@@ -23,7 +23,18 @@ use domain::{
     PackageReviewStatus, RenditionOrigin, SourceAsset, SourceAssetAvailability, SourceAssetBinding,
 };
 
-use crate::{ApplicationError, MaterialRepository, PackageLifecycleRepository};
+use crate::{ApplicationError, MaterialRepository, MediaRepository, PackageLifecycleRepository};
+
+/// Deterministic Core identity for a package-owned derived audio/video
+/// rendition. The identity is derived only from the immutable rendition
+/// digest and media type; it is not persisted in package facts or invented by
+/// the App.
+pub(crate) fn package_derived_media_id(media_digest: &str, media_type: &str) -> MediaId {
+    MediaId::from_fingerprint(
+        "package-derived-media",
+        &format!("{media_digest}:{media_type}"),
+    )
+}
 
 /// Typed failure semantics of adopted composition reads. Raw repository
 /// details never appear in these messages.
@@ -118,7 +129,8 @@ pub enum CompositionBinding {
 }
 
 /// One selected rendition of the adopted composition, with its exact blob
-/// facts and its binding when it is a Source rendition.
+/// facts and its binding when it is a Source rendition or a materialized
+/// package-derived media rendition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompositionRenditionView {
     pub rendition_id: String,
@@ -166,16 +178,19 @@ pub struct CompositionPayload {
 #[derive(Clone)]
 pub struct CompositionUseCases {
     materials: Arc<dyn MaterialRepository>,
+    media: Arc<dyn MediaRepository>,
     package_lifecycle: Arc<dyn PackageLifecycleRepository>,
 }
 
 impl CompositionUseCases {
     pub fn new(
         materials: Arc<dyn MaterialRepository>,
+        media: Arc<dyn MediaRepository>,
         package_lifecycle: Arc<dyn PackageLifecycleRepository>,
     ) -> Self {
         Self {
             materials,
+            media,
             package_lifecycle,
         }
     }
@@ -218,7 +233,7 @@ impl CompositionUseCases {
             &installation.release_id,
             &plan,
             &composition,
-        )))
+        )?))
     }
 
     /// Reads the exact durable payload of one selected resource of the
@@ -380,45 +395,50 @@ impl CompositionUseCases {
         _release_id: &PackageReleaseId,
         plan: &AdoptionCommitPlan,
         composition: &AdoptedComposition,
-    ) -> AdoptedCompositionView {
+    ) -> Result<AdoptedCompositionView, CompositionError> {
         let renditions: Vec<CompositionRenditionView> = composition
             .renditions
             .iter()
-            .map(|rendition| {
-                let binding = match rendition.origin {
-                    RenditionOrigin::Derived => None,
-                    RenditionOrigin::Source => {
-                        if rendition.kind == "media" {
-                            rendition
-                                .media_id
-                                .clone()
-                                .map(|media_id| CompositionBinding::Media { media_id })
-                        } else {
-                            self.document_binding(revision, rendition.source_asset_id.as_ref())
+            .map(
+                |rendition| -> Result<CompositionRenditionView, CompositionError> {
+                    let binding = match rendition.origin {
+                        RenditionOrigin::Derived if rendition.kind == "media" => {
+                            self.derived_media_binding(rendition)?
                         }
-                    }
-                };
-                CompositionRenditionView {
-                    rendition_id: rendition.rendition_id.clone(),
-                    kind: rendition.kind.clone(),
-                    origin: rendition.origin,
-                    media_type: rendition.media_type.clone(),
-                    language: None,
-                    digest: rendition
-                        .media_digest
-                        .trim_start_matches("sha256:")
-                        .to_owned(),
-                    byte_size: rendition.media_size_bytes,
-                    blob_available: rendition.available,
-                    binding,
-                    producer_tool_id: rendition
-                        .producer
-                        .as_ref()
-                        .map(|producer| producer.tool_id.clone()),
-                }
-            })
-            .collect();
-        AdoptedCompositionView {
+                        RenditionOrigin::Derived => None,
+                        RenditionOrigin::Source => {
+                            if rendition.kind == "media" {
+                                rendition
+                                    .media_id
+                                    .clone()
+                                    .map(|media_id| CompositionBinding::Media { media_id })
+                            } else {
+                                self.document_binding(revision, rendition.source_asset_id.as_ref())
+                            }
+                        }
+                    };
+                    Ok(CompositionRenditionView {
+                        rendition_id: rendition.rendition_id.clone(),
+                        kind: rendition.kind.clone(),
+                        origin: rendition.origin,
+                        media_type: rendition.media_type.clone(),
+                        language: None,
+                        digest: rendition
+                            .media_digest
+                            .trim_start_matches("sha256:")
+                            .to_owned(),
+                        byte_size: rendition.media_size_bytes,
+                        blob_available: rendition.available,
+                        binding,
+                        producer_tool_id: rendition
+                            .producer
+                            .as_ref()
+                            .map(|producer| producer.tool_id.clone()),
+                    })
+                },
+            )
+            .collect::<Result<_, _>>()?;
+        Ok(AdoptedCompositionView {
             material_id: plan.material_id.clone(),
             material_revision_id: plan.material_revision_id.clone(),
             release_id: plan.release_id.clone(),
@@ -445,7 +465,32 @@ impl CompositionUseCases {
                 })
                 .collect(),
             renditions,
+        })
+    }
+
+    /// Returns the Core-owned binding for a selected package-derived media
+    /// rendition only after its deterministic MediaItem has been materialized.
+    /// A missing item is represented as an absent binding; storage failures
+    /// remain explicit composition failures rather than silently producing an
+    /// App-local detached identity.
+    fn derived_media_binding(
+        &self,
+        rendition: &domain::PackageRenditionFact,
+    ) -> Result<Option<CompositionBinding>, CompositionError> {
+        if !(rendition.media_type.starts_with("audio/")
+            || rendition.media_type.starts_with("video/"))
+        {
+            return Ok(None);
         }
+        let media_id = rendition.media_id.clone().unwrap_or_else(|| {
+            package_derived_media_id(&rendition.media_digest, &rendition.media_type)
+        });
+        let exists = self
+            .media
+            .get(&media_id)
+            .map_err(|_| CompositionError::StorageFailure)?
+            .is_some();
+        Ok(exists.then_some(CompositionBinding::Media { media_id }))
     }
 
     /// The Source Asset binding behind one Source Document Rendition, from

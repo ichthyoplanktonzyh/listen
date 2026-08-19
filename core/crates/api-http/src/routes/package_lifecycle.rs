@@ -241,14 +241,30 @@ pub(crate) async fn adopt_learning_edition(
     state
         .application
         .execute("package_lifecycle.adopt", move |services| {
-            let view = services
+            // Materialize the package's subtitle track and rich candidates
+            // before committing the learner's adoption. A package with a
+            // selected subtitle track is not adoptable until Core owns the
+            // corresponding global sentence ids and candidate resources.
+            // This ordering keeps a landing failure from returning an error
+            // after the adoption row has already been committed.
+            let newly_landed_track =
+                services.land_adopted_subtitle_track(&material_id, &release_id)?;
+            match services
                 .package_lifecycle()
-                .adopt_for_material(&material_id, &release_id)?;
-            // Land the just-adopted subtitle_text_track (when present) as a real
-            // subtitle track. Best-effort and post-commit: it must not make an
-            // already committed adoption appear to have failed.
-            let _ = services.land_adopted_subtitle_track(&material_id, &release_id);
-            Ok(view)
+                .adopt_for_material(&material_id, &release_id)
+            {
+                Ok(view) => Ok(view),
+                Err(error) => {
+                    // The landing is idempotent. If the adoption commit
+                    // itself fails, remove only the track created by this
+                    // attempt so the previously adopted track remains the
+                    // material's sole resolved source.
+                    if let Some(track_id) = newly_landed_track {
+                        services.media_analysis().delete_subtitle_track(&track_id)?;
+                    }
+                    Err(error)
+                }
+            }
         })
         .await
         .map(LearningEditionDetails::from)

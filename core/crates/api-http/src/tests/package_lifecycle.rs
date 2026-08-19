@@ -18,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::to_bytes;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{Request, StatusCode};
-use content_package::v2::serialize_canonical;
+use content_package::v2::{SUBTITLE_TEXT_TRACK_SCHEMA_V1, serialize_canonical};
 use content_package::v3::{RELEASE_SCHEMA_V3, STRUCTURED_READING_SCHEMA_V1};
 use rusqlite::params;
 use serde_json::{Value, json};
@@ -249,6 +249,231 @@ fn text_release_carrier(
     (directory, release, resource_id_value)
 }
 
+fn subtitle_payload(text: &str) -> Vec<u8> {
+    assert_eq!(
+        text, "Hello world.",
+        "the compact fixture has fixed token spans"
+    );
+    canonical_bytes(&json!({
+        "language": "en",
+        "source_kind": "asr",
+        "sentences": [{
+            "id": "package-sentence-0",
+            "index": 0,
+            "start_ms": 0,
+            "end_ms": 1200,
+            "original_text": text,
+            "display_text": text,
+            "tokens": [
+                {"index": 0, "kind": "word", "text": "Hello", "normalized": "hello", "start_char": 0, "end_char": 5},
+                {"index": 1, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 5, "end_char": 6},
+                {"index": 2, "kind": "word", "text": "world", "normalized": "world", "start_char": 6, "end_char": 11},
+                {"index": 3, "kind": "punctuation", "text": ".", "normalized": null, "start_char": 11, "end_char": 12}
+            ]
+        }]
+    }))
+}
+
+fn subtitle_resource(revision_id: &str, rendition_ids: Vec<&str>, payload: &[u8]) -> Value {
+    let digest = sha256_id(payload);
+    let descriptor = json!({
+        "schema": SUBTITLE_TEXT_TRACK_SCHEMA_V1,
+        "kind": "subtitle_text_track",
+        "role": "base",
+        "content_language": "en",
+        "support_languages": [],
+        "subject": {
+            "material_revision_id": revision_id,
+            "rendition_ids": rendition_ids,
+            "anchor_resource_ids": []
+        },
+        "dependencies": [],
+        "provenance": {
+            "created_at_ms": 1,
+            "tool": {"id": "listen-gen", "version": "0.5.0"},
+            "provider": null,
+            "model": null,
+            "config_sha256": null,
+            "input_rendition_ids": [],
+            "input_resource_ids": [],
+            "extensions": {}
+        },
+        "quality": {"review_status": "human_reviewed", "warnings": [], "extensions": {}},
+        "payload_blob": {"digest": digest, "size_bytes": payload.len(), "embedded": true},
+        "extensions": {}
+    });
+    resource_entry(&descriptor, true)
+}
+
+/// Text-only package with a timed subtitle but no source or derived media.
+/// Adoption must fail loudly: there is no Core media identity to anchor the
+/// track, and the failed attempt must stay candidate-only.
+fn subtitle_text_only_carrier(
+    material_id: &str,
+    revision_id: &str,
+    edition_id: &str,
+    text: &str,
+) -> TestDirectory {
+    let (directory, mut release, _) =
+        text_release_carrier(material_id, revision_id, edition_id, text, "human_reviewed");
+    let payload = subtitle_payload(text);
+    let resource = subtitle_resource(revision_id, Vec::new(), &payload);
+    release["resources"].as_array_mut().unwrap().push(resource);
+    fs::write(
+        directory.path().join("release.json"),
+        canonical_bytes(&release),
+    )
+    .unwrap();
+    let payload_digest = sha256_id(&payload);
+    let payload_path = directory.path().join(blob_path(&payload_digest));
+    fs::create_dir_all(payload_path.parent().unwrap()).unwrap();
+    fs::write(payload_path, payload).unwrap();
+    directory
+}
+
+/// Audio Source Material package carrying a valid package subtitle track.
+fn audio_subtitle_carrier(
+    material_id: &str,
+    revision_id: &str,
+    edition_id: &str,
+    media_id: &str,
+    media_fingerprint: &str,
+    text: &str,
+) -> TestDirectory {
+    let media_bytes = b"listen-core package audio fixture";
+    let media_digest = sha256_id(media_bytes);
+    let media_blob = json!({
+        "digest": media_digest,
+        "size_bytes": media_bytes.len(),
+        "embedded": true,
+    });
+    let media_identity = json!({
+        "kind": "audio",
+        "media_type": "audio/mpeg",
+        "media_blob": media_blob,
+        "media_id": media_id,
+        "fingerprint": media_fingerprint,
+    });
+    let rendition_id = sha256_id(&canonical_bytes(&media_identity));
+    let media_rendition = json!({
+        "rendition_id": rendition_id,
+        "origin": "source",
+        "kind": "audio",
+        "media_type": "audio/mpeg",
+        "media_blob": media_blob,
+        "media_id": media_id,
+        "fingerprint": media_fingerprint,
+        "producer": null,
+        "compatibility": null,
+        "extensions": {},
+    });
+    let payload = subtitle_payload(text);
+    let resource = subtitle_resource(revision_id, vec![rendition_id.as_str()], &payload);
+    let release = json!({
+        "schema": RELEASE_SCHEMA_V3,
+        "created_at_ms": 1u64,
+        "edition": {
+            "edition_id": edition_id,
+            "title": "Audio Subtitle Fixture",
+            "target_language": "en",
+            "support_languages": [],
+        },
+        "material": {
+            "material_id": material_id,
+            "material_revision_id": revision_id,
+            "title": "Audio Subtitle Material",
+        },
+        "document_renditions": [],
+        "media_renditions": [media_rendition],
+        "resources": [resource],
+        "extensions": {},
+    });
+    let directory = TestDirectory::new();
+    let files = [
+        ("release.json".to_owned(), canonical_bytes(&release)),
+        (blob_path(&media_digest), media_bytes.to_vec()),
+        (blob_path(&sha256_id(&payload)), payload),
+    ];
+    for (name, bytes) in files {
+        let path = directory.path().join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+    directory
+}
+
+/// Text Material package carrying an available Derived audio rendition and a
+/// subtitle track. Core must create the deterministic synthetic MediaItem and
+/// attach the track to it; the App must not invent a detached track.
+fn derived_audio_subtitle_carrier(
+    material_id: &str,
+    revision_id: &str,
+    edition_id: &str,
+    text: &str,
+) -> (TestDirectory, String) {
+    let (directory, mut release, _) =
+        text_release_carrier(material_id, revision_id, edition_id, text, "human_reviewed");
+    let media_bytes = b"listen-core package audio fixture";
+    let media_digest = sha256_id(media_bytes);
+    let media_blob = json!({
+        "digest": media_digest,
+        "size_bytes": media_bytes.len(),
+        "embedded": true,
+    });
+    let media_identity = json!({
+        "kind": "audio",
+        "media_type": "audio/mpeg",
+        "media_blob": media_blob,
+        "media_id": null,
+        "fingerprint": media_digest,
+    });
+    let rendition_id = sha256_id(&canonical_bytes(&media_identity));
+    let media_rendition = json!({
+        "rendition_id": rendition_id,
+        "origin": "derived",
+        "kind": "audio",
+        "media_type": "audio/mpeg",
+        "media_blob": media_blob,
+        "media_id": null,
+        "fingerprint": media_digest,
+        "producer": {
+            "created_at_ms": 1,
+            "tool": {"id": "listen-gen", "version": "0.5.0"},
+            "provider": null,
+            "model": null,
+            "config_sha256": null,
+        },
+        "compatibility": {"verified_inputs": [], "checks": ["exact_text_match"]},
+        "extensions": {},
+    });
+    let payload = subtitle_payload(text);
+    let resource = subtitle_resource(revision_id, vec![rendition_id.as_str()], &payload);
+    release["media_renditions"]
+        .as_array_mut()
+        .unwrap()
+        .push(media_rendition);
+    release["resources"].as_array_mut().unwrap().push(resource);
+    fs::write(
+        directory.path().join("release.json"),
+        canonical_bytes(&release),
+    )
+    .unwrap();
+    let media_path = directory.path().join(blob_path(&media_digest));
+    fs::create_dir_all(media_path.parent().unwrap()).unwrap();
+    fs::write(media_path, media_bytes).unwrap();
+    let payload_digest = sha256_id(&payload);
+    let payload_path = directory.path().join(blob_path(&payload_digest));
+    fs::create_dir_all(payload_path.parent().unwrap()).unwrap();
+    fs::write(payload_path, payload).unwrap();
+    let media_id = domain::MediaId::from_fingerprint(
+        "package-derived-media",
+        &format!("{}:audio/mpeg", media_digest),
+    )
+    .as_str()
+    .to_owned();
+    (directory, media_id)
+}
+
 // ---------------------------------------------------------------------
 // HTTP helpers
 // ---------------------------------------------------------------------
@@ -287,6 +512,58 @@ async fn create_text_material(app: &Router, text: &str) -> Value {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+async fn create_audio_material(app: &Router) -> (Value, String, String) {
+    let media_bytes = b"listen-core package audio fixture";
+    let fingerprint = hex::encode(Sha256::digest(media_bytes));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/media")
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "path": "/tmp/listen-core-package-audio.mp3",
+                        "fingerprint": fingerprint,
+                        "title": "Package Audio",
+                        "kind": "audio",
+                        "retain": false,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let media: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let media_id = media["id"].as_str().unwrap().to_owned();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/materials")
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "title": "Package Audio Material",
+                        "source_assets": [],
+                        "document_renditions": [],
+                        "media_renditions": [{"media_id": media_id}],
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let material: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    (material, media_id, fingerprint)
 }
 
 async fn install_package(
@@ -482,6 +759,261 @@ async fn installing_a_matching_v2_package_returns_exact_candidate_dto() {
     assert_eq!(installed["renditions"][0]["kind"], "document");
     assert_eq!(installed["renditions"][0]["available"], true);
     assert_no_private_facts(&installed);
+}
+
+#[tokio::test]
+async fn adoption_rejects_a_subtitle_package_without_a_core_media_anchor() {
+    let app = test_app();
+    let material = create_text_material(&app, "Hello world.").await;
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let directory = subtitle_text_only_carrier(
+        &material_id,
+        &revision_id,
+        "edition-subtitle-without-media",
+        "Hello world.",
+    );
+
+    let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed}");
+    let release_id = installed["release_id"].as_str().unwrap().to_owned();
+    let (status, error) = adopt_edition(&app, &material_id, &release_id).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{error}");
+    assert_eq!(error["code"], "edition_adoption_conflict");
+
+    let (status, editions) = list_editions(&app, &material_id).await;
+    assert_eq!(status, StatusCode::OK, "{editions}");
+    assert_eq!(editions[0]["adopted"], false);
+    assert!(editions[0]["adopted_at_ms"].is_null());
+}
+
+#[tokio::test]
+async fn adopting_a_subtitle_package_lands_global_core_sentence_ids() {
+    let app = test_app();
+    let (material, media_id, media_fingerprint) = create_audio_material(&app).await;
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let directory = audio_subtitle_carrier(
+        &material_id,
+        &revision_id,
+        "edition-subtitle-global-ids",
+        &media_id,
+        &media_fingerprint,
+        "Hello world.",
+    );
+
+    let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed}");
+    let release_id = installed["release_id"].as_str().unwrap().to_owned();
+    let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+    assert_eq!(status, StatusCode::OK, "{adopted}");
+    assert_eq!(adopted["adopted"], true);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/media/{media_id}/subtitles"))
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let tracks: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(tracks.as_array().unwrap().len(), 1);
+    assert_eq!(tracks[0]["source"], "package:subtitle_text_track");
+    assert_eq!(tracks[0]["sentences"][0]["display_text"], "Hello world.");
+    assert_ne!(
+        tracks[0]["sentences"][0]["id"], "package-sentence-0",
+        "package-local ids must never be exposed as Core sentence ids"
+    );
+}
+
+#[tokio::test]
+async fn document_package_uses_a_core_owned_derived_media_identity_for_subtitles() {
+    let app = test_app();
+    let material = create_text_material(&app, "Hello world.").await;
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (directory, derived_media_id) = derived_audio_subtitle_carrier(
+        &material_id,
+        &revision_id,
+        "edition-derived-audio-subtitle",
+        "Hello world.",
+    );
+
+    let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed}");
+    let release_id = installed["release_id"].as_str().unwrap().to_owned();
+    let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+    assert_eq!(status, StatusCode::OK, "{adopted}");
+
+    let (status, composition) = read_composition(&app, &material_id).await;
+    assert_eq!(status, StatusCode::OK, "{composition}");
+    let derived_rendition = composition["renditions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rendition| rendition["origin"] == "derived")
+        .expect("the adopted document package keeps its derived audio rendition");
+    assert_eq!(derived_rendition["kind"], "media");
+    assert_eq!(derived_rendition["binding"]["type"], "media");
+    assert_eq!(derived_rendition["binding"]["media_id"], derived_media_id);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/media/{derived_media_id}"))
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let media: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(media["id"], derived_media_id);
+    assert_eq!(media["path"], format!("lltimeline://{derived_media_id}"));
+    assert_eq!(media["availability"], "missing");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/media/{derived_media_id}/subtitles"))
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let tracks: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(tracks.as_array().unwrap().len(), 1);
+    assert_eq!(tracks[0]["source"], "package:subtitle_text_track");
+}
+
+#[tokio::test]
+async fn failed_adoption_does_not_replace_the_previous_package_subtitle_track() {
+    let directory = tempfile::tempdir().unwrap();
+    let db_path = directory.path().join("failed-adoption.db");
+    let material_id;
+    let revision_id;
+    let media_id;
+    let second_release_id;
+    let previous_sentence_id;
+    {
+        let app = file_app(&db_path);
+        let (material, registered_media_id, media_fingerprint) = create_audio_material(&app).await;
+        material_id = material["material"]["id"].as_str().unwrap().to_owned();
+        revision_id = material["current_revision"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        media_id = registered_media_id;
+
+        let first_directory = audio_subtitle_carrier(
+            &material_id,
+            &revision_id,
+            "edition-subtitle-first",
+            &media_id,
+            &media_fingerprint,
+            "Hello world.",
+        );
+        let (status, installed) = install_package(&app, &material_id, first_directory.path()).await;
+        assert_eq!(status, StatusCode::OK, "{installed}");
+        let first_release_id = installed["release_id"].as_str().unwrap().to_owned();
+        let (status, adopted) = adopt_edition(&app, &material_id, &first_release_id).await;
+        assert_eq!(status, StatusCode::OK, "{adopted}");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/v1/media/{media_id}/subtitles"))
+                    .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let tracks: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        previous_sentence_id = tracks[0]["sentences"][0]["id"].as_str().unwrap().to_owned();
+
+        // Change the second package's descriptor identity while leaving the
+        // source rendition and payload the same. This forces a distinct
+        // candidate track, so a leaked pre-adoption write is observable.
+        let second_directory = audio_subtitle_carrier(
+            &material_id,
+            &revision_id,
+            "edition-subtitle-second",
+            &media_id,
+            &media_fingerprint,
+            "Hello world.",
+        );
+        let release_path = second_directory.path().join("release.json");
+        let release_bytes = fs::read(&release_path).unwrap();
+        let mut release: Value = serde_json::from_slice(&release_bytes).unwrap();
+        release["resources"][0]["descriptor"]["provenance"]["created_at_ms"] = json!(2);
+        let resource_id = sha256_id(&canonical_bytes(&release["resources"][0]["descriptor"]));
+        release["resources"][0]["resource_id"] = json!(resource_id);
+        fs::write(&release_path, canonical_bytes(&release)).unwrap();
+
+        let (status, installed) =
+            install_package(&app, &material_id, second_directory.path()).await;
+        assert_eq!(status, StatusCode::OK, "{installed}");
+        second_release_id = installed["release_id"].as_str().unwrap().to_owned();
+    }
+
+    // Force the actual adoption commit to fail after the landing preflight
+    // has run. The route must remove only the newly landed second track and
+    // leave the previously adopted composition untouched.
+    let connection = rusqlite::Connection::open(&db_path).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TRIGGER fail_package_adoption_switch
+             BEFORE UPDATE ON package_adoptions
+             BEGIN
+               SELECT RAISE(ABORT, 'injected adoption failure');
+             END;",
+        )
+        .unwrap();
+    drop(connection);
+
+    let app = file_app(&db_path);
+    let (status, error) = adopt_edition(&app, &material_id, &second_release_id).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{error}");
+    assert_eq!(error["code"], "package_lifecycle_failed");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/media/{media_id}/subtitles"))
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let tracks: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(tracks.as_array().unwrap().len(), 1);
+    assert_eq!(tracks[0]["sentences"][0]["id"], previous_sentence_id);
 }
 
 // ---------------------------------------------------------------------
@@ -1243,7 +1775,10 @@ fn package_lifecycle_routes_match_openapi_and_client() {
     for (method, path) in [
         ("post", "/v1/materials/{material_id}/package-installations"),
         ("get", "/v1/materials/{material_id}/editions"),
-        ("delete", "/v1/materials/{material_id}/editions/{release_id}"),
+        (
+            "delete",
+            "/v1/materials/{material_id}/editions/{release_id}",
+        ),
         ("put", "/v1/materials/{material_id}/edition-adoption"),
     ] {
         assert!(
