@@ -4,7 +4,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -52,6 +52,48 @@ class LlmProviderProfile:
         return cls.from_dict(json.loads(content))
 
 
+#: Where this tool keeps its own provider configuration. The bundled web GUI
+#: writes it; every entry point reads it, so configuring a provider once is
+#: enough no matter which one drives the run.
+DEFAULT_PROFILE_STORE = Path.home() / ".listen-gen" / "profiles.json"
+
+
+def profile_from_store(
+    path: Path | str | None = None,
+) -> LlmProviderProfile | None:
+    """The selected provider from the local store, or None.
+
+    The GUI and the CLI used to reach credentials by different routes: the GUI
+    read this file, while the CLI saw only environment variables and explicit
+    flags. A caller that had configured a provider in the GUI still got no LLM
+    when the same machine ran a capability from the command line — which is
+    exactly how an embedding app, launched from Finder with no shell
+    environment, ends up with no provider at all.
+
+    Any malformed or unreadable store is simply "no provider configured".
+    Credentials are never logged or raised from here.
+    """
+    store = Path(path) if path is not None else DEFAULT_PROFILE_STORE
+    try:
+        data = json.loads(store.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    profiles = data.get("llm_profiles")
+    if not isinstance(profiles, dict) or not profiles:
+        return None
+    selected = data.get("selected_llm")
+    entry = profiles.get(selected) if isinstance(selected, str) else None
+    if not isinstance(entry, dict):
+        # A store naming no usable selection is not a store to guess through.
+        return None
+    profile = LlmProviderProfile.from_dict(entry)
+    # An entry without a credential is a configured *shape*, not a usable
+    # provider; saying so here keeps the auto-upgrade honest.
+    return profile if profile.api_key else None
+
+
 def auto_detect_profile(
     *,
     adapter_kind: str | None = None,
@@ -68,6 +110,24 @@ def auto_detect_profile(
     env_profile_path = os.environ.get("LISTEN_LLM_PROFILE_PATH")
     if env_profile_path and Path(env_profile_path).is_file():
         return LlmProviderProfile.from_file(env_profile_path)
+
+    # Explicit arguments and the environment win; the local store is what
+    # answers when neither is present, so a provider configured once in the
+    # GUI also serves runs driven by the CLI.
+    if not any((api_key, adapter_kind, base_url, model_id)) and not any(
+        os.environ.get(name)
+        for name in (
+            "LISTEN_LLM_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "GEMINI_API_KEY",
+        )
+    ):
+        stored = profile_from_store()
+        if stored is not None:
+            return replace(stored, timeout_seconds=timeout_seconds)
 
     # Resolve API Key
     resolved_key = (

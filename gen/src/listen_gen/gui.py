@@ -38,6 +38,7 @@ from .capability import (
 )
 from .cli import CancellationRequested, _classify_error, _default_attempt_id
 from .llm_client import (
+    DEFAULT_PROFILE_STORE,
     LlmAdapterKind,
     LlmProviderProfile,
     create_llm_client,
@@ -53,7 +54,8 @@ from .protocol_v2 import (
 from .rich_stages import RichStages
 
 DEFAULT_CONFIG_DIR = Path.home() / ".listen-gen"
-DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "profiles.json"
+# One truth for where provider configuration lives; llm_client reads it too.
+DEFAULT_CONFIG_FILE = DEFAULT_PROFILE_STORE
 UPLOAD_DIR = DEFAULT_CONFIG_DIR / "uploads"
 ARTIFACTS_DIR = DEFAULT_CONFIG_DIR / "artifacts"
 SOURCES_DIR = DEFAULT_CONFIG_DIR / "sources"  # durable text inputs (for reruns)

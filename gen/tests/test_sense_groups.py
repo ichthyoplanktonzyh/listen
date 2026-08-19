@@ -159,7 +159,14 @@ class SenseGroupThreeLayersTests(unittest.TestCase):
                 "GEMINI_API_KEY",
             )
         }
-        with mock.patch.dict(os.environ, cleared, clear=False):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            # Never let the developer's own configured store decide this.
+            "listen_gen.llm_client.DEFAULT_PROFILE_STORE",
+            Path(directory) / "absent.json",
+        ), mock.patch.dict(os.environ, cleared, clear=False):
             for key in cleared:
                 os.environ.pop(key, None)
             self.assertFalse(auto_detect_profile().api_key)
@@ -179,6 +186,107 @@ class SenseGroupThreeLayersTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"LISTEN_LLM_API_KEY": "sk-configured"}):
             self.assertEqual(auto_detect_profile().api_key, "sk-configured")
             self.assertIsNotNone(PunctuationSenseGroupBaseline().llm_analyzer)
+
+    def test_the_local_store_supplies_the_credential(self) -> None:
+        """One configuration, whichever entry point drives the run.
+
+        The bundled GUI writes `~/.listen-gen/profiles.json`; `auto_detect_profile`
+        used to look only at explicit arguments and the environment. A provider
+        configured in the GUI therefore did nothing for a CLI-driven capability
+        run — and an embedding app launched from Finder, which inherits no shell
+        environment, could never supply a credential at all.
+        """
+        import json
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from listen_gen.llm_client import profile_from_store
+
+        cleared = {
+            key: ""
+            for key in (
+                "LISTEN_LLM_API_KEY",
+                "LISTEN_LLM_PROFILE_PATH",
+                "DEEPSEEK_API_KEY",
+                "DASHSCOPE_API_KEY",
+                "OPENAI_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "GEMINI_API_KEY",
+            )
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            store = Path(directory) / "profiles.json"
+            store.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "selected_llm": "deepseek",
+                        "llm_profiles": {
+                            "deepseek": {
+                                "adapter_kind": "openai_chat",
+                                "base_url": "https://api.deepseek.com/v1",
+                                "model_id": "deepseek-v4-flash",
+                                "api_key": "sk-from-store",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stored = profile_from_store(store)
+            self.assertIsNotNone(stored)
+            self.assertEqual(stored.api_key, "sk-from-store")
+            self.assertEqual(stored.model_id, "deepseek-v4-flash")
+
+            with mock.patch(
+                "listen_gen.llm_client.DEFAULT_PROFILE_STORE", store
+            ), mock.patch.dict(os.environ, cleared, clear=False):
+                for key in cleared:
+                    os.environ.pop(key, None)
+                self.assertEqual(auto_detect_profile().api_key, "sk-from-store")
+                # And therefore the default sense-group path upgrades to LLM.
+                self.assertIsNotNone(PunctuationSenseGroupBaseline().llm_analyzer)
+
+    def test_a_store_without_a_credential_is_not_a_provider(self) -> None:
+        """A configured shape is not a usable provider.
+
+        The GUI seeds empty `api_key` entries for every known vendor, so
+        treating "an entry exists" as "a provider is configured" would put
+        every machine back on the LLM path with no way to authenticate.
+        """
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from listen_gen.llm_client import profile_from_store
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = Path(directory) / "profiles.json"
+            store.write_text(
+                json.dumps(
+                    {
+                        "selected_llm": "deepseek",
+                        "llm_profiles": {"deepseek": {"model_id": "deepseek-chat", "api_key": ""}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertIsNone(profile_from_store(store))
+
+    def test_an_unreadable_store_is_simply_no_provider(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from listen_gen.llm_client import profile_from_store
+
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "absent.json"
+            self.assertIsNone(profile_from_store(missing))
+            malformed = Path(directory) / "malformed.json"
+            malformed.write_text("{not json", encoding="utf-8")
+            self.assertIsNone(profile_from_store(malformed))
 
     def test_provider_profile_json_file_loading(self) -> None:
         profile_data = {
