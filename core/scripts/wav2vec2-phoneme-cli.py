@@ -43,8 +43,20 @@ _CHUNK_MS_DEFAULT = 180_000  # 3 minutes of audio per chunk
 _MAX_WORKERS_DEFAULT = 4
 
 
+def _read_audio_tensor(path: str) -> tuple[torch.Tensor, int]:
+    try:
+        return torchaudio.load(path)
+    except Exception as torchaudio_exc:
+        try:
+            data, sr = sf.read(path, dtype="float32", always_2d=True)
+            waveform = torch.from_numpy(data.T).contiguous()
+            return waveform, int(sr)
+        except Exception:
+            raise torchaudio_exc
+
+
 def load_audio(path: str, start_ms: int, end_ms: int) -> tuple[np.ndarray, int]:
-    waveform, sr = torchaudio.load(path)
+    waveform, sr = _read_audio_tensor(path)
     if waveform.shape[0] > 1:
         waveform = waveform.mean(dim=0, keepdim=True)
     if sr != 16000:
@@ -57,30 +69,11 @@ def load_audio(path: str, start_ms: int, end_ms: int) -> tuple[np.ndarray, int]:
 
 
 def load_audio_slice(path: str, start_ms: int, end_ms: int) -> tuple[np.ndarray, int]:
-    """Load only the [start_ms, end_ms) window, 16 kHz mono.
-
-    torchaudio (TorchCodec) is the primary reader because the Gen pipeline
-    hands us compressed containers (m4a/mp4); soundfile cannot decode those.
-    """
-    try:
-        info = sf.info(path)
-    except Exception:
-        info = None
-    if info is not None:
-        sr = int(info.samplerate)
-        start_sample = int(start_ms / 1000 * sr)
-        num_samples = max(1, int((end_ms - start_ms) / 1000 * sr))
-        try:
-            waveform, sr = torchaudio.load(
-                path, frame_offset=start_sample, num_frames=num_samples
-            )
-        except Exception:
-            info = None
-    if info is None:
-        waveform, sr = torchaudio.load(path)
-        start_sample = int(start_ms / 1000 * sr)
-        num_samples = max(1, int((end_ms - start_ms) / 1000 * sr))
-        waveform = waveform[:, start_sample : start_sample + num_samples]
+    """Load only the [start_ms, end_ms) window, 16 kHz mono."""
+    waveform, sr = _read_audio_tensor(path)
+    start_sample = int(start_ms / 1000 * sr)
+    num_samples = max(1, int((end_ms - start_ms) / 1000 * sr))
+    waveform = waveform[:, start_sample : start_sample + num_samples]
     if waveform.shape[0] > 1:
         waveform = waveform.mean(dim=0, keepdim=True)
     if sr != 16000:
@@ -99,6 +92,9 @@ def ctc_decode_with_timestamps(
     num_frames = predicted_ids.shape[0]
     ms_per_frame = audio_duration_ms / num_frames if num_frames > 0 else 20.0
 
+    # Convert logits to frame-level posterior probabilities for true confidence
+    probs = torch.softmax(logits[0], dim=-1)
+
     phones = []
     prev_id = -1
     phone_start_frame = 0
@@ -108,12 +104,14 @@ def ctc_decode_with_timestamps(
             if prev_id > 0:
                 symbol = processor.decode([prev_id]).strip()
                 if symbol:
-                    frame_logits = logits[0, phone_start_frame:frame_idx, prev_id]
-                    confidence = float(torch.sigmoid(frame_logits.mean()).item())
+                    frame_probs = probs[phone_start_frame:frame_idx, prev_id]
+                    confidence = float(frame_probs.mean().item()) if frame_probs.numel() > 0 else 0.5
+                    start_ms = audio_start_ms + int(phone_start_frame * ms_per_frame)
+                    end_ms = max(start_ms + 1, audio_start_ms + int(frame_idx * ms_per_frame))
                     phones.append({
                         "symbol": symbol,
-                        "start_ms": audio_start_ms + int(phone_start_frame * ms_per_frame),
-                        "end_ms": audio_start_ms + int(frame_idx * ms_per_frame),
+                        "start_ms": start_ms,
+                        "end_ms": end_ms,
                         "confidence": round(confidence, 4),
                     })
             phone_start_frame = frame_idx
@@ -122,12 +120,14 @@ def ctc_decode_with_timestamps(
     if prev_id > 0:
         symbol = processor.decode([prev_id]).strip()
         if symbol:
-            frame_logits = logits[0, phone_start_frame:num_frames, prev_id]
-            confidence = float(torch.sigmoid(frame_logits.mean()).item())
+            frame_probs = probs[phone_start_frame:num_frames, prev_id]
+            confidence = float(frame_probs.mean().item()) if frame_probs.numel() > 0 else 0.5
+            start_ms = audio_start_ms + int(phone_start_frame * ms_per_frame)
+            end_ms = max(start_ms + 1, audio_start_ms + int(num_frames * ms_per_frame))
             phones.append({
                 "symbol": symbol,
-                "start_ms": audio_start_ms + int(phone_start_frame * ms_per_frame),
-                "end_ms": audio_start_ms + int(num_frames * ms_per_frame),
+                "start_ms": start_ms,
+                "end_ms": end_ms,
                 "confidence": round(confidence, 4),
             })
 

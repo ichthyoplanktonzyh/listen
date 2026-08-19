@@ -29,7 +29,9 @@ pub(super) fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressA
         let energy_prominence = token.energy_prominence_score();
         let pitch_prominence = token.pitch_prominence_score();
         let acoustically_prominent = energy_prominence.is_some() || pitch_prominence.is_some();
-        if !content_word {
+        let strong_acoustic_prominence = energy_prominence.unwrap_or(0.0) >= 0.40
+            || pitch_prominence.unwrap_or(0.0) >= 0.40;
+        if !content_word && !strong_acoustic_prominence {
             continue;
         }
         if !stressed
