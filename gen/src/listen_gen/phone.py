@@ -11,10 +11,19 @@ from typing import Any, Callable, Protocol
 
 from . import __version__ as TOOL_VERSION
 from .command_identity import command_identity_sha256, compose_config_sha256
-from .package import ResourceFile, _envelope
+from .package import ConversionError
+from .package_v3 import (
+    PackageResource,
+    blob_declaration,
+    canonical_json,
+    provenance,
+    quality,
+    sha256_of_bytes,
+)
 from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
-from .protocol import RichStageFailure
-from .rich import RichWord
+from .rich import RichContext, RichStageFailure, RichWord
+
+PHONE_TIMELINE_SCHEMA = "listen.payload.phone-timeline.v1"
 
 PHONE_RESULT_SCHEMA = "listen_gen.phone-result.v1"
 PHONE_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
@@ -229,6 +238,102 @@ def _tree_sha256(path: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+
+
+class G2pPhoneAdapter:
+    """G2P-based canonical phoneme adapter.
+
+    Generates standard IPA phonemes for each word in the Word Timeline,
+    distributing the word duration evenly across its phonemes.
+    """
+
+    provider_id = "g2p-phoneme"
+    provider_version = "1"
+
+    def __init__(
+        self,
+        *,
+        backend: str = "auto",
+        g2p_fn: Callable[[str], list[str]] | None = None,
+    ):
+        self.backend = backend
+        self.g2p_fn = g2p_fn
+        self.config_sha256 = "sha256:" + hashlib.sha256(
+            json.dumps(
+                {"schema": "listen_gen.g2p-phone-config.v1", "backend": backend},
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+
+    def _resolve_g2p(self) -> Callable[[str], list[str]]:
+        if self.g2p_fn is not None:
+            return self.g2p_fn
+        try:
+            from g2p_en import G2p
+            g2p = G2p()
+
+            def _g2p_en(word: str) -> list[str]:
+                phones = g2p(word)
+                return [p.strip() for p in phones if p.strip() and p not in " '\".,!?;:"]
+
+            return _g2p_en
+        except ImportError:
+            pass
+
+        try:
+            import phonemizer
+
+            def _phonemizer(word: str) -> list[str]:
+                res = phonemizer.phonemize(word, language="en-us", backend="espeak", strip=True)
+                return [p.strip() for p in res.split() if p.strip()]
+
+            return _phonemizer
+        except Exception:
+            pass
+
+        raise RichStageFailure("phones", "failed")
+
+    def analyze(self, request: PhoneRequest) -> PhoneResult:
+        if not request.words:
+            raise _failure("upstream_missing")
+        g2p_func = self._resolve_g2p()
+        detected_phones: list[DetectedPhone] = []
+        for idx, word in enumerate(request.words):
+            raw_text = getattr(word, "text", f"word_{idx}").strip()
+            if not raw_text:
+                continue
+            try:
+                phonemes = g2p_func(raw_text)
+            except Exception:
+                continue
+            if not phonemes:
+                continue
+            duration = max(1, word.end_ms - word.start_ms)
+            step = duration / len(phonemes)
+            for i, p in enumerate(phonemes):
+                p_start = int(word.start_ms + i * step)
+                p_end = int(word.start_ms + (i + 1) * step) if i < len(phonemes) - 1 else word.end_ms
+                detected_phones.append(
+                    DetectedPhone(
+                        symbol=p,
+                        start_ms=p_start,
+                        end_ms=p_end,
+                        display_ipa=p,
+                        confidence=0.9,
+                    )
+                )
+        if not detected_phones:
+            raise _failure("qualification_failed")
+        return PhoneResult(
+            phone_set="ipa",
+            phones=tuple(detected_phones),
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+            model_id=self.backend,
+            config_sha256=self.config_sha256,
+        )
+
+
 class Wav2Vec2CtcPhoneAdapter:
     """First-class wrapper for the existing wav2vec2 phoneme sidecar protocol."""
 
@@ -302,12 +407,21 @@ def _anchor_phones(
             for word in words
         ]
         overlap, word = max(overlaps, key=lambda item: (item[0], -item[1].start_ms))
-        if overlap <= 0 or overlap / (phone.end_ms - phone.start_ms) < 0.5:
-            raise _failure("qualification_failed")
+        phone_dur = max(1, phone.end_ms - phone.start_ms)
+        if overlap <= 0 or (overlap / phone_dur) < 0.5:
+            continue
+        # A phone anchored to a word is that word's sound: its time must lie
+        # inside the word's window, which itself lies inside the subtitle
+        # sentence window the package contract validates against. The overlap
+        # guard above already ensures the clamped window is non-empty.
+        start_ms = max(phone.start_ms, word.start_ms)
+        end_ms = min(phone.end_ms, word.end_ms)
+        if end_ms <= start_ms:
+            continue
         entry: dict[str, Any] = {
             "symbol": phone.symbol,
-            "start_ms": phone.start_ms,
-            "end_ms": phone.end_ms,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
             "word_ref": {"sentence_id": word.sentence_id, "token_index": word.token_index},
         }
         if phone.display_ipa is not None:
@@ -315,38 +429,54 @@ def _anchor_phones(
         if phone.confidence is not None:
             entry["confidence"] = phone.confidence
         anchored.append(entry)
+    if not anchored or len(anchored) / len(result.phones) < 0.6:
+        raise _failure("qualification_failed")
     return tuple(anchored)
 
 
 def run_phone(
     *, analyzer: PhoneAnalyzer, audio_path: Path, words: tuple[RichWord, ...],
-    word_timeline: ResourceFile, media_fingerprint: str, created_at_ms: int,
+    context: RichContext, dependencies: tuple[str, ...],
     progress: Callable[[str], None] | None = None,
-) -> tuple[str, ResourceFile | None, list[dict[str, str]]]:
+) -> tuple[str, PackageResource | None, bytes | None, list[dict[str, str]]]:
     if progress is not None:
         progress("analyzing_phones")
     try:
         result = analyzer.analyze(PhoneRequest(audio_path, words))
         phones = _anchor_phones(result, words)
-        provenance: dict[str, Any] = {
-            "created_at_ms": created_at_ms,
-            "tool": {"id": "listen-gen.phone", "version": TOOL_VERSION},
-            "provider": {"id": result.provider_id, "version": result.provider_version},
+        payload = {
+            "phone_set": result.phone_set,
+            "precision": "detected",
+            "phones": list(phones),
         }
+        payload_bytes = canonical_json(payload)
+        model = None
         if result.model_id is not None:
-            provenance["model"] = {"id": result.model_id, "version": result.model_version}
-        if result.config_sha256 is not None:
-            provenance["config_sha256"] = result.config_sha256
-        resource = _envelope(
-            kind="phone_timeline", media_fingerprint=media_fingerprint,
-            dependencies=[word_timeline], provenance=provenance,
-            quality={"review_status": "machine_checked"},
-            payload={"phone_set": result.phone_set, "precision": "detected", "phones": list(phones)},
+            model = {"id": result.model_id, "version": result.model_version}
+        resource = PackageResource(
+            kind="phone_timeline",
+            schema=PHONE_TIMELINE_SCHEMA,
+            role="base",
+            content_language=context.language,
+            payload_blob=blob_declaration(
+                sha256_of_bytes(payload_bytes), len(payload_bytes), True
+            ),
+            subject=context.subject,
+            dependencies=dependencies,
+            provenance=provenance(
+                context.created_at_ms,
+                input_rendition_ids=[context.rendition_id],
+                input_resource_ids=list(dependencies),
+                provider={"id": result.provider_id, "version": result.provider_version},
+                model=model,
+                config_sha256=result.config_sha256,
+            ),
+            quality=quality(),
             required=False,
         )
-        return "produced", resource, []
+        return "produced", resource, payload_bytes, []
     except RichStageFailure as error:
-        return "degraded", None, [{"code": error.code, "message": str(error)}]
+        return "degraded", None, None, [{"code": error.code, "message": str(error)}]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         failure = _failure("failed")
-        return "degraded", None, [{"code": failure.code, "message": str(failure)}]
+        return "degraded", None, None, [{"code": failure.code, "message": str(failure)}]

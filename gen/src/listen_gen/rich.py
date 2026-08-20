@@ -43,22 +43,125 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from . import __version__ as TOOL_VERSION
-from .alignment import AlignmentSentence
 from .command_identity import command_identity_sha256, compose_config_sha256
 from .media import AudioPreprocessor
-from .package import ConversionError, ResourceFile, _envelope
+from .package import ConversionError
+from .package_v3 import (
+    PackageResource,
+    blob_declaration,
+    canonical_json,
+    producer_declaration,
+    provenance,
+    quality,
+    sha256_of_bytes,
+)
 from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
-from .protocol import RichStageFailure, rich_warning
 
 SENSE_GROUP_RESULT_SCHEMA = "listen_gen.sense-group-result.v1"
 ACOUSTICS_RESULT_SCHEMA = "listen_gen.acoustics-result.v1"
 PROSODY_RESULT_SCHEMA = "listen_gen.prosody-result.v1"
-SENSE_GROUP_INPUT_SCHEMA = "listen_gen.subtitle-input.v1"
-ACOUSTICS_INPUT_SCHEMA = "listen_gen.acoustics-input.v1"
-PROSODY_INPUT_SCHEMA = "listen_gen.prosody-input.v1"
+SENSE_GROUP_SCHEMA = "listen.payload.sense-group-analysis.v1"
+ACOUSTICS_SCHEMA = "listen.payload.word-acoustics.v1"
+PROSODY_SCHEMA = "listen.payload.prosody-analysis.v1"
 ACOUSTICS_PIPELINE_CONFIG_SCHEMA = "listen_gen.acoustics-pipeline-config.v1"
 RICH_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 NORMALIZED_SAMPLE_RATE_HZ = 16000
+
+# Optional rich stages are provider-neutral: every failure preserves the
+# already-qualified upstream resources and is reported as a stable typed
+# warning code with a safe human message. Cancellation and media-change
+# failures are never treated as degradation.
+RICH_STAGE_TITLES: dict[str, str] = {
+    "sense_groups": "Sense-group",
+    "acoustics": "Acoustics",
+    "prosody": "Prosody",
+    "phone": "Phone",
+}
+RICH_WARNING_TAILS: dict[str, str] = {
+    "start_failed": "provider could not be started",
+    "timeout": "provider timed out",
+    "failed": "provider failed",
+    "output_invalid": "provider returned an invalid result",
+    "output_too_large": "provider produced too much output",
+    "qualification_failed": "result did not qualify",
+    "upstream_missing": "required upstream resource was not produced",
+}
+RICH_WARNING_MESSAGES: dict[str, str] = {
+    f"{stage}_{code}": (
+        f"The {RICH_STAGE_TITLES[stage]} {tail}; "
+        "already-qualified resources were preserved."
+    )
+    for stage in RICH_STAGE_TITLES
+    for code, tail in RICH_WARNING_TAILS.items()
+}
+
+
+class RichStageFailure(ConversionError):
+    """A degradable rich-stage failure carrying a stable typed warning code."""
+
+    def __init__(self, stage: str, code: str):
+        if stage not in RICH_STAGE_TITLES:
+            raise ValueError(f"unknown rich stage: {stage!r}")
+        if code not in RICH_WARNING_TAILS:
+            raise ValueError(f"unknown rich warning code: {code!r}")
+        self.stage = stage
+        self.code = f"{stage}_{code}"
+        super().__init__(RICH_WARNING_MESSAGES[self.code])
+
+
+def rich_warning(error: BaseException, stage: str) -> tuple[str, str]:
+    """Map a degradable rich-stage error to a stable typed warning."""
+    if isinstance(error, RichStageFailure):
+        return error.code, RICH_WARNING_MESSAGES[error.code]
+    message = str(error).lower()
+    if "timed out" in message:
+        code = "timeout"
+    elif "safety limit" in message:
+        code = "output_too_large"
+    elif "could not be started" in message:
+        code = "start_failed"
+    else:
+        code = "failed"
+    full = f"{stage}_{code}"
+    return full, RICH_WARNING_MESSAGES[full]
+
+
+@dataclass(frozen=True)
+class AlignmentToken:
+    index: int
+    kind: str
+    text: str
+    normalized: str | None
+    start_char: int
+    end_char: int
+
+
+@dataclass(frozen=True)
+class AlignmentSentence:
+    id: str
+    index: int
+    start_ms: int
+    end_ms: int
+    original_text: str
+    display_text: str
+    tokens: tuple[AlignmentToken, ...]
+
+
+@dataclass(frozen=True)
+class RichContext:
+    """The v3 package context a rich stage derives into.
+
+    ``anchor_resource_id`` names the Structured Reading resource the stage is
+    anchored to; ``rendition_id`` names the media rendition the timing refers
+    to. Every rich resource depends on the anchor resource and the stage
+    inputs.
+    """
+
+    language: str
+    subject: dict[str, object]
+    anchor_resource_id: str
+    rendition_id: str
+    created_at_ms: int
 
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}")
 
@@ -1301,121 +1404,116 @@ def _compose_acoustics_config_sha256(
     return f"sha256:{hashlib.sha256(config_bytes).hexdigest()}"
 
 
-def _rich_provenance(
+def _rich_resource(
     *,
-    tool_id: str,
+    kind: str,
+    schema: str,
+    context: RichContext,
+    dependencies: tuple[str, ...],
+    payload: dict[str, object],
     provider_id: str,
     provider_version: str,
     model_id: str | None,
     model_version: str | None,
     config_sha256: str | None,
-    created_at_ms: int,
-) -> dict[str, Any]:
-    provenance: dict[str, Any] = {
-        "created_at_ms": created_at_ms,
-        "tool": {"id": tool_id, "version": TOOL_VERSION},
-        "provider": {"id": provider_id, "version": provider_version},
-    }
+) -> tuple[PackageResource, bytes]:
+    """Build one v3 rich resource: canonical payload, declared provenance."""
+    provider = {"id": provider_id, "version": provider_version}
+    model = None
     if model_id is not None:
-        provenance["model"] = {"id": model_id, "version": model_version}
-    if config_sha256 is not None:
-        provenance["config_sha256"] = config_sha256
-    return provenance
+        model = {"id": model_id, "version": model_version}
+    payload_bytes = canonical_json(payload)
+    resource = PackageResource(
+        kind=kind,
+        schema=schema,
+        role="base",
+        content_language=context.language,
+        payload_blob=blob_declaration(
+            sha256_of_bytes(payload_bytes), len(payload_bytes), True
+        ),
+        subject=context.subject,
+        dependencies=dependencies,
+        provenance=provenance(
+            context.created_at_ms,
+            input_rendition_ids=[context.rendition_id],
+            input_resource_ids=list(dependencies),
+            provider=provider,
+            model=model,
+            config_sha256=config_sha256,
+        ),
+        quality=quality(),
+        required=False,
+    )
+    return resource, payload_bytes
 
 
 def _sense_group_resource(
     *,
-    subtitle: ResourceFile,
-    media_fingerprint: str,
+    context: RichContext,
+    dependencies: tuple[str, ...],
     result: SenseGroupResult,
     groups: tuple[dict[str, Any], ...],
-    created_at_ms: int,
-) -> ResourceFile:
-    return _envelope(
+) -> tuple[PackageResource, bytes]:
+    return _rich_resource(
         kind="sense_group_analysis",
-        media_fingerprint=media_fingerprint,
-        dependencies=[subtitle],
-        provenance=_rich_provenance(
-            tool_id="listen-gen.sense-groups",
-            provider_id=result.provider_id,
-            provider_version=result.provider_version,
-            model_id=result.model_id,
-            model_version=result.model_version,
-            config_sha256=result.config_sha256,
-            created_at_ms=created_at_ms,
-        ),
-        quality={"review_status": "machine_checked"},
+        schema=SENSE_GROUP_SCHEMA,
+        context=context,
+        dependencies=dependencies,
         payload={"groups": list(groups)},
-        required=False,
+        provider_id=result.provider_id,
+        provider_version=result.provider_version,
+        model_id=result.model_id,
+        model_version=result.model_version,
+        config_sha256=result.config_sha256,
     )
 
 
 def _acoustics_resource(
     *,
-    word_timeline: ResourceFile,
-    media_fingerprint: str,
+    context: RichContext,
+    dependencies: tuple[str, ...],
     result: AcousticsResult,
     measurements: tuple[dict[str, Any], ...],
     config_sha256: str | None,
-    created_at_ms: int,
-) -> ResourceFile:
-    return _envelope(
+) -> tuple[PackageResource, bytes]:
+    return _rich_resource(
         kind="word_acoustics",
-        media_fingerprint=media_fingerprint,
-        dependencies=[word_timeline],
-        provenance=_rich_provenance(
-            tool_id="listen-gen.acoustics",
-            provider_id=result.provider_id,
-            provider_version=result.provider_version,
-            model_id=result.model_id,
-            model_version=result.model_version,
-            config_sha256=config_sha256,
-            created_at_ms=created_at_ms,
-        ),
-        quality={"review_status": "machine_checked"},
+        schema=ACOUSTICS_SCHEMA,
+        context=context,
+        dependencies=dependencies,
         payload={
             "sample_rate_hz": result.sample_rate_hz,
             "energy_baseline": "sentence_median_dbfs",
             "pitch_baseline": "sentence_median_f0_hz",
             "measurements": list(measurements),
         },
-        required=False,
+        provider_id=result.provider_id,
+        provider_version=result.provider_version,
+        model_id=result.model_id,
+        model_version=result.model_version,
+        config_sha256=config_sha256,
     )
 
 
 def _prosody_resource(
     *,
-    word_timeline: ResourceFile,
-    acoustics: ResourceFile,
-    sense_group: ResourceFile | None,
-    media_fingerprint: str,
+    context: RichContext,
+    dependencies: tuple[str, ...],
     result: ProsodyResult,
     anchors: tuple[dict[str, Any], ...],
     chunks: tuple[dict[str, Any], ...],
-    created_at_ms: int,
-) -> ResourceFile:
-    dependencies: list[ResourceFile] = [word_timeline, acoustics]
-    if sense_group is not None:
-        dependencies.append(sense_group)
-    return _envelope(
+) -> tuple[PackageResource, bytes]:
+    return _rich_resource(
         kind="prosody_analysis",
-        media_fingerprint=media_fingerprint,
+        schema=PROSODY_SCHEMA,
+        context=context,
         dependencies=dependencies,
-        provenance=_rich_provenance(
-            tool_id="listen-gen.prosody",
-            provider_id=result.provider_id,
-            provider_version=result.provider_version,
-            model_id=result.model_id,
-            model_version=result.model_version,
-            config_sha256=result.config_sha256,
-            created_at_ms=created_at_ms,
-        ),
-        quality={"review_status": "machine_checked"},
-        payload={
-            "chunks": list(chunks),
-            "anchors": list(anchors),
-        },
-        required=False,
+        payload={"chunks": list(chunks), "anchors": list(anchors)},
+        provider_id=result.provider_id,
+        provider_version=result.provider_version,
+        model_id=result.model_id,
+        model_version=result.model_version,
+        config_sha256=result.config_sha256,
     )
 
 
@@ -1427,38 +1525,37 @@ def _prosody_resource(
 def run_sense_groups(
     *,
     analyzer: SenseGroupAnalyzer,
-    language: str,
+    context: RichContext,
     sentences: tuple[AlignmentSentence, ...],
-    subtitle: ResourceFile,
-    media_fingerprint: str,
-    created_at_ms: int,
+    dependencies: tuple[str, ...],
     progress: Callable[[str], None] | None = None,
-) -> tuple[str, ResourceFile | None, list[dict[str, str]], tuple[dict[str, Any], ...]]:
+) -> tuple[
+    str, PackageResource | None, bytes | None, list[dict[str, str]], tuple[dict[str, Any], ...]
+]:
     """Run the optional sense-group stage and convert failures into degradation.
 
-    Returns ``(status, resource, typed_warnings, resolved_groups)`` where
-    status is ``"produced"`` or ``"degraded"``. Degradable failures preserve
-    the subtitle and word resources; cancellation is never swallowed.
+    Returns ``(status, resource, payload_bytes, typed_warnings, resolved_groups)``
+    where status is ``"produced"`` or ``"degraded"``. Degradable failures
+    preserve the upstream resources; cancellation is never swallowed.
     """
     if progress is not None:
         progress("analyzing_sense_groups")
     try:
-        request = SenseGroupRequest(language=language, sentences=sentences)
+        request = SenseGroupRequest(language=context.language, sentences=sentences)
         result = analyzer.analyze(request)
         groups = _qualify_sense_groups(result, sentences)
-        resource = _sense_group_resource(
-            subtitle=subtitle,
-            media_fingerprint=media_fingerprint,
+        resource, payload_bytes = _sense_group_resource(
+            context=context,
+            dependencies=dependencies,
             result=result,
             groups=groups,
-            created_at_ms=created_at_ms,
         )
-        return "produced", resource, [], groups
+        return "produced", resource, payload_bytes, [], groups
     except RichStageFailure as error:
-        return "degraded", None, [{"code": error.code, "message": str(error)}], ()
+        return "degraded", None, None, [{"code": error.code, "message": str(error)}], ()
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         code, message = rich_warning(error, "sense_groups")
-        return "degraded", None, [{"code": code, "message": message}], ()
+        return "degraded", None, None, [{"code": code, "message": message}], ()
 
 
 def run_acoustics(
@@ -1467,14 +1564,14 @@ def run_acoustics(
     preprocessor: AudioPreprocessor | None,
     media_path: Path,
     audio_stream_index: int | None,
-    language: str,
+    context: RichContext,
     sentences: tuple[AlignmentSentence, ...],
     words: tuple[RichWord, ...],
-    word_timeline: ResourceFile,
-    media_fingerprint: str,
-    created_at_ms: int,
+    dependencies: tuple[str, ...],
     progress: Callable[[str], None] | None = None,
-) -> tuple[str, ResourceFile | None, list[dict[str, str]], tuple[dict[str, Any], ...]]:
+) -> tuple[
+    str, PackageResource | None, bytes | None, list[dict[str, str]], tuple[dict[str, Any], ...]
+]:
     """Run the optional word-acoustics stage and convert failures into degradation.
 
     The extractor receives the normalized 16 kHz mono PCM WAV when a media
@@ -1490,7 +1587,7 @@ def run_acoustics(
                 media_path, audio_stream_index=audio_stream_index
             ) as prepared:
                 request = AcousticsRequest(
-                    language=language,
+                    language=context.language,
                     sentences=sentences,
                     words=words,
                     audio_path=prepared.path,
@@ -1499,7 +1596,7 @@ def run_acoustics(
             stream_index = prepared.stream_index
         else:
             request = AcousticsRequest(
-                language=language,
+                language=context.language,
                 sentences=sentences,
                 words=words,
                 audio_path=media_path,
@@ -1512,37 +1609,32 @@ def run_acoustics(
             config_sha256 = _compose_acoustics_config_sha256(
                 result.config_sha256, stream_index
             )
-        resource = _acoustics_resource(
-            word_timeline=word_timeline,
-            media_fingerprint=media_fingerprint,
+        resource, payload_bytes = _acoustics_resource(
+            context=context,
+            dependencies=dependencies,
             result=result,
             measurements=measurements,
             config_sha256=config_sha256,
-            created_at_ms=created_at_ms,
         )
-        return "produced", resource, [], measurements
+        return "produced", resource, payload_bytes, [], measurements
     except RichStageFailure as error:
-        return "degraded", None, [{"code": error.code, "message": str(error)}], ()
+        return "degraded", None, None, [{"code": error.code, "message": str(error)}], ()
     except (ConversionError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         code, message = rich_warning(error, "acoustics")
-        return "degraded", None, [{"code": code, "message": message}], ()
+        return "degraded", None, None, [{"code": code, "message": message}], ()
 
 
 def run_prosody(
     *,
     analyzer: ProsodyAnalyzer,
-    language: str,
+    context: RichContext,
     sentences: tuple[AlignmentSentence, ...],
     words: tuple[RichWord, ...],
     measurements: tuple[dict[str, Any], ...],
     groups: tuple[dict[str, Any], ...] | None,
-    word_timeline: ResourceFile,
-    acoustics: ResourceFile,
-    sense_group: ResourceFile | None,
-    media_fingerprint: str,
-    created_at_ms: int,
+    dependencies: tuple[str, ...],
     progress: Callable[[str], None] | None = None,
-) -> tuple[str, ResourceFile | None, list[dict[str, str]]]:
+) -> tuple[str, PackageResource | None, bytes | None, list[dict[str, str]]]:
     """Run the optional prosody stage and convert failures into degradation.
 
     The prosody request carries the exact Word Timeline, the exact Word
@@ -1554,7 +1646,7 @@ def run_prosody(
         progress("analyzing_prosody")
     try:
         request = ProsodyRequest(
-            language=language,
+            language=context.language,
             sentences=sentences,
             words=words,
             measurements=measurements,
@@ -1564,19 +1656,16 @@ def run_prosody(
         anchors, chunks = _qualify_prosody(
             result, words, measurements, sentences, groups
         )
-        resource = _prosody_resource(
-            word_timeline=word_timeline,
-            acoustics=acoustics,
-            sense_group=sense_group if result.uses_sense_groups else None,
-            media_fingerprint=media_fingerprint,
+        resource, payload_bytes = _prosody_resource(
+            context=context,
+            dependencies=dependencies,
             result=result,
             anchors=anchors,
             chunks=chunks,
-            created_at_ms=created_at_ms,
         )
-        return "produced", resource, []
+        return "produced", resource, payload_bytes, []
     except RichStageFailure as error:
-        return "degraded", None, [{"code": error.code, "message": str(error)}]
+        return "degraded", None, None, [{"code": error.code, "message": str(error)}]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         code, message = rich_warning(error, "prosody")
-        return "degraded", None, [{"code": code, "message": message}]
+        return "degraded", None, None, [{"code": code, "message": message}]

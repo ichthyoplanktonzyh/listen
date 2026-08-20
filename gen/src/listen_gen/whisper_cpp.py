@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from .asr import AsrSegment, AsrTranscript
+from .asr import AsrSegment, AsrTranscript, AsrWord
 from .package import LANGUAGE_RE, ConversionError
 from .process import ProcessTimedOut, run_argv
 
@@ -24,6 +24,119 @@ def _sha256_file(path: Path) -> str:
 
 def _integer_offset(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _word_timings_from_tokens(raw_tokens: object) -> tuple[AsrWord, ...]:
+    """Aggregate whisper.cpp BPE tokens into exact word timings.
+
+    ``-ojf`` output places per-token text, offsets, and probability inside each
+    transcription segment. Tokens are model/BPE units, not guaranteed one per
+    word: consecutive lexical tokens aggregate into one word timing whose
+    character offsets cover the joined text. Special tokens (``<|``) are
+    skipped; every retained token must carry a positive half-open range and
+    advance the accumulated character offset exactly, so the emitted
+    ``start_char``/``end_char`` agree with the deterministic tokenization of
+    the segment text. Word timings are therefore exact ASR decoder facts, and
+    never fabricated.
+    """
+    if not isinstance(raw_tokens, list):
+        raise ConversionError("whisper.cpp provider returned an invalid result")
+    words: list[AsrWord] = []
+    char_cursor = 0
+    first_token = True
+    pending_text: list[str] = []
+    pending_start: int | None = None
+    pending_conf: list[float] = []
+    pending_time_start: int | None = None
+    pending_time_end: int | None = None
+
+    def flush() -> None:
+        nonlocal pending_text, pending_start, pending_conf
+        nonlocal pending_time_start, pending_time_end
+        if not pending_text or pending_start is None:
+            return
+        text = "".join(pending_text)
+        end_char = pending_start + len(text)
+        confidence = (
+            round(sum(pending_conf) / len(pending_conf), 4)
+            if pending_conf
+            else None
+        )
+        words.append(
+            AsrWord(
+                start_char=pending_start,
+                end_char=end_char,
+                start_ms=pending_time_start or 0,
+                end_ms=pending_time_end or 0,
+                confidence=confidence,
+                timing_source="asr_reported",
+            )
+        )
+        pending_text, pending_start, pending_conf = [], None, []
+        pending_time_start, pending_time_end = None, None
+
+    for raw_token in raw_tokens:
+        if not isinstance(raw_token, dict):
+            raise ConversionError("whisper.cpp provider returned an invalid result")
+        text = raw_token.get("text")
+        if not isinstance(text, str):
+            raise ConversionError("whisper.cpp provider returned an invalid result")
+        if "<|" in text or (text.startswith("[_") and text.endswith("]")):
+            continue
+        offsets = raw_token.get("offsets")
+        if not isinstance(offsets, dict):
+            raise ConversionError("whisper.cpp provider returned an invalid result")
+        start_ms = offsets.get("from")
+        end_ms = offsets.get("to")
+        if not _integer_offset(start_ms) or not _integer_offset(end_ms):
+            raise ConversionError("whisper.cpp provider returned an invalid result")
+        if end_ms <= start_ms:
+            # A zero-length word boundary token (e.g. a split-on-word prefix
+            # with no audio of its own) still carries text and advances the
+            # character cursor; it contributes no timing of its own.
+            leading = len(text) - len(text.lstrip(" "))
+            stripped = text.lstrip(" ")
+            if leading and pending_text:
+                flush()
+            pending_text.append(stripped)
+            if not first_token:
+                char_cursor += leading
+            first_token = False
+            if pending_start is None:
+                pending_start = char_cursor
+            char_cursor += len(stripped)
+            continue
+        probability = raw_token.get("p")
+        confidence: float | None = None
+        if isinstance(probability, (int, float)) and not isinstance(probability, bool):
+            if not 0 <= probability <= 1:
+                raise ConversionError("whisper.cpp provider returned an invalid result")
+            confidence = float(probability)
+        leading = len(text) - len(text.lstrip(" "))
+        stripped = text.lstrip(" ")
+        word_initial = bool(stripped) and (stripped[0].isalnum() or stripped[0] == "_")
+        if leading and pending_text:
+            flush()
+        elif pending_text and not word_initial:
+            # A punctuation token continues nothing: it is its own entry,
+            # matching the deterministic word/punctuation tokenization.
+            flush()
+        pending_text.append(stripped)
+        # The segment text is stripped; the first token's leading space does
+        # not exist in the emitted sentence, so only inter-word spaces count.
+        if not first_token:
+            char_cursor += leading
+        first_token = False
+        if pending_start is None:
+            pending_start = char_cursor
+        if pending_time_start is None:
+            pending_time_start = start_ms
+        pending_time_end = end_ms
+        if confidence is not None:
+            pending_conf.append(confidence)
+        char_cursor += len(stripped)
+    flush()
+    return tuple(words)
 
 
 def _parse_whisper_result(
@@ -59,13 +172,19 @@ def _parse_whisper_result(
         trimmed_text = text.strip()
         if not trimmed_text:
             raise ConversionError("whisper.cpp provider returned an invalid result")
+        raw_tokens = raw_segment.get("tokens")
+        words = (
+            _word_timings_from_tokens(raw_tokens)
+            if raw_tokens is not None
+            else ()
+        )
         segments.append(
             AsrSegment(
                 start_ms=start_ms,
                 end_ms=end_ms,
                 text=trimmed_text,
                 display_text=trimmed_text,
-                words=(),
+                words=words,
             )
         )
         previous_to = end_ms
@@ -152,7 +271,9 @@ class WhisperCppAsrAdapter:
                 str(self.model_path),
                 "-f",
                 str(media_path),
-                "-oj",
+                "-ojf",
+                "-sow",
+                "-wt", "0.01",
                 "-of",
                 str(output_prefix),
                 "-l",
@@ -220,8 +341,10 @@ class WhisperCppAsrAdapter:
             "model_version": f"sha256:{model_sha256}",
             "requested_language": self.language,
             "task": "translate_to_english" if self.translate_to_english else "transcribe",
-            "output_format": "whisper.cpp-standard-json",
-            "word_timestamps": False,
+            "output_format": "whisper.cpp-full-json",
+            "word_timestamps": True,
+            "word_threshold": 0.01,
+            "split_on_word": True,
         }
         config_bytes = json.dumps(
             config_value,

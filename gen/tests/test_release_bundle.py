@@ -17,14 +17,37 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import release_bundle as rb
-from listen_gen import protocol
+from listen_gen import protocol_v2 as protocol
 
 FAKE_COMMIT = "ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12"
-VERSION = "0.4.0"
+# Read from the package rather than restated here: a hardcoded copy turned
+# every version bump into sixteen red tests that say nothing about the bump.
+VERSION = protocol.TOOL_VERSION
 PYZ_NAME = f"listen-gen-{VERSION}.pyz"
 MANIFEST_NAME = f"listen-gen-{VERSION}.release.json"
 SHEBANG = b"#!/usr/bin/env python3\n"
 FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+
+FAKE_CORE_SCHEMA_DIGEST = "ab" * 32
+FAKE_CORE_CONTRACT_VERSION = "4.0.0"
+
+
+def write_core_contract_manifest(directory: Path) -> Path:
+    """Write a fake listen-core contract artifact manifest (real format)."""
+    manifest = {
+        "api_version": 1,
+        "artifact_kind": "listen-contracts",
+        "contract_version": FAKE_CORE_CONTRACT_VERSION,
+        "core_git_sha": "0" * 40,
+        "event_schema_version": 1,
+        "manifest_version": 1,
+        "files": {
+            "contracts/content-package/v3/release.schema.json": FAKE_CORE_SCHEMA_DIGEST,
+        },
+    }
+    path = directory / "listen-contracts.manifest.json"
+    path.write_text(canonical_json_file_bytes(manifest).decode("utf-8"), encoding="utf-8")
+    return path
 
 
 def canonical_json_bytes(document: object) -> bytes:
@@ -47,17 +70,56 @@ def env_with_src() -> dict[str, str]:
     return env
 
 
+def _capability_request_path(directory: Path) -> Path:
+    import hashlib
+
+    text = b"Release bundle sample text.\nSecond sentence."
+    digest = "sha256:" + hashlib.sha256(text).hexdigest()
+    document_path = directory / "sample.txt"
+    document_path.write_bytes(text)
+    request = {
+        "schema": "listen_gen.capability-request.v2",
+        "version": 2,
+        "created_at_ms": 1786000000000,
+        "attempt_id": "attempt-release-bundle",
+        "material": {
+            "material_id": "material-1",
+            "material_revision_id": "revision-1",
+            "title": "Release bundle sample",
+        },
+        "edition": {
+            "edition_id": "edition-1",
+            "title": "Edition",
+            "target_language": "en",
+            "support_languages": [],
+        },
+        "requested_capability": "read",
+        "available_renditions": [
+            {
+                "kind": "document",
+                "rendition_id": "sha256:" + "1" * 64,
+                "media_type": "text/plain",
+                "language": "en",
+                "source_asset_id": "sha256:" + "2" * 64,
+                "blob": {
+                    "digest": digest,
+                    "size_bytes": len(text),
+                    "path": str(document_path),
+                },
+            }
+        ],
+        "available_resources": [],
+    }
+    request_path = directory / "request.json"
+    request_path.write_text(json.dumps(request), encoding="utf-8")
+    return request_path
+
+
 def fixture_argv(output: Path, *, machine: bool) -> list[str]:
     argv = [
-        "package", "from-media",
-        str(ROOT / "tests" / "fixtures" / "sample-media.wav"),
+        "package", "from-capability",
+        str(_capability_request_path(output.parent)),
         "--output", str(output),
-        "--provider", "fixture",
-        "--fixture", str(ROOT / "tests" / "fixtures" / "sample.asr.json"),
-        "--title", "Release bundle sample",
-        "--media-kind", "audio",
-        "--duration-ms", "2200",
-        "--created-at-ms", "1786000000000",
     ]
     if machine:
         argv.append("--machine-events")
@@ -99,8 +161,10 @@ class ReleaseBundleTestBase(unittest.TestCase):
         cls._class_tmp = tempfile.TemporaryDirectory()
         cls.class_tmp = Path(cls._class_tmp.name)
         cls.output_parent = cls.class_tmp / "dist"
+        cls.core_manifest = write_core_contract_manifest(cls.class_tmp)
         cls.artifact, cls.manifest = rb.build_release_bundle(
-            ROOT, cls.output_parent, FAKE_COMMIT
+            ROOT, cls.output_parent, FAKE_COMMIT,
+            core_contract_manifest=cls.core_manifest,
         )
 
     @classmethod
@@ -117,7 +181,10 @@ class DeterministicBuildTests(ReleaseBundleTestBase):
     def test_same_commit_two_output_parents_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             parent_b = Path(tmp) / "other-dist"
-            artifact_b, manifest_b = rb.build_release_bundle(ROOT, parent_b, FAKE_COMMIT)
+            artifact_b, manifest_b = rb.build_release_bundle(
+                ROOT, parent_b, FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(
                 self.artifact.read_bytes(), artifact_b.read_bytes()
             )
@@ -136,10 +203,12 @@ class DeterministicBuildTests(ReleaseBundleTestBase):
         root_b = make_repo_root("repo-b-")
         with tempfile.TemporaryDirectory() as tmp:
             artifact_a, manifest_a = rb.build_release_bundle(
-                root_a, Path(tmp) / "dist-a", FAKE_COMMIT
+                root_a, Path(tmp) / "dist-a", FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
             )
             artifact_b, manifest_b = rb.build_release_bundle(
-                root_b, Path(tmp) / "dist-b", FAKE_COMMIT
+                root_b, Path(tmp) / "dist-b", FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
             )
             bytes_a = artifact_a.read_bytes()
             bytes_b = artifact_b.read_bytes()
@@ -175,10 +244,10 @@ class ManifestContentTests(ReleaseBundleTestBase):
             set(manifest["content_package_contract"]),
             {
                 "authority",
-                "manifest_schema_id",
-                "resource_schema_id",
+                "release_schema_id",
                 "package_schema",
                 "schema_version",
+                "contract_version",
                 "canonical_sha256",
             },
         )
@@ -211,7 +280,7 @@ class ManifestContentTests(ReleaseBundleTestBase):
             "version": protocol.TOOL_VERSION,
         })
         self.assertEqual(manifest["machine_protocol"], {
-            "schema": protocol.MACHINE_EVENT_SCHEMA,
+            "schema": protocol.MACHINE_EVENT_SCHEMA_V2,
             "version": protocol.MACHINE_PROTOCOL_VERSION,
         })
         runtime_identity = manifest["runtime_identity"]
@@ -263,19 +332,19 @@ class ManifestContentTests(ReleaseBundleTestBase):
             "path": lock["authority"]["path"],
         })
         self.assertEqual(
-            contract["manifest_schema_id"], lock["manifest_schema_id"]
-        )
-        self.assertEqual(
-            contract["resource_schema_id"], lock["resource_schema_id"]
+            contract["release_schema_id"], lock["release_schema_id"]
         )
         self.assertEqual(contract["package_schema"], lock["package_schema"])
         self.assertEqual(contract["schema_version"], lock["schema_version"])
-        self.assertEqual(contract["canonical_sha256"], "sha256:" + hashlib.sha256(
-            canonical_json_bytes(lock)
-        ).hexdigest())
+        self.assertEqual(contract["contract_version"], FAKE_CORE_CONTRACT_VERSION)
+        self.assertEqual(
+            contract["canonical_sha256"], "sha256:" + FAKE_CORE_SCHEMA_DIGEST
+        )
+        # The contract digest comes from the Core artifact manifest, never
+        # from this repository's own lock.
         self.assertNotEqual(
             contract["canonical_sha256"],
-            "sha256:" + hashlib.sha256(canonical_json_file_bytes(lock)).hexdigest(),
+            "sha256:" + hashlib.sha256(canonical_json_bytes(lock)).hexdigest(),
         )
         artifact_bytes = self.artifact.read_bytes()
         self.assertEqual(manifest["artifact"], {
@@ -298,7 +367,10 @@ class ManifestContentTests(ReleaseBundleTestBase):
             renamed = manifest.parent / "wrong-name.json"
             shutil.copyfile(manifest, renamed)
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.verify_release_bundle(ROOT, renamed)
+                rb.verify_release_bundle(
+                ROOT, renamed,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release manifest is invalid")
 
 
@@ -387,8 +459,8 @@ class ZipappRuntimeTests(ReleaseBundleTestBase):
             ]
             self.assertGreaterEqual(len(events), 2)
             for index, event in enumerate(events):
-                self.assertEqual(event["schema"], "listen_gen.machine-event.v1")
-                self.assertEqual(event["protocol_version"], 1)
+                self.assertEqual(event["schema"], "listen_gen.machine-event.v2")
+                self.assertEqual(event["protocol_version"], 2)
                 self.assertEqual(event["tool"], {
                     "id": protocol.TOOL_ID,
                     "version": protocol.TOOL_VERSION,
@@ -396,7 +468,7 @@ class ZipappRuntimeTests(ReleaseBundleTestBase):
                 self.assertEqual(event["sequence"], index)
             terminals = [
                 event for event in events
-                if event["event"] in {"completed", "failed", "cancelled"}
+                if event["event"] in {"completed", "cancelled", "failed"}
             ]
             self.assertEqual(len(terminals), 1)
             terminal = terminals[0]
@@ -425,7 +497,10 @@ class VerifierFailureTests(ReleaseBundleTestBase):
             data = bytearray(artifact.read_bytes())
             data[len(data) // 2] ^= 0xFF
             artifact.write_bytes(bytes(data))
-            completed = run_tool(["verify", str(manifest)])
+            completed = run_tool([
+                "verify", str(manifest),
+                "--core-contract-manifest", str(self.core_manifest),
+            ])
             self.assertEqual(completed.returncode, 2)
             self.assertEqual(
                 completed.stderr.splitlines(),
@@ -437,7 +512,10 @@ class VerifierFailureTests(ReleaseBundleTestBase):
             artifact, manifest = self.copy_bundle(Path(tmp))
             artifact.write_bytes(artifact.read_bytes() + b"\x00")
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.verify_release_bundle(ROOT, manifest)
+                rb.verify_release_bundle(
+                ROOT, manifest,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release artifact size mismatch")
 
     def test_missing_artifact(self) -> None:
@@ -445,7 +523,10 @@ class VerifierFailureTests(ReleaseBundleTestBase):
             _, manifest = self.copy_bundle(Path(tmp))
             (manifest.parent / PYZ_NAME).unlink()
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.verify_release_bundle(ROOT, manifest)
+                rb.verify_release_bundle(
+                ROOT, manifest,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release artifact is missing")
 
     def test_manifest_path_traversal_rejected(self) -> None:
@@ -454,7 +535,10 @@ class VerifierFailureTests(ReleaseBundleTestBase):
             parsed = json.loads(manifest.read_bytes())
             parsed["artifact"]["filename"] = f"../{PYZ_NAME}"
             manifest.write_bytes(canonical_json_file_bytes(parsed))
-            completed = run_tool(["verify", str(manifest)])
+            completed = run_tool([
+                "verify", str(manifest),
+                "--core-contract-manifest", str(self.core_manifest),
+            ])
             self.assertEqual(completed.returncode, 2)
             self.assertEqual(
                 completed.stderr.splitlines(),
@@ -473,7 +557,10 @@ class VerifierFailureTests(ReleaseBundleTestBase):
                     "sha256:" + hashlib.sha256(malicious).hexdigest()
                 )
                 manifest.write_bytes(canonical_json_file_bytes(parsed))
-                completed = run_tool(["verify", str(manifest)])
+                completed = run_tool([
+                "verify", str(manifest),
+                "--core-contract-manifest", str(self.core_manifest),
+            ])
                 self.assertEqual(completed.returncode, 2, bad_name)
                 self.assertEqual(
                     completed.stderr.splitlines(),
@@ -482,7 +569,10 @@ class VerifierFailureTests(ReleaseBundleTestBase):
                 )
 
     def test_verify_success_output(self) -> None:
-        completed = run_tool(["verify", str(self.manifest)])
+        completed = run_tool([
+                "verify", str(self.manifest),
+                "--core-contract-manifest", str(self.core_manifest),
+            ])
         self.assertEqual(completed.returncode, 0, completed.stderr)
         document = json.loads(completed.stdout)
         self.assertEqual(document["status"], "verified")
@@ -502,6 +592,15 @@ class VerifierFailureTests(ReleaseBundleTestBase):
 
 
 class BuildErrorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.core_manifest = write_core_contract_manifest(
+            Path(self._tmp.name)
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
     def test_invalid_source_commit(self) -> None:
         invalid = [
             "",
@@ -515,7 +614,10 @@ class BuildErrorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             for commit in invalid:
                 with self.assertRaises(rb.ReleaseBundleError) as caught:
-                    rb.build_release_bundle(ROOT, Path(tmp), commit)
+                    rb.build_release_bundle(
+                    ROOT, Path(tmp), commit,
+                    core_contract_manifest=self.core_manifest,
+                )
                 self.assertEqual(
                     str(caught.exception),
                     "source commit must be a lowercase 40-character SHA",
@@ -523,8 +625,11 @@ class BuildErrorTests(unittest.TestCase):
 
     def test_invalid_source_commit_via_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            core_manifest = write_core_contract_manifest(Path(tmp))
             completed = run_tool([
-                "build", "--source-commit", "NOPE", "--output-parent", tmp,
+                "build", "--source-commit", "NOPE",
+                "--core-contract-manifest", str(core_manifest),
+                "--output-parent", tmp,
             ])
             self.assertEqual(completed.returncode, 2)
             self.assertEqual(
@@ -540,7 +645,10 @@ class BuildErrorTests(unittest.TestCase):
             sentinel = existing / "sentinel.txt"
             sentinel.write_text("do not touch\n")
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.build_release_bundle(ROOT, output_parent, FAKE_COMMIT)
+                rb.build_release_bundle(
+                ROOT, output_parent, FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(
                 str(caught.exception), "release bundle directory already exists"
             )
@@ -563,7 +671,10 @@ class BuildErrorTests(unittest.TestCase):
             unrelated = output_parent / "keep.txt"
             unrelated.write_text("keep me\n")
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.build_release_bundle(root, output_parent, FAKE_COMMIT)
+                rb.build_release_bundle(
+                root, output_parent, FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(
                 str(caught.exception), "content package contract lock is invalid"
             )
@@ -583,7 +694,10 @@ class BuildErrorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             output_parent = Path(tmp)
             with self.assertRaises(rb.ReleaseBundleError):
-                rb.build_release_bundle(root, output_parent, FAKE_COMMIT)
+                rb.build_release_bundle(
+                root, output_parent, FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertFalse((output_parent / f"listen-gen-{VERSION}").exists())
             self.assertEqual(
                 [path.name for path in output_parent.iterdir()], []
@@ -593,8 +707,10 @@ class BuildErrorTests(unittest.TestCase):
 class CliBuildOutputTests(unittest.TestCase):
     def test_build_success_output_and_layout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            core_manifest = write_core_contract_manifest(Path(tmp))
             completed = run_tool([
                 "build", "--source-commit", FAKE_COMMIT,
+                "--core-contract-manifest", str(core_manifest),
                 "--output-parent", tmp,
             ])
             self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -615,7 +731,10 @@ class CliBuildOutputTests(unittest.TestCase):
             )
             mode = (bundle / PYZ_NAME).stat().st_mode & 0o777
             self.assertEqual(mode, 0o755)
-            verify = run_tool(["verify", str(bundle / MANIFEST_NAME)])
+            verify = run_tool([
+                "verify", str(bundle / MANIFEST_NAME),
+                "--core-contract-manifest", str(core_manifest),
+            ])
             self.assertEqual(verify.returncode, 0, verify.stderr)
 
 
@@ -625,8 +744,54 @@ class StrictVerifierTests(ReleaseBundleTestBase):
             _, manifest = self.copy_bundle(Path(tmp))
             manifest.write_bytes(raw)
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.verify_release_bundle(ROOT, manifest)
+                rb.verify_release_bundle(
+                ROOT, manifest,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release manifest is invalid")
+
+    def test_build_without_core_manifest_abstains(self) -> None:
+        # Gen never invents a Core release identity: a build without the real
+        # Core contract manifest is a hard error, never a silent identity.
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.build_release_bundle(
+                    ROOT,
+                    Path(tmp),
+                    FAKE_COMMIT,
+                    core_contract_manifest=Path(tmp) / "missing.json",
+                )
+            self.assertEqual(str(caught.exception), "core contract manifest is not valid JSON")
+
+    def test_forged_contract_version_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            core_manifest = write_core_contract_manifest(Path(tmp))
+            _, manifest = self.copy_bundle(Path(tmp))
+            parsed = json.loads(manifest.read_bytes())
+            parsed["content_package_contract"]["contract_version"] = "99.0.0"
+            manifest.write_bytes(canonical_json_file_bytes(parsed))
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(
+                    ROOT, manifest,
+                    core_contract_manifest=core_manifest,
+                )
+            self.assertEqual(str(caught.exception), "core contract manifest is invalid")
+
+    def test_forged_contract_digest_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            core_manifest = write_core_contract_manifest(Path(tmp))
+            _, manifest = self.copy_bundle(Path(tmp))
+            parsed = json.loads(manifest.read_bytes())
+            parsed["content_package_contract"]["canonical_sha256"] = (
+                "sha256:" + "ff" * 32
+            )
+            manifest.write_bytes(canonical_json_file_bytes(parsed))
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(
+                    ROOT, manifest,
+                    core_contract_manifest=core_manifest,
+                )
+            self.assertEqual(str(caught.exception), "core contract manifest is invalid")
 
     def test_non_canonical_manifest_variants_rejected(self) -> None:
         parsed = json.loads(self.manifest.read_bytes())
@@ -690,7 +855,10 @@ class StrictVerifierTests(ReleaseBundleTestBase):
                 parsed["artifact"]["sha256"] = value
                 manifest.write_bytes(canonical_json_file_bytes(parsed))
                 with self.assertRaises(rb.ReleaseBundleError) as caught:
-                    rb.verify_release_bundle(ROOT, manifest)
+                    rb.verify_release_bundle(
+                ROOT, manifest,
+                core_contract_manifest=self.core_manifest,
+            )
                 self.assertEqual(
                     str(caught.exception), "release manifest is invalid", value
                 )
@@ -722,7 +890,10 @@ class StrictVerifierTests(ReleaseBundleTestBase):
             manifest.rename(forged_manifest)
             forged_manifest.write_bytes(canonical_json_file_bytes(parsed))
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.verify_release_bundle(ROOT, forged_manifest)
+                rb.verify_release_bundle(
+                ROOT, forged_manifest,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release manifest is invalid")
 
 
@@ -732,7 +903,10 @@ class RuntimeIdentityVerifierTests(ReleaseBundleTestBase):
             _, manifest = self.copy_bundle(Path(tmp))
             manifest.write_bytes(raw)
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.verify_release_bundle(ROOT, manifest)
+                rb.verify_release_bundle(
+                ROOT, manifest,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release manifest is invalid")
 
     def test_bool_cannot_impersonate_identity_versions(self) -> None:
@@ -833,15 +1007,27 @@ class RuntimeIdentityVerifierTests(ReleaseBundleTestBase):
 
 
 class ModuleIsolationAndSourceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.core_manifest = write_core_contract_manifest(
+            Path(self._tmp.name)
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
     def test_repo_root_module_isolation(self) -> None:
         root = copy_repo_root("isolated-repo-")
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-        protocol_file = root / "src" / "listen_gen" / "protocol.py"
+        protocol_file = root / "src" / "listen_gen" / "protocol_v2.py"
         with protocol_file.open("a", encoding="utf-8") as handle:
             handle.write('\nTOOL_VERSION = "9.9.9"\n')
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.build_release_bundle(root, Path(tmp), FAKE_COMMIT)
+                rb.build_release_bundle(
+                root, Path(tmp), FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release manifest is invalid")
         # The test process's cached real modules must be fully restored.
         self.assertEqual(protocol.TOOL_VERSION, VERSION)
@@ -852,15 +1038,21 @@ class ModuleIsolationAndSourceTests(unittest.TestCase):
         pyproject = root / "pyproject.toml"
         pyproject.write_text(
             pyproject.read_text("utf-8").replace(
-                'version = "0.4.0"', 'version = "9.9.9"', 1
+                f'version = "{VERSION}"', 'version = "9.9.9"', 1
             )
         )
-        # The checkout protocol identity stays at 0.4.0.
+        # The checkout protocol identity stays at the real version.
         self.assertEqual(protocol.TOOL_VERSION, VERSION)
         with tempfile.TemporaryDirectory() as tmp:
-            _, manifest = rb.build_release_bundle(ROOT, Path(tmp), FAKE_COMMIT)
+            _, manifest = rb.build_release_bundle(
+                ROOT, Path(tmp), FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
+            )
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.verify_release_bundle(root, manifest)
+                rb.verify_release_bundle(
+                root, manifest,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(str(caught.exception), "release manifest is invalid")
 
     def test_non_utf8_python_source_rejected(self) -> None:
@@ -872,7 +1064,10 @@ class ModuleIsolationAndSourceTests(unittest.TestCase):
             unrelated = output_parent / "keep.txt"
             unrelated.write_text("keep me\n")
             with self.assertRaises(rb.ReleaseBundleError) as caught:
-                rb.build_release_bundle(root, output_parent, FAKE_COMMIT)
+                rb.build_release_bundle(
+                root, output_parent, FAKE_COMMIT,
+                core_contract_manifest=self.core_manifest,
+            )
             self.assertEqual(
                 str(caught.exception),
                 "release archive content does not match source",

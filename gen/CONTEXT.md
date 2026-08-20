@@ -42,6 +42,15 @@ A candidate Learning Resource emitted by a Generation Run with complete Resource
 Provenance.
 _Avoid_: Raw provider response, activated resource
 
+**Production Input Projection**:
+A provider-specific rendering of the exact ordered spans of one Structured
+Reading (for example plain text for TTS or Markdown for a text-model
+producer), produced inside a Generation Run only. A projection is never
+persisted as a Rendition, Resource, or package authority; its hash and
+configuration flow into resource provenance so the exact provider input stays
+reproducible.
+_Avoid_: Extracted document text, canonical intermediate format
+
 **Producer Capability**:
 A declared kind of Learning Resource that a configured producer can attempt to
 create for specified languages and input resources.

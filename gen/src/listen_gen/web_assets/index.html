@@ -1,0 +1,2371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Listen Gen - Model Providers & Generation Workbench</title>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      
+      /* Dark Theme (Default) */
+      --bg-base: #0f1117;
+      --bg-surface: #171923;
+      --bg-surface-raised: #1f2333;
+      --bg-surface-hover: #272c40;
+      --border-subtle: #2d3348;
+      --border-focus: #3b82f6;
+      
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-glow: rgba(37, 99, 235, 0.2);
+      
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.15);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.15);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+    }
+
+    [data-theme="light"] {
+      --bg-base: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-surface-raised: #f1f5f9;
+      --bg-surface-hover: #e2e8f0;
+      --border-subtle: #e2e8f0;
+      --border-focus: #2563eb;
+      
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-dim: #94a3b8;
+      
+      --shadow-card: 0 4px 16px -2px rgba(0, 0, 0, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    header {
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #3b82f6, #10b981);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 1.1rem;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-badge {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9999px;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* Main Container */
+    .app-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 240px;
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-subtle);
+      padding: 1.25rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.9rem;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.92rem;
+      font-weight: 500;
+      transition: all 0.15s ease;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+
+    .nav-item:hover {
+      background-color: var(--bg-surface-hover);
+      color: var(--text-main);
+    }
+
+    .nav-item.active {
+      background-color: var(--primary-glow);
+      color: #60a5fa;
+      font-weight: 600;
+    }
+
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    /* Content Area */
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.75rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Typography & Sections */
+    .section-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    /* Cards */
+    .card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow-card);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Form Controls */
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 0.4rem;
+      color: var(--text-muted);
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 0.55rem 0.85rem;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.55rem 1.1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background-color: var(--bg-surface-raised);
+      border-color: var(--border-subtle);
+      color: var(--text-main);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--bg-surface-hover);
+    }
+
+    .btn-success {
+      background-color: var(--success);
+      color: white;
+    }
+
+    .btn-sm {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    .btn-danger-link {
+      background: transparent;
+      border: none;
+      color: var(--danger);
+      font-size: 0.82rem;
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+    }
+    .btn-danger-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Pill Tabs */
+    .pill-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      background-color: var(--bg-surface-raised);
+      padding: 0.35rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+      overflow-x: auto;
+    }
+
+    .pill-tab {
+      padding: 0.4rem 0.9rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+
+    .pill-tab:hover {
+      color: var(--text-main);
+    }
+
+    .pill-tab.active {
+      background-color: var(--bg-surface);
+      color: var(--text-main);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
+    /* File Dropzone & Chosen Card */
+    .dropzone {
+      border: 2px dashed var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      background-color: var(--bg-surface-raised);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background-color: var(--bg-surface-hover);
+    }
+
+    .dropzone-icon {
+      font-size: 1.8rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .dropzone-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 0.2rem;
+    }
+
+    .dropzone-desc {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .file-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      margin-top: 0.6rem;
+    }
+
+    .file-card-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      overflow: hidden;
+    }
+
+    .file-card-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .file-card-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 450px;
+    }
+
+    .file-card-meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Status Badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+
+    .badge-success {
+      background-color: var(--success-bg);
+      color: #34d399;
+    }
+
+    .badge-warning {
+      background-color: var(--warning-bg);
+      color: #fbbf24;
+    }
+
+    .badge-danger {
+      background-color: var(--danger-bg);
+      color: #f87171;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
+
+    /* Test Result Box */
+    .test-feedback {
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    .test-feedback.active {
+      display: block;
+    }
+
+    .test-feedback.success {
+      background-color: var(--success-bg);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+
+    .test-feedback.error {
+      background-color: var(--danger-bg);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+
+    /* Terminal / Log Output */
+    .terminal-box {
+      background-color: #0b0c10;
+      border: 1px solid #1f2333;
+      border-radius: var(--radius-sm);
+      padding: 0.85rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      height: 240px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      line-height: 1.4;
+    }
+
+    .terminal-line {
+      margin-bottom: 2px;
+    }
+    .terminal-line.info { color: #60a5fa; }
+    .terminal-line.success { color: #34d399; }
+    .terminal-line.warning { color: #fbbf24; }
+    .terminal-line.error { color: #f87171; }
+
+    /* Checkbox / Toggle */
+    .checkbox-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+      cursor: pointer;
+    }
+
+    .checkbox-item input {
+      margin-top: 0.2rem;
+      cursor: pointer;
+    }
+
+    .checkbox-label-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .checkbox-label-desc {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.88rem;
+      z-index: 1000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Nav item count badge */
+    .nav-count {
+      margin-left: auto;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 6px;
+    }
+    .nav-item.active .nav-count {
+      color: #60a5fa;
+      border-color: rgba(96, 165, 250, 0.4);
+    }
+
+    /* Task history list */
+    .task-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.75rem;
+      align-items: center;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.6rem;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .task-row:hover {
+      border-color: var(--border-focus);
+      background-color: var(--bg-surface-hover);
+    }
+    .task-row-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .task-row-meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .task-row-actions {
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    /* Task detail */
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .detail-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .detail-meta {
+      font-size: 0.83rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Cancel button */
+    .btn-danger {
+      background-color: var(--danger);
+      color: white;
+    }
+    .btn-danger:hover {
+      filter: brightness(1.1);
+    }
+    .btn-danger:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Upload progress */
+    .upload-progress {
+      height: 4px;
+      border-radius: 9999px;
+      background-color: var(--bg-surface-hover);
+      overflow: hidden;
+      margin-top: 0.55rem;
+      display: none;
+    }
+    .upload-progress.visible {
+      display: block;
+    }
+    .upload-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary), #10b981);
+      transition: width 0.2s ease;
+    }
+
+    /* Form validation */
+    .field-error {
+      color: var(--danger);
+      font-size: 0.78rem;
+      margin-top: 0.3rem;
+      display: none;
+    }
+    .field-error.visible {
+      display: block;
+    }
+    .form-input.invalid, .form-select.invalid, .form-textarea.invalid {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px var(--danger-bg);
+    }
+    .error-summary {
+      background-color: var(--danger-bg);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      border-radius: var(--radius-sm);
+      padding: 0.7rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .error-summary.visible {
+      display: block;
+    }
+    .error-summary ul {
+      margin: 0.4rem 0 0 1.1rem;
+    }
+
+    /* Queued badge + task stats */
+    .badge-neutral {
+      background-color: var(--bg-surface-hover);
+      color: var(--text-muted);
+    }
+    .task-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .stat-card {
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 0.85rem;
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.2rem;
+    }
+    .stat-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .stage-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin-top: 0.5rem;
+    }
+    .stage-table th, .stage-table td {
+      text-align: left;
+      padding: 0.3rem 0.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .stage-table th {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .resource-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9999px;
+      padding: 0.15rem 0.5rem;
+      margin: 0.15rem 0.25rem 0 0;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">L</div>
+      <div>
+        <div class="brand-title">Listen Gen</div>
+      </div>
+      <span class="brand-badge">Open Producer v0.5.0</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" id="btn-theme-toggle" title="切换主题">
+        🌓 主题
+      </button>
+      <button class="btn btn-primary btn-sm" id="btn-save-all-config">
+        💾 保存全局配置
+      </button>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <button class="nav-item active" data-tab="providers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span>Model Providers</span>
+      </button>
+      <button class="nav-item" data-tab="workbench">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>生成工作台</span>
+      </button>
+      <button class="nav-item" data-tab="toolchain">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span>系统工具链</span>
+      </button>
+      <button class="nav-item" data-tab="tasks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>任务历史</span>
+        <span class="nav-count" id="nav-task-count" style="display:none;">0</span>
+      </button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+      <!-- TAB 1: Model Providers -->
+      <section id="tab-providers" class="tab-pane active">
+        <div class="section-header">
+          <h2 class="section-title">⚙️ 模型与 Provider 管理中心</h2>
+          <p class="section-desc">配置与测试用于意群分析、语音识别、音素提取和强制对齐的多模态 AI 模型与 Provider 凭据。</p>
+        </div>
+
+        <!-- 1. LLM Profiles -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🧠 大语言模型 (LLM) — 意群分析与语义切分</h3>
+            <span class="badge badge-success" id="active-llm-badge"><span class="badge-dot"></span> 当前默认: DeepSeek</span>
+          </div>
+
+          <div class="pill-tabs" id="llm-pill-tabs">
+            <button class="pill-tab active" data-llm-key="deepseek">DeepSeek</button>
+            <button class="pill-tab" data-llm-key="openai">OpenAI</button>
+            <button class="pill-tab" data-llm-key="anthropic">Claude (Anthropic)</button>
+            <button class="pill-tab" data-llm-key="gemini">Google Gemini</button>
+            <button class="pill-tab" data-llm-key="custom">自定义 / 本地 Ollama</button>
+          </div>
+
+          <div id="llm-form-container">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">协议类型 (Adapter Kind)</label>
+                <select class="form-select" id="llm-adapter-kind">
+                  <option value="openai_chat">OpenAI Chat 兼容</option>
+                  <option value="anthropic_messages">Anthropic Messages</option>
+                  <option value="gemini">Google Gemini</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">模型标识 (Model ID)</label>
+                <input type="text" class="form-input" id="llm-model-id" placeholder="e.g. deepseek-chat">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">接口地址 (Base URL)</label>
+              <input type="text" class="form-input" id="llm-base-url" placeholder="https://api.deepseek.com/v1">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">API Key / 访问令牌</label>
+              <input type="password" class="form-input" id="llm-api-key" placeholder="sk-...">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">请求超时 (秒)</label>
+                <input type="number" class="form-input" id="llm-timeout" value="30">
+              </div>
+              <div class="form-group">
+                <label class="form-label">并发工作线程数</label>
+                <input type="number" class="form-input" id="llm-concurrency" value="100">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+              <button class="btn btn-secondary btn-sm" id="btn-test-llm">⚡ 测试连通性 (Test Connection)</button>
+              <button class="btn btn-primary btn-sm" id="btn-set-active-llm">⭐ 设为默认意群模型</button>
+            </div>
+
+            <div class="test-feedback" id="llm-test-feedback"></div>
+          </div>
+        </div>
+
+        <!-- 2. Local ASR (Whisper.cpp) -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🎙️ 语音识别 (ASR) — Whisper.cpp 本地模型</h3>
+            <span class="badge badge-warning" id="asr-status-badge"><span class="badge-dot"></span> 待检测</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Whisper CLI 可执行文件路径</label>
+              <input type="text" class="form-input" id="asr-whisper-cli" value="whisper-cli">
+            </div>
+            <div class="form-group">
+              <label class="form-label">本地 GGML 模型文件路径 (.bin)</label>
+              <input type="text" class="form-input" id="asr-whisper-model" placeholder="/path/to/ggml-base.en.bin">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">识别语言</label>
+              <input type="text" class="form-input" id="asr-whisper-lang" value="auto">
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; margin-top: 1.5rem;">
+              <label class="checkbox-item">
+                <input type="checkbox" id="asr-whisper-translate">
+                <span class="checkbox-label-title">翻译为英文 (Translate to English)</span>
+              </label>
+            </div>
+          </div>
+
+          <button class="btn btn-secondary btn-sm" id="btn-test-whisper">🔍 检测 Whisper CLI 与模型文件</button>
+          <div class="test-feedback" id="whisper-test-feedback"></div>
+        </div>
+
+        <!-- 3. Phones & Aligner -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🗣️ 音素与强制对齐分析 (Phones & Aligner)</h3>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Wav2Vec2 CTC Sidecar 脚本路径</label>
+              <input type="text" class="form-input" id="phones-sidecar" placeholder="/path/to/wav2vec2_sidecar.py">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Wav2Vec2 / MMS 模型目录 / Model ID</label>
+              <input type="text" class="form-input" id="phones-model-id" value="facebook/wav2vec2-lv-60-espeak-cv-ft">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">TorchAudio 强制对齐脚本路径</label>
+              <input type="text" class="form-input" id="aligner-script" placeholder="/path/to/aligner_sidecar.py">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sidecar 独立 Python 解释器</label>
+              <input type="text" class="form-input" id="phones-python" value="python3">
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. TTS Adapter -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🔊 语音合成 (TTS) — 朗读生成</h3>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">TTS Provider</label>
+              <select class="form-select" id="tts-provider">
+                <option value="kokoro">Kokoro-82M (高音质神经网络 TTS)</option>
+                <option value="say">macOS say (系统原生)</option>
+                <option value="fake">Fake (测试用虚拟生成器)</option>
+                <option value="none">None (禁用)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">发音人 / Voice</label>
+              <input type="text" class="form-input" id="tts-voice" placeholder="Kokoro: af_bella, af_sarah, am_adam | say: Samantha">
+            </div>
+            <div class="form-group">
+              <label class="form-label">语速倍率 (Speed)</label>
+              <input type="number" step="0.1" min="0.5" max="2.0" class="form-input" id="tts-speed" value="1.0">
+            </div>
+          </div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" id="btn-test-tts">🔍 测试 TTS 引擎状态</button>
+            <div id="tts-test-feedback" class="test-feedback" style="display:none; margin: 0;"></div>
+          </div>
+        </div>
+
+        <!-- 5. OCR Provider -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">📄 文档识别与版面重构 (OCR)</h3>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">OCR Provider</label>
+              <select class="form-select" id="ocr-provider">
+                <option value="none">None (禁用/诚实弃权)</option>
+                <option value="surya">Surya OCR (版面分析与阅读顺序重构)</option>
+                <option value="rapidocr">RapidOCR (极速 PP-OCR ONNX)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">识别语言 (Languages)</label>
+              <input type="text" class="form-input" id="ocr-langs" value="en,zh" placeholder="e.g. en,zh,ja">
+            </div>
+            <div class="form-group">
+              <label class="form-label">计算设备 (Device)</label>
+              <select class="form-select" id="ocr-device">
+                <option value="mps">MPS (Apple Silicon GPU加速)</option>
+                <option value="cpu">CPU</option>
+                <option value="cuda">CUDA (Nvidia GPU)</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" id="btn-test-ocr">🔍 测试 OCR 环境就绪状态</button>
+            <div id="ocr-test-feedback" class="test-feedback" style="display:none; margin: 0;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Generation Workbench -->
+      <section id="tab-workbench" class="tab-pane">
+        <div class="section-header">
+          <h2 class="section-title">🚀 内容生成流水线工作台</h2>
+          <p class="section-desc">选择或输入原材料（文档、音视频、字幕）并选定目标能力，一键生成符合 Content Package v3 规范的学习资源包。</p>
+        </div>
+
+        <!-- Material Metadata -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">1. 素材元信息 (Material Info)</h3>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">素材唯一 ID (Material ID)</label>
+              <input type="text" class="form-input" id="work-material-id" value="demo-lesson-01">
+            </div>
+            <div class="form-group">
+              <label class="form-label">素材标题 (Title)</label>
+              <input type="text" class="form-input" id="work-title" value="Climate Scientists Predictions">
+            </div>
+            <div class="form-group">
+              <label class="form-label">目标语言 (Target Language)</label>
+              <input type="text" class="form-input" id="work-target-lang" value="en-US">
+            </div>
+          </div>
+        </div>
+
+        <!-- Document Input -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">2. 文档素材 (Document Input)</h3>
+            <div class="pill-tabs" style="margin-bottom: 0; padding: 0.2rem;">
+              <button class="pill-tab active" id="doc-tab-file" onclick="switchDocMode('file')">📂 选择本机文件</button>
+              <button class="pill-tab" id="doc-tab-text" onclick="switchDocMode('text')">✍️ 手动编辑文本</button>
+            </div>
+          </div>
+
+          <!-- File Upload Mode -->
+          <div id="doc-file-section">
+            <div class="dropzone" id="doc-dropzone" onclick="document.getElementById('doc-file-input').click()">
+              <div class="dropzone-icon">📄</div>
+              <div class="dropzone-title">点击选择或拖拽本机文档文件</div>
+              <div class="dropzone-desc">支持格式: Markdown (.md), 纯文本 (.txt), PDF (.pdf), EPUB (.epub), HTML (.html)</div>
+              <input type="file" id="doc-file-input" style="display: none;" accept=".md,.markdown,.txt,.pdf,.epub,.html,.htm">
+            </div>
+
+            <div class="upload-progress"><div class="upload-progress-bar" id="doc-upload-bar"></div></div>
+
+            <div id="doc-file-card" class="file-card" style="display: none;">
+              <div class="file-card-left">
+                <span class="file-card-icon">📄</span>
+                <div>
+                  <div class="file-card-title" id="doc-file-name">filename.md</div>
+                  <div class="file-card-meta" id="doc-file-meta">12.5 KB · text/markdown</div>
+                </div>
+              </div>
+              <button class="btn-danger-link" onclick="removeDocFile()">✕ 移除</button>
+            </div>
+          </div>
+
+          <!-- Direct Text Mode -->
+          <div id="doc-text-section" style="display: none;">
+            <textarea class="form-textarea" id="work-doc-text" rows="6" placeholder="# Heading&#10;&#10;Climate change is one of the most pressing challenges of our time. Scientists use mathematical models to predict future trends."></textarea>
+          </div>
+        </div>
+
+        <!-- Media & Subtitle Input -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">3. 音视频与字幕素材 (Media & Subtitles)</h3>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">本机音视频文件 (用于媒体语音转写或视听同步)</label>
+            <div class="dropzone" id="media-dropzone" onclick="document.getElementById('media-file-input').click()">
+              <div class="dropzone-icon">🎵</div>
+              <div class="dropzone-title">点击选择或拖拽本机音视频文件</div>
+              <div class="dropzone-desc">支持格式: MP4 (.mp4), MP3 (.mp3), WAV (.wav), M4A (.m4a), MKV (.mkv), MOV (.mov)</div>
+              <input type="file" id="media-file-input" style="display: none;" accept=".mp4,.m4v,.mov,.mkv,.mp3,.wav,.m4a,.flac">
+            </div>
+
+            <div class="upload-progress"><div class="upload-progress-bar" id="media-upload-bar"></div></div>
+
+            <div id="media-file-card" class="file-card" style="display: none;">
+              <div class="file-card-left">
+                <span class="file-card-icon">🎵</span>
+                <div>
+                  <div class="file-card-title" id="media-file-name">audio.mp4</div>
+                  <div class="file-card-meta" id="media-file-meta">5.2 MB · audio/mp4</div>
+                </div>
+              </div>
+              <button class="btn-danger-link" onclick="removeMediaFile()">✕ 移除</button>
+            </div>
+
+            <div style="margin-top: 0.6rem;">
+              <input type="text" class="form-input" id="work-media-path" placeholder="或直接输入/粘贴本机绝对路径: /Users/.../video.mp4">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 1.25rem;">
+            <label class="form-label">独立字幕文件 (可选，用于音文强制对齐)</label>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <input type="file" id="sub-file-input" style="display: none;" accept=".srt,.vtt">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('sub-file-input').click()">
+                💬 选择字幕文件 (.srt / .vtt)
+              </button>
+              <span id="sub-file-name" style="font-size: 0.85rem; color: var(--text-muted);">未选择字幕</span>
+              <button id="btn-remove-sub" class="btn-danger-link" style="display: none;" onclick="removeSubFile()">✕ 移除</button>
+            </div>
+            <div class="upload-progress"><div class="upload-progress-bar" id="sub-upload-bar"></div></div>
+          </div>
+        </div>
+
+        <!-- Capability & Stages -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">4. 目标能力与分析阶段 (Capability & Stages)</h3>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">请求能力 (Requested Material Capability)</label>
+            <select class="form-select" id="work-capability">
+              <option value="read">read — 纯阅读 (提取排版与段落句子锚点)</option>
+              <option value="listen">listen — 朗读音频 (TTS 合成与句子时长对齐)</option>
+              <option value="synchronized_read_listen">synchronized_read_listen — 视听同步阅读</option>
+            </select>
+          </div>
+
+          <div style="margin-top: 1rem;">
+            <label class="checkbox-item">
+              <input type="checkbox" id="stage-sense-groups" checked>
+              <div>
+                <div class="checkbox-label-title">意群切分 (Sense Groups)</div>
+                <div class="checkbox-label-desc">使用当前激活的 LLM 模型智能划分英文/中文意群语义块</div>
+              </div>
+            </label>
+
+            <label class="checkbox-item">
+              <input type="checkbox" id="stage-phones">
+              <div>
+                <div class="checkbox-label-title">音素特征提取 (Phones)</div>
+                <div class="checkbox-label-desc">使用 Wav2Vec2 CTC 声学模型提取单词级音素发音证据</div>
+              </div>
+            </label>
+          </div>
+
+          <div style="margin-top: 1rem;">
+            <div class="error-summary" id="workbench-errors"></div>
+          </div>
+
+          <div style="margin-top: 1.5rem;">
+            <button class="btn btn-primary" id="btn-start-produce" style="padding: 0.75rem 1.75rem; font-size: 0.95rem;">
+              🚀 开始生成 Content Package v3
+            </button>
+          </div>
+        </div>
+
+        <!-- Task Logs & Progress -->
+        <div class="card" id="task-monitor-card" style="display: none;">
+          <div class="card-header">
+            <h3 class="card-title">📡 实时流水线事件 (Machine Events v2)</h3>
+            <span class="badge badge-warning" id="task-status-badge">运行中...</span>
+          </div>
+
+          <div class="terminal-box" id="task-terminal"></div>
+
+          <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+            <div id="task-result-info" style="font-size: 0.88rem; color: var(--text-muted);"></div>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <button class="btn btn-danger btn-sm" id="btn-cancel-produce" style="display: none;">⏹ 取消任务</button>
+              <a id="btn-download-pkg" class="btn btn-success btn-sm" style="display: none;" target="_blank">
+                📦 下载 Content Package v3 (.zip)
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Toolchain Health -->
+      <section id="tab-toolchain" class="tab-pane">
+        <div class="section-header">
+          <h2 class="section-title">🩺 系统工具链与环境诊断</h2>
+          <p class="section-desc">检测音视频处理 (FFmpeg)、系统朗读 (macOS say) 以及 Python 依赖状态。</p>
+        </div>
+
+        <div id="toolchain-grid" class="form-row">
+          <!-- Populated by JS -->
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-toolchain">🔄 重新检测工具链</button>
+        </div>
+      </section>
+
+      <!-- TAB 4: Task History -->
+      <section id="tab-tasks" class="tab-pane">
+        <div class="section-header">
+          <h2 class="section-title">🕘 任务历史</h2>
+          <p class="section-desc">所有生成任务已持久化到 ~/.listen-gen/tasks.json，重启 GUI 后仍然保留；点击任务可回放完整事件流。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">📋 生成任务</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-tasks">🔄 刷新列表</button>
+          </div>
+          <div id="task-list" class="task-list"></div>
+        </div>
+
+        <div class="card" id="task-detail" style="display: none;">
+          <div class="detail-header">
+            <div>
+              <div class="detail-title" id="task-detail-title">任务详情</div>
+              <div class="detail-meta" id="task-detail-meta"></div>
+            </div>
+            <div style="display:flex; gap: 0.6rem; align-items:center; flex-wrap: wrap;">
+              <span id="task-detail-badge"></span>
+              <button class="btn btn-secondary btn-sm" id="btn-rerun-task" title="使用本次请求与配置快照重新生成">↻ 一键重跑</button>
+              <a id="btn-export-task" class="btn btn-secondary btn-sm" title="导出完整事件日志 JSON">⬇ 导出日志</a>
+              <button class="btn btn-danger btn-sm" id="btn-cancel-task" style="display:none;">⏹ 取消任务</button>
+              <a id="task-detail-download" class="btn btn-success btn-sm" style="display:none;" target="_blank">📦 下载产物</a>
+              <button class="btn btn-secondary btn-sm" id="btn-close-task-detail">← 返回列表</button>
+            </div>
+          </div>
+          <div class="task-stats" id="task-stats"></div>
+          <div class="terminal-box" id="task-detail-terminal" style="height: 320px;"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // Global State
+    let state = {
+      config: null,
+      currentLlmTab: 'deepseek',
+      activeTab: 'providers',
+      docMode: 'file', // 'file' | 'text'
+      selectedDoc: null, // { path, filename, size_bytes, media_type, preview_text }
+      selectedMedia: null, // { path, filename, size_bytes, media_type }
+      selectedSubtitle: null, // { path, filename }
+      tasks: [],
+      activeTaskId: null,
+      streams: [], // active EventSource handles
+    };
+
+    const SUPPORTED_CAPS = ['read', 'listen', 'watch', 'synchronized_read_listen'];
+    const TERMINAL_EVENTS = ['completed', 'cancelled', 'failed'];
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2600);
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatTime(ts) {
+      if (!ts) return '—';
+      return new Date(ts * 1000).toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function badgeForStatus(status) {
+      const map = {
+        queued: ['badge-neutral', '排队中'],
+        running: ['badge-warning', '运行中'],
+        completed: ['badge-success', '已完成'],
+        failed: ['badge-danger', '失败'],
+        cancelled: ['', '已取消'],
+      };
+      const [cls, label] = map[status] || ['', status || '—'];
+      return `<span class="badge ${cls}"><span class="badge-dot"></span> ${label}</span>`;
+    }
+
+    function formatDuration(ms) {
+      if (ms == null || ms < 0) return '—';
+      if (ms < 1000) return ms.toFixed(0) + 'ms';
+      const s = ms / 1000;
+      if (s < 60) return s.toFixed(1) + 's';
+      const m = Math.floor(s / 60);
+      return m + 'm ' + Math.round(s % 60) + 's';
+    }
+
+    // Aggregate per-stage timing from running events (recorded_at timestamps).
+    function stageTimes(events) {
+      const buckets = new Map();
+      for (const e of events || []) {
+        if (e.event !== 'running' && e.type !== 'running') continue;
+        const t = (e.recorded_at || 0) * 1000;
+        const label = e.stage || e.message || '…';
+        let b = buckets.get(label);
+        if (!b) { b = { count: 0, first: t || null, last: t || null }; buckets.set(label, b); }
+        b.count += 1;
+        if (t) { if (b.first === null || t < b.first) b.first = t; if (t > b.last) b.last = t; }
+      }
+      return [...buckets.entries()]
+        .map(([label, b]) => ({ label, count: b.count, ms: b.first ? Math.max(0, b.last - b.first) : 0 }))
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, 8);
+    }
+
+    function renderTaskStats(task) {
+      const box = document.getElementById('task-stats');
+      const events = task.events || [];
+      const start = task.created_at ? task.created_at * 1000 : 0;
+      const end = task.completed_at
+        ? task.completed_at * 1000
+        : (events[events.length - 1]?.recorded_at || task.created_at) * 1000;
+      const durationMs = end > start ? end - start : 0;
+      const warnings = events.filter(e => e.event === 'warning').length;
+      const completed = events.find(e => e.event === 'completed');
+      const resources = completed?.resources || [];
+      const mediaRenditions = completed?.media_renditions || [];
+
+      let html = `
+        <div class="stat-card"><div class="stat-label">总耗时</div><div class="stat-value">${formatDuration(durationMs)}</div></div>
+        <div class="stat-card"><div class="stat-label">事件数</div><div class="stat-value">${events.length}</div></div>
+        <div class="stat-card"><div class="stat-label">警告</div><div class="stat-value">${warnings}</div></div>
+        <div class="stat-card"><div class="stat-label">产出资源</div><div class="stat-value">${resources.length}</div></div>
+      `;
+
+      const stages = stageTimes(events);
+      if (stages.length) {
+        html += `
+          <div class="stat-card" style="grid-column: 1 / -1;">
+            <div class="stat-label">阶段耗时（Top）</div>
+            <table class="stage-table">
+              <tr><th>阶段</th><th>耗时</th><th>事件</th></tr>
+              ${stages.map(s =>
+                `<tr><td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.label)}</td>` +
+                `<td>${formatDuration(s.ms)}</td><td>${s.count}</td></tr>`).join('')}
+            </table>
+          </div>`;
+      }
+
+      if (mediaRenditions.length || resources.length) {
+        html += `
+          <div class="stat-card" style="grid-column: 1 / -1;">
+            <div class="stat-label">清单</div>
+            <div>
+              ${mediaRenditions.map(r =>
+                `<span class="resource-chip">🎵 ${escapeHtml(r.rendition_id || '')} · ${escapeHtml(r.origin || '')}</span>`).join('')}
+              ${resources.map(r =>
+                `<span class="resource-chip">📄 ${escapeHtml(r.kind || '')} ${escapeHtml(r.resource_id || '')}</span>`).join('')}
+            </div>
+          </div>`;
+      }
+      box.innerHTML = html;
+    }
+
+    // ---- v2 machine protocol event rendering (shared by monitor + history) ----
+    function eventLine(event) {
+      const kind = event.event || event.type;
+      switch (kind) {
+        case 'protocol':
+          return { cls: 'info', text: `[协议] ${event.schema || ''} v${event.protocol_version || '?'} · tool ${(event.tool || {}).id || '?'}@${(event.tool || {}).version || '?'}` };
+        case 'accepted':
+          return { cls: 'info', text: `[已受理] attempt=${event.attempt_id}` };
+        case 'planned': {
+          const plan = event.plan || {};
+          const derivs = Array.isArray(plan.derivations)
+            ? plan.derivations.map(d => (d && d.kind) || d)
+            : [];
+          return { cls: 'info', text: `[计划] ${derivs.length ? derivs.length + ' 条推导: ' + derivs.join(', ') : JSON.stringify(plan)}` };
+        }
+        case 'running':
+          return { cls: 'info', text: `[执行] ${event.stage || ''}${event.message ? ' — ' + event.message : ''}` };
+        case 'warning':
+          return { cls: 'warning', text: `[警告:${event.code}] ${event.message}` };
+        case 'completed':
+          return { cls: 'success', text: `[完成] ${(event.resources || []).length} 个资源 · ${(event.media_renditions || []).length} 条媒体音轨 · sha256=${event.package_sha256 || 'n/a'}` };
+        case 'cancelled':
+          return { cls: 'warning', text: '[已取消] 用户中止了本次生成' };
+        case 'failed':
+          return { cls: 'error', text: `[失败:${event.code}] ${event.message}` };
+        case 'terminal': {
+          const cls = event.status === 'completed' ? 'success' : (event.status === 'cancelled' ? 'warning' : 'error');
+          return { cls, text: `[任务结束] ${event.status}${event.error ? ' · ' + event.error : ''}${event.package_path ? ' · ' + event.package_path : ''}` };
+        }
+        default:
+          return { cls: 'info', text: '[事件] ' + JSON.stringify(event) };
+      }
+    }
+
+    function appendTerminal(terminalEl, event) {
+      const { cls, text } = eventLine(event);
+      const line = document.createElement('div');
+      line.className = 'terminal-line ' + cls;
+      line.textContent = text;
+      terminalEl.appendChild(line);
+      terminalEl.scrollTop = terminalEl.scrollHeight;
+    }
+
+    // ---- file upload: multipart streaming with progress (no base64 blowup) ----
+    function uploadFile(file, progressEl) {
+      return new Promise((resolve, reject) => {
+        const form = new FormData();
+        form.append('file', file);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+        if (progressEl) {
+          progressEl.closest('.upload-progress')?.classList.add('visible');
+          progressEl.style.width = '0%';
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              progressEl.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+            }
+          };
+        }
+        xhr.onload = () => {
+          let data = {};
+          try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) { /* keep {} */ }
+          if (progressEl) progressEl.closest('.upload-progress')?.classList.remove('visible');
+          if (xhr.status >= 200 && xhr.status < 300 && data.status === 'ok') {
+            resolve(data);
+          } else {
+            reject(new Error(data.error || '上传失败'));
+          }
+        };
+        xhr.onerror = () => {
+          if (progressEl) progressEl.closest('.upload-progress')?.classList.remove('visible');
+          reject(new Error('上传网络错误'));
+        };
+        xhr.ontimeout = () => {
+          if (progressEl) progressEl.closest('.upload-progress')?.classList.remove('visible');
+          reject(new Error('上传超时'));
+        };
+        xhr.send(form);
+      });
+    }
+
+    // ---- task history tab ----
+    async function loadTasks(quiet) {
+      try {
+        const res = await fetch('/api/tasks');
+        const data = await res.json();
+        state.tasks = data.tasks || [];
+        renderTaskList();
+      } catch (err) {
+        if (!quiet) showToast('加载任务历史失败: ' + err.message);
+      }
+    }
+
+    function renderTaskList() {
+      const count = state.tasks.length;
+      const navCount = document.getElementById('nav-task-count');
+      navCount.textContent = String(count);
+      navCount.style.display = count > 0 ? 'inline-flex' : 'none';
+
+      const list = document.getElementById('task-list');
+      if (count === 0) {
+        list.innerHTML = '<div class="empty-state">暂无任务记录。去「生成工作台」发起一次生成，任务会出现在这里。</div>';
+        return;
+      }
+      list.innerHTML = '';
+      for (const task of state.tasks) {
+        const row = document.createElement('div');
+        row.className = 'task-row';
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-label', `查看任务 ${task.task_id}`);
+        row.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskDetail(task.task_id); }
+        });
+
+        const queuedInfo = task.status === 'queued' && task.queued_position
+          ? ` · 排队 #${task.queued_position}` : '';
+        const info = document.createElement('div');
+        info.innerHTML = `
+          <div class="task-row-title">${escapeHtml(task.title || task.material_id || task.task_id)}</div>
+          <div class="task-row-meta">${task.task_id} · ${formatTime(task.created_at)}${queuedInfo}${task.capability ? ' · ' + task.capability : ''} · ${task.event_count} 个事件</div>
+        `;
+
+        const badge = document.createElement('div');
+        badge.innerHTML = badgeForStatus(task.status);
+
+        const actions = document.createElement('div');
+        actions.className = 'task-row-actions';
+        const detailBtn = document.createElement('button');
+        detailBtn.className = 'btn btn-secondary btn-sm';
+        detailBtn.textContent = '详情';
+        detailBtn.addEventListener('click', (e) => { e.stopPropagation(); openTaskDetail(task.task_id); });
+        actions.appendChild(detailBtn);
+        if (task.status === 'running' || task.status === 'queued') {
+          const cancelBtn = document.createElement('button');
+          cancelBtn.className = 'btn btn-danger btn-sm';
+          cancelBtn.textContent = task.status === 'queued' ? '取消排队' : '取消';
+          cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); cancelTask(task.task_id); });
+          actions.appendChild(cancelBtn);
+        } else if (task.status === 'completed' && task.download_url) {
+          const dl = document.createElement('a');
+          dl.className = 'btn btn-success btn-sm';
+          dl.href = task.download_url;
+          dl.textContent = '下载';
+          actions.appendChild(dl);
+        }
+
+        row.appendChild(info);
+        row.appendChild(badge);
+        row.appendChild(actions);
+        row.addEventListener('click', () => openTaskDetail(task.task_id));
+        list.appendChild(row);
+      }
+    }
+
+    async function openTaskDetail(id) {
+      state.activeTaskId = id;
+      try {
+        const res = await fetch(`/api/tasks/${id}`);
+        const data = await res.json();
+        renderTaskDetail(data.task);
+      } catch (err) {
+        showToast('加载任务详情失败: ' + err.message);
+      }
+    }
+
+    function renderTaskDetail(task) {
+      if (!task) return;
+      const detail = document.getElementById('task-detail');
+      const terminal = document.getElementById('task-detail-terminal');
+      document.getElementById('task-detail-title').textContent = task.title || task.material_id || task.task_id;
+      document.getElementById('task-detail-meta').textContent =
+        `${task.task_id} · ${formatTime(task.created_at)}${task.completed_at ? ' → ' + formatTime(task.completed_at) : ''}${task.capability ? ' · ' + task.capability : ''}`;
+      document.getElementById('task-detail-badge').innerHTML = badgeForStatus(task.status);
+
+      const cancelBtn = document.getElementById('btn-cancel-task');
+      const isActive = task.status === 'running' || task.status === 'queued';
+      cancelBtn.style.display = isActive ? 'inline-flex' : 'none';
+      cancelBtn.disabled = false;
+      cancelBtn.textContent = task.status === 'queued' ? '⏹ 取消排队' : '⏹ 取消任务';
+
+      const rerunBtn = document.getElementById('btn-rerun-task');
+      rerunBtn.style.display = isActive ? 'none' : 'inline-flex';
+      rerunBtn.disabled = false;
+
+      const exportLink = document.getElementById('btn-export-task');
+      exportLink.href = `/api/tasks/${task.task_id}/events/export`;
+
+      const downloadBtn = document.getElementById('task-detail-download');
+      downloadBtn.style.display = task.status === 'completed' ? 'inline-flex' : 'none';
+      if (task.status === 'completed') downloadBtn.href = `/api/download/${task.task_id}`;
+
+      renderTaskStats(task);
+
+      terminal.innerHTML = '';
+      for (const event of task.events || []) appendTerminal(terminal, event);
+      detail.style.display = 'block';
+      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      if (task.status === 'running') {
+        attachTaskStream(task.task_id, terminal, () => {
+          loadTasks(true);
+          refreshTaskSummary(task.task_id);
+        });
+      }
+    }
+
+    function refreshTaskSummary(id) {
+      fetch(`/api/tasks/${id}`)
+        .then(r => r.json())
+        .then(({ task }) => { if (task) renderTaskDetail(task); })
+        .catch(() => {});
+    }
+
+    async function cancelTask(id) {
+      try {
+        const res = await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || (data.status === 'cancelling'
+          ? '已发送取消请求，任务将在当前阶段结束后停止'
+          : '操作完成'));
+        loadTasks(true);
+        if (state.activeTaskId === id) refreshTaskSummary(id);
+      } catch (err) {
+        showToast('取消请求发送失败: ' + err.message);
+      }
+    }
+
+    // SSE subscription with automatic reconnect: the server sends `id: <seq>`
+    // frames, so the browser's native Last-Event-ID resumes the stream after
+    // a dropped connection and we dedupe by seq.
+    function attachTaskStream(id, terminalEl, onDone) {
+      const es = new EventSource(`/api/tasks/${id}/events`);
+      state.streams.push(es);
+      let lastShown = -1;
+      es.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          if (typeof event.seq === 'number' && event.seq <= lastShown) return; // dedupe after resume
+          if (typeof event.seq === 'number') lastShown = event.seq;
+          appendTerminal(terminalEl, event);
+          const isTerminal = event.type === 'terminal' || TERMINAL_EVENTS.includes(event.event);
+          if (isTerminal) {
+            es.close();
+            if (onDone) onDone();
+          }
+        } catch (err) { /* ignore malformed frames */ }
+      };
+      // onerror deliberately left open: EventSource retries with Last-Event-ID.
+    }
+
+    // Tab Navigation
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        state.activeTab = tab;
+        if (tab === 'tasks') loadTasks(true);
+      });
+    });
+
+    // Theme Toggle
+    document.getElementById('btn-theme-toggle').addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+    });
+
+    // Document Mode Switching
+    function switchDocMode(mode) {
+      state.docMode = mode;
+      document.getElementById('doc-tab-file').classList.toggle('active', mode === 'file');
+      document.getElementById('doc-tab-text').classList.toggle('active', mode === 'text');
+      document.getElementById('doc-file-section').style.display = mode === 'file' ? 'block' : 'none';
+      document.getElementById('doc-text-section').style.display = mode === 'text' ? 'block' : 'none';
+    }
+
+    // Task history tab controls
+    document.getElementById('btn-refresh-tasks').addEventListener('click', () => loadTasks());
+    document.getElementById('btn-close-task-detail').addEventListener('click', () => {
+      document.getElementById('task-detail').style.display = 'none';
+      state.activeTaskId = null;
+    });
+    document.getElementById('btn-cancel-task').addEventListener('click', () => {
+      if (state.activeTaskId) cancelTask(state.activeTaskId);
+    });
+
+    document.getElementById('btn-rerun-task').addEventListener('click', async () => {
+      const id = state.activeTaskId;
+      if (!id) return;
+      const btn = document.getElementById('btn-rerun-task');
+      btn.disabled = true;
+      btn.textContent = '↻ 提交中...';
+      try {
+        const res = await fetch(`/api/tasks/${id}/rerun`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          showToast('❌ 重跑失败: ' + (data.message || data.error || '未知错误'));
+        } else {
+          showToast('✅ 已提交重跑，任务 ' + data.task_id + ' 已进入队列');
+          loadTasks(true);
+          openTaskDetail(data.task_id);
+        }
+      } catch (err) {
+        showToast('❌ 重跑请求出错: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '↻ 一键重跑';
+      }
+    });
+
+    // Document File Handling
+    document.getElementById('doc-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        showToast(`正在载入文档: ${file.name}...`);
+        const info = await uploadFile(file, document.getElementById('doc-upload-bar'));
+        state.selectedDoc = info;
+        renderDocCard();
+        
+        // Auto-fill material id and title if empty
+        const titleInput = document.getElementById('work-title');
+        const idInput = document.getElementById('work-material-id');
+        if (titleInput.value === 'Climate Scientists Predictions' || !titleInput.value) {
+          const baseName = file.name.replace(/\.[^/.]+$/, "");
+          titleInput.value = baseName;
+          idInput.value = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        }
+
+        // If preview text available, populate text area as well
+        if (info.preview_text) {
+          document.getElementById('work-doc-text').value = info.preview_text;
+        }
+        showToast(`✅ 文档 ${file.name} 就绪`);
+      } catch (err) {
+        showToast('❌ 加载文档失败: ' + err.message);
+      }
+    });
+
+    function renderDocCard() {
+      const card = document.getElementById('doc-file-card');
+      const dropzone = document.getElementById('doc-dropzone');
+      if (state.selectedDoc) {
+        document.getElementById('doc-file-name').textContent = state.selectedDoc.filename;
+        document.getElementById('doc-file-meta').textContent = `${formatBytes(state.selectedDoc.size_bytes)} · ${state.selectedDoc.media_type}`;
+        card.style.display = 'flex';
+        dropzone.style.display = 'none';
+      } else {
+        card.style.display = 'none';
+        dropzone.style.display = 'block';
+      }
+    }
+
+    function removeDocFile() {
+      state.selectedDoc = null;
+      document.getElementById('doc-file-input').value = '';
+      renderDocCard();
+    }
+
+    // Media File Handling
+    document.getElementById('media-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        showToast(`正在载入音视频: ${file.name}...`);
+        const info = await uploadFile(file, document.getElementById('media-upload-bar'));
+        state.selectedMedia = info;
+        document.getElementById('work-media-path').value = info.path;
+        renderMediaCard();
+
+        // Auto-fill title if default
+        const titleInput = document.getElementById('work-title');
+        const idInput = document.getElementById('work-material-id');
+        if (titleInput.value === 'Climate Scientists Predictions' || !titleInput.value) {
+          const baseName = file.name.replace(/\.[^/.]+$/, "");
+          titleInput.value = baseName;
+          idInput.value = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        }
+
+        showToast(`✅ 音视频 ${file.name} 就绪`);
+      } catch (err) {
+        showToast('❌ 加载音视频失败: ' + err.message);
+      }
+    });
+
+    function renderMediaCard() {
+      const card = document.getElementById('media-file-card');
+      const dropzone = document.getElementById('media-dropzone');
+      if (state.selectedMedia) {
+        document.getElementById('media-file-name').textContent = state.selectedMedia.filename;
+        document.getElementById('media-file-meta').textContent = `${formatBytes(state.selectedMedia.size_bytes)} · ${state.selectedMedia.media_type}`;
+        card.style.display = 'flex';
+        dropzone.style.display = 'none';
+      } else {
+        card.style.display = 'none';
+        dropzone.style.display = 'block';
+      }
+    }
+
+    function removeMediaFile() {
+      state.selectedMedia = null;
+      document.getElementById('media-file-input').value = '';
+      document.getElementById('work-media-path').value = '';
+      renderMediaCard();
+    }
+
+    // Subtitle File Handling
+    document.getElementById('sub-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const info = await uploadFile(file, document.getElementById('sub-upload-bar'));
+        state.selectedSubtitle = info;
+        document.getElementById('sub-file-name').textContent = `${file.name} (${formatBytes(file.size)})`;
+        document.getElementById('btn-remove-sub').style.display = 'inline-block';
+        showToast(`✅ 字幕 ${file.name} 已加载`);
+      } catch (err) {
+        showToast('❌ 加载字幕失败: ' + err.message);
+      }
+    });
+
+    function removeSubFile() {
+      state.selectedSubtitle = null;
+      document.getElementById('sub-file-input').value = '';
+      document.getElementById('sub-file-name').textContent = '未选择字幕';
+      document.getElementById('btn-remove-sub').style.display = 'none';
+    }
+
+    // Drag & drop listeners for dropzones
+    ['doc-dropzone', 'media-dropzone'].forEach(id => {
+      const el = document.getElementById(id);
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        el.classList.add('dragover');
+      });
+      el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+      el.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        el.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          const inputId = id === 'doc-dropzone' ? 'doc-file-input' : 'media-file-input';
+          const input = document.getElementById(inputId);
+          // Trigger change manually
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+
+    // Load initial config
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        state.config = await res.json();
+        renderConfig();
+      } catch (err) {
+        showToast('无法连接后端 API: ' + err.message);
+      }
+    }
+
+    function renderConfig() {
+      if (!state.config) return;
+
+      const selected = state.config.selected_llm || 'deepseek';
+      const prof = (state.config.llm_profiles || {})[selected] || {};
+      document.getElementById('active-llm-badge').innerHTML = `<span class="badge-dot"></span> 当前默认: ${prof.name || selected}`;
+
+      renderLlmForm(state.currentLlmTab);
+
+      const asr = state.config.asr || {};
+      document.getElementById('asr-whisper-cli').value = asr.whisper_cli || 'whisper-cli';
+      document.getElementById('asr-whisper-model').value = asr.whisper_model || '';
+      document.getElementById('asr-whisper-lang').value = asr.whisper_language || 'auto';
+      document.getElementById('asr-whisper-translate').checked = !!asr.whisper_translate_to_english;
+
+      const phones = state.config.phones || {};
+      document.getElementById('phones-sidecar').value = phones.wav2vec2_sidecar || '';
+      document.getElementById('phones-model-id').value = phones.wav2vec2_model_id || '';
+      document.getElementById('phones-python').value = phones.wav2vec2_python || 'python3';
+
+      const aligner = state.config.aligner || {};
+      document.getElementById('aligner-script').value = aligner.aligner_script || '';
+
+      const tts = state.config.tts || {};
+      document.getElementById('tts-provider').value = tts.provider || 'kokoro';
+      document.getElementById('tts-voice').value = tts.voice || 'af_bella';
+      document.getElementById('tts-speed').value = tts.speed || 1.0;
+
+      const ocr = state.config.ocr || {};
+      document.getElementById('ocr-provider').value = ocr.provider || 'none';
+      document.getElementById('ocr-langs').value = ocr.langs || 'en,zh';
+      document.getElementById('ocr-device').value = ocr.device || 'mps';
+    }
+
+    function renderLlmForm(key) {
+      state.currentLlmTab = key;
+      const profiles = state.config.llm_profiles || {};
+      const prof = profiles[key] || {};
+
+      document.getElementById('llm-adapter-kind').value = prof.adapter_kind || 'openai_chat';
+      document.getElementById('llm-model-id').value = prof.model_id || '';
+      document.getElementById('llm-base-url').value = prof.base_url || '';
+      document.getElementById('llm-api-key').value = prof.api_key || '';
+      document.getElementById('llm-timeout').value = prof.timeout_seconds || 30;
+      document.getElementById('llm-concurrency').value = prof.concurrency || 50;
+
+      document.querySelectorAll('#llm-pill-tabs .pill-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.llmKey === key);
+      });
+
+      const fb = document.getElementById('llm-test-feedback');
+      fb.className = 'test-feedback';
+      fb.style.display = 'none';
+    }
+
+    document.querySelectorAll('#llm-pill-tabs .pill-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        saveCurrentLlmForm();
+        renderLlmForm(btn.dataset.llmKey);
+      });
+    });
+
+    function saveCurrentLlmForm() {
+      const key = state.currentLlmTab;
+      if (!state.config.llm_profiles) state.config.llm_profiles = {};
+      const current = state.config.llm_profiles[key] || {};
+
+      state.config.llm_profiles[key] = {
+        ...current,
+        adapter_kind: document.getElementById('llm-adapter-kind').value,
+        model_id: document.getElementById('llm-model-id').value,
+        base_url: document.getElementById('llm-base-url').value,
+        api_key: document.getElementById('llm-api-key').value,
+        timeout_seconds: parseFloat(document.getElementById('llm-timeout').value) || 30.0,
+        concurrency: parseInt(document.getElementById('llm-concurrency').value, 10) || 50,
+      };
+    }
+
+    document.getElementById('btn-set-active-llm').addEventListener('click', () => {
+      saveCurrentLlmForm();
+      state.config.selected_llm = state.currentLlmTab;
+      renderConfig();
+      showToast(`已将 ${state.currentLlmTab} 设为默认意群分析模型`);
+    });
+
+    document.getElementById('btn-save-all-config').addEventListener('click', async () => {
+      saveCurrentLlmForm();
+
+      state.config.asr = {
+        ...(state.config.asr || {}),
+        whisper_cli: document.getElementById('asr-whisper-cli').value,
+        whisper_model: document.getElementById('asr-whisper-model').value,
+        whisper_language: document.getElementById('asr-whisper-lang').value,
+        whisper_translate_to_english: document.getElementById('asr-whisper-translate').checked,
+      };
+
+      state.config.phones = {
+        ...(state.config.phones || {}),
+        wav2vec2_sidecar: document.getElementById('phones-sidecar').value,
+        wav2vec2_model_id: document.getElementById('phones-model-id').value,
+        wav2vec2_python: document.getElementById('phones-python').value,
+      };
+      state.config.aligner = {
+        ...(state.config.aligner || {}),
+        aligner_script: document.getElementById('aligner-script').value,
+      };
+
+      state.config.tts = {
+        ...(state.config.tts || {}),
+        provider: document.getElementById('tts-provider').value,
+        voice: document.getElementById('tts-voice').value,
+        speed: parseFloat(document.getElementById('tts-speed').value) || 1.0,
+      };
+
+      state.config.ocr = {
+        ...(state.config.ocr || {}),
+        provider: document.getElementById('ocr-provider').value,
+        langs: document.getElementById('ocr-langs').value,
+        device: document.getElementById('ocr-device').value,
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state.config),
+        });
+        if (res.ok) {
+          showToast('✅ 全局 Provider 配置已保存到 ~/.listen-gen/profiles.json');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          if (data.errors && data.errors.length) {
+            showToast('❌ ' + data.errors.join('；'));
+          } else {
+            showToast('❌ ' + (data.message || '保存失败'));
+          }
+        }
+      } catch (err) {
+        showToast('保存出错: ' + err.message);
+      }
+    });
+
+    document.getElementById('btn-test-tts').addEventListener('click', async () => {
+      const payload = {
+        provider: document.getElementById('tts-provider').value,
+        voice: document.getElementById('tts-voice').value,
+      };
+      const fb = document.getElementById('tts-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.style.display = 'block';
+      fb.textContent = '正在检测 TTS 运行环境...';
+
+      try {
+        const res = await fetch('/api/test/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.ok) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ ${result.message}`;
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `⚠️ ${result.message}`;
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求错误: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btn-test-ocr').addEventListener('click', async () => {
+      const payload = {
+        provider: document.getElementById('ocr-provider').value,
+        langs: document.getElementById('ocr-langs').value,
+        device: document.getElementById('ocr-device').value,
+      };
+      const fb = document.getElementById('ocr-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.style.display = 'block';
+      fb.textContent = '正在检测 OCR 运行环境...';
+
+      try {
+        const res = await fetch('/api/test/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.ok) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ ${result.message}`;
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `⚠️ ${result.message}`;
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求错误: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btn-test-llm').addEventListener('click', async () => {
+      saveCurrentLlmForm();
+      const prof = state.config.llm_profiles[state.currentLlmTab];
+      const fb = document.getElementById('llm-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.textContent = '正在发起测试请求...';
+
+      try {
+        const res = await fetch('/api/test/llm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(prof),
+        });
+        const result = await res.json();
+        if (result.success) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ 连通性测试成功！响应耗时: ${result.latency_ms}ms`;
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `❌ 测试失败: ${result.message}`;
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求错误: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btn-test-whisper').addEventListener('click', async () => {
+      const payload = {
+        whisper_cli: document.getElementById('asr-whisper-cli').value,
+        whisper_model: document.getElementById('asr-whisper-model').value,
+      };
+      const fb = document.getElementById('whisper-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.textContent = '正在检测本地二进制与模型...';
+
+      try {
+        const res = await fetch('/api/test/whisper', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.cli_available && result.model_exists) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ Whisper CLI (${result.cli_path}) 与模型文件均就绪！`;
+          document.getElementById('asr-status-badge').className = 'badge badge-success';
+          document.getElementById('asr-status-badge').innerHTML = '<span class="badge-dot"></span> 就绪';
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `⚠️ 检测结果: ${result.message} (CLI: ${result.cli_available ? '可用' : '未找到'}, 模型: ${result.model_exists ? '存在' : '未找到'})`;
+          document.getElementById('asr-status-badge').className = 'badge badge-warning';
+          document.getElementById('asr-status-badge').innerHTML = '<span class="badge-dot"></span> 未就绪';
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求出错: ${err.message}`;
+      }
+    });
+
+    async function loadToolchain() {
+      try {
+        const res = await fetch('/api/toolchain/status');
+        const tools = await res.json();
+        const grid = document.getElementById('toolchain-grid');
+        grid.innerHTML = '';
+
+        for (const [name, info] of Object.entries(tools)) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
+            <div class="card-header">
+              <h3 class="card-title">${name}</h3>
+              <span class="badge ${info.available ? 'badge-success' : 'badge-danger'}">
+                <span class="badge-dot"></span> ${info.available ? '可用' : '缺失'}
+              </span>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">
+              <div>路径: ${info.path || '未找到'}</div>
+              ${info.version ? `<div>版本: ${info.version}</div>` : ''}
+              ${info.voices ? `<div>检测到声音数: ${info.voices.length} 个</div>` : ''}
+              ${info.installed_models ? `<div>已装模型: ${info.installed_models.join(', ') || '无'}</div>` : ''}
+            </div>
+          `;
+          grid.appendChild(card);
+        }
+      } catch (err) {
+        console.error('Failed to load toolchain', err);
+      }
+    }
+
+    document.getElementById('btn-refresh-toolchain').addEventListener('click', () => {
+      loadToolchain();
+      showToast('已重新检测工具链');
+    });
+
+    // Production Execution & SSE Event Stream
+    let monitorES = null;
+    let monitorTaskId = null;
+
+    function clearFieldErrors() {
+      document.querySelectorAll('.form-input.invalid, .form-select.invalid, .form-textarea.invalid')
+        .forEach(el => el.classList.remove('invalid'));
+      document.getElementById('workbench-errors').classList.remove('visible');
+    }
+
+    function markFieldInvalid(fieldId) {
+      const el = document.getElementById(fieldId);
+      if (el) el.classList.add('invalid');
+    }
+
+    function validateWorkbench() {
+      clearFieldErrors();
+      const errors = [];
+      const id = document.getElementById('work-material-id').value.trim();
+      const title = document.getElementById('work-title').value.trim();
+      const lang = document.getElementById('work-target-lang').value.trim();
+      const cap = document.getElementById('work-capability').value;
+      const docText = document.getElementById('work-doc-text').value.trim();
+      const mediaPath = document.getElementById('work-media-path').value.trim();
+
+      if (!id) { errors.push({ field: 'work-material-id', msg: '素材唯一 ID 不能为空' }); }
+      if (!title) { errors.push({ field: 'work-title', msg: '素材标题不能为空' }); }
+      if (!lang) { errors.push({ field: 'work-target-lang', msg: '目标语言不能为空' }); }
+      if (!SUPPORTED_CAPS.includes(cap)) { errors.push({ field: 'work-capability', msg: '不支持的能力: ' + cap }); }
+
+      const hasDoc = state.docMode === 'text' ? !!docText : !!state.selectedDoc;
+      const hasMedia = !!state.selectedMedia || !!mediaPath;
+      if (!hasDoc && !hasMedia) {
+        errors.push({ field: 'work-media-path', msg: '需要至少一份文档素材或音视频素材' });
+        errors.push({ field: 'work-doc-text', msg: '需要至少一份文档素材或音视频素材' });
+      }
+      if (cap === 'listen' && !hasDoc) {
+        errors.push({ field: 'work-doc-text', msg: 'listen 能力需要文档输入（文本或文件）' });
+      }
+
+      if (errors.length) {
+        const summary = document.getElementById('workbench-errors');
+        const seen = [...new Set(errors.map(e => e.msg))];
+        summary.innerHTML = '请修正以下问题：<ul>' + seen.map(m => `<li>${m}</li>`).join('') + '</ul>';
+        summary.classList.add('visible');
+        for (const e of errors) markFieldInvalid(e.field);
+      }
+      return errors.length === 0;
+    }
+
+    function renderServerErrors(taskInfo) {
+      const terminal = document.getElementById('task-terminal');
+      if (taskInfo.errors && Array.isArray(taskInfo.errors)) {
+        for (const e of taskInfo.errors) {
+          terminal.innerHTML += `<div class="terminal-line error">[校验] ${(e.field || '')}: ${e.message}</div>`;
+          if (e.field) markFieldInvalid(e.field);
+        }
+      } else {
+        terminal.innerHTML += `<div class="terminal-line error">[ERR] ${taskInfo.error || '请求失败'}</div>`;
+      }
+    }
+
+    document.getElementById('btn-start-produce').addEventListener('click', async () => {
+      if (!validateWorkbench()) {
+        showToast('❌ 请先修正表单中的问题');
+        return;
+      }
+
+      const materialId = document.getElementById('work-material-id').value.trim() || 'demo-material';
+      const title = document.getElementById('work-title').value.trim() || 'Untitled Material';
+      const targetLang = document.getElementById('work-target-lang').value.trim() || 'en-US';
+      const docText = document.getElementById('work-doc-text').value;
+      const mediaPath = document.getElementById('work-media-path').value.trim();
+      const capability = document.getElementById('work-capability').value;
+
+      const enableSenseGroups = document.getElementById('stage-sense-groups').checked;
+      const enablePhones = document.getElementById('stage-phones').checked;
+
+      const monitorCard = document.getElementById('task-monitor-card');
+      const terminal = document.getElementById('task-terminal');
+      const statusBadge = document.getElementById('task-status-badge');
+      const resultInfo = document.getElementById('task-result-info');
+      const downloadBtn = document.getElementById('btn-download-pkg');
+      const cancelProduceBtn = document.getElementById('btn-cancel-produce');
+
+      if (monitorES) { monitorES.close(); monitorES = null; }
+      monitorTaskId = null;
+      monitorCard.style.display = 'block';
+      terminal.innerHTML = '<div class="terminal-line info">[SYS] 正在准备生成请求...</div>';
+      statusBadge.className = 'badge badge-neutral';
+      statusBadge.innerHTML = '<span class="badge-dot"></span> 排队中...';
+      downloadBtn.style.display = 'none';
+      cancelProduceBtn.style.display = 'inline-flex';
+      cancelProduceBtn.disabled = false;
+      resultInfo.textContent = '';
+
+      const requestDoc = {
+        material_id: materialId,
+        material_revision_id: `rev-${Date.now()}`,
+        edition_id: `ed-${materialId}`,
+        title: title,
+        target_language: targetLang,
+        support_languages: [],
+        requested_capability: capability,
+        available_resources: [],
+      };
+
+      const payload = {
+        request: requestDoc,
+        document_path: state.selectedDoc ? state.selectedDoc.path : null,
+        document_text: (state.docMode === 'text' || !state.selectedDoc) ? docText : null,
+        document_media_type: state.selectedDoc ? state.selectedDoc.media_type : 'text/markdown',
+        media_path: state.selectedMedia ? state.selectedMedia.path : (mediaPath || null),
+        subtitle_path: state.selectedSubtitle ? state.selectedSubtitle.path : null,
+        config: {
+          ...state.config,
+          enable_sense_groups: enableSenseGroups,
+          enable_phones: enablePhones,
+        }
+      };
+
+      try {
+        const res = await fetch('/api/produce', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const taskInfo = await res.json();
+
+        if (!res.ok || taskInfo.error) {
+          renderServerErrors(taskInfo);
+          statusBadge.className = 'badge badge-danger';
+          statusBadge.textContent = '启动失败';
+          cancelProduceBtn.style.display = 'none';
+          return;
+        }
+
+        monitorTaskId = taskInfo.task_id;
+        terminal.innerHTML += `<div class="terminal-line info">[SYS] 任务已提交: ${taskInfo.task_id}${taskInfo.status === 'queued' ? '（排队中，或有空闲槽位立即运行）' : ''}</div>`;
+        loadTasks(true);
+        attachMonitor(taskInfo.task_id, terminal);
+      } catch (err) {
+        terminal.innerHTML += `<div class="terminal-line error">[ERR] ${err.message}</div>`;
+        cancelProduceBtn.style.display = 'none';
+      }
+    });
+
+    function attachMonitor(id, terminal) {
+      if (monitorES) { monitorES.close(); monitorES = null; }
+      const es = new EventSource(`/api/tasks/${id}/events`);
+      monitorES = es;
+      let lastShown = -1;
+      es.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          if (typeof event.seq === 'number' && event.seq <= lastShown) return;
+          if (typeof event.seq === 'number') lastShown = event.seq;
+          const statusBadge = document.getElementById('task-status-badge');
+          // A live machine event means the run actually started (left queue).
+          if (statusBadge.textContent.includes('排队') && event.event) {
+            statusBadge.className = 'badge badge-warning';
+            statusBadge.innerHTML = '<span class="badge-dot"></span> 运行中';
+          }
+          appendTerminal(terminal, event);
+
+          const isTerminal = event.type === 'terminal' || TERMINAL_EVENTS.includes(event.event);
+          if (!isTerminal) return;
+
+          es.close();
+          monitorES = null;
+          const downloadBtn = document.getElementById('btn-download-pkg');
+          const cancelProduceBtn = document.getElementById('btn-cancel-produce');
+          const resultInfo = document.getElementById('task-result-info');
+          cancelProduceBtn.style.display = 'none';
+
+          const status = event.type === 'terminal' ? event.status : event.event;
+          if (status === 'completed') {
+            statusBadge.className = 'badge badge-success';
+            statusBadge.innerHTML = '<span class="badge-dot"></span> 生成完成';
+            downloadBtn.href = `/api/download/${id}`;
+            downloadBtn.style.display = 'inline-flex';
+            resultInfo.textContent = '✅ 产物 Content Package v3 构建成功！';
+          } else if (status === 'cancelled') {
+            statusBadge.className = 'badge';
+            statusBadge.textContent = '已取消';
+            resultInfo.textContent = '⏹ 任务已取消';
+          } else {
+            statusBadge.className = 'badge badge-danger';
+            statusBadge.textContent = '生成失败';
+            resultInfo.textContent = `❌ 失败原因: ${event.error || event.message || '未知错误'}`;
+          }
+          loadTasks(true);
+        } catch (err) { /* ignore malformed frames */ }
+      };
+      // onerror left open: EventSource reconnects with Last-Event-ID automatically.
+    }
+
+    document.getElementById('btn-cancel-produce').addEventListener('click', () => {
+      if (monitorTaskId) {
+        document.getElementById('btn-cancel-produce').disabled = true;
+        cancelTask(monitorTaskId);
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadConfig();
+      loadToolchain();
+      loadTasks(true);
+    });
+  </script>
+</body>
+</html>

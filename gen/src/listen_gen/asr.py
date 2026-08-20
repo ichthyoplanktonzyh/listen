@@ -1,3 +1,10 @@
+"""Provider-neutral ASR adapters.
+
+The v1 media packaging orchestration was removed in the Slice 3 cutover; the
+adapter layer survives unchanged behind the capability production engine
+(``media_to_structured_reading`` derivations).
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,50 +16,37 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from .media import AudioPreprocessor
+from .package import LANGUAGE_RE, TIMING_SOURCES, ConversionError
 from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
 
-from .alignment import (
-    AlignmentFailure,
-    AlignmentRequest,
-    AlignmentSentence,
-    AlignmentToken,
-    AlignerAdapter,
-    run_alignment,
-)
-from .package import (
-    PACKAGE_SCHEMA,
-    RESOURCE_SCHEMAS,
-    TIMING_SOURCES,
-    LANGUAGE_RE,
-    ConversionError,
-    ResourceFile,
-    _envelope,
-    write_package,
-)
-from .package_v2 import (
-    ReleaseSpec,
-    build_v2_carrier,
-    write_v2_package,
-)
-from .phone import PhoneAnalyzer, run_phone
-from .protocol import (
-    ALIGNMENT_WARNING_MESSAGES,
-    RICH_WARNING_MESSAGES,
-    alignment_warning,
-)
-from .rich import (
-    AcousticsExtractor,
-    ProsodyAnalyzer,
-    RichWord,
-    SenseGroupAnalyzer,
-    run_acoustics,
-    run_prosody,
-    run_sense_groups,
-)
-
-TOOL_VERSION = "0.4.0"
 TOKEN_RE = re.compile(r"\w+(?:['\u2019]\w+)*|\s+|[^\w\s]", re.UNICODE)
 ASR_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
+
+
+def _tokens(text: str) -> list[dict[str, Any]]:
+    """Deterministically tokenize one sentence into word/whitespace/punct.
+
+    The emitted token indexes are the exact coordinates the word timeline
+    resource refers to; tokenization must be lossless or it is a failure.
+    """
+    tokens = []
+    for index, match in enumerate(TOKEN_RE.finditer(text)):
+        value = match.group(0)
+        if value.isspace():
+            kind, normalized = "whitespace", None
+        elif any(character.isalnum() or character == "_" for character in value):
+            kind, normalized = "word", unicodedata.normalize("NFKC", value).casefold()
+        elif all(unicodedata.category(character).startswith("P") for character in value):
+            kind, normalized = "punctuation", None
+        else:
+            kind, normalized = "other", None
+        tokens.append({
+            "index": index, "kind": kind, "text": value, "normalized": normalized,
+            "start_char": match.start(), "end_char": match.end(),
+        })
+    if not tokens or "".join(token["text"] for token in tokens) != text:
+        raise ConversionError("ASR segment could not be losslessly tokenized")
+    return tokens
 
 
 @dataclass(frozen=True)
@@ -110,11 +104,11 @@ class FixtureAsrAdapter:
 
 
 class CommandAsrAdapter:
-    """Run a provider wrapper as an argv-only subprocess.
+    """Run an external ASR wrapper as an argv-only subprocess.
 
-    The wrapper receives the media path at the exact ``{media}`` placeholder
-    and must write one normalized ``listen_gen.asr-result.v1`` JSON document
-    to stdout. Shell parsing is deliberately never involved.
+    The wrapper receives the normalized 16 kHz mono PCM WAV path through the
+    single ``{media}`` placeholder and writes one normalized ASR result JSON
+    object to stdout. No shell is used.
     """
 
     def __init__(
@@ -125,43 +119,44 @@ class CommandAsrAdapter:
         *,
         progress: Callable[[str], None] | None = None,
     ):
-        if not executable:
-            raise ConversionError("ASR command executable must be non-empty")
+        if not executable.strip():
+            raise ValueError("asr command executable must be non-empty")
         if arguments.count("{media}") != 1:
-            raise ConversionError("ASR command arguments must contain exactly one {media} placeholder")
+            raise ValueError(
+                "asr command arguments must contain exactly one {media} placeholder"
+            )
         if timeout_seconds <= 0:
-            raise ConversionError("ASR command timeout must be positive")
+            raise ValueError("asr command timeout must be positive")
         self.executable = executable
-        self.arguments = tuple(arguments)
+        self.arguments = list(arguments)
         self.timeout_seconds = timeout_seconds
         self.progress = progress
 
     def transcribe(self, media_path: Path) -> AsrTranscript:
-        if not media_path.is_file():
-            raise ConversionError("media input is not a regular file")
+        if self.progress is not None:
+            self.progress("transcribing")
         argv = [
-            self.executable,
-            *(str(media_path) if argument == "{media}" else argument for argument in self.arguments),
+            item.replace("{media}", str(media_path)) for item in self.arguments
         ]
         try:
             completed = run_argv(
-                argv,
+                [self.executable, *argv],
                 timeout_seconds=self.timeout_seconds,
                 stdout_limit_bytes=ASR_STDOUT_LIMIT_BYTES,
             )
         except ProcessTimedOut as error:
-            raise ConversionError("ASR command timed out without producing a usable result") from error
+            raise ConversionError("asr command timed out") from error
         except ProcessOutputTooLarge as error:
-            raise ConversionError("ASR command output exceeded the safety limit") from error
-        except OSError as error:
-            raise ConversionError("ASR command could not be started") from error
+            raise ConversionError("asr command output exceeded the safety limit") from error
         if completed.returncode != 0:
-            raise ConversionError(f"ASR command failed with exit status {completed.returncode}")
+            raise ConversionError(
+                f"asr command failed with exit status {completed.returncode}"
+            )
         try:
-            raw = json.loads(completed.stdout)
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ConversionError("ASR command returned invalid normalized JSON") from error
-        return _parse_transcript(raw)
+            document = json.loads(completed.stdout)
+        except json.JSONDecodeError as error:
+            raise ConversionError("asr command returned invalid json") from error
+        return _parse_transcript(document)
 
 
 class PreprocessingAsrAdapter:
@@ -210,13 +205,15 @@ class PreprocessingAsrAdapter:
 
 def _object(value: Any, location: str) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise ConversionError(f"{location} must be an object")
+        raise ConversionError(f"{location} must be a JSON object")
     return value
 
 
 def _integer(value: Any, location: str, minimum: int = 0) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
-        raise ConversionError(f"{location} must be an integer >= {minimum}")
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ConversionError(f"{location} must be an integer")
+    if value < minimum:
+        raise ConversionError(f"{location} must be at least {minimum}")
     return value
 
 
@@ -259,8 +256,10 @@ def _parse_transcript(raw: Any) -> AsrTranscript:
         if not isinstance(text, str) or not text or not isinstance(display_text, str):
             raise ConversionError(f"{location} text fields must be strings and text must be non-empty")
         raw_words = segment.get("words")
-        if not isinstance(raw_words, list) or not raw_words:
-            raise ConversionError(f"{location}/words must be a non-empty array")
+        if raw_words is None:
+            raw_words = []
+        if not isinstance(raw_words, list):
+            raise ConversionError(f"{location}/words must be an array")
         words: list[AsrWord] = []
         previous_word_end = start_ms
         previous_char_end = 0
@@ -302,462 +301,262 @@ def _parse_transcript(raw: Any) -> AsrTranscript:
     )
 
 
-def _tokens(text: str) -> list[dict[str, Any]]:
-    tokens = []
-    for index, match in enumerate(TOKEN_RE.finditer(text)):
-        value = match.group(0)
-        if value.isspace():
-            kind, normalized = "whitespace", None
-        elif any(character.isalnum() or character == "_" for character in value):
-            kind, normalized = "word", unicodedata.normalize("NFKC", value).casefold()
-        elif all(unicodedata.category(character).startswith("P") for character in value):
-            kind, normalized = "punctuation", None
-        else:
-            kind, normalized = "other", None
-        tokens.append({
-            "index": index, "kind": kind, "text": value, "normalized": normalized,
-            "start_char": match.start(), "end_char": match.end(),
-        })
-    if not tokens or "".join(token["text"] for token in tokens) != text:
-        raise ConversionError("ASR segment could not be losslessly tokenized")
-    return tokens
+# ---------------------------------------------------------------------------
+# Faster-Whisper (CTranslate2) & OpenAI Cloud Audio Adapters
+# ---------------------------------------------------------------------------
 
 
-def _fingerprint(media_path: Path) -> str:
-    digest, _size = _stream_fingerprint(media_path)
-    return digest
+class FasterWhisperAsrAdapter:
+    """High-throughput local Whisper transcription using faster-whisper (CTranslate2)."""
 
+    def __init__(
+        self,
+        *,
+        model_size_or_path: str = "base",
+        device: str = "auto",
+        compute_type: str = "default",
+        language: str = "auto",
+        beam_size: int = 5,
+        word_timestamps: bool = True,
+        vad_filter: bool = True,
+        engine: Any = None,
+    ) -> None:
+        self.model_size_or_path = model_size_or_path
+        self.device = device
+        self.compute_type = compute_type
+        self.language = language
+        self.beam_size = beam_size
+        self.word_timestamps = word_timestamps
+        self.vad_filter = vad_filter
+        self._engine = engine
+        self.config_sha256 = f"sha256:{hashlib.sha256(json.dumps({"schema": "listen_gen.faster-whisper-config.v1", "model": model_size_or_path, "device": device, "compute_type": compute_type, "beam_size": beam_size}, sort_keys=True).encode()).hexdigest()}"
 
-def _stream_fingerprint(media_path: Path) -> tuple[str, int]:
-    """Streaming SHA-256 identity and byte count of a file.
-
-    The media is never read into memory: the digest and the observed byte
-    count come from the same bounded-chunk pass, so a declared size and its
-    identity always refer to the same observed state.
-    """
-    digest = hashlib.sha256()
-    size = 0
-    with media_path.open("rb") as media:
-        for chunk in iter(lambda: media.read(1024 * 1024), b""):
-            size += len(chunk)
-            digest.update(chunk)
-    return f"sha256:{digest.hexdigest()}", size
-
-
-def _sentence_id(media_fingerprint: str, segment_index: int, segment: AsrSegment) -> str:
-    identity = f"{media_fingerprint}:{segment_index}:{segment.start_ms}:{segment.end_ms}:{segment.text}"
-    return f"sentence.{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:24]}"
-
-
-def _provenance(transcript: AsrTranscript, created_at_ms: int) -> dict[str, Any]:
-    value: dict[str, Any] = {
-        "created_at_ms": created_at_ms,
-        "tool": {"id": "listen-gen.asr-package", "version": TOOL_VERSION},
-        "provider": {"id": transcript.provider_id, "version": transcript.provider_version},
-    }
-    if transcript.model_id is not None:
-        value["model"] = {"id": transcript.model_id, "version": transcript.model_version}
-    if transcript.config_sha256 is not None:
-        value["config_sha256"] = transcript.config_sha256
-    return value
-
-
-def package_media(
-    media_path: Path,
-    output_path: Path,
-    adapter: AsrAdapter,
-    *,
-    title: str,
-    media_kind: str,
-    duration_ms: int,
-    created_at_ms: int,
-    progress: Callable[[str], None] | None = None,
-    aligner: AlignerAdapter | None = None,
-    aligner_preprocessor: AudioPreprocessor | None = None,
-    aligner_audio_stream_index: int | None = None,
-    sense_analyzer: SenseGroupAnalyzer | None = None,
-    acoustics_extractor: AcousticsExtractor | None = None,
-    acoustics_preprocessor: AudioPreprocessor | None = None,
-    acoustics_audio_stream_index: int | None = None,
-    prosody_analyzer: ProsodyAnalyzer | None = None,
-    phone_analyzer: PhoneAnalyzer | None = None,
-    phone_preprocessor: AudioPreprocessor | None = None,
-    phone_audio_stream_index: int | None = None,
-    package_version: int = 1,
-    release_spec: ReleaseSpec | None = None,
-) -> dict[str, Any]:
-    if not media_path.is_file():
-        raise ConversionError("media input is not a regular file")
-    if not title.strip():
-        raise ConversionError("title must be non-empty")
-    if media_kind not in {"audio", "video"}:
-        raise ConversionError("media kind must be audio or video")
-    _integer(duration_ms, "duration_ms", 1)
-    _integer(created_at_ms, "created_at_ms")
-    if package_version not in (1, 2):
-        raise ConversionError("package version must be 1 or 2")
-    if package_version == 1 and release_spec is not None:
-        raise ConversionError("package version 1 does not accept a v2 release specification")
-    if package_version == 2 and release_spec is None:
-        raise ConversionError("package version 2 requires a release specification")
-    media_fingerprint = _fingerprint(media_path)
-    transcript = adapter.transcribe(media_path)
-    if _fingerprint(media_path) != media_fingerprint:
-        raise ConversionError("media input changed during processing")
-    if release_spec is not None and (
-        transcript.language.casefold() != release_spec.target_language.casefold()
-    ):
-        raise ConversionError(
-            f"ASR transcript language {transcript.language!r} does not agree with "
-            f"target-language {release_spec.target_language!r}"
-        )
-    segments = transcript.segments
-    if segments and any(bool(segment.words) for segment in segments) and not all(
-        bool(segment.words) for segment in segments
-    ):
-        raise ConversionError(
-            "ASR transcript must provide word timings for every segment or none"
-        )
-    has_word_timeline = bool(segments) and all(
-        bool(segment.words) for segment in segments
-    )
-    sentences = []
-    timings = []
-    for index, segment in enumerate(segments):
-        if segment.end_ms > duration_ms:
-            raise ConversionError(f"ASR segment {index} exceeds media duration")
-        tokens = _tokens(segment.text)
-        sentence_id = _sentence_id(media_fingerprint, index, segment)
-        sentences.append({
-            "id": sentence_id, "index": index, "start_ms": segment.start_ms,
-            "end_ms": segment.end_ms, "original_text": segment.text,
-            "display_text": segment.display_text, "tokens": tokens,
-        })
-        if has_word_timeline:
-            token_by_span = {
-                (token["start_char"], token["end_char"]): token
-                for token in tokens
-                if token["kind"] == "word"
-            }
-            for word_index, word in enumerate(segment.words):
-                token = token_by_span.get((word.start_char, word.end_char))
-                if token is None:
-                    raise ConversionError(
-                        f"ASR segment {index} word {word_index} does not exactly match a word token"
-                    )
-                timing = {
-                    "sentence_id": sentence_id, "token_index": token["index"],
-                    "start_ms": word.start_ms, "end_ms": word.end_ms,
-                    "timing_source": word.timing_source,
-                }
-                if word.confidence is not None:
-                    timing["confidence"] = word.confidence
-                timings.append(timing)
-    provenance = _provenance(transcript, created_at_ms)
-    quality = {"review_status": "machine_checked"}
-    subtitle = _envelope(
-        kind="subtitle_text_track", media_fingerprint=media_fingerprint,
-        dependencies=[], provenance=provenance, quality=quality,
-        payload={"language": transcript.language, "source_kind": "asr", "sentences": sentences},
-        required=True,
-    )
-    resources: list[ResourceFile] = [subtitle]
-    warnings: list[str] = []
-
-    def check_media_unchanged() -> None:
-        if _fingerprint(media_path) != media_fingerprint:
-            raise ConversionError("media input changed during processing")
-
-    alignment_outcome: dict[str, Any] = {"status": "skipped", "warnings": []}
-    word_resource: ResourceFile | None = None
-    if aligner is not None:
-        # The optional word-alignment stage is authoritative for the
-        # word_timeline resource when it is selected. Its failures degrade
-        # honestly to the ASR subtitle package; media changes and cancellation
-        # are never treated as degradation.
+    def _resolve_model(self) -> Any:
+        if self._engine is not None:
+            return self._engine
         try:
-            if aligner_preprocessor is not None:
-                with aligner_preprocessor.prepare(
-                    media_path, audio_stream_index=aligner_audio_stream_index
-                ) as prepared:
-                    status, word_resource, typed_warnings = run_alignment(
-                        aligner=aligner,
-                        media_path=media_path,
-                        audio_path=prepared.path,
-                        audio_stream_index=prepared.stream_index,
-                        language=transcript.language,
-                        sentences=_alignment_sentences(sentences),
-                        subtitle=subtitle,
-                        media_fingerprint=media_fingerprint,
-                        duration_ms=duration_ms,
-                        created_at_ms=created_at_ms,
-                        progress=progress,
-                    )
-            else:
-                status, word_resource, typed_warnings = run_alignment(
-                    aligner=aligner,
-                    media_path=media_path,
-                    audio_path=media_path,
-                    audio_stream_index=None,
-                    language=transcript.language,
-                    sentences=_alignment_sentences(sentences),
-                    subtitle=subtitle,
-                    media_fingerprint=media_fingerprint,
-                    duration_ms=duration_ms,
-                    created_at_ms=created_at_ms,
-                    progress=progress,
-                )
-        except (ConversionError, OSError, json.JSONDecodeError, UnicodeDecodeError) as error:
-            if isinstance(error, AlignmentFailure):
-                code = error.code
-            else:
-                code, _message = alignment_warning(error)
-            message = ALIGNMENT_WARNING_MESSAGES[code]
-            status, word_resource, typed_warnings = (
-                "degraded",
-                None,
-                [{"code": code, "message": message}],
+            from faster_whisper import WhisperModel
+
+            return WhisperModel(
+                self.model_size_or_path,
+                device=self.device,
+                compute_type=self.compute_type,
             )
-        check_media_unchanged()
-        alignment_outcome = {"status": status, "warnings": typed_warnings}
-        warnings.extend(item["message"] for item in typed_warnings)
-        if word_resource is not None:
-            resources.append(word_resource)
-    elif has_word_timeline:
-        word_resource = _envelope(
-            kind="word_timeline", media_fingerprint=media_fingerprint,
-            dependencies=[subtitle], provenance=provenance, quality=quality,
-            payload={"words": timings}, required=False,
-        )
-        resources.append(word_resource)
+        except ImportError as e:
+            raise ConversionError(
+                "faster-whisper is not installed. Install with 'pip install faster-whisper'"
+            ) from e
 
-    # The optional rich stages (R4) run in strict dependency order and each
-    # failure preserves every already-qualified upstream resource.
-    rich_outcomes: dict[str, Any] = {
-        "sense_groups": {"status": "skipped", "warnings": []},
-        "acoustics": {"status": "skipped", "warnings": []},
-        "prosody": {"status": "skipped", "warnings": []},
-    }
-
-    def degrade_rich(outcome_key: str, code: str) -> None:
-        typed = [{"code": code, "message": RICH_WARNING_MESSAGES[code]}]
-        rich_outcomes[outcome_key] = {"status": "degraded", "warnings": typed}
-        warnings.extend(item["message"] for item in typed)
-
-    if any(
-        analyzer is not None
-        for analyzer in (
-            sense_analyzer, acoustics_extractor, prosody_analyzer, phone_analyzer
-        )
-    ):
-        sentence_evidence = _alignment_sentences(sentences)
-        rich_words: tuple[RichWord, ...] = ()
-        if word_resource is not None:
-            rich_words = _rich_words(sentences, word_resource)
-    else:
-        sentence_evidence = ()
-        rich_words = ()
-
-    sense_resource: ResourceFile | None = None
-    resolved_groups: tuple[dict[str, Any], ...] = ()
-    if sense_analyzer is not None:
-        status, sense_resource, typed_warnings, resolved_groups = run_sense_groups(
-            analyzer=sense_analyzer,
-            language=transcript.language,
-            sentences=sentence_evidence,
-            subtitle=subtitle,
-            media_fingerprint=media_fingerprint,
-            created_at_ms=created_at_ms,
-            progress=progress,
-        )
-        rich_outcomes["sense_groups"] = {"status": status, "warnings": typed_warnings}
-        warnings.extend(item["message"] for item in typed_warnings)
-        if sense_resource is not None:
-            resources.append(sense_resource)
-        check_media_unchanged()
-
-    acoustics_resource: ResourceFile | None = None
-    resolved_measurements: tuple[dict[str, Any], ...] = ()
-    if acoustics_extractor is not None:
-        if word_resource is None:
-            degrade_rich("acoustics", "acoustics_upstream_missing")
-        else:
-            status, acoustics_resource, typed_warnings, resolved_measurements = run_acoustics(
-                extractor=acoustics_extractor,
-                preprocessor=acoustics_preprocessor,
-                media_path=media_path,
-                audio_stream_index=acoustics_audio_stream_index,
-                language=transcript.language,
-                sentences=sentence_evidence,
-                words=rich_words,
-                word_timeline=word_resource,
-                media_fingerprint=media_fingerprint,
-                created_at_ms=created_at_ms,
-                progress=progress,
+    def transcribe(self, media_path: Path) -> AsrTranscript:
+        if not media_path.is_file():
+            raise ConversionError("media input is not a regular file")
+        model = self._resolve_model()
+        try:
+            kwargs: dict[str, Any] = {
+                "beam_size": self.beam_size,
+                "word_timestamps": self.word_timestamps,
+                "vad_filter": self.vad_filter,
+            }
+            if self.language != "auto":
+                kwargs["language"] = self.language
+            segments_gen, info = model.transcribe(str(media_path), **kwargs)
+            detected_lang = (
+                getattr(info, "language", "en")
+                if self.language == "auto"
+                else self.language
             )
-            rich_outcomes["acoustics"] = {"status": status, "warnings": typed_warnings}
-            warnings.extend(item["message"] for item in typed_warnings)
-            if acoustics_resource is not None:
-                resources.append(acoustics_resource)
-        check_media_unchanged()
-
-    if prosody_analyzer is not None:
-        if word_resource is None or acoustics_resource is None:
-            degrade_rich("prosody", "prosody_upstream_missing")
-        else:
-            status, prosody_resource, typed_warnings = run_prosody(
-                analyzer=prosody_analyzer,
-                language=transcript.language,
-                sentences=sentence_evidence,
-                words=rich_words,
-                measurements=resolved_measurements,
-                groups=resolved_groups if sense_resource is not None else None,
-                word_timeline=word_resource,
-                acoustics=acoustics_resource,
-                sense_group=sense_resource,
-                media_fingerprint=media_fingerprint,
-                created_at_ms=created_at_ms,
-                progress=progress,
-            )
-            rich_outcomes["prosody"] = {"status": status, "warnings": typed_warnings}
-            warnings.extend(item["message"] for item in typed_warnings)
-            if prosody_resource is not None:
-                resources.append(prosody_resource)
-        check_media_unchanged()
-
-    if phone_analyzer is not None:
-        if word_resource is None:
-            degrade_rich("phone", "phone_upstream_missing")
-        else:
-            try:
-                if phone_preprocessor is None:
-                    status, phone_resource, typed_warnings = run_phone(
-                        analyzer=phone_analyzer,
-                        audio_path=media_path,
-                        words=rich_words,
-                        word_timeline=word_resource,
-                        media_fingerprint=media_fingerprint,
-                        created_at_ms=created_at_ms,
-                        progress=progress,
-                    )
-                else:
-                    with phone_preprocessor.prepare(
-                        media_path, audio_stream_index=phone_audio_stream_index
-                    ) as prepared:
-                        status, phone_resource, typed_warnings = run_phone(
-                            analyzer=phone_analyzer,
-                            audio_path=prepared.path,
-                            words=rich_words,
-                            word_timeline=word_resource,
-                            media_fingerprint=media_fingerprint,
-                            created_at_ms=created_at_ms,
-                            progress=progress,
+            if not LANGUAGE_RE.fullmatch(detected_lang):
+                detected_lang = "en"
+            segments: list[AsrSegment] = []
+            previous_end = 0
+            for seg in segments_gen:
+                start_ms = int(seg.start * 1000)
+                end_ms = max(start_ms + 1, int(seg.end * 1000))
+                if start_ms < previous_end:
+                    start_ms = previous_end
+                if end_ms <= start_ms:
+                    end_ms = start_ms + 1
+                text = seg.text.strip()
+                if not text:
+                    continue
+                words: list[AsrWord] = []
+                if getattr(seg, "words", None):
+                    prev_char = 0
+                    prev_word_end = start_ms
+                    for w in seg.words:
+                        w_text = w.word.strip()
+                        if not w_text:
+                            continue
+                        w_start = max(start_ms, int(w.start * 1000))
+                        w_end = min(end_ms, max(w_start + 1, int(w.end * 1000)))
+                        if w_start < prev_word_end:
+                            w_start = prev_word_end
+                        if w_end <= w_start:
+                            w_end = w_start + 1
+                        char_pos = text.find(w_text, prev_char)
+                        if char_pos == -1:
+                            char_pos = prev_char
+                        char_end = char_pos + len(w_text)
+                        words.append(
+                            AsrWord(
+                                start_char=char_pos,
+                                end_char=char_end,
+                                start_ms=w_start,
+                                end_ms=w_end,
+                                confidence=float(getattr(w, "probability", 0.9)),
+                                timing_source="asr_reported",
+                            )
                         )
-            except (ConversionError, OSError, json.JSONDecodeError, UnicodeDecodeError):
-                code = "phone_failed"
-                status, phone_resource, typed_warnings = (
-                    "degraded",
-                    None,
-                    [{"code": code, "message": RICH_WARNING_MESSAGES[code]}],
+                        prev_char = char_end
+                        prev_word_end = w_end
+                segments.append(
+                    AsrSegment(
+                        start_ms=start_ms,
+                        end_ms=end_ms,
+                        text=text,
+                        display_text=text,
+                        words=tuple(words),
+                    )
                 )
-            rich_outcomes["phone"] = {"status": status, "warnings": typed_warnings}
-            warnings.extend(item["message"] for item in typed_warnings)
-            if phone_resource is not None:
-                resources.append(phone_resource)
-        check_media_unchanged()
+                previous_end = end_ms
+            if not segments:
+                raise ConversionError("faster-whisper produced no speech segments")
+            return AsrTranscript(
+                language=detected_lang,
+                segments=tuple(segments),
+                provider_id="faster-whisper",
+                provider_version="1.0.0",
+                model_id=str(self.model_size_or_path),
+                model_version="ctranslate2",
+                config_sha256=self.config_sha256,
+            )
+        except ConversionError:
+            raise
+        except Exception as error:
+            raise ConversionError(f"faster-whisper transcription failed: {error}") from error
 
-    manifest = {
-        "schema": PACKAGE_SCHEMA,
-        "created_at_ms": created_at_ms,
-        "content_document": {
-            "media_fingerprint": media_fingerprint, "title": title,
-            "media_kind": media_kind, "duration_ms": duration_ms,
-        },
-        "resources": [{
-            "resource_id": resource.resource_id, "path": resource.path,
-            "kind": resource.kind, "schema": RESOURCE_SCHEMAS[resource.kind],
-            "required": resource.required, "size_bytes": len(resource.body),
-        } for resource in resources],
-    }
-    if package_version == 2:
-        assert release_spec is not None
-        if progress is not None:
-            progress("building_package")
-        media_source: Path | None = None
-        if release_spec.media_delivery == "embedded":
-            # The exact media bytes are carried as an internal file-backed
-            # entry and streamed into the archive by the writer, whose
-            # streaming digest/size validation is the final mutation check.
-            # The media is never read into memory.
-            media_size = media_path.stat().st_size
-            media_source = media_path
+
+class OpenAiAudioAsrAdapter:
+    """Cloud / Remote ASR adapter using OpenAI Audio Transcriptions API."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str = "https://api.openai.com/v1",
+        api_key: str | None = None,
+        model: str = "whisper-1",
+        language: str = "auto",
+        timeout_seconds: float = 300.0,
+        client: Any = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.model = model
+        self.language = language
+        self.timeout_seconds = timeout_seconds
+        self._client = client
+        self.config_sha256 = f"sha256:{hashlib.sha256(json.dumps({"schema": "listen_gen.openai-audio-config.v1", "base_url": self.base_url, "model": self.model}, sort_keys=True).encode()).hexdigest()}"
+
+    def transcribe(self, media_path: Path) -> AsrTranscript:
+        if not media_path.is_file():
+            raise ConversionError("media input is not a regular file")
+        if self._client is not None:
+            raw = self._client(media_path)
         else:
-            # Referenced delivery declares the missing media identity from a
-            # final streaming pass immediately before the carrier is built, so
-            # the declared size and digest refer to the same observed pass.
-            observed_digest, media_size = _stream_fingerprint(media_path)
-            if observed_digest != media_fingerprint:
-                raise ConversionError("media input changed during processing")
-        carrier = build_v2_carrier(
-            resources=resources,
-            media_sha256=media_fingerprint,
-            media_size=media_size,
-            media_kind=media_kind,
-            media_source=media_source,
-            spec=release_spec,
-            created_at_ms=created_at_ms,
+            if not self.api_key:
+                raise ConversionError("OpenAI API key is required for cloud ASR transcription")
+            import urllib.request
+            import uuid
+
+            boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
+            body = bytearray()
+
+            def add_field(name: str, value: str):
+                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n".encode())
+
+            def add_file(name: str, filename: str, data: bytes, content_type: str):
+                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n".encode())
+                body.extend(data)
+                body.extend(b"\r\n")
+
+            add_field("model", self.model)
+            add_field("response_format", "verbose_json")
+            add_field("timestamp_granularities[]", "word")
+            add_field("timestamp_granularities[]", "segment")
+            if self.language != "auto":
+                add_field("language", self.language)
+            add_file("file", media_path.name, media_path.read_bytes(), "audio/wav")
+            body.extend(f"--{boundary}--\r\n".encode())
+
+            req = urllib.request.Request(
+                f"{self.base_url}/audio/transcriptions",
+                data=bytes(body),
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                    raw = json.loads(resp.read().decode("utf-8"))
+            except Exception as e:
+                raise ConversionError(f"OpenAI audio transcription request failed: {e}") from e
+
+        # Parse verbose_json format from OpenAI API
+        language = raw.get("language", "en") if self.language == "auto" else self.language
+        if not LANGUAGE_RE.fullmatch(language):
+            language = "en"
+        raw_segments = raw.get("segments") or []
+        segments: list[AsrSegment] = []
+        previous_end = 0
+        for seg in raw_segments:
+            start_ms = int(seg.get("start", 0) * 1000)
+            end_ms = max(start_ms + 1, int(seg.get("end", 0) * 1000))
+            if start_ms < previous_end:
+                start_ms = previous_end
+            if end_ms <= start_ms:
+                end_ms = start_ms + 1
+            text = str(seg.get("text", "")).strip()
+            if not text:
+                continue
+            words: list[AsrWord] = []
+            for w in seg.get("words", []):
+                w_text = str(w.get("word", "")).strip()
+                if not w_text:
+                    continue
+                w_start = max(start_ms, int(w.get("start", 0) * 1000))
+                w_end = min(end_ms, max(w_start + 1, int(w.get("end", 0) * 1000)))
+                words.append(
+                    AsrWord(
+                        start_char=0,
+                        end_char=len(w_text),
+                        start_ms=w_start,
+                        end_ms=w_end,
+                        confidence=0.9,
+                        timing_source="asr_reported",
+                    )
+                )
+            segments.append(
+                AsrSegment(
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    text=text,
+                    display_text=text,
+                    words=tuple(words),
+                )
+            )
+            previous_end = end_ms
+
+        if not segments:
+            raise ConversionError("OpenAI audio transcription returned no segments")
+
+        return AsrTranscript(
+            language=language,
+            segments=tuple(segments),
+            provider_id="openai-audio",
+            provider_version="1.0.0",
+            model_id=self.model,
+            model_version=None,
+            config_sha256=self.config_sha256,
         )
-        package_sha256 = write_v2_package(output_path, carrier)
-        return {
-            "status": "created", "output": str(output_path),
-            "media_fingerprint": media_fingerprint, "package_sha256": package_sha256,
-            "resource_count": len(resources), "warnings": warnings,
-            "alignment": alignment_outcome,
-            "rich_resources": rich_outcomes,
-            "package_version": 2,
-            "release_id": carrier["release_id"],
-            "delivery_profile": carrier["delivery"]["profile"],
-        }
-    if progress is not None:
-        progress("building_package")
-    package_sha256 = write_package(output_path, manifest, resources)
-    return {
-        "status": "created", "output": str(output_path),
-        "media_fingerprint": media_fingerprint, "package_sha256": package_sha256,
-        "resource_count": len(resources), "warnings": warnings,
-        "alignment": alignment_outcome,
-        "rich_resources": rich_outcomes,
-    }
-
-
-def _rich_words(
-    sentences: list[dict[str, Any]], word_resource: ResourceFile
-) -> tuple[RichWord, ...]:
-    """Resolve the exact word timeline payload to subtitle coordinates."""
-    index_by_id = {sentence["id"]: sentence["index"] for sentence in sentences}
-    envelope = json.loads(word_resource.body)
-    return tuple(
-        RichWord(
-            sentence_index=index_by_id[entry["sentence_id"]],
-            token_index=entry["token_index"],
-            start_ms=entry["start_ms"],
-            end_ms=entry["end_ms"],
-            sentence_id=entry["sentence_id"],
-        )
-        for entry in envelope["payload"]["words"]
-    )
-
-
-def _alignment_sentences(sentences: list[dict[str, Any]]) -> tuple[AlignmentSentence, ...]:
-    return tuple(
-        AlignmentSentence(
-            id=sentence["id"],
-            index=sentence["index"],
-            start_ms=sentence["start_ms"],
-            end_ms=sentence["end_ms"],
-            original_text=sentence["original_text"],
-            display_text=sentence["display_text"],
-            tokens=tuple(AlignmentToken(**token) for token in sentence["tokens"]),
-        )
-        for sentence in sentences
-    )

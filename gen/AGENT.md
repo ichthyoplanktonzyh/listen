@@ -31,20 +31,17 @@ the owner has added an explicit license grant.
 
 ## Contract ownership
 
-- `listen-core/contracts/content-package/v1` and
-  `listen-core/contracts/content-package/v2` are the only schema authorities.
-- Do not copy either schema generation into this repository.
+- `listen-core/contracts/content-package/v3` is the only package schema
+  authority.
+- Do not copy its schema generation into this repository.
 - Update `contracts.lock.json` when a pinned schema identity/version changes.
-- V1 remains the default compatibility output. V2 is selected explicitly and
-  is assembled only from a caller-owned Release Specification.
-- Package output must contain only typed, allowlisted resources and declared
-  content-addressed blobs.
+- Package output must be Content Package v3 only and contain only typed,
+  allowlisted resources and declared content-addressed blobs.
 
 ## Safety and privacy
 
 - Never include local filesystem paths, secrets, raw provider responses, or
   learner facts in a package.
-- Unknown LLTimeline artifacts produce warnings; never forward their payloads.
 - Tests must be deterministic and must not use paid/live model calls.
 
 ## Scope discipline

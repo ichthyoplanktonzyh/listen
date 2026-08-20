@@ -4,9 +4,32 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "listen-gen"
-version = "0.4.0"
+version = "0.5.2"
 description = "Heavy resource generation and content packaging for Listen"
 requires-python = ">=3.11"
+dependencies = [
+    "pypdf>=5.0,<7",
+]
+
+[project.optional-dependencies]
+tts = [
+    "kokoro>=0.8",
+    "soundfile>=0.12",
+]
+ocr = [
+    "pypdfium2>=4.0",
+    "pillow>=10.0",
+    "surya-ocr>=0.6.0",
+    "rapidocr-onnxruntime>=1.3.0",
+]
+all = [
+    "kokoro>=0.8",
+    "soundfile>=0.12",
+    "pypdfium2>=4.0",
+    "pillow>=10.0",
+    "surya-ocr>=0.6.0",
+    "rapidocr-onnxruntime>=1.3.0",
+]
 
 [project.scripts]
 listen-gen = "listen_gen.cli:main"

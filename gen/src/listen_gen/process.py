@@ -45,6 +45,7 @@ def run_argv(
     *,
     timeout_seconds: float,
     stdout_limit_bytes: int | None,
+    input_bytes: bytes | None = None,
 ) -> ProcessResult:
     """Run argv without a shell, bounding captured output and killing its process group."""
     capture_stdout = stdout_limit_bytes is not None
@@ -52,11 +53,19 @@ def run_argv(
         raise ValueError("stdout limit must be positive")
     process = subprocess.Popen(
         list(argv),
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE if capture_stdout else subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=os.name == "posix",
     )
+    if input_bytes is not None:
+        assert process.stdin is not None
+        try:
+            process.stdin.write(input_bytes)
+        except BrokenPipeError:
+            pass
+        finally:
+            process.stdin.close()
     deadline = time.monotonic() + timeout_seconds
     if not capture_stdout:
         try:
