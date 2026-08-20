@@ -53,6 +53,131 @@ DEFAULT_TARGET_GROUPS_PER_SENTENCE = 4
 
 LLM_SENSE_GROUP_PROMPT_CONTRACT = "sense-group-partition-v1"
 
+LLM_SENSE_GROUP_SYSTEM_PROMPT = """## System Prompt
+
+You are a language-learning content analyzer.
+
+Your task is to split a sentence into **sense groups** for reading and listening practice.
+
+A **sense group** is a short sequence of consecutive words that a learner can process together as **one meaningful chunk** in working memory.
+
+The purpose of sense-group segmentation is to help learners understand language **chunk by chunk instead of word by word**, so that they can gradually recognize meaningful multi-word patterns during reading and listening.
+
+### Segmentation principles
+
+1. **Meaning comes first.**
+   Words that naturally belong together in meaning should stay together.
+
+2. **Keep common language chunks intact.**
+   Do not unnecessarily split:
+
+   * fixed expressions
+   * collocations
+   * phrasal verbs
+   * idiomatic expressions
+   * closely connected grammatical patterns
+   * words that learners would naturally recognize together as one expression
+
+3. **Avoid chunks that are too small.**
+   Do not create isolated function words or fragments that carry little useful meaning for comprehension.
+
+4. **Avoid chunks that are too large.**
+   When a span contains several clearly distinguishable pieces of meaning, split it into smaller meaningful chunks.
+
+5. **Prefer compact chunks.**
+   Sense groups are usually relatively short because they are intended to reduce working-memory load, but there is no fixed word-count limit. Never break a meaningful expression only to make chunks shorter or more uniform.
+
+6. **Do not optimize for breathing or rhythm.**
+   A sense group is not a breath group, intonation group, subtitle segment, or visual line break. Natural pauses may sometimes coincide with sense-group boundaries, but semantic processing is the primary criterion.
+
+7. **Use the sentence context.**
+   The same words may be grouped differently in different sentences. Segment according to the meaning they express in the current sentence.
+
+### Examples
+
+Sentence:
+
+`I was looking forward to seeing you again.`
+
+Good segmentation:
+
+`I / was looking forward to / seeing you again`
+
+Not:
+
+`I was / looking / forward / to seeing / you / again`
+
+---
+
+Sentence:
+
+`She takes care of her younger brother after school.`
+
+Good segmentation:
+
+`She / takes care of / her younger brother / after school`
+
+Not:
+
+`She takes / care of her / younger / brother after / school`
+
+---
+
+Sentence:
+
+`One of the most important things is learning how to listen.`
+
+Good segmentation:
+
+`One of the most important things / is / learning how to listen`
+
+Not:
+
+`One of / the most / important things is / learning / how to / listen`
+
+---
+
+Sentence:
+
+`When I got home, I realized that I had left my phone at work.`
+
+Good segmentation:
+
+`When I got home / I realized / that I had left my phone / at work`
+
+The exact number and length of sense groups may vary. Choose the segmentation that is most useful for a learner trying to understand the sentence as meaningful chunks.
+
+## Task
+
+You will receive:
+
+* the original sentence
+* its tokens in exact order
+* token indices
+
+Return only the token indices after which a sense-group boundary should occur.
+
+Do not change, remove, merge, reorder, or rewrite any tokens.
+
+Do not add a boundary after the final token.
+
+Return valid JSON only in this format:
+
+```json
+{
+  "boundary_after_token_indices": [3, 7, 11]
+}
+```
+
+If the whole sentence is best processed as a single sense group, return:
+
+```json
+{
+  "boundary_after_token_indices": []
+}
+```"""
+
+
 _ABBREVIATIONS = frozenset(
     {
         "mr",
@@ -537,7 +662,7 @@ from .llm_client import (
 class LlmSenseGroupAnalyzer:
     """LLM-powered sense group analyzer implementing the sense-group-partition-v1 contract
 
-    Sends structured prompt with candidate boundaries to any supported LLM provider
+    Sends structured prompt with indexed tokens to any supported LLM provider
     (OpenAI-compatible, Anthropic Messages, Google Gemini), validates output against
     token coordinates, and gracefully falls back to rule/syntax partitioning upon
     rate-limiting, network timeout, or schema mismatch.
@@ -642,40 +767,18 @@ class LlmSenseGroupAnalyzer:
         fallback: list[SenseGroup],
     ) -> list[SenseGroup] | None:
         words = [t for t in sentence.tokens if t.kind == "word"]
-        if len(words) < self.config.min_words * 2:
+        if len(words) < 2:
             return fallback
 
         tokens_repr = "\n".join(
             f"{t.index}:{t.kind}:{t.text!r}" for t in sentence.tokens
         )
-        candidates_repr = ", ".join(
-            str(g.end_token_index_exclusive - 1)
-            for g in fallback[:-1]
-        ) or "none"
 
-        system_prompt = (
-            f"You are an expert English linguist and speech perception specialist.\n"
-            f"Partition {language} subtitle sentences into natural, rhythmical sense groups (breath groups) for language learning.\n\n"
-            "Granularity Guidelines:\n"
-            "1. Target group length: 2 to 6 words per group.\n"
-            "2. Distinct units that SHOULD form separate groups:\n"
-            "   - Introductory / adverbial clauses (e.g., 'When you explore careers')\n"
-            "   - Prepositional phrases acting as locative/temporal/manner modifiers (e.g., 'in the sports industry,')\n"
-            "   - Main verb phrases / predicates (e.g., 'you might find')\n"
-            "   - Object noun phrases / complement structures (e.g., 'many exciting opportunities.')\n"
-            "3. Never isolate single words or function words alone.\n"
-            "4. Return token indices after which a group ends. Do not return the sentence-final boundary.\n"
-            "5. Never split a protected span. Rule/NLP candidates are hints, not constraints.\n"
-            "6. Do not rewrite, translate, or omit tokens. Return only JSON matching schema:\n"
-            '{"boundary_after_token_indices": [integer_token_index, ...]}'
-        )
+        system_prompt = LLM_SENSE_GROUP_SYSTEM_PROMPT
 
         user_prompt = (
-            f"Source text:\n{sentence.display_text}\n\n"
-            f"Indexed tokens (index:kind:text):\n{tokens_repr}\n\n"
-            "Protected spans:\nnone\n\n"
-            f"Candidate boundaries after token indices:\n{candidates_repr}\n\n"
-            'Output format: {"boundary_after_token_indices": [integer_token_index, ...]}'
+            f"Original sentence:\n{sentence.display_text}\n\n"
+            f"Tokens (index:kind:text):\n{tokens_repr}"
         )
 
         try:
@@ -687,13 +790,17 @@ class LlmSenseGroupAnalyzer:
             if not parsed or not isinstance(parsed, dict):
                 return None
 
-            boundaries = (
-                parsed.get("boundary_after_token_indices")
-                or parsed.get("boundaries")
-                or parsed.get("boundary_indices")
-                or parsed.get("boundary_tokens")
-            )
-            if not isinstance(boundaries, list):
+            boundaries = None
+            for key in (
+                "boundary_after_token_indices",
+                "boundaries",
+                "boundary_indices",
+                "boundary_tokens",
+            ):
+                if key in parsed and isinstance(parsed[key], list):
+                    boundaries = parsed[key]
+                    break
+            if boundaries is None:
                 return None
 
             return self._spans_from_llm_boundaries(sentence, [int(b) for b in boundaries])
@@ -746,7 +853,7 @@ class LlmSenseGroupAnalyzer:
         if start_idx < len(tokens):
             raw_spans.append((start_idx, len(tokens)))
 
-        # Clean and merge short spans (< min_words words) to prevent fragments
+        # Clean spans with no word tokens (e.g. trailing whitespace/punctuation)
         final_spans: list[tuple[int, int]] = []
         for s_start, s_end in raw_spans:
             span_words = [t for t in tokens[s_start:s_end] if t.kind == "word"]
@@ -755,11 +862,7 @@ class LlmSenseGroupAnalyzer:
                     prev_start, _ = final_spans.pop()
                     final_spans.append((prev_start, s_end))
                 continue
-            if len(span_words) < self.config.min_words and final_spans:
-                prev_start, _ = final_spans.pop()
-                final_spans.append((prev_start, s_end))
-            else:
-                final_spans.append((s_start, s_end))
+            final_spans.append((s_start, s_end))
 
         if not final_spans:
             final_spans = [(0, len(tokens))]

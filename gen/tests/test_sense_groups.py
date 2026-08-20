@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from listen_gen.llm_client import (
@@ -16,6 +17,7 @@ from listen_gen.llm_client import (
 )
 from listen_gen.rich import AlignmentSentence, AlignmentToken, SenseGroupRequest
 from listen_gen.sense_groups import (
+    LLM_SENSE_GROUP_SYSTEM_PROMPT,
     LlmSenseGroupAnalyzer,
     PunctuationSenseGroupBaseline,
     SenseGroupPartitionConfig,
@@ -254,6 +256,82 @@ class SenseGroupThreeLayersTests(unittest.TestCase):
         self.assertEqual(groups[1].start_token_index, 7)
         self.assertEqual(groups[1].end_token_index_exclusive, len(tokens))
         self.assertEqual(groups[1].sources, ("language_model",))
+
+    def test_layer3_llm_meaningful_chunk_standard_examples(self) -> None:
+        """Verify LLM boundary mapping follows the working-memory meaningful chunk principles.
+
+        Tests all standard examples from the sense group specification:
+        1. "I was looking forward to seeing you again." -> ["I", "was looking forward to", "seeing you again"]
+        2. "She takes care of her younger brother after school." -> ["She", "takes care of", "her younger brother", "after school"]
+        3. "One of the most important things is learning how to listen." -> ["One of the most important things", "is", "learning how to listen"]
+        4. "When I got home, I realized that I had left my phone at work." -> ["When I got home", "I realized", "that I had left my phone", "at work"]
+        """
+        analyzer = LlmSenseGroupAnalyzer(api_key="mock")
+
+        # Example 1
+        w1 = ["I", " ", "was", " ", "looking", " ", "forward", " ", "to", " ", "seeing", " ", "you", " ", "again", "."]
+        t1 = _tokens(*w1)
+        s1 = AlignmentSentence("s1", 0, 0, 1000, "".join(w1), "".join(w1), t1)
+        groups1 = analyzer._spans_from_llm_boundaries(s1, [0, 8])
+        self.assertIsNotNone(groups1)
+        chunks1 = ["".join(t.text for t in t1[g.start_token_index:g.end_token_index_exclusive]) for g in groups1]
+        self.assertEqual(chunks1, ["I ", "was looking forward to ", "seeing you again."])
+
+        # Example 2
+        w2 = ["She", " ", "takes", " ", "care", " ", "of", " ", "her", " ", "younger", " ", "brother", " ", "after", " ", "school", "."]
+        t2 = _tokens(*w2)
+        s2 = AlignmentSentence("s2", 0, 0, 1000, "".join(w2), "".join(w2), t2)
+        groups2 = analyzer._spans_from_llm_boundaries(s2, [0, 6, 12])
+        self.assertIsNotNone(groups2)
+        chunks2 = ["".join(t.text for t in t2[g.start_token_index:g.end_token_index_exclusive]) for g in groups2]
+        self.assertEqual(chunks2, ["She ", "takes care of ", "her younger brother ", "after school."])
+
+        # Example 3: single-word predicate "is" preserved as a distinct meaningful chunk
+        w3 = ["One", " ", "of", " ", "the", " ", "most", " ", "important", " ", "things", " ", "is", " ", "learning", " ", "how", " ", "to", " ", "listen", "."]
+        t3 = _tokens(*w3)
+        s3 = AlignmentSentence("s3", 0, 0, 1000, "".join(w3), "".join(w3), t3)
+        groups3 = analyzer._spans_from_llm_boundaries(s3, [10, 12])
+        self.assertIsNotNone(groups3)
+        chunks3 = ["".join(t.text for t in t3[g.start_token_index:g.end_token_index_exclusive]) for g in groups3]
+        self.assertEqual(chunks3, ["One of the most important things ", "is ", "learning how to listen."])
+
+        # Example 4
+        w4 = ["When", " ", "I", " ", "got", " ", "home", ",", " ", "I", " ", "realized", " ", "that", " ", "I", " ", "had", " ", "left", " ", "my", " ", "phone", " ", "at", " ", "work", "."]
+        t4 = _tokens(*w4)
+        s4 = AlignmentSentence("s4", 0, 0, 1000, "".join(w4), "".join(w4), t4)
+        groups4 = analyzer._spans_from_llm_boundaries(s4, [7, 11, 23])
+        self.assertIsNotNone(groups4)
+        chunks4 = ["".join(t.text for t in t4[g.start_token_index:g.end_token_index_exclusive]) for g in groups4]
+        self.assertEqual(chunks4, ["When I got home, ", "I realized ", "that I had left my phone ", "at work."])
+
+        # Entire sentence as single chunk when empty boundaries returned
+        groups_single = analyzer._spans_from_llm_boundaries(s1, [])
+        self.assertIsNotNone(groups_single)
+        self.assertEqual(len(groups_single), 1)
+        self.assertEqual(groups_single[0].start_token_index, 0)
+        self.assertEqual(groups_single[0].end_token_index_exclusive, len(t1))
+
+    def test_layer3_llm_prompt_contract_and_user_prompt(self) -> None:
+        """Verify LLM client invocation sends the working-memory prompt and indexed tokens."""
+        analyzer = LlmSenseGroupAnalyzer(api_key="mock")
+        w = ["I", " ", "was", " ", "looking", " ", "forward", " ", "to", " ", "seeing", " ", "you", " ", "again", "."]
+        tokens = _tokens(*w)
+        sentence = AlignmentSentence("s1", 0, 0, 1000, "".join(w), "".join(w), tokens)
+
+        with mock.patch.object(analyzer.client, "call_structured_json", return_value={"boundary_after_token_indices": [0, 8]}) as mock_call:
+            result = analyzer.analyze(SenseGroupRequest(language="en-US", sentences=(sentence,)))
+            mock_call.assert_called_once()
+            sys_prompt, user_prompt = mock_call.call_args[0][:2]
+            self.assertEqual(sys_prompt, LLM_SENSE_GROUP_SYSTEM_PROMPT)
+            self.assertIn("Original sentence:\nI was looking forward to seeing you again.", user_prompt)
+            self.assertIn("Tokens (index:kind:text):", user_prompt)
+            self.assertEqual(len(result.groups), 3)
+
+        # Verify empty boundaries [] does not fall back to rule partition
+        with mock.patch.object(analyzer.client, "call_structured_json", return_value={"boundary_after_token_indices": []}) as mock_call:
+            result = analyzer.analyze(SenseGroupRequest(language="en-US", sentences=(sentence,)))
+            self.assertEqual(len(result.groups), 1)
+            self.assertEqual(result.groups[0].sources, ("language_model",))
 
     def test_provider_agnostic_profile_auto_detection(self) -> None:
         # Anthropic detection

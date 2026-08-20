@@ -472,10 +472,10 @@ class OpenAiAudioAsrAdapter:
             body = bytearray()
 
             def add_field(name: str, value: str):
-                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n".encode())
+                body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
 
             def add_file(name: str, filename: str, data: bytes, content_type: str):
-                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n".encode())
+                body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n'.encode())
                 body.extend(data)
                 body.extend(b"\r\n")
 
