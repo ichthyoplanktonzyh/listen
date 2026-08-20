@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from listen_gen.document import (
+    DoclingOcrProvider,
     DocumentDecodeError,
     NoTextLayer,
     RapidOcrProvider,
@@ -72,6 +73,24 @@ class OcrProvidersTests(unittest.TestCase):
         )
         text = decode_pdf(blank_pdf(), ocr=provider)
         self.assertEqual(text, "PDF recognized text via OCR.")
+
+
+
+    def test_docling_ocr_with_custom_engine(self) -> None:
+        def mock_engine(raw: bytes) -> str:
+            return "# Docling Markdown Heading\n\nExtracted paragraph with structured layout."
+
+        provider = DoclingOcrProvider(engine=mock_engine)
+        text = provider.extract_text(blank_pdf(), "application/pdf")
+        self.assertEqual(text, "# Docling Markdown Heading\n\nExtracted paragraph with structured layout.")
+
+    def test_docling_ocr_empty_text_raises_no_text_layer(self) -> None:
+        def empty_engine(raw: bytes) -> str:
+            return "   "
+
+        provider = DoclingOcrProvider(engine=empty_engine)
+        with self.assertRaises(NoTextLayer):
+            provider.extract_text(blank_pdf(), "application/pdf")
 
 
 if __name__ == "__main__":

@@ -1409,3 +1409,46 @@ def plain_text_for_speech(decoded) -> str:
     exact logical text of the structured reading, free of markup markers.
     """
     return " ".join(sentence.text.strip() for sentence in decoded.sentences)
+
+
+class DoclingOcrProvider:
+    """Document OCR and layout parser based on IBM Docling."""
+
+    name = "docling"
+
+    def __init__(
+        self,
+        *,
+        engine: Callable[[bytes], str] | None = None,
+    ):
+        self.engine = engine
+
+    def extract_text(self, raw: bytes, media_type: str) -> str:
+        if self.engine is not None:
+            text = self.engine(raw)
+            if not text.strip():
+                raise NoTextLayer("the OCR provider detected no text")
+            return text
+
+        try:
+            import tempfile
+            from docling.document_converter import DocumentConverter
+
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as tmp:
+                tmp.write(raw)
+                tmp.flush()
+                converter = DocumentConverter()
+                result = converter.convert(tmp.name)
+                markdown_text = result.document.export_to_markdown()
+
+            if not markdown_text.strip():
+                raise NoTextLayer("Docling could not detect any text in the document")
+            return markdown_text
+        except ImportError as error:
+            raise DocumentDecodeError(
+                "Docling is not installed. Install with 'pip install docling'"
+            ) from error
+        except NoTextLayer:
+            raise
+        except Exception as error:
+            raise DocumentDecodeError(f"Docling failed during document extraction: {error}") from error

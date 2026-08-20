@@ -238,6 +238,102 @@ def _tree_sha256(path: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+
+
+class G2pPhoneAdapter:
+    """G2P-based canonical phoneme adapter.
+
+    Generates standard IPA phonemes for each word in the Word Timeline,
+    distributing the word duration evenly across its phonemes.
+    """
+
+    provider_id = "g2p-phoneme"
+    provider_version = "1"
+
+    def __init__(
+        self,
+        *,
+        backend: str = "auto",
+        g2p_fn: Callable[[str], list[str]] | None = None,
+    ):
+        self.backend = backend
+        self.g2p_fn = g2p_fn
+        self.config_sha256 = "sha256:" + hashlib.sha256(
+            json.dumps(
+                {"schema": "listen_gen.g2p-phone-config.v1", "backend": backend},
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+
+    def _resolve_g2p(self) -> Callable[[str], list[str]]:
+        if self.g2p_fn is not None:
+            return self.g2p_fn
+        try:
+            from g2p_en import G2p
+            g2p = G2p()
+
+            def _g2p_en(word: str) -> list[str]:
+                phones = g2p(word)
+                return [p.strip() for p in phones if p.strip() and p not in " '\".,!?;:"]
+
+            return _g2p_en
+        except ImportError:
+            pass
+
+        try:
+            import phonemizer
+
+            def _phonemizer(word: str) -> list[str]:
+                res = phonemizer.phonemize(word, language="en-us", backend="espeak", strip=True)
+                return [p.strip() for p in res.split() if p.strip()]
+
+            return _phonemizer
+        except Exception:
+            pass
+
+        raise RichStageFailure("phones", "failed")
+
+    def analyze(self, request: PhoneRequest) -> PhoneResult:
+        if not request.words:
+            raise _failure("upstream_missing")
+        g2p_func = self._resolve_g2p()
+        detected_phones: list[DetectedPhone] = []
+        for idx, word in enumerate(request.words):
+            raw_text = getattr(word, "text", f"word_{idx}").strip()
+            if not raw_text:
+                continue
+            try:
+                phonemes = g2p_func(raw_text)
+            except Exception:
+                continue
+            if not phonemes:
+                continue
+            duration = max(1, word.end_ms - word.start_ms)
+            step = duration / len(phonemes)
+            for i, p in enumerate(phonemes):
+                p_start = int(word.start_ms + i * step)
+                p_end = int(word.start_ms + (i + 1) * step) if i < len(phonemes) - 1 else word.end_ms
+                detected_phones.append(
+                    DetectedPhone(
+                        symbol=p,
+                        start_ms=p_start,
+                        end_ms=p_end,
+                        display_ipa=p,
+                        confidence=0.9,
+                    )
+                )
+        if not detected_phones:
+            raise _failure("qualification_failed")
+        return PhoneResult(
+            phone_set="ipa",
+            phones=tuple(detected_phones),
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+            model_id=self.backend,
+            config_sha256=self.config_sha256,
+        )
+
+
 class Wav2Vec2CtcPhoneAdapter:
     """First-class wrapper for the existing wav2vec2 phoneme sidecar protocol."""
 

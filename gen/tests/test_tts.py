@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from listen_gen.tts import (
+    EdgeTtsAdapter,
     AnchorAlignment,
     FakeTtsAdapter,
     FixtureTtsAdapter,
@@ -123,6 +124,43 @@ class SayTtsAdapterTests(unittest.TestCase):
         )
         with self.assertRaises(TtsProviderError):
             adapter.synthesize("Hello.", [])
+
+
+
+
+class EdgeTtsAdapterTests(unittest.TestCase):
+    def test_synthesize_with_mock_synthesizer(self) -> None:
+        def mock_synth(sentence: str, voice: str, rate: str, volume: str, pitch: str) -> bytes:
+            # Return fake WAV bytes
+            from listen_gen.tts import _wav_bytes
+            return _wav_bytes([0] * 16000)  # 1 second of audio at 16kHz
+
+        adapter = EdgeTtsAdapter(
+            voice="en-US-AvaNeural",
+            synthesizer=mock_synth,
+        )
+        result = adapter.synthesize(
+            "Hello world. Second sentence.",
+            [("sentence-0", "Hello world."), ("sentence-1", "Second sentence.")],
+        )
+        self.assertEqual(result.provider_id, "edge-tts")
+        self.assertEqual(result.model_id, "en-US-AvaNeural")
+        self.assertIsNotNone(result.alignment)
+        self.assertEqual(len(result.alignment), 2)
+        self.assertEqual(result.alignment[0].anchor_id, "sentence-0")
+        self.assertEqual(result.alignment[0].media_time_ms, 0)
+        self.assertEqual(result.alignment[1].anchor_id, "sentence-1")
+        self.assertEqual(result.alignment[1].media_time_ms, 1000)
+        self.assertEqual(result.duration_ms, 2000)
+
+    def test_synthesize_with_uninstalled_edge_tts_raises(self) -> None:
+        adapter = EdgeTtsAdapter(voice="en-US-AvaNeural")
+        # When edge_tts is not installed or without mock
+        try:
+            import edge_tts
+        except ImportError:
+            with self.assertRaises(TtsProviderError):
+                adapter.synthesize("Hello.", [("s-0", "Hello.")])
 
 
 if __name__ == "__main__":

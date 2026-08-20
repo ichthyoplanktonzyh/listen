@@ -740,6 +740,36 @@ def check_toolchain() -> dict[str, Any]:
         "installed_models": spacy_models,
     }
 
+    try:
+        import edge_tts
+        tools["edge_tts"] = {"available": True}
+    except ImportError:
+        tools["edge_tts"] = {"available": False}
+
+    try:
+        import parselmouth
+        tools["parselmouth"] = {"available": True}
+    except ImportError:
+        tools["parselmouth"] = {"available": False}
+
+    try:
+        import docling
+        tools["docling"] = {"available": True}
+    except ImportError:
+        tools["docling"] = {"available": False}
+
+    try:
+        import g2p_en
+        tools["g2p_en"] = {"available": True}
+    except ImportError:
+        tools["g2p_en"] = {"available": False}
+
+    try:
+        import faster_whisper
+        tools["faster_whisper"] = {"available": True}
+    except ImportError:
+        tools["faster_whisper"] = {"available": False}
+
     return tools
 
 
@@ -1597,6 +1627,16 @@ def _run_produce_worker(
                 afconvert_executable=tts_cfg.get("afconvert_executable", "afconvert"),
                 timeout_seconds=float(tts_cfg.get("timeout_seconds", 600.0)),
             )
+        elif tts_provider == "edge-tts":
+            from .tts import EdgeTtsAdapter
+            tts_adapter = EdgeTtsAdapter(
+                voice=tts_cfg.get("voice", "en-US-AvaNeural"),
+                rate=tts_cfg.get("rate", "+0%"),
+                volume=tts_cfg.get("volume", "+0%"),
+                pitch=tts_cfg.get("pitch", "+0Hz"),
+                afconvert_executable=tts_cfg.get("afconvert_executable", "afconvert"),
+                timeout_seconds=float(tts_cfg.get("timeout_seconds", 600.0)),
+            )
         elif tts_provider == "fake":
             from .tts import FakeTtsAdapter
             tts_adapter = FakeTtsAdapter()
@@ -1615,12 +1655,34 @@ def _run_produce_worker(
         elif ocr_provider == "rapidocr":
             from .document import RapidOcrProvider
             ocr_adapter = RapidOcrProvider()
+        elif ocr_provider == "docling":
+            from .document import DoclingOcrProvider
+            ocr_adapter = DoclingOcrProvider()
 
         # 2. ASR Adapter (for media or audio derivations)
         asr_adapter = None
         asr_preprocessor = None
         asr_cfg = config_dict.get("asr", {})
-        if asr_cfg.get("provider") == "whisper-cpp" and asr_cfg.get("whisper_model"):
+        asr_provider = asr_cfg.get("provider", "whisper-cpp")
+        if asr_provider == "faster-whisper":
+            from .media import FfmpegAudioPreprocessor
+            from .asr import PreprocessingAsrAdapter, FasterWhisperAsrAdapter
+            fw_adapter = FasterWhisperAsrAdapter(
+                model_size_or_path=asr_cfg.get("model", "base"),
+                device=asr_cfg.get("device", "auto"),
+                compute_type=asr_cfg.get("compute_type", "default"),
+                language=asr_cfg.get("language", "auto"),
+            )
+            asr_preprocessor = FfmpegAudioPreprocessor(
+                timeout_seconds=300.0,
+                progress=progress,
+            )
+            asr_adapter = PreprocessingAsrAdapter(
+                fw_adapter,
+                asr_preprocessor,
+                progress=progress,
+            )
+        elif asr_provider == "whisper-cpp" and asr_cfg.get("whisper_model"):
             from .media import FfmpegAudioPreprocessor
             from .asr import PreprocessingAsrAdapter
             from .whisper_cpp import WhisperCppAsrAdapter
@@ -1667,17 +1729,21 @@ def _run_produce_worker(
 
         phone_adapter = None
         phone_cfg = config_dict.get("phones", {})
-        if config_dict.get("enable_phones", False) and phone_cfg.get("provider") == "wav2vec2":
-            from .phone import Wav2Vec2CtcPhoneAdapter
-            if phone_cfg.get("wav2vec2_sidecar") and Path(phone_cfg["wav2vec2_sidecar"]).is_file():
-                phone_adapter = Wav2Vec2CtcPhoneAdapter(
-                    Path(phone_cfg.get("wav2vec2_python", sys.executable)),
-                    Path(phone_cfg["wav2vec2_sidecar"]),
-                    Path(phone_cfg.get("wav2vec2_model_dir", "")),
-                    phone_cfg.get("wav2vec2_model_id", "facebook/wav2vec2-lv-60-espeak-cv-ft"),
-                    phone_cfg.get("wav2vec2_model_revision", "main"),
-                    float(phone_cfg.get("timeout_seconds", 600.0)),
-                )
+        if config_dict.get("enable_phones", False):
+            if phone_cfg.get("provider") == "wav2vec2":
+                from .phone import Wav2Vec2CtcPhoneAdapter
+                if phone_cfg.get("wav2vec2_sidecar") and Path(phone_cfg["wav2vec2_sidecar"]).is_file():
+                    phone_adapter = Wav2Vec2CtcPhoneAdapter(
+                        Path(phone_cfg.get("wav2vec2_python", sys.executable)),
+                        Path(phone_cfg["wav2vec2_sidecar"]),
+                        Path(phone_cfg.get("wav2vec2_model_dir", "")),
+                        phone_cfg.get("wav2vec2_model_id", "facebook/wav2vec2-lv-60-espeak-cv-ft"),
+                        phone_cfg.get("wav2vec2_model_revision", "main"),
+                        float(phone_cfg.get("timeout_seconds", 600.0)),
+                    )
+            elif phone_cfg.get("provider") == "g2p":
+                from .phone import G2pPhoneAdapter
+                phone_adapter = G2pPhoneAdapter(backend=phone_cfg.get("g2p_backend", "auto"))
 
         aligner_adapter = None
         aligner_cfg = config_dict.get("aligner", {})
@@ -1689,8 +1755,18 @@ def _run_produce_worker(
                 float(aligner_cfg.get("timeout_seconds", 600.0)),
             )
 
+        acoustics_adapter = None
+        acoustics_cfg = config_dict.get("acoustics", {})
+        if acoustics_cfg.get("provider") == "praat":
+            from .rich_baselines import ParselmouthAcousticsBaseline
+            acoustics_adapter = ParselmouthAcousticsBaseline()
+        elif acoustics_cfg.get("provider") == "baseline":
+            from .rich_baselines import WavWordAcousticsBaseline
+            acoustics_adapter = WavWordAcousticsBaseline()
+
         rich = RichStages(
             sense_groups=sense_groups_adapter,
+            acoustics=acoustics_adapter,
             phone=phone_adapter,
             aligner=aligner_adapter,
         )

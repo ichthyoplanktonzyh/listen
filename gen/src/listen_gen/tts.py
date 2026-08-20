@@ -694,3 +694,216 @@ class KokoroTtsAdapter:
             raise TtsProviderStartFailed(
                 "the TTS provider could not be started"
             ) from error
+
+
+# ---------------------------------------------------------------------------
+# Microsoft Edge Cloud Neural TTS Adapter
+# ---------------------------------------------------------------------------
+
+
+class EdgeTtsAdapter:
+    """High-quality cloud neural speech synthesis using Microsoft Edge TTS.
+
+    Synthesizes speech per sentence anchor, measures exact audio segment length
+    to construct precise AnchorAlignment, and converts combined audio to AAC/m4a
+    (or WAV if afconvert is unavailable).
+    """
+
+    name = "edge-tts"
+
+    def __init__(
+        self,
+        *,
+        voice: str = "en-US-AvaNeural",
+        rate: str = "+0%",
+        volume: str = "+0%",
+        pitch: str = "+0Hz",
+        afconvert_executable: str = "afconvert",
+        timeout_seconds: float = 600.0,
+        synthesizer: Callable[..., Any] | None = None,
+    ):
+        self.voice = voice or "en-US-AvaNeural"
+        self.rate = rate or "+0%"
+        self.volume = volume or "+0%"
+        self.pitch = pitch or "+0Hz"
+        self.afconvert_executable = afconvert_executable
+        self.timeout_seconds = timeout_seconds
+        self._synthesizer = synthesizer
+        self._version = "edge-tts-v1"
+
+    def _resolve_synthesizer(self) -> Callable[..., Any]:
+        if self._synthesizer is not None:
+            return self._synthesizer
+        try:
+            import asyncio
+            import edge_tts
+
+            def _synthesize_edge(sentence: str, voice: str, rate: str, volume: str, pitch: str) -> bytes:
+                async def _run() -> bytes:
+                    communicate = edge_tts.Communicate(
+                        sentence, voice=voice, rate=rate, volume=volume, pitch=pitch
+                    )
+                    audio_chunks: list[bytes] = []
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            audio_chunks.append(chunk["data"])
+                    return b"".join(audio_chunks)
+
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        return pool.submit(asyncio.run, _run()).result(timeout=self.timeout_seconds)
+                else:
+                    return loop.run_until_complete(_run())
+
+            return _synthesize_edge
+        except ImportError:
+            pass
+
+        raise TtsProviderStartFailed(
+            "Edge-TTS is not installed. Install with 'pip install edge-tts'"
+        )
+
+    def synthesize(
+        self,
+        text: str,
+        sentence_anchors: Sequence[tuple[str, str]],
+    ) -> TtsResult:
+        if not sentence_anchors:
+            raise TtsProviderOutputInvalid(
+                "the TTS provider requires at least one sentence anchor"
+            )
+        segments: list[bytes] = []
+        alignments: list[AnchorAlignment] = []
+        cursor_ms = 0
+        synthesizer_fn = self._resolve_synthesizer()
+
+        with tempfile.TemporaryDirectory(prefix="listen-gen-edge-tts-") as directory:
+            directory_path = Path(directory)
+            for index, (anchor_id, sentence) in enumerate(sentence_anchors):
+                if not sentence.strip():
+                    continue
+                try:
+                    audio_data = synthesizer_fn(
+                        sentence,
+                        voice=self.voice,
+                        rate=self.rate,
+                        volume=self.volume,
+                        pitch=self.pitch,
+                    )
+                except TtsProviderError:
+                    raise
+                except Exception as error:
+                    raise TtsProviderError(
+                        f"Edge-TTS synthesis failed on sentence: {error}"
+                    ) from error
+
+                if not isinstance(audio_data, bytes) or not audio_data:
+                    raise TtsProviderOutputInvalid(
+                        "the TTS provider produced empty or non-bytes audio"
+                    )
+
+                seg_audio_path = directory_path / f"segment-{index}.audio"
+                seg_audio_path.write_bytes(audio_data)
+                wav_path = directory_path / f"segment-{index}.wav"
+
+                # If audio is already a WAV
+                if audio_data.startswith(b"RIFF"):
+                    wav_path.write_bytes(audio_data)
+                else:
+                    # Convert to standard 16kHz mono WAV using afconvert or ffmpeg
+                    if sys.platform == "darwin":
+                        self._run_afconvert(seg_audio_path, wav_path, "WAVE", "LEI16@16000")
+                    else:
+                        try:
+                            run_argv(
+                                ["ffmpeg", "-y", "-i", str(seg_audio_path), "-ar", "16000", "-ac", "1", str(wav_path)],
+                                timeout_seconds=self.timeout_seconds,
+                                stdout_limit_bytes=None,
+                            )
+                        except Exception as e:
+                            raise TtsProviderOutputInvalid(f"Failed to convert audio segment to WAV: {e}") from e
+
+                if not wav_path.is_file() or wav_path.stat().st_size == 0:
+                    raise TtsProviderOutputInvalid("the TTS provider produced zero-length audio")
+
+                wav_bytes = wav_path.read_bytes()
+                segments.append(wav_bytes)
+
+                try:
+                    duration_ms = _wav_duration_ms(wav_path)
+                    if duration_ms <= 0:
+                        raise TtsProviderOutputInvalid("the TTS provider produced zero-length audio")
+                    alignments.append(AnchorAlignment(anchor_id, cursor_ms))
+                    cursor_ms += duration_ms
+                except TtsProviderError:
+                    raise
+
+            if not segments:
+                raise TtsProviderOutputInvalid("the TTS provider produced no audio")
+
+            combined_wav = _concat_wav(segments)
+            combined_path = directory_path / "combined.wav"
+            combined_path.write_bytes(combined_wav)
+
+            media_type = "audio/wav"
+            audio_bytes = combined_wav
+            if sys.platform == "darwin":
+                m4a_path = directory_path / "speech.m4a"
+                try:
+                    self._run_afconvert(combined_path, m4a_path, "m4af", "aac")
+                    if m4a_path.is_file() and m4a_path.stat().st_size > 0:
+                        audio_bytes = m4a_path.read_bytes()
+                        media_type = "audio/mp4"
+                except Exception:
+                    pass
+
+        return TtsResult(
+            audio_bytes=audio_bytes,
+            media_type=media_type,
+            alignment=tuple(alignments),
+            duration_ms=cursor_ms,
+            provider_id="edge-tts",
+            provider_version=self._version,
+            model_id=self.voice,
+            model_version="cloud-neural",
+            config_sha256=_config_identity(
+                {
+                    "voice": self.voice,
+                    "rate": self.rate,
+                    "volume": self.volume,
+                    "pitch": self.pitch,
+                }
+            ),
+        )
+
+    def _run_afconvert(
+        self,
+        input_path: Path,
+        output_path: Path,
+        format_flag: str,
+        data_format: str,
+    ) -> None:
+        argv = [
+            self.afconvert_executable,
+            str(input_path),
+            "-f",
+            format_flag,
+            "-d",
+            data_format,
+            "-o",
+            str(output_path),
+        ]
+        try:
+            run_argv(argv, timeout_seconds=self.timeout_seconds, stdout_limit_bytes=None)
+        except ProcessTimedOut as error:
+            raise TtsProviderTimedOut("the TTS provider timed out") from error
+        except OSError as error:
+            raise TtsProviderStartFailed(
+                "the TTS provider could not be started"
+            ) from error

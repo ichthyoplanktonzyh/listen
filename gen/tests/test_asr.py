@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from listen_gen.asr import (
+    FasterWhisperAsrAdapter,
+    OpenAiAudioAsrAdapter,
     CommandAsrAdapter,
     FixtureAsrAdapter,
     PreprocessingAsrAdapter,
@@ -148,6 +150,82 @@ class WhisperCppAsrAdapterTests(unittest.TestCase):
     def test_missing_model_rejected_at_construction(self) -> None:
         with self.assertRaises(ConversionError):
             self.make_adapter(model_path=Path("/does/not/exist.bin"))
+
+
+
+
+class FasterWhisperAsrAdapterTests(unittest.TestCase):
+    def test_transcribe_with_mock_engine(self) -> None:
+        class MockWord:
+            def __init__(self, word, start, end, prob=0.95):
+                self.word = word
+                self.start = start
+                self.end = end
+                self.probability = prob
+
+        class MockSegment:
+            def __init__(self, text, start, end, words):
+                self.text = text
+                self.start = start
+                self.end = end
+                self.words = words
+
+        class MockInfo:
+            language = "en"
+
+        class MockEngine:
+            def transcribe(self, path, **kwargs):
+                seg = MockSegment(
+                    "Hello world.",
+                    0.0,
+                    1.5,
+                    [MockWord("Hello", 0.0, 0.6), MockWord("world.", 0.7, 1.5)],
+                )
+                return [seg], MockInfo()
+
+        adapter = FasterWhisperAsrAdapter(
+            model_size_or_path="base",
+            engine=MockEngine(),
+        )
+        transcript = adapter.transcribe(MEDIA)
+        self.assertEqual(transcript.provider_id, "faster-whisper")
+        self.assertEqual(transcript.language, "en")
+        self.assertEqual(len(transcript.segments), 1)
+        self.assertEqual(transcript.segments[0].text, "Hello world.")
+        self.assertEqual(len(transcript.segments[0].words), 2)
+        self.assertEqual(transcript.segments[0].words[0].start_ms, 0)
+        self.assertEqual(transcript.segments[0].words[0].end_ms, 600)
+
+
+class OpenAiAudioAsrAdapterTests(unittest.TestCase):
+    def test_transcribe_with_mock_client(self) -> None:
+        def mock_client(path: Path) -> dict:
+            return {
+                "language": "en",
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 2.0,
+                        "text": "OpenAI speech transcription.",
+                        "words": [
+                            {"word": "OpenAI", "start": 0.0, "end": 0.5},
+                            {"word": "speech", "start": 0.6, "end": 1.0},
+                            {"word": "transcription.", "start": 1.1, "end": 2.0},
+                        ],
+                    }
+                ],
+            }
+
+        adapter = OpenAiAudioAsrAdapter(
+            model="whisper-1",
+            client=mock_client,
+        )
+        transcript = adapter.transcribe(MEDIA)
+        self.assertEqual(transcript.provider_id, "openai-audio")
+        self.assertEqual(transcript.language, "en")
+        self.assertEqual(len(transcript.segments), 1)
+        self.assertEqual(transcript.segments[0].text, "OpenAI speech transcription.")
+        self.assertEqual(len(transcript.segments[0].words), 3)
 
 
 if __name__ == "__main__":

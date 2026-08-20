@@ -299,3 +299,264 @@ def _parse_transcript(raw: Any) -> AsrTranscript:
         language, tuple(segments), provider_id, provider_version,
         model_id, model_version, config_sha256,
     )
+
+
+# ---------------------------------------------------------------------------
+# Faster-Whisper (CTranslate2) & OpenAI Cloud Audio Adapters
+# ---------------------------------------------------------------------------
+
+
+class FasterWhisperAsrAdapter:
+    """High-throughput local Whisper transcription using faster-whisper (CTranslate2)."""
+
+    def __init__(
+        self,
+        *,
+        model_size_or_path: str = "base",
+        device: str = "auto",
+        compute_type: str = "default",
+        language: str = "auto",
+        beam_size: int = 5,
+        word_timestamps: bool = True,
+        vad_filter: bool = True,
+        engine: Any = None,
+    ) -> None:
+        self.model_size_or_path = model_size_or_path
+        self.device = device
+        self.compute_type = compute_type
+        self.language = language
+        self.beam_size = beam_size
+        self.word_timestamps = word_timestamps
+        self.vad_filter = vad_filter
+        self._engine = engine
+        self.config_sha256 = f"sha256:{hashlib.sha256(json.dumps({"schema": "listen_gen.faster-whisper-config.v1", "model": model_size_or_path, "device": device, "compute_type": compute_type, "beam_size": beam_size}, sort_keys=True).encode()).hexdigest()}"
+
+    def _resolve_model(self) -> Any:
+        if self._engine is not None:
+            return self._engine
+        try:
+            from faster_whisper import WhisperModel
+
+            return WhisperModel(
+                self.model_size_or_path,
+                device=self.device,
+                compute_type=self.compute_type,
+            )
+        except ImportError as e:
+            raise ConversionError(
+                "faster-whisper is not installed. Install with 'pip install faster-whisper'"
+            ) from e
+
+    def transcribe(self, media_path: Path) -> AsrTranscript:
+        if not media_path.is_file():
+            raise ConversionError("media input is not a regular file")
+        model = self._resolve_model()
+        try:
+            kwargs: dict[str, Any] = {
+                "beam_size": self.beam_size,
+                "word_timestamps": self.word_timestamps,
+                "vad_filter": self.vad_filter,
+            }
+            if self.language != "auto":
+                kwargs["language"] = self.language
+            segments_gen, info = model.transcribe(str(media_path), **kwargs)
+            detected_lang = (
+                getattr(info, "language", "en")
+                if self.language == "auto"
+                else self.language
+            )
+            if not LANGUAGE_RE.fullmatch(detected_lang):
+                detected_lang = "en"
+            segments: list[AsrSegment] = []
+            previous_end = 0
+            for seg in segments_gen:
+                start_ms = int(seg.start * 1000)
+                end_ms = max(start_ms + 1, int(seg.end * 1000))
+                if start_ms < previous_end:
+                    start_ms = previous_end
+                if end_ms <= start_ms:
+                    end_ms = start_ms + 1
+                text = seg.text.strip()
+                if not text:
+                    continue
+                words: list[AsrWord] = []
+                if getattr(seg, "words", None):
+                    prev_char = 0
+                    prev_word_end = start_ms
+                    for w in seg.words:
+                        w_text = w.word.strip()
+                        if not w_text:
+                            continue
+                        w_start = max(start_ms, int(w.start * 1000))
+                        w_end = min(end_ms, max(w_start + 1, int(w.end * 1000)))
+                        if w_start < prev_word_end:
+                            w_start = prev_word_end
+                        if w_end <= w_start:
+                            w_end = w_start + 1
+                        char_pos = text.find(w_text, prev_char)
+                        if char_pos == -1:
+                            char_pos = prev_char
+                        char_end = char_pos + len(w_text)
+                        words.append(
+                            AsrWord(
+                                start_char=char_pos,
+                                end_char=char_end,
+                                start_ms=w_start,
+                                end_ms=w_end,
+                                confidence=float(getattr(w, "probability", 0.9)),
+                                timing_source="asr_reported",
+                            )
+                        )
+                        prev_char = char_end
+                        prev_word_end = w_end
+                segments.append(
+                    AsrSegment(
+                        start_ms=start_ms,
+                        end_ms=end_ms,
+                        text=text,
+                        display_text=text,
+                        words=tuple(words),
+                    )
+                )
+                previous_end = end_ms
+            if not segments:
+                raise ConversionError("faster-whisper produced no speech segments")
+            return AsrTranscript(
+                language=detected_lang,
+                segments=tuple(segments),
+                provider_id="faster-whisper",
+                provider_version="1.0.0",
+                model_id=str(self.model_size_or_path),
+                model_version="ctranslate2",
+                config_sha256=self.config_sha256,
+            )
+        except ConversionError:
+            raise
+        except Exception as error:
+            raise ConversionError(f"faster-whisper transcription failed: {error}") from error
+
+
+class OpenAiAudioAsrAdapter:
+    """Cloud / Remote ASR adapter using OpenAI Audio Transcriptions API."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str = "https://api.openai.com/v1",
+        api_key: str | None = None,
+        model: str = "whisper-1",
+        language: str = "auto",
+        timeout_seconds: float = 300.0,
+        client: Any = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.model = model
+        self.language = language
+        self.timeout_seconds = timeout_seconds
+        self._client = client
+        self.config_sha256 = f"sha256:{hashlib.sha256(json.dumps({"schema": "listen_gen.openai-audio-config.v1", "base_url": self.base_url, "model": self.model}, sort_keys=True).encode()).hexdigest()}"
+
+    def transcribe(self, media_path: Path) -> AsrTranscript:
+        if not media_path.is_file():
+            raise ConversionError("media input is not a regular file")
+        if self._client is not None:
+            raw = self._client(media_path)
+        else:
+            if not self.api_key:
+                raise ConversionError("OpenAI API key is required for cloud ASR transcription")
+            import urllib.request
+            import uuid
+
+            boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
+            body = bytearray()
+
+            def add_field(name: str, value: str):
+                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n".encode())
+
+            def add_file(name: str, filename: str, data: bytes, content_type: str):
+                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n".encode())
+                body.extend(data)
+                body.extend(b"\r\n")
+
+            add_field("model", self.model)
+            add_field("response_format", "verbose_json")
+            add_field("timestamp_granularities[]", "word")
+            add_field("timestamp_granularities[]", "segment")
+            if self.language != "auto":
+                add_field("language", self.language)
+            add_file("file", media_path.name, media_path.read_bytes(), "audio/wav")
+            body.extend(f"--{boundary}--\r\n".encode())
+
+            req = urllib.request.Request(
+                f"{self.base_url}/audio/transcriptions",
+                data=bytes(body),
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                    raw = json.loads(resp.read().decode("utf-8"))
+            except Exception as e:
+                raise ConversionError(f"OpenAI audio transcription request failed: {e}") from e
+
+        # Parse verbose_json format from OpenAI API
+        language = raw.get("language", "en") if self.language == "auto" else self.language
+        if not LANGUAGE_RE.fullmatch(language):
+            language = "en"
+        raw_segments = raw.get("segments") or []
+        segments: list[AsrSegment] = []
+        previous_end = 0
+        for seg in raw_segments:
+            start_ms = int(seg.get("start", 0) * 1000)
+            end_ms = max(start_ms + 1, int(seg.get("end", 0) * 1000))
+            if start_ms < previous_end:
+                start_ms = previous_end
+            if end_ms <= start_ms:
+                end_ms = start_ms + 1
+            text = str(seg.get("text", "")).strip()
+            if not text:
+                continue
+            words: list[AsrWord] = []
+            for w in seg.get("words", []):
+                w_text = str(w.get("word", "")).strip()
+                if not w_text:
+                    continue
+                w_start = max(start_ms, int(w.get("start", 0) * 1000))
+                w_end = min(end_ms, max(w_start + 1, int(w.get("end", 0) * 1000)))
+                words.append(
+                    AsrWord(
+                        start_char=0,
+                        end_char=len(w_text),
+                        start_ms=w_start,
+                        end_ms=w_end,
+                        confidence=0.9,
+                        timing_source="asr_reported",
+                    )
+                )
+            segments.append(
+                AsrSegment(
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    text=text,
+                    display_text=text,
+                    words=tuple(words),
+                )
+            )
+            previous_end = end_ms
+
+        if not segments:
+            raise ConversionError("OpenAI audio transcription returned no segments")
+
+        return AsrTranscript(
+            language=language,
+            segments=tuple(segments),
+            provider_id="openai-audio",
+            provider_version="1.0.0",
+            model_id=self.model,
+            model_version=None,
+            config_sha256=self.config_sha256,
+        )

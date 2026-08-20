@@ -584,3 +584,233 @@ class AcousticProsodyBaseline:
             )
             return nucleus[0], "duration", PROSODY_DURATION_PROMINENCE
         return None
+
+
+# ---------------------------------------------------------------------------
+# Praat / Parselmouth Acoustics Baseline (F0 Pitch, Voicing & Energy)
+# ---------------------------------------------------------------------------
+
+PARSELMOUTH_ACOUSTICS_CONFIG_SCHEMA = "listen_gen.parselmouth-acoustics-config.v1"
+
+
+class ParselmouthAcousticsBaseline:
+    """Praat/Parselmouth-backed Word Acoustics and Pitch producer.
+
+    Measures real F0 pitch (median, min, max, delta, range), voicing frame ratio,
+    as well as RMS energy and duration per word window against sentence baselines.
+    Gracefully falls back to WavWordAcousticsBaseline if praat-parselmouth is unavailable.
+    """
+
+    provider_id = "praat-acoustics"
+    provider_version = "1"
+
+    def __init__(
+        self,
+        *,
+        pitch_floor: float = 75.0,
+        pitch_ceiling: float = 600.0,
+        time_step: float = 0.01,
+    ) -> None:
+        self.pitch_floor = pitch_floor
+        self.pitch_ceiling = pitch_ceiling
+        self.time_step = time_step
+        self.config_sha256 = _config_sha256(
+            {
+                "schema": PARSELMOUTH_ACOUSTICS_CONFIG_SCHEMA,
+                "provider_id": self.provider_id,
+                "pitch_floor": self.pitch_floor,
+                "pitch_ceiling": self.pitch_ceiling,
+                "time_step": self.time_step,
+                "input": {
+                    "container": "wav",
+                    "channels": NORMALIZED_CHANNELS,
+                    "sample_format": NORMALIZED_SAMPLE_FORMAT,
+                    "sample_rate_hz": NORMALIZED_SAMPLE_RATE_HZ,
+                },
+            }
+        )
+
+    def measure(self, request: AcousticsRequest) -> AcousticsResult:
+        try:
+            import parselmouth
+        except ImportError:
+            fallback = WavWordAcousticsBaseline()
+            return fallback.measure(request)
+
+        try:
+            sample_rate, samples = _read_normalized_wav(request.audio_path)
+        except (OSError, ValueError) as error:
+            raise _fail("acoustics", "failed") from error
+        if sample_rate != NORMALIZED_SAMPLE_RATE_HZ:
+            raise _fail("acoustics", "failed")
+        if not request.words:
+            raise _fail("acoustics", "failed")
+        sample_count = len(samples)
+        for word in request.words:
+            if word.start_ms * NORMALIZED_SAMPLE_RATE_HZ // 1000 >= sample_count:
+                raise _fail("acoustics", "failed")
+
+        try:
+            sound = parselmouth.Sound(str(request.audio_path))
+            pitch_obj = sound.to_pitch(
+                time_step=self.time_step,
+                pitch_floor=self.pitch_floor,
+                pitch_ceiling=self.pitch_ceiling,
+            )
+        except Exception:
+            fallback = WavWordAcousticsBaseline()
+            return fallback.measure(request)
+
+        measurements = self._measure_words_with_pitch(
+            request.words, samples, pitch_obj, self.time_step
+        )
+        return AcousticsResult(
+            sample_rate_hz=NORMALIZED_SAMPLE_RATE_HZ,
+            measurements=tuple(measurements),
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+            config_sha256=self.config_sha256,
+        )
+
+    @staticmethod
+    def _measure_words_with_pitch(
+        words: tuple[RichWord, ...],
+        samples: array,
+        pitch_obj: Any,
+        time_step: float,
+    ) -> list[AcousticMeasurement]:
+        per_word_energy: list[tuple[int, float, int]] = []
+        for word in words:
+            start_sample = word.start_ms * NORMALIZED_SAMPLE_RATE_HZ // 1000
+            end_sample = word.end_ms * NORMALIZED_SAMPLE_RATE_HZ // 1000
+            window = samples[start_sample:end_sample]
+            rms = (
+                math.sqrt(sum(sample * sample for sample in window) / len(window))
+                if window
+                else 0.0
+            )
+            rms_dbfs = _rms_dbfs(rms)
+            duration_ms = word.end_ms - word.start_ms
+            per_word_energy.append((word.sentence_index, rms_dbfs, duration_ms))
+
+        rms_by_sentence: dict[int, list[float]] = {}
+        duration_by_sentence: dict[int, list[int]] = {}
+        for sentence_index, rms_dbfs, duration_ms in per_word_energy:
+            rms_by_sentence.setdefault(sentence_index, []).append(rms_dbfs)
+            duration_by_sentence.setdefault(sentence_index, []).append(duration_ms)
+
+        baseline_rms_by_sentence = {
+            sentence_index: _median(values)
+            for sentence_index, values in rms_by_sentence.items()
+        }
+        median_duration_by_sentence = {
+            sentence_index: _median(duration_values)
+            for sentence_index, duration_values in duration_by_sentence.items()
+        }
+
+        # Measure F0 per word
+        word_f0_stats: list[dict[str, Any]] = []
+        for word in words:
+            start_s = word.start_ms / 1000.0
+            end_s = word.end_ms / 1000.0
+            f0_values: list[float] = []
+            t = start_s
+            total_frames = 0
+            while t <= end_s:
+                total_frames += 1
+                try:
+                    val = pitch_obj.get_value_at_time(t)
+                    if val is not None and not math.isnan(val) and val > 0:
+                        f0_values.append(float(val))
+                except Exception:
+                    pass
+                t += time_step
+
+            total_frames = max(1, total_frames)
+            voiced_ratio = _round3(len(f0_values) / total_frames)
+
+            if f0_values:
+                med_f0 = _round1(_median(f0_values))
+                min_f0 = _round1(min(f0_values))
+                max_f0 = _round1(max(f0_values))
+                range_st = (
+                    _round1(12.0 * math.log2(max_f0 / min_f0))
+                    if min_f0 > 0 and max_f0 >= min_f0
+                    else 0.0
+                )
+            else:
+                med_f0 = None
+                min_f0 = None
+                max_f0 = None
+                range_st = None
+
+            word_f0_stats.append(
+                {
+                    "median_f0_hz": med_f0,
+                    "min_f0_hz": min_f0,
+                    "max_f0_hz": max_f0,
+                    "range_semitones": range_st,
+                    "voiced_frame_ratio": voiced_ratio,
+                    "sentence_index": word.sentence_index,
+                }
+            )
+
+        f0_by_sentence: dict[int, list[float]] = {}
+        for item in word_f0_stats:
+            med_f0 = item["median_f0_hz"]
+            if med_f0 is not None and med_f0 > 0:
+                f0_by_sentence.setdefault(item["sentence_index"], []).append(med_f0)
+
+        baseline_f0_by_sentence = {
+            s_idx: _round1(_median(vals))
+            for s_idx, vals in f0_by_sentence.items()
+            if vals
+        }
+
+        measurements: list[AcousticMeasurement] = []
+        for word, (sentence_index, rms_dbfs, duration_ms), f0_stat in zip(
+            words, per_word_energy, word_f0_stats
+        ):
+            baseline_rms = baseline_rms_by_sentence[sentence_index]
+            delta_db = rms_dbfs - baseline_rms
+            prominence = _clamp(0.5 + delta_db / PROMINENCE_DELTA_DB_RANGE, 0.0, 1.0)
+            median_duration = median_duration_by_sentence[sentence_index]
+            local_ratio = (
+                duration_ms / median_duration if median_duration else 1.0
+            )
+
+            med_f0 = f0_stat["median_f0_hz"]
+            base_f0 = baseline_f0_by_sentence.get(sentence_index)
+            if med_f0 is not None and base_f0 is not None and base_f0 > 0 and med_f0 > 0:
+                delta_st = _round1(12.0 * math.log2(med_f0 / base_f0))
+                pitch_prominence = _clamp(0.5 + delta_st / 12.0, 0.0, 1.0)
+            else:
+                delta_st = None
+                pitch_prominence = None
+
+            measurements.append(
+                AcousticMeasurement(
+                    sentence_index=word.sentence_index,
+                    token_index=word.token_index,
+                    energy={
+                        "rms_dbfs": _round1(rms_dbfs),
+                        "local_baseline_dbfs": _round1(baseline_rms),
+                        "delta_db": _round1(delta_db),
+                        "prominence": _round3(prominence),
+                    },
+                    pitch={
+                        "median_f0_hz": med_f0,
+                        "local_baseline_f0_hz": base_f0,
+                        "delta_semitones": delta_st,
+                        "range_semitones": f0_stat["range_semitones"],
+                        "prominence": _round3(pitch_prominence) if pitch_prominence is not None else None,
+                        "reset_after": None,
+                    },
+                    duration={
+                        "duration_ms": duration_ms,
+                        "local_ratio": _round3(local_ratio),
+                    },
+                    voiced_frame_ratio=f0_stat["voiced_frame_ratio"],
+                )
+            )
+        return measurements

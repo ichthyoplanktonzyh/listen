@@ -12,6 +12,7 @@ import zipfile
 from pathlib import Path
 
 from listen_gen.phone import (
+    G2pPhoneAdapter,
     CommandPhoneAdapter,
     DetectedPhone,
     FixturePhoneAdapter,
@@ -118,6 +119,30 @@ class PhoneAnchoringTests(unittest.TestCase):
         with self.assertRaises(RichStageFailure) as caught:
             _anchor_phones(_result([DetectedPhone("t", 200, 400)]), ())
         self.assertEqual(caught.exception.code, "phone_upstream_missing")
+
+
+
+
+class G2pPhoneAdapterTests(unittest.TestCase):
+    def test_g2p_phone_adapter_with_custom_fn(self) -> None:
+        def mock_g2p(word: str) -> list[str]:
+            if "0" in word or word == "hello":
+                return ["h", "e", "l", "o"]
+            return ["w", "r", "l", "d"]
+
+        adapter = G2pPhoneAdapter(g2p_fn=mock_g2p)
+        words = (
+            RichWord(sentence_id="s0", sentence_index=0, token_index=0, start_ms=0, end_ms=400),
+            RichWord(sentence_id="s0", sentence_index=0, token_index=1, start_ms=500, end_ms=900),
+        )
+        request = PhoneRequest(audio_path=Path("/fake/audio.wav"), words=words)
+        result = adapter.analyze(request)
+        self.assertEqual(result.phone_set, "ipa")
+        self.assertEqual(result.provider_id, "g2p-phoneme")
+        self.assertEqual(len(result.phones), 8)
+        self.assertEqual(result.phones[0].symbol, "h")
+        self.assertEqual(result.phones[0].start_ms, 0)
+        self.assertEqual(result.phones[0].end_ms, 100)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ from listen_gen.rich import (
     SenseGroupRequest,
 )
 from listen_gen.rich_baselines import (
+    ParselmouthAcousticsBaseline,
     AcousticProsodyBaseline,
     PunctuationSenseGroupBaseline,
     WavWordAcousticsBaseline,
@@ -472,3 +473,25 @@ class BaselineProsodyTests(unittest.TestCase):
             )
             self.assertFalse(with_boost.uses_sense_groups)
 
+
+
+
+class ParselmouthAcousticsBaselineTests(unittest.TestCase):
+    def test_parselmouth_measure_and_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = write_tone_wav(Path(directory) / "tone.wav")
+            request = AcousticsRequest(
+                language="en-US",
+                sentences=fixture_sentences(),
+                words=fixture_words(),
+                audio_path=wav_path,
+            )
+            baseline = ParselmouthAcousticsBaseline()
+            result = baseline.measure(request)
+            self.assertEqual(result.sample_rate_hz, 16000)
+            self.assertEqual(len(result.measurements), len(fixture_words()))
+            self.assertEqual(result.measurements[0].sentence_index, 0)
+            self.assertEqual(result.measurements[0].token_index, 0)
+            self.assertIn("rms_dbfs", result.measurements[0].energy)
+            self.assertIn("median_f0_hz", result.measurements[0].pitch)
+            self.assertIsNotNone(result.config_sha256)

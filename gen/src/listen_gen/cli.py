@@ -121,7 +121,7 @@ def parser(
     produce.add_argument(
         "--tts-provider",
         default="none",
-        choices=["none", "fixture", "say", "fake", "kokoro"],
+        choices=["none", "fixture", "say", "fake", "kokoro", "edge-tts"],
         help="TTS provider for document-to-listen derivations (say is macOS local adapter, kokoro is neural TTS)",
     )
     produce.add_argument("--tts-fixture", type=Path, help="audio fixture for the fixture TTS provider")
@@ -137,10 +137,14 @@ def parser(
     produce.add_argument("--tts-kokoro-voice", default="af_bella", help="Kokoro voice model (e.g. af_bella, af_sarah, am_adam)")
     produce.add_argument("--tts-kokoro-speed", type=float, default=1.0, help="Kokoro speech speed multiplier")
     produce.add_argument("--tts-kokoro-lang", default="a", help="Kokoro language code (e.g. 'a' for American English, 'b' for British, 'z' for Chinese)")
+    produce.add_argument("--tts-edge-voice", default="en-US-AvaNeural", help="Microsoft Edge TTS voice (e.g. en-US-AvaNeural, en-US-JennyNeural, zh-CN-XiaoxiaoNeural)")
+    produce.add_argument("--tts-edge-rate", default="+0%", help="Edge TTS speech rate (e.g. +0%%, +20%%, -10%%)")
+    produce.add_argument("--tts-edge-volume", default="+0%", help="Edge TTS speech volume (e.g. +0%%, +10%%)")
+    produce.add_argument("--tts-edge-pitch", default="+0Hz", help="Edge TTS speech pitch (e.g. +0Hz, +5Hz)")
     produce.add_argument(
         "--ocr-provider",
         default="none",
-        choices=["none", "fixture", "surya", "rapidocr"],
+        choices=["none", "fixture", "surya", "rapidocr", "docling"],
         help="optional OCR path for scanned PDFs; absence is an honest capability result",
     )
     produce.add_argument("--ocr-fixture", type=Path, help="committed OCR text for the fixture OCR provider")
@@ -149,7 +153,7 @@ def parser(
     produce.add_argument(
         "--provider",
         default="none",
-        choices=["none", "fixture", "command", "whisper-cpp"],
+        choices=["none", "fixture", "command", "whisper-cpp", "faster-whisper", "openai-audio"],
         help="ASR provider for media-to-read derivations",
     )
     produce.add_argument("--fixture", type=Path, help="normalized JSON for the fixture ASR provider")
@@ -167,6 +171,12 @@ def parser(
     produce.add_argument("--whisper-language", default="auto")
     produce.add_argument("--whisper-translate-to-english", action="store_true")
     produce.add_argument("--whisper-timeout-seconds", type=float, default=3600.0)
+    produce.add_argument("--faster-whisper-model", default="base", help="Model size or path for faster-whisper (e.g. base, small, medium, large-v3, large-v3-turbo)")
+    produce.add_argument("--faster-whisper-device", default="auto", help="Device for faster-whisper (e.g. auto, cpu, cuda)")
+    produce.add_argument("--faster-whisper-compute-type", default="default", help="Compute type for faster-whisper (e.g. default, float16, int8)")
+    produce.add_argument("--openai-audio-api-key", help="OpenAI API key for cloud audio transcription")
+    produce.add_argument("--openai-audio-base-url", default="https://api.openai.com/v1", help="Base URL for OpenAI audio API")
+    produce.add_argument("--openai-audio-model", default="whisper-1", help="Model name for OpenAI audio API")
     produce.add_argument(
         "--audio-stream-index",
         type=int,
@@ -218,22 +228,28 @@ def parser(
     produce.add_argument("--sense-groups-llm-concurrency", type=int, default=300, help="concurrency worker count for LLM sense group requests")
     produce.add_argument("--sense-groups-syntax-backend", choices=["spacy", "stanza"], default="spacy", help="syntax backend for sense group analyzer")
     produce.add_argument("--sense-groups-syntax-model", help="model name for syntax sense group analyzer")
-    for stage in ("acoustics", "prosody"):
-        produce.add_argument(
-            f"--{stage}",
-            default="none",
-            choices=["none", "fixture", "command", "baseline"],
-            help=f"optional {stage} stage adapter (none/fixture/command/baseline)",
-        )
+    produce.add_argument(
+        "--acoustics",
+        default="none",
+        choices=["none", "fixture", "command", "baseline", "praat"],
+        help="optional acoustics stage adapter (none/fixture/command/baseline/praat)",
+    )
+    produce.add_argument(
+        "--prosody",
+        default="none",
+        choices=["none", "fixture", "command", "baseline"],
+        help="optional prosody stage adapter (none/fixture/command/baseline)",
+    )
     produce.add_argument(
         "--phones",
         default="none",
-        choices=["none", "fixture", "command", "baseline", "wav2vec2"],
+        choices=["none", "fixture", "command", "baseline", "wav2vec2", "g2p"],
         help="optional phones stage adapter (none/fixture/command/baseline/wav2vec2)",
     )
     for option in ("python", "sidecar", "model-dir", "model-id", "model-revision"):
         produce.add_argument(f"--phones-wav2vec2-{option}", help=f"wav2vec2 phone adapter {option} argument")
     produce.add_argument("--phones-wav2vec2-timeout-seconds", type=float, default=600.0)
+    produce.add_argument("--phones-g2p-backend", default="auto", choices=["auto", "g2p_en", "phonemizer"], help="G2P backend for phone adapter")
     for stage, flag in (
         ("sense-groups", "sense_groups"),
         ("acoustics", "acoustics"),
@@ -247,7 +263,7 @@ def parser(
     produce.add_argument(
         "--tts-aligner",
         default="none",
-        choices=["none", "fixture", "command", "whisper-cpp"],
+        choices=["none", "fixture", "command", "whisper-cpp", "faster-whisper"],
         help="ASR provider that transcribes derived TTS audio into word timings",
     )
     produce.add_argument(
@@ -294,6 +310,42 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
             ),
             preprocessor,
         )
+    if args.provider == "faster-whisper":
+        from .asr import FasterWhisperAsrAdapter
+        return (
+            PreprocessingAsrAdapter(
+                FasterWhisperAsrAdapter(
+                    model_size_or_path=args.faster_whisper_model,
+                    device=args.faster_whisper_device,
+                    compute_type=args.faster_whisper_compute_type,
+                    language=getattr(args, "whisper_language", "auto"),
+                ),
+                preprocessor,
+                audio_stream_index=args.audio_stream_index,
+                progress=progress,
+            ),
+            preprocessor,
+        )
+    if args.provider == "openai-audio":
+        from .asr import OpenAiAudioAsrAdapter
+        return (
+            PreprocessingAsrAdapter(
+                OpenAiAudioAsrAdapter(
+                    base_url=args.openai_audio_base_url,
+                    api_key=args.openai_audio_api_key,
+                    model=args.openai_audio_model,
+                    language=getattr(args, "whisper_language", "auto"),
+                ),
+                preprocessor,
+                audio_stream_index=args.audio_stream_index,
+                progress=progress,
+            ),
+            preprocessor,
+        )
+    if args.whisper_model is None or args.whisper_model_id is None:
+        raise ConversionError(
+            "--whisper-model and --whisper-model-id are required for the whisper-cpp ASR provider"
+        )
     return (
         PreprocessingAsrAdapter(
             WhisperCppAsrAdapter(
@@ -326,6 +378,16 @@ def _build_tts(args: argparse.Namespace) -> Any | None:
             afconvert_executable=args.tts_afconvert_executable,
             timeout_seconds=args.tts_timeout_seconds,
         )
+    if selected == "edge-tts":
+        from .tts import EdgeTtsAdapter
+        return EdgeTtsAdapter(
+            voice=args.tts_edge_voice,
+            rate=args.tts_edge_rate,
+            volume=args.tts_edge_volume,
+            pitch=args.tts_edge_pitch,
+            afconvert_executable=args.tts_afconvert_executable,
+            timeout_seconds=args.tts_timeout_seconds,
+        )
     if selected == "say":
         return SayTtsAdapter(
             voice=args.tts_voice,
@@ -346,6 +408,9 @@ def _build_ocr(args: argparse.Namespace) -> Any | None:
         return SuryaOcrProvider(langs=langs, device=args.ocr_device)
     if args.ocr_provider == "rapidocr":
         return RapidOcrProvider()
+    if args.ocr_provider == "docling":
+        from .document import DoclingOcrProvider
+        return DoclingOcrProvider()
     if args.ocr_fixture is None:
         raise ConversionError("--ocr-fixture is required for the fixture OCR provider")
     if not args.ocr_fixture.is_file():
@@ -438,6 +503,9 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         )
     elif selector == "baseline":
         acoustics = WavWordAcousticsBaseline()
+    elif selector == "praat":
+        from .rich_baselines import ParselmouthAcousticsBaseline
+        acoustics = ParselmouthAcousticsBaseline()
 
     selector = args.prosody
     if selector == "fixture":
@@ -480,6 +548,9 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
             args.phones_wav2vec2_model_revision,
             args.phones_wav2vec2_timeout_seconds,
         )
+    elif selector == "g2p":
+        from .phone import G2pPhoneAdapter
+        phone = G2pPhoneAdapter(backend=args.phones_g2p_backend)
 
     aligner = None
     selector = args.aligner
@@ -535,7 +606,7 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
             ffmpeg_executable=args.ffmpeg_command,
             timeout_seconds=args.media_command_timeout_seconds,
             progress=progress,
-        ) if args.acoustics in ("command", "baseline") else None,
+        ) if args.acoustics in ("command", "baseline", "praat") else None,
         prosody=prosody,
         phone=phone,
         aligner=aligner,
