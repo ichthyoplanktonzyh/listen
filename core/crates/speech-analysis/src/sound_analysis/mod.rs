@@ -4,6 +4,7 @@ mod build;
 mod config;
 mod connected;
 mod constants;
+mod frame_cues;
 mod grouping;
 mod helpers;
 mod hotspots;
@@ -16,6 +17,9 @@ mod tokens;
 pub use build::{build_rhythm_frame_from_word_timeline, build_sound_analysis};
 pub use config::{RhythmWordAcousticCue, SoundAnalysisConfig};
 pub use connected::explain_connected_speech;
+pub use frame_cues::{
+    AcousticFrameSample, SpeechActivitySpan, derive_word_acoustic_cues_from_frames,
+};
 pub use phones::{build_learning_phones, detect_prosodic_phrases, syllabify};
 
 #[cfg(test)]
