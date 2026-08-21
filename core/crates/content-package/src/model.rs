@@ -376,6 +376,65 @@ pub struct DurationMeasurement {
     pub local_ratio: Option<f64>,
 }
 
+/// `acoustic_track` v1 payload: frame-level acoustic evidence over a fixed hop.
+/// Audio-only measurement (no word or sentence coordinate): every frame carries
+/// raw energy in dBFS plus its value relative to the recording's own median, and
+/// optional pitch (Hz and semitones relative to the recording median) with a
+/// voiced flag. Pitch fields are `null` on an unvoiced frame; `voiced` is `null`
+/// when voicing was not measured. Prominence, anchors, and boundaries are never
+/// stated here — that interpretation belongs to Core.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcousticTrack {
+    pub sample_rate_hz: u32,
+    pub frame_step_ms: u32,
+    pub energy_baseline: String,
+    pub pitch_baseline: String,
+    pub frames: Vec<AcousticFrame>,
+}
+
+/// One fixed-hop acoustic measurement at `time_ms` (absolute media time). Every
+/// field is a raw measurement, never an interpretation. `f0_hz`/`f0_rel_st` are
+/// `null` on an unvoiced frame; `voiced` is `null` when voicing was not measured.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcousticFrame {
+    pub time_ms: u64,
+    pub energy_dbfs: f64,
+    pub energy_rel_db: f64,
+    #[serde(deserialize_with = "deserialize_required_option")]
+    pub f0_hz: Option<f64>,
+    #[serde(deserialize_with = "deserialize_required_option")]
+    pub f0_rel_st: Option<f64>,
+    #[serde(deserialize_with = "deserialize_required_option")]
+    pub voiced: Option<bool>,
+}
+
+/// `speech_activity` v1 payload: ordered, non-overlapping speech/silence spans
+/// over the audio rendition. Audio-only measurement: it reports where speech and
+/// silence are and never interprets a silence as any kind of boundary.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpeechActivity {
+    pub spans: Vec<SpeechSpan>,
+}
+
+/// One half-open absolute-media-time span labelled speech or silence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpeechSpan {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub activity: SpeechActivityKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechActivityKind {
+    Speech,
+    Silence,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProsodyAnalysis {

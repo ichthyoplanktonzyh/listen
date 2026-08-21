@@ -1144,6 +1144,8 @@ fn validate_known_payloads(
             KnownPayload::ProsodyAnalysis(value) => {
                 validate::validate_prosody_analysis(value, subtitle, timeline)
             }
+            KnownPayload::AcousticTrack(value) => validate::validate_acoustic_track(value),
+            KnownPayload::SpeechActivity(value) => validate::validate_speech_activity(value),
         };
         result.map_err(|message| invalid(&resource.resource_id, message))?;
     }

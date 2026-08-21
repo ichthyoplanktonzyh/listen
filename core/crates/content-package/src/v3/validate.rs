@@ -9,9 +9,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::v2::validate::{
-    validate_half_open, validate_language_tag, validate_phone_timeline, validate_prosody_analysis,
-    validate_sense_group_analysis, validate_subtitle_text_track, validate_timed_text_track,
-    validate_word_acoustics, validate_word_timeline,
+    validate_acoustic_track, validate_half_open, validate_language_tag, validate_phone_timeline,
+    validate_prosody_analysis, validate_sense_group_analysis, validate_speech_activity,
+    validate_subtitle_text_track, validate_timed_text_track, validate_word_acoustics,
+    validate_word_timeline,
 };
 
 use crate::v2::ResourceRole;
@@ -52,6 +53,8 @@ pub(crate) fn validate_payload(
         KnownPayloadV3::ProsodyAnalysis(value) => {
             validate_prosody_analysis(value, subtitle, timeline)
         }
+        KnownPayloadV3::AcousticTrack(value) => validate_acoustic_track(value),
+        KnownPayloadV3::SpeechActivity(value) => validate_speech_activity(value),
         KnownPayloadV3::StructuredReading(value) => validate_structured_reading(release, value),
         KnownPayloadV3::AnchorTimeAlignment(value) => {
             validate_anchor_time_alignment(release, value, decoded, warnings)
