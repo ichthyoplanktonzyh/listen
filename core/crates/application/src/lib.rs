@@ -511,6 +511,8 @@ impl AppServices {
             "sense_group_analysis",
             "word_acoustics",
             "prosody_analysis",
+            "acoustic_track",
+            "speech_activity",
         ];
         let mut payloads = std::collections::HashMap::new();
         for resource in resources
@@ -775,6 +777,8 @@ fn validate_package_candidate_payloads(
         "sense_group_analysis",
         "word_acoustics",
         "prosody_analysis",
+        "acoustic_track",
+        "speech_activity",
     ];
     for resource in resources.iter().filter(|resource| {
         CANDIDATE_KINDS.contains(&resource.kind.as_str())
@@ -802,6 +806,12 @@ fn validate_package_candidate_payloads(
                 .map(|_| ())
                 .map_err(|error| error.to_string()),
             "prosody_analysis" => serde_json::from_slice::<content_package::ProsodyAnalysis>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            "acoustic_track" => serde_json::from_slice::<content_package::AcousticTrack>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            "speech_activity" => serde_json::from_slice::<content_package::SpeechActivity>(bytes)
                 .map(|_| ())
                 .map_err(|error| error.to_string()),
             _ => Ok(()),

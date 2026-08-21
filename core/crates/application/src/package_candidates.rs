@@ -17,10 +17,11 @@
 use std::collections::HashMap;
 
 use content_package::{
-    EnergyBaseline, PhoneTimeline as PackagePhoneTimeline, PitchBaseline,
-    ProsodyAnalysis as PackageProsodyAnalysis, SenseGroupAnalysis as PackageSenseGroupAnalysis,
-    SubtitleTextTrack as PackageSubtitleTextTrack, WordAcoustics as PackageWordAcoustics,
-    WordTimeline as PackageWordTimeline,
+    AcousticTrack as PackageAcousticTrack, EnergyBaseline, PhoneTimeline as PackagePhoneTimeline,
+    PitchBaseline, ProsodyAnalysis as PackageProsodyAnalysis,
+    SenseGroupAnalysis as PackageSenseGroupAnalysis, SpeechActivity as PackageSpeechActivity,
+    SpeechActivityKind, SubtitleTextTrack as PackageSubtitleTextTrack,
+    WordAcoustics as PackageWordAcoustics, WordTimeline as PackageWordTimeline,
 };
 use domain::{
     DetectedPhone, LLTimelineArtifact, LLTimelineGenerator, LLTimelineMedia, LLTimelineMetadata,
@@ -36,6 +37,11 @@ use serde::de::DeserializeOwned;
 use crate::{ApplicationError, ContentPackageCandidateImport};
 
 const ACOUSTIC_ARTIFACT_KIND: &str = "rhythm_word_acoustic_cues";
+/// Frame-level acoustic evidence and speech/non-speech evidence, sliced per
+/// sentence by absolute time. Rendition-level measurement (no word refs), so the
+/// slice is purely temporal. Core interprets these; Gen only measures them.
+const ACOUSTIC_TRACK_ARTIFACT_KIND: &str = "rhythm_acoustic_track";
+const SPEECH_ACTIVITY_ARTIFACT_KIND: &str = "rhythm_speech_activity";
 const PACKAGE_GENERATOR_ID: &str = "listen-resource-package";
 const PACKAGE_GENERATOR_VERSION: &str = "v3";
 const PACKAGE_SOURCE: &str = "package:subtitle_text_track";
@@ -187,6 +193,30 @@ pub(crate) fn project_package_candidates(
             )
         })
         .into_iter()
+        .chain(
+            // Frame-level acoustic evidence, sliced to each sentence by absolute
+            // time. Audio-only (no word refs), so it needs neither a word
+            // timeline nor the sentence-id remap; missing resource ⇒ no artifact.
+            resources
+                .fact("acoustic_track")
+                .and_then(|fact| {
+                    resources
+                        .decode::<PackageAcousticTrack>(fact)
+                        .map(|payload| (fact, payload))
+                })
+                .and_then(|(fact, payload)| project_acoustic_track(track, fact, &payload)),
+        )
+        .chain(
+            // Speech/silence evidence, likewise sliced per sentence by time.
+            resources
+                .fact("speech_activity")
+                .and_then(|fact| {
+                    resources
+                        .decode::<PackageSpeechActivity>(fact)
+                        .map(|payload| (fact, payload))
+                })
+                .and_then(|(fact, payload)| project_speech_activity(track, fact, &payload)),
+        )
         .collect::<Vec<_>>();
 
     let metadata = LLTimelineMetadata {
@@ -307,6 +337,38 @@ fn project_word_timeline(
     })
 }
 
+/// Assign a phone with no written-token reference (an observed phone whose
+/// audible span crosses a word boundary, e.g. `did you` -> /dɪdʒə/) to the
+/// sentence whose time span it overlaps most. Returns `None` when the phone
+/// falls outside every sentence span, so the caller can keep it in an
+/// unassigned bucket rather than dropping the evidence.
+fn overlap_sentence(
+    start_ms: u64,
+    end_ms: u64,
+    sentences_by_id: &HashMap<SubtitleSentenceId, &domain::SubtitleSentence>,
+) -> Option<SubtitleSentenceId> {
+    let mut best: Option<(u64, u32, SubtitleSentenceId)> = None;
+    for sentence in sentences_by_id.values() {
+        let lo = start_ms.max(sentence.start.get());
+        let hi = end_ms.min(sentence.end.get());
+        if hi <= lo {
+            continue;
+        }
+        let overlap = hi - lo;
+        let better = match &best {
+            None => true,
+            Some((best_overlap, best_index, _)) => {
+                overlap > *best_overlap
+                    || (overlap == *best_overlap && sentence.index < *best_index)
+            }
+        };
+        if better {
+            best = Some((overlap, sentence.index, sentence.id.clone()));
+        }
+    }
+    best.map(|(_, _, id)| id)
+}
+
 fn project_phone_timelines(
     track: &SubtitleTrack,
     media: &MediaItem,
@@ -322,53 +384,66 @@ fn project_phone_timelines(
         .model_version
         .clone()
         .unwrap_or_else(|| provider_version.clone());
-    let mut by_sentence = HashMap::<SubtitleSentenceId, Vec<DetectedPhone>>::new();
+    let mut by_sentence = HashMap::<Option<SubtitleSentenceId>, Vec<DetectedPhone>>::new();
     for phone in &payload.phones {
-        let Some(word_ref) = phone.word_ref.as_ref() else {
-            continue;
-        };
-        let Some(sentence_id) = sentence_ids.get(&word_ref.sentence_id) else {
-            continue;
-        };
-        let Some(sentence) = sentences_by_id.get(sentence_id) else {
-            continue;
-        };
-        if !sentence
-            .tokens
-            .iter()
-            .any(|token| token.index == word_ref.token_index)
-        {
-            continue;
-        }
-        by_sentence
-            .entry(sentence_id.clone())
-            .or_default()
-            .push(DetectedPhone {
-                symbol: phone.symbol.clone(),
-                display_ipa: phone
-                    .display_ipa
-                    .clone()
-                    .unwrap_or_else(|| phone.symbol.clone()),
-                phone_set: payload.phone_set.clone(),
-                start_ms: phone.start_ms,
-                end_ms: phone.end_ms,
-                confidence: phone.confidence.map(|value| value as f32),
-                token_index: Some(word_ref.token_index),
-                provider_id: provider_id.clone(),
-                provider_version: provider_version.clone(),
-                model_revision: model_revision.clone(),
-            });
+        // A phone's primary identity is its time span; the written-token
+        // reference is optional. Resolved refs keep their token association;
+        // cross-word phones (word_ref: null) are retained and assigned to a
+        // sentence by time overlap, never dropped.
+        let (bucket, token_index): (Option<SubtitleSentenceId>, Option<u32>) =
+            match phone.word_ref.as_ref() {
+                Some(word_ref) => {
+                    let Some(sentence_id) = sentence_ids.get(&word_ref.sentence_id) else {
+                        continue;
+                    };
+                    let Some(sentence) = sentences_by_id.get(sentence_id) else {
+                        continue;
+                    };
+                    if !sentence
+                        .tokens
+                        .iter()
+                        .any(|token| token.index == word_ref.token_index)
+                    {
+                        continue;
+                    }
+                    (Some(sentence_id.clone()), Some(word_ref.token_index))
+                }
+                None => (
+                    overlap_sentence(phone.start_ms, phone.end_ms, sentences_by_id),
+                    None,
+                ),
+            };
+        by_sentence.entry(bucket).or_default().push(DetectedPhone {
+            symbol: phone.symbol.clone(),
+            display_ipa: phone
+                .display_ipa
+                .clone()
+                .unwrap_or_else(|| phone.symbol.clone()),
+            phone_set: payload.phone_set.clone(),
+            start_ms: phone.start_ms,
+            end_ms: phone.end_ms,
+            confidence: phone.confidence.map(|value| value as f32),
+            token_index,
+            provider_id: provider_id.clone(),
+            provider_version: provider_version.clone(),
+            model_revision: model_revision.clone(),
+        });
     }
     by_sentence
         .into_iter()
         .map(|(sentence_id, phones)| PhoneTimeline {
             id: PhoneTimelineId::from_fingerprint(
                 "package-phone-timeline",
-                &format!("{}:{}:{sentence_id}", track.id.as_str(), fact.resource_id),
+                &format!(
+                    "{}:{}:{}",
+                    track.id.as_str(),
+                    fact.resource_id,
+                    sentence_id.as_ref().map(|id| id.as_str()).unwrap_or("unassigned"),
+                ),
             ),
             track_id: track.id.clone(),
             media_id: media.id.clone(),
-            sentence_id: Some(sentence_id),
+            sentence_id,
             parent_word_timeline_id: parent_word_timeline_id.cloned(),
             parent_phonetic_analysis_id: None,
             provider_id: provider_id.clone(),
@@ -653,6 +728,120 @@ fn project_word_acoustics(
     })
 }
 
+/// Slices frame-level acoustic evidence to each sentence's absolute-time window
+/// and emits one `rhythm_acoustic_track` artifact. The track has no word or
+/// sentence coordinate of its own (audio-only measurement), so a frame belongs
+/// to sentence `s` exactly when `s.start <= frame.time_ms < s.end`. Frames keep
+/// their absolute media time; nothing is downsampled or interpreted here.
+fn project_acoustic_track(
+    track: &SubtitleTrack,
+    fact: &PackageResourceFact,
+    payload: &PackageAcousticTrack,
+) -> Option<LLTimelineArtifact> {
+    let (provider_id, provider_version) = producer(fact);
+    let mut sentences = Vec::new();
+    for sentence in &track.sentences {
+        let (start, end) = (sentence.start.get(), sentence.end.get());
+        let frames = payload
+            .frames
+            .iter()
+            .filter(|frame| frame.time_ms >= start && frame.time_ms < end)
+            .map(|frame| {
+                serde_json::json!({
+                    "time_ms": frame.time_ms,
+                    "energy_dbfs": frame.energy_dbfs,
+                    "energy_rel_db": frame.energy_rel_db,
+                    "f0_hz": frame.f0_hz,
+                    "f0_rel_st": frame.f0_rel_st,
+                    "voiced": frame.voiced,
+                })
+            })
+            .collect::<Vec<_>>();
+        if frames.is_empty() {
+            continue;
+        }
+        sentences.push(serde_json::json!({
+            "sentence_id": sentence.id.as_str(),
+            "frames": frames,
+        }));
+    }
+    if sentences.is_empty() {
+        return None;
+    }
+    Some(LLTimelineArtifact {
+        kind: ACOUSTIC_TRACK_ARTIFACT_KIND.into(),
+        provider_id: Some(provider_id),
+        provider_version: Some(provider_version),
+        payload: serde_json::json!({
+            "status": "measured",
+            "line": "sound",
+            "resource_id": fact.resource_id,
+            "exchange_source": PACKAGE_SOURCE,
+            "sample_rate_hz": payload.sample_rate_hz,
+            "frame_step_ms": payload.frame_step_ms,
+            "calibration": {
+                "energy": payload.energy_baseline,
+                "pitch": payload.pitch_baseline,
+            },
+            "sentences": sentences,
+        }),
+    })
+}
+
+/// Slices speech/silence evidence to each sentence's absolute-time window and
+/// emits one `rhythm_speech_activity` artifact. A span contributes to sentence
+/// `s` when it overlaps `[s.start, s.end)`, clipped to that window. Gen states
+/// only measured speech/silence; this projection never relabels a silence as a
+/// boundary — Core owns that interpretation.
+fn project_speech_activity(
+    track: &SubtitleTrack,
+    fact: &PackageResourceFact,
+    payload: &PackageSpeechActivity,
+) -> Option<LLTimelineArtifact> {
+    let (provider_id, provider_version) = producer(fact);
+    let mut sentences = Vec::new();
+    for sentence in &track.sentences {
+        let (start, end) = (sentence.start.get(), sentence.end.get());
+        let spans = payload
+            .spans
+            .iter()
+            .filter(|span| span.start_ms < end && span.end_ms > start)
+            .map(|span| {
+                serde_json::json!({
+                    "start_ms": span.start_ms.max(start),
+                    "end_ms": span.end_ms.min(end),
+                    "activity": match span.activity {
+                        SpeechActivityKind::Speech => "speech",
+                        SpeechActivityKind::Silence => "silence",
+                    },
+                })
+            })
+            .collect::<Vec<_>>();
+        if spans.is_empty() {
+            continue;
+        }
+        sentences.push(serde_json::json!({
+            "sentence_id": sentence.id.as_str(),
+            "spans": spans,
+        }));
+    }
+    if sentences.is_empty() {
+        return None;
+    }
+    Some(LLTimelineArtifact {
+        kind: SPEECH_ACTIVITY_ARTIFACT_KIND.into(),
+        provider_id: Some(provider_id),
+        provider_version: Some(provider_version),
+        payload: serde_json::json!({
+            "status": "measured",
+            "line": "sound",
+            "resource_id": fact.resource_id,
+            "exchange_source": PACKAGE_SOURCE,
+            "sentences": sentences,
+        }),
+    })
+}
+
 fn package_word_timing_lookup(payload: &PackageWordTimeline) -> HashMap<(String, u32), (u64, u64)> {
     payload
         .words
@@ -751,10 +940,11 @@ fn map_prosody_evidence(value: content_package::ProsodyEvidence) -> ProsodyEvide
 mod tests {
     use super::*;
     use content_package::{
-        EnergyBaseline, EnergyMeasurement, PitchBaseline, PitchMeasurement,
-        ProsodyEvidence as PackageProsodyEvidence, SubtitleSentence as PackageSubtitleSentence,
-        SubtitleSourceKind, SubtitleToken as PackageSubtitleToken, TokenKind as PackageTokenKind,
-        TokenRef, WordTiming as PackageWordTiming,
+        AcousticFrame, EnergyBaseline, EnergyMeasurement, PitchBaseline, PitchMeasurement,
+        ProsodyEvidence as PackageProsodyEvidence, SpeechSpan,
+        SubtitleSentence as PackageSubtitleSentence, SubtitleSourceKind,
+        SubtitleToken as PackageSubtitleToken, TokenKind as PackageTokenKind, TokenRef,
+        WordTiming as PackageWordTiming,
     };
     use domain::{
         LanguageCode, PackageResourceAvailability, PackageResourceProvenance, PackageResourceRole,
@@ -1055,6 +1245,149 @@ mod tests {
         assert!(projected.corpus_occurrences.is_empty());
     }
 
+    fn two_sentence_track() -> SubtitleTrack {
+        let mut base = track();
+        base.sentences = vec![
+            SubtitleSentence {
+                id: SubtitleSentenceId::from_fingerprint("package-subtitle-sentence", "sa"),
+                index: 0,
+                start: TimeMs::new(0),
+                end: TimeMs::new(500),
+                original_text: "A".into(),
+                display_text: "A".into(),
+                tokens: Vec::new(),
+            },
+            SubtitleSentence {
+                id: SubtitleSentenceId::from_fingerprint("package-subtitle-sentence", "sb"),
+                index: 1,
+                start: TimeMs::new(500),
+                end: TimeMs::new(1000),
+                original_text: "B".into(),
+                display_text: "B".into(),
+                tokens: Vec::new(),
+            },
+        ];
+        base
+    }
+
+    #[test]
+    fn acoustic_track_and_speech_activity_are_sliced_per_sentence_by_time() {
+        let frames = (0..10)
+            .map(|index| AcousticFrame {
+                time_ms: index * 100,
+                energy_dbfs: -30.0,
+                energy_rel_db: 2.0,
+                f0_hz: Some(120.0),
+                f0_rel_st: Some(0.5),
+                voiced: Some(true),
+            })
+            .collect::<Vec<_>>();
+        let acoustic_track = content_package::AcousticTrack {
+            sample_rate_hz: 16_000,
+            frame_step_ms: 100,
+            energy_baseline: "recording_median_dbfs".into(),
+            pitch_baseline: "recording_median_f0_hz".into(),
+            frames,
+        };
+        let speech_activity = content_package::SpeechActivity {
+            spans: vec![
+                SpeechSpan {
+                    start_ms: 0,
+                    end_ms: 250,
+                    activity: SpeechActivityKind::Silence,
+                },
+                SpeechSpan {
+                    start_ms: 250,
+                    end_ms: 750,
+                    activity: SpeechActivityKind::Speech,
+                },
+                SpeechSpan {
+                    start_ms: 750,
+                    end_ms: 1000,
+                    activity: SpeechActivityKind::Silence,
+                },
+            ],
+        };
+        // The identity map requires the landed track and the subtitle payload to
+        // agree on sentence count; the audio-only slicing itself uses neither the
+        // payload sentences nor the id remap (it slices track sentences by time).
+        let two_sentence_payload = {
+            let mut payload = subtitle_payload();
+            let first = payload.sentences[0].clone();
+            payload.sentences = vec![
+                PackageSubtitleSentence {
+                    id: "local-0".into(),
+                    index: 0,
+                    start_ms: 0,
+                    end_ms: 500,
+                    ..first.clone()
+                },
+                PackageSubtitleSentence {
+                    id: "local-1".into(),
+                    index: 1,
+                    start_ms: 500,
+                    end_ms: 1000,
+                    ..first
+                },
+            ];
+            payload
+        };
+        let projected = project_package_candidates(
+            &two_sentence_track(),
+            &media(),
+            10,
+            &two_sentence_payload,
+            resources(vec![
+                (
+                    "acoustic_track",
+                    serde_json::to_vec(&acoustic_track).unwrap(),
+                ),
+                (
+                    "speech_activity",
+                    serde_json::to_vec(&speech_activity).unwrap(),
+                ),
+            ]),
+        )
+        .unwrap();
+
+        let sa = SubtitleSentenceId::from_fingerprint("package-subtitle-sentence", "sa");
+        let sb = SubtitleSentenceId::from_fingerprint("package-subtitle-sentence", "sb");
+
+        let track_artifact = projected
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == "rhythm_acoustic_track")
+            .expect("acoustic track artifact projected");
+        let track_sentences = track_artifact.payload["sentences"].as_array().unwrap();
+        assert_eq!(track_sentences.len(), 2);
+        // Frames route to the sentence whose [start,end) window contains their
+        // absolute time: 0..400 → sentence A, 500..900 → sentence B.
+        assert_eq!(track_sentences[0]["sentence_id"], sa.as_str());
+        assert_eq!(track_sentences[0]["frames"].as_array().unwrap().len(), 5);
+        assert_eq!(track_sentences[0]["frames"][0]["time_ms"], 0);
+        assert_eq!(track_sentences[1]["sentence_id"], sb.as_str());
+        assert_eq!(track_sentences[1]["frames"].as_array().unwrap().len(), 5);
+        assert_eq!(track_sentences[1]["frames"][0]["time_ms"], 500);
+        assert_eq!(track_artifact.payload["frame_step_ms"], 100);
+
+        let activity_artifact = projected
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == "rhythm_speech_activity")
+            .expect("speech activity artifact projected");
+        let activity_sentences = activity_artifact.payload["sentences"].as_array().unwrap();
+        assert_eq!(activity_sentences.len(), 2);
+        // The [250,750) speech span is clipped at each sentence boundary.
+        assert_eq!(activity_sentences[0]["sentence_id"], sa.as_str());
+        assert_eq!(activity_sentences[0]["spans"][0]["activity"], "silence");
+        assert_eq!(activity_sentences[0]["spans"][1]["activity"], "speech");
+        assert_eq!(activity_sentences[0]["spans"][1]["end_ms"], 500);
+        assert_eq!(activity_sentences[1]["sentence_id"], sb.as_str());
+        assert_eq!(activity_sentences[1]["spans"][0]["start_ms"], 500);
+        assert_eq!(activity_sentences[1]["spans"][0]["activity"], "speech");
+        assert_eq!(activity_sentences[1]["spans"][1]["activity"], "silence");
+    }
+
     #[test]
     fn package_local_ids_never_survive_projection() {
         let projected = project_package_candidates(
@@ -1105,5 +1438,97 @@ mod tests {
         assert!(projected.word_timelines.is_empty());
         assert!(projected.phone_timelines.is_empty());
         assert!(projected.sense_group_analyses.is_empty());
+    }
+
+    #[test]
+    fn cross_word_phones_are_retained_by_time_overlap_not_dropped() {
+        // A phone's primary identity is time; the written-token reference is
+        // optional. Cross-word phones (word_ref: null) must survive projection:
+        // assigned to a sentence by time overlap, or kept in an unassigned
+        // (null-sentence) timeline when they fall outside every sentence span.
+        let phone_payload = content_package::PhoneTimeline {
+            phone_set: "ipa".into(),
+            precision: content_package::PhoneTimelinePrecision::Detected,
+            phones: vec![
+                // resolved: keeps its token association
+                content_package::Phone {
+                    symbol: "p".into(),
+                    display_ipa: Some("p".into()),
+                    start_ms: 0,
+                    end_ms: 100,
+                    confidence: Some(0.8),
+                    word_ref: Some(TokenRef {
+                        sentence_id: "local-0".into(),
+                        token_index: 0,
+                    }),
+                },
+                // cross-word: no token ref, spans inside sentence [0, 900]
+                content_package::Phone {
+                    symbol: "dz".into(),
+                    display_ipa: Some("dʒ".into()),
+                    start_ms: 400,
+                    end_ms: 520,
+                    confidence: Some(0.6),
+                    word_ref: None,
+                },
+                // outside every sentence span (sentence ends at 900)
+                content_package::Phone {
+                    symbol: "x".into(),
+                    display_ipa: Some("x".into()),
+                    start_ms: 1_000,
+                    end_ms: 1_100,
+                    confidence: None,
+                    word_ref: None,
+                },
+            ],
+        };
+        let projected = project_package_candidates(
+            &track(),
+            &media(),
+            10,
+            &subtitle_payload(),
+            resources(vec![(
+                "phone_timeline",
+                serde_json::to_vec(&phone_payload).unwrap(),
+            )]),
+        )
+        .unwrap();
+
+        let global = &track().sentences[0].id;
+        // Nothing is dropped: all three phones survive somewhere.
+        let total: usize = projected
+            .phone_timelines
+            .iter()
+            .map(|timeline| timeline.phones.len())
+            .sum();
+        assert_eq!(total, 3);
+
+        let in_sentence = projected
+            .phone_timelines
+            .iter()
+            .find(|timeline| timeline.sentence_id.as_ref() == Some(global))
+            .expect("a sentence-assigned phone timeline");
+        assert_eq!(in_sentence.phones.len(), 2);
+        assert!(
+            in_sentence
+                .phones
+                .iter()
+                .any(|phone| phone.symbol == "p" && phone.token_index == Some(0))
+        );
+        assert!(
+            in_sentence
+                .phones
+                .iter()
+                .any(|phone| phone.symbol == "dz" && phone.token_index.is_none())
+        );
+
+        let unassigned = projected
+            .phone_timelines
+            .iter()
+            .find(|timeline| timeline.sentence_id.is_none())
+            .expect("an unassigned (null-sentence) phone timeline");
+        assert_eq!(unassigned.phones.len(), 1);
+        assert_eq!(unassigned.phones[0].symbol, "x");
+        assert!(unassigned.phones[0].token_index.is_none());
     }
 }
