@@ -143,10 +143,16 @@ def assert_complete_rich_package(testcase: unittest.TestCase, output: Path) -> d
     phones = resource_payload(output, by_kind["phone_timeline"])["phones"]
     testcase.assertTrue(phones)
     for phone in phones:
-        ref = (phone["word_ref"]["sentence_id"], phone["word_ref"]["token_index"])
-        testcase.assertIn(ref, timeline_refs)
-        testcase.assertGreaterEqual(phone["start_ms"], word_windows[ref][0])
-        testcase.assertLessEqual(phone["end_ms"], word_windows[ref][1])
+        # Observed phones keep their real audio time as primary identity; the
+        # word_ref annotation is optional (nullable). When it is present the
+        # phone lies wholly inside that word's window.
+        testcase.assertLess(phone["start_ms"], phone["end_ms"])
+        ref_obj = phone["word_ref"]
+        if ref_obj is not None:
+            ref = (ref_obj["sentence_id"], ref_obj["token_index"])
+            testcase.assertIn(ref, timeline_refs)
+            testcase.assertGreaterEqual(phone["start_ms"], word_windows[ref][0])
+            testcase.assertLessEqual(phone["end_ms"], word_windows[ref][1])
     return by_kind
 
 
@@ -371,6 +377,66 @@ class RichMediaPipelineTests(unittest.TestCase):
         self.assertTrue(
             all(entry["timing_source"] == "asr_reported" for entry in words)
         )
+
+    def test_acoustic_track_and_speech_activity_are_audio_only_evidence(self) -> None:
+        request_path = self.directory / "request.json"
+        request_path.write_text(json.dumps(request_media(directory=self.directory)))
+        output = self.directory / "package.zip"
+        result = run_cli([
+            "package", "from-capability", str(request_path),
+            "--output", str(output),
+            "--provider", "fixture", "--fixture", str(FIXTURES / "sample.asr.json"),
+            "--acoustic-track", "fixture",
+            "--acoustic-track-fixture", str(FIXTURES / "acoustic-track-result.json"),
+            "--speech-activity", "fixture",
+            "--speech-activity-fixture", str(FIXTURES / "speech-activity-result.json"),
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        resources = package_resources(output)
+        by_kind = {r["descriptor"]["kind"]: r for r in resources}
+        self.assertIn("acoustic_track", by_kind)
+        self.assertIn("speech_activity", by_kind)
+
+        track = by_kind["acoustic_track"]
+        # Audio-only: the frame track never depends on the word timeline or the
+        # subtitle track, and it references the audio rendition through
+        # provenance rather than a text resource dependency.
+        self.assertEqual(track["descriptor"]["dependencies"], [])
+        self.assertEqual(
+            track["descriptor"]["provenance"]["input_resource_ids"], []
+        )
+        self.assertTrue(track["descriptor"]["provenance"]["input_rendition_ids"])
+        # The subject names only the audio rendition, never the reading anchor.
+        self.assertEqual(track["descriptor"]["subject"]["anchor_resource_ids"], [])
+        self.assertTrue(track["descriptor"]["subject"]["rendition_ids"])
+        self.assertFalse(track["required"])
+        track_payload = resource_payload(output, track)
+        self.assertEqual(track_payload["frame_step_ms"], 10)
+        self.assertTrue(track_payload["frames"])
+        allowed_frame_keys = {
+            "time_ms", "energy_dbfs", "energy_rel_db", "f0_hz", "f0_rel_st", "voiced",
+        }
+        previous_time = -1
+        for frame in track_payload["frames"]:
+            # No English-specific / interpretation field ever leaks into the
+            # measurement layer.
+            self.assertEqual(set(frame), allowed_frame_keys)
+            self.assertGreater(frame["time_ms"], previous_time)
+            previous_time = frame["time_ms"]
+            if frame["f0_hz"] is None:
+                self.assertIsNone(frame["f0_rel_st"])
+
+        activity = by_kind["speech_activity"]
+        self.assertEqual(activity["descriptor"]["dependencies"], [])
+        self.assertFalse(activity["required"])
+        spans = resource_payload(output, activity)["spans"]
+        self.assertTrue(spans)
+        previous_end = 0
+        for span in spans:
+            self.assertIn(span["activity"], ("speech", "silence"))
+            self.assertLess(span["start_ms"], span["end_ms"])
+            self.assertGreaterEqual(span["start_ms"], previous_end)
+            previous_end = span["end_ms"]
 
     def test_screenshot_fragments_produce_one_closed_rich_sentence(self) -> None:
         asr_path, expected_word_times = _write_assembled_screenshot_fixtures(self.directory)

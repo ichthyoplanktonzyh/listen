@@ -153,8 +153,9 @@ def parser(
     produce.add_argument(
         "--provider",
         default="none",
-        choices=["none", "fixture", "command", "whisper-cpp", "faster-whisper", "openai-audio"],
-        help="ASR provider for media-to-read derivations",
+        choices=["none", "fixture", "command", "qwen3", "sensevoice", "whisper-cpp"],
+        help="ASR provider for media-to-read derivations "
+        "(qwen3 default / sensevoice fast / whisper-cpp compatibility)",
     )
     produce.add_argument("--fixture", type=Path, help="normalized JSON for the fixture ASR provider")
     produce.add_argument("--command", help="external ASR wrapper executable; no shell is used")
@@ -165,18 +166,28 @@ def parser(
         help="one argv item for the command ASR provider; include {media} exactly once",
     )
     produce.add_argument("--command-timeout-seconds", type=float, default=3600.0)
+    produce.add_argument("--asr-timeout-seconds", type=float, default=3600.0, help="timeout for the qwen3/sensevoice ASR sidecars")
+    # Qwen3-ASR (default provider) sidecar options.
+    produce.add_argument("--qwen3-python", type=Path, default=Path(sys.executable), help="python interpreter that runs the qwen3 ASR sidecar")
+    produce.add_argument("--qwen3-sidecar", type=Path, help="path to tools/qwen3_asr_wrapper.py")
+    produce.add_argument("--qwen3-model-id", default="Qwen/Qwen3-ASR-0.6B")
+    produce.add_argument("--qwen3-forced-aligner-model-id", default="Qwen/Qwen3-ForcedAligner-0.6B")
+    produce.add_argument("--qwen3-language", default="auto")
+    produce.add_argument("--qwen3-device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
+    produce.add_argument("--qwen3-dtype", default="auto")
+    # SenseVoice (fast / CPU provider) sidecar options.
+    produce.add_argument("--sensevoice-python", type=Path, default=Path(sys.executable), help="python interpreter that runs the sensevoice ASR sidecar")
+    produce.add_argument("--sensevoice-sidecar", type=Path, help="path to tools/sensevoice_asr_wrapper.py")
+    produce.add_argument("--sensevoice-model-id", default="iic/SenseVoiceSmall")
+    produce.add_argument("--sensevoice-language", default="auto", choices=["auto", "zh", "en", "yue", "ja", "ko"])
+    produce.add_argument("--sensevoice-device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
+    produce.add_argument("--sensevoice-vad-model", default="fsmn-vad")
     produce.add_argument("--whisper-cli", default="whisper-cli")
     produce.add_argument("--whisper-model", type=Path)
-    produce.add_argument("--whisper-model-id")
+    produce.add_argument("--whisper-model-id", default="ggml-large-v3-turbo.bin")
     produce.add_argument("--whisper-language", default="auto")
     produce.add_argument("--whisper-translate-to-english", action="store_true")
     produce.add_argument("--whisper-timeout-seconds", type=float, default=3600.0)
-    produce.add_argument("--faster-whisper-model", default="base", help="Model size or path for faster-whisper (e.g. base, small, medium, large-v3, large-v3-turbo)")
-    produce.add_argument("--faster-whisper-device", default="auto", help="Device for faster-whisper (e.g. auto, cpu, cuda)")
-    produce.add_argument("--faster-whisper-compute-type", default="default", help="Compute type for faster-whisper (e.g. default, float16, int8)")
-    produce.add_argument("--openai-audio-api-key", help="OpenAI API key for cloud audio transcription")
-    produce.add_argument("--openai-audio-base-url", default="https://api.openai.com/v1", help="Base URL for OpenAI audio API")
-    produce.add_argument("--openai-audio-model", default="whisper-1", help="Model name for OpenAI audio API")
     produce.add_argument(
         "--audio-stream-index",
         type=int,
@@ -191,8 +202,8 @@ def parser(
     produce.add_argument(
         "--aligner",
         default="none",
-        choices=["none", "fixture", "command", "torchaudio"],
-        help="forced alignment provider (none/fixture/command/torchaudio)",
+        choices=["none", "fixture", "command", "qwen"],
+        help="forced alignment provider (none/fixture/command/qwen)",
     )
     produce.add_argument("--aligner-fixture", type=Path, help="committed result fixture for the aligner provider")
     produce.add_argument("--aligner-command", help="external aligner executable; no shell is used")
@@ -203,9 +214,28 @@ def parser(
         help="one argv item for the command aligner provider; include {media} exactly once",
     )
     produce.add_argument("--aligner-command-timeout-seconds", type=float, default=600.0)
-    produce.add_argument("--aligner-python", type=Path, help="python interpreter for the torchaudio aligner sidecar")
-    produce.add_argument("--aligner-script", type=Path, help="torchaudio forced-alignment sidecar script")
-    produce.add_argument("--aligner-timeout-seconds", type=float, default=600.0)
+    produce.add_argument(
+        "--aligner-model",
+        default="Qwen/Qwen3-ForcedAligner-0.6B",
+        help="Qwen3 forced-aligner model id (qwen provider)",
+    )
+    produce.add_argument(
+        "--aligner-model-revision",
+        default="main",
+        help="Qwen3 forced-aligner model revision (qwen provider)",
+    )
+    produce.add_argument(
+        "--aligner-device",
+        default="auto",
+        choices=["auto", "cpu", "cuda", "mps"],
+        help="runtime device for the qwen aligner (auto prefers cuda then mps)",
+    )
+    produce.add_argument(
+        "--aligner-padding-ms",
+        type=int,
+        default=400,
+        help="context padding added to each sentence window before alignment",
+    )
     produce.add_argument("--ffprobe-command", default="ffprobe")
     produce.add_argument("--ffmpeg-command", default="ffmpeg")
     produce.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
@@ -235,6 +265,20 @@ def parser(
         help="optional acoustics stage adapter (none/fixture/command/baseline/praat)",
     )
     produce.add_argument(
+        "--acoustic-track",
+        default="none",
+        choices=["none", "fixture", "baseline"],
+        help="optional frame-level acoustic-track stage adapter (none/fixture/baseline)",
+    )
+    produce.add_argument(
+        "--speech-activity",
+        default="none",
+        choices=["none", "fixture", "baseline"],
+        help="optional speech/non-speech stage adapter (none/fixture/baseline)",
+    )
+    produce.add_argument("--acoustic-track-fixture", type=Path, help="committed result fixture for the acoustic-track stage")
+    produce.add_argument("--speech-activity-fixture", type=Path, help="committed result fixture for the speech-activity stage")
+    produce.add_argument(
         "--prosody",
         default="none",
         choices=["none", "fixture", "command", "baseline"],
@@ -263,7 +307,7 @@ def parser(
     produce.add_argument(
         "--tts-aligner",
         default="none",
-        choices=["none", "fixture", "command", "whisper-cpp", "faster-whisper"],
+        choices=["none", "fixture", "command", "whisper-cpp"],
         help="ASR provider that transcribes derived TTS audio into word timings",
     )
     produce.add_argument(
@@ -310,15 +354,22 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
             ),
             preprocessor,
         )
-    if args.provider == "faster-whisper":
-        from .asr import FasterWhisperAsrAdapter
+    if args.provider == "qwen3":
+        from .asr import Qwen3AsrAdapter
+        if args.qwen3_sidecar is None:
+            raise ConversionError("--qwen3-sidecar is required for the qwen3 ASR provider")
         return (
             PreprocessingAsrAdapter(
-                FasterWhisperAsrAdapter(
-                    model_size_or_path=args.faster_whisper_model,
-                    device=args.faster_whisper_device,
-                    compute_type=args.faster_whisper_compute_type,
-                    language=getattr(args, "whisper_language", "auto"),
+                Qwen3AsrAdapter(
+                    args.qwen3_python,
+                    args.qwen3_sidecar,
+                    model_id=args.qwen3_model_id,
+                    forced_aligner_model_id=args.qwen3_forced_aligner_model_id,
+                    language=args.qwen3_language,
+                    device=args.qwen3_device,
+                    dtype=args.qwen3_dtype,
+                    timeout_seconds=args.asr_timeout_seconds,
+                    progress=progress,
                 ),
                 preprocessor,
                 audio_stream_index=args.audio_stream_index,
@@ -326,15 +377,21 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
             ),
             preprocessor,
         )
-    if args.provider == "openai-audio":
-        from .asr import OpenAiAudioAsrAdapter
+    if args.provider == "sensevoice":
+        from .asr import SenseVoiceAsrAdapter
+        if args.sensevoice_sidecar is None:
+            raise ConversionError("--sensevoice-sidecar is required for the sensevoice ASR provider")
         return (
             PreprocessingAsrAdapter(
-                OpenAiAudioAsrAdapter(
-                    base_url=args.openai_audio_base_url,
-                    api_key=args.openai_audio_api_key,
-                    model=args.openai_audio_model,
-                    language=getattr(args, "whisper_language", "auto"),
+                SenseVoiceAsrAdapter(
+                    args.sensevoice_python,
+                    args.sensevoice_sidecar,
+                    model_id=args.sensevoice_model_id,
+                    language=args.sensevoice_language,
+                    device=args.sensevoice_device,
+                    vad_model=args.sensevoice_vad_model,
+                    timeout_seconds=args.asr_timeout_seconds,
+                    progress=progress,
                 ),
                 preprocessor,
                 audio_stream_index=args.audio_stream_index,
@@ -429,9 +486,15 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         FixtureProsodyAdapter,
         FixtureSenseGroupAdapter,
     )
+    from .rich import (
+        FixtureAcousticTrackAdapter,
+        FixtureSpeechActivityAdapter,
+    )
     from .rich_baselines import (
         AcousticProsodyBaseline,
+        AcousticTrackBaseline,
         PunctuationSenseGroupBaseline,
+        SpeechActivityBaseline,
         WavWordAcousticsBaseline,
     )
     from .rich_stages import RichStages
@@ -443,11 +506,13 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
     from .align import (
         CommandAlignAdapter,
         FixtureAlignAdapter,
-        TorchaudioAlignAdapter,
+        Qwen3ForcedAlignAdapter,
     )
 
     sense_groups = None
     acoustics = None
+    acoustic_track = None
+    speech_activity = None
     prosody = None
     phone = None
     tts_aligner = None
@@ -506,6 +571,22 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
     elif selector == "praat":
         from .rich_baselines import ParselmouthAcousticsBaseline
         acoustics = ParselmouthAcousticsBaseline()
+
+    selector = args.acoustic_track
+    if selector == "fixture":
+        if args.acoustic_track_fixture is None:
+            raise ConversionError("--acoustic-track-fixture is required for the fixture adapter")
+        acoustic_track = FixtureAcousticTrackAdapter(args.acoustic_track_fixture)
+    elif selector == "baseline":
+        acoustic_track = AcousticTrackBaseline()
+
+    selector = args.speech_activity
+    if selector == "fixture":
+        if args.speech_activity_fixture is None:
+            raise ConversionError("--speech-activity-fixture is required for the fixture adapter")
+        speech_activity = FixtureSpeechActivityAdapter(args.speech_activity_fixture)
+    elif selector == "baseline":
+        speech_activity = SpeechActivityBaseline()
 
     selector = args.prosody
     if selector == "fixture":
@@ -569,20 +650,12 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
             args.aligner_command, args.aligner_command_arg,
             args.aligner_command_timeout_seconds,
         )
-    elif selector == "torchaudio":
-        missing = [
-            name for name, value in (
-                ("--aligner-python", args.aligner_python),
-                ("--aligner-script", args.aligner_script),
-            ) if not value
-        ]
-        if missing:
-            raise ConversionError(
-                f"{', '.join(missing)} are required for the torchaudio aligner provider"
-            )
-        aligner = TorchaudioAlignAdapter(
-            Path(args.aligner_python), Path(args.aligner_script),
-            args.aligner_timeout_seconds,
+    elif selector == "qwen":
+        aligner = Qwen3ForcedAlignAdapter(
+            model_id=args.aligner_model,
+            model_revision=args.aligner_model_revision,
+            device=args.aligner_device,
+            padding_ms=args.aligner_padding_ms,
         )
 
     aligner_selector = args.tts_aligner
@@ -592,12 +665,23 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
     if (
         sense_groups is None
         and acoustics is None
+        and acoustic_track is None
+        and speech_activity is None
         and prosody is None
         and phone is None
         and aligner is None
         and tts_aligner is None
     ):
         return None
+    # The acoustics, acoustic-track, and speech-activity stages all consume the
+    # normalized 16 kHz mono WAV, so the ffmpeg preprocessor is shared whenever
+    # any of them needs a locally computed measurement (fixture adapters replay
+    # committed results and never touch the media).
+    needs_preprocessor = (
+        args.acoustics in ("command", "baseline", "praat")
+        or args.acoustic_track == "baseline"
+        or args.speech_activity == "baseline"
+    )
     return RichStages(
         sense_groups=sense_groups,
         acoustics=acoustics,
@@ -606,7 +690,9 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
             ffmpeg_executable=args.ffmpeg_command,
             timeout_seconds=args.media_command_timeout_seconds,
             progress=progress,
-        ) if args.acoustics in ("command", "baseline", "praat") else None,
+        ) if needs_preprocessor else None,
+        acoustic_track=acoustic_track,
+        speech_activity=speech_activity,
         prosody=prosody,
         phone=phone,
         aligner=aligner,

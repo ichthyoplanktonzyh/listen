@@ -42,10 +42,52 @@ Derivations:
   measured segment boundaries; when exact timing cannot be produced, audio
   succeeds while synchronized reading stays unavailable — timing is never
   fabricated.
-- **media → structured reading** — the existing ASR adapters (fixture,
-  command, whisper.cpp) and exact media-time alignment behind the request
-  interface. Provider, model, and configuration facts flow into resource
-  provenance and never leak raw output or paths into the package.
+- **media → structured reading** — a provider-neutral ASR seam plus exact
+  media-time alignment behind the request interface. ASR determines the
+  transcript and coarse/timed fragments; **forced alignment determines the
+  final word timeline** (never the ASR provider). Provider, model, and
+  configuration facts flow into resource provenance and never leak raw output
+  or paths into the package.
+
+  | Provider | Role | Model |
+  | --- | --- | --- |
+  | `qwen3` | **default**, local | `Qwen/Qwen3-ASR-0.6B` |
+  | `sensevoice` | fast / CPU (zh·en·ja·ko·yue) | `iic/SenseVoiceSmall` (FunASR/ModelScope) |
+  | `whisper-cpp` | compatibility / multilingual | whisper.cpp `large-v3-turbo` |
+  | `fixture` / `command` / `none` | tests & extension | — |
+
+  ASR word timings are optional *evidence* for sentence assembly; there is no
+  automatic provider fallback — you run exactly the provider you select, and a
+  missing provider/model is a clear error.
+
+  Qwen3-ASR and SenseVoice run their heavy runtime in a sidecar
+  (`tools/qwen3_asr_wrapper.py`, `tools/sensevoice_asr_wrapper.py`) so the base
+  install stays light. Install a provider's runtime with the matching extra:
+
+  ```bash
+  pip install "listen-gen[asr-qwen]"        # default Qwen3-ASR
+  pip install "listen-gen[asr-sensevoice]"  # SenseVoiceSmall
+  # whisper.cpp uses your own whisper-cli binary + ggml model file
+  ```
+
+  Minimal CLI examples (media reading + Qwen forced-aligned word timeline):
+
+  ```bash
+  # default: Qwen3-ASR-0.6B
+  python -m listen_gen package from-capability request.json --output out.zip \
+    --provider qwen3 --qwen3-sidecar tools/qwen3_asr_wrapper.py \
+    --aligner qwen
+
+  # fast / CPU: SenseVoiceSmall
+  python -m listen_gen package from-capability request.json --output out.zip \
+    --provider sensevoice --sensevoice-sidecar tools/sensevoice_asr_wrapper.py \
+    --aligner qwen
+
+  # compatibility: whisper.cpp large-v3-turbo
+  python -m listen_gen package from-capability request.json --output out.zip \
+    --provider whisper-cpp --whisper-model /path/to/ggml-large-v3-turbo.bin \
+    --aligner qwen
+  ```
 
 An offline fixture flow exercises the full CLI without model credentials or
 network access:
@@ -67,15 +109,15 @@ Launch the local GUI management workbench:
 source .venv/bin/activate && listen-gen gui
 ```
 
-The GUI workbench is served at `http://127.0.0.1:8420` and allows managing LLM, ASR (Whisper.cpp), phonetic models (Wav2Vec2), alignment, TTS, running connectivity tests, and launching generation pipelines.
+The GUI workbench is served at `http://127.0.0.1:8420` and allows managing LLM, ASR (Qwen3-ASR / SenseVoice / Whisper.cpp), phonetic models (Wav2Vec2), alignment, TTS, running connectivity tests, and launching generation pipelines.
 
 The workbench ships as a zero-runtime-dependency stack (Python standard
 library server + single-file frontend) with:
 
 - **Provider management** — LLM profiles (DeepSeek/OpenAI/Anthropic/Gemini/
-  custom), Whisper.cpp, Wav2Vec2, aligner and TTS configuration persisted to
-  `~/.listen-gen/profiles.json`, with connectivity tests and validation on
-  save.
+  custom), ASR (Qwen3-ASR / SenseVoice / Whisper.cpp), Wav2Vec2, aligner and
+  TTS configuration persisted to `~/.listen-gen/profiles.json`, with
+  connectivity tests and validation on save.
 - **Generation pipeline** — submit a bounded capability request from document
   or media input, watch the live v2 machine-event stream (accept → plan →
   running → completed/cancelled/failed), download the produced Content

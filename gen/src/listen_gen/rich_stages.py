@@ -44,9 +44,11 @@ from .rich import (
     RichContext,
     RichStageFailure,
     RichWord,
+    run_acoustic_track,
     run_acoustics,
     run_prosody,
     run_sense_groups,
+    run_speech_activity,
 )
 
 WORD_TIMELINE_RESOURCE_KIND = "word_timeline"
@@ -62,16 +64,22 @@ class RichStages:
     """Provider selection for the optional analysis stages.
 
     ``sense_groups``, ``acoustics``, ``prosody``, and ``phone`` are the rich
-    stage adapters (fixture/command/baseline); ``acoustics_preprocessor``
-    normalizes the media window the acoustics extractor receives; an
-    ``aligner`` forced-aligns known sentence text plus its time windows into
-    exact word timings; a ``tts_aligner`` ASR adapter re-transcribes derived
-    TTS audio when no aligner is configured (an honest fallback).
+    stage adapters (fixture/command/baseline); ``acoustic_track`` and
+    ``speech_activity`` are audio-only measurement adapters that derive
+    frame-level acoustic evidence and speech/non-speech evidence directly from
+    the audio rendition (they never receive the word timeline);
+    ``acoustics_preprocessor`` normalizes the media window every audio
+    extractor receives; an ``aligner`` forced-aligns known sentence text plus
+    its time windows into exact word timings; a ``tts_aligner`` ASR adapter
+    re-transcribes derived TTS audio when no aligner is configured (an honest
+    fallback).
     """
 
     sense_groups: Any | None = None
     acoustics: Any | None = None
     acoustics_preprocessor: Any | None = None
+    acoustic_track: Any | None = None
+    speech_activity: Any | None = None
     prosody: Any | None = None
     phone: Any | None = None
     aligner: Any | None = None
@@ -493,6 +501,37 @@ def run_rich_stages(
             bytes_by_digest[resource.payload_blob["digest"]] = payload_bytes
             acoustics_id = resource.resource_id
             measurements = resolved
+
+    # Frame-level acoustic evidence and speech/non-speech evidence are facts
+    # about the audio rendition alone: they do not receive the word timeline or
+    # the sentences, so their measurement never depends on text segmentation.
+    if stages.acoustic_track is not None and audio_path is not None:
+        status, resource, payload_bytes, typed_warnings = run_acoustic_track(
+            extractor=stages.acoustic_track,
+            preprocessor=stages.acoustics_preprocessor,
+            media_path=audio_path,
+            audio_stream_index=audio_stream_index,
+            context=context,
+            progress=progress,
+        )
+        warnings.extend(typed_warnings)
+        if status == "produced" and resource is not None and payload_bytes is not None:
+            resources.append(resource)
+            bytes_by_digest[resource.payload_blob["digest"]] = payload_bytes
+
+    if stages.speech_activity is not None and audio_path is not None:
+        status, resource, payload_bytes, typed_warnings = run_speech_activity(
+            detector=stages.speech_activity,
+            preprocessor=stages.acoustics_preprocessor,
+            media_path=audio_path,
+            audio_stream_index=audio_stream_index,
+            context=context,
+            progress=progress,
+        )
+        warnings.extend(typed_warnings)
+        if status == "produced" and resource is not None and payload_bytes is not None:
+            resources.append(resource)
+            bytes_by_digest[resource.payload_blob["digest"]] = payload_bytes
 
     if stages.prosody is not None and acoustics_id is not None:
         status, resource, payload_bytes, typed_warnings = run_prosody(

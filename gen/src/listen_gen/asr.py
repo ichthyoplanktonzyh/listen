@@ -302,261 +302,534 @@ def _parse_transcript(raw: Any) -> AsrTranscript:
 
 
 # ---------------------------------------------------------------------------
-# Faster-Whisper (CTranslate2) & OpenAI Cloud Audio Adapters
+# Neural ASR sidecar adapters (Qwen3-ASR, SenseVoice)
 # ---------------------------------------------------------------------------
+#
+# Both providers run their heavy runtime (torch / transformers / qwen-asr /
+# FunASR) in a separate ``tools/*_asr_wrapper.py`` subprocess so the base
+# install stays light.  The wrapper receives the normalized 16 kHz mono WAV
+# and prints one small "core" JSON object.  These adapters do the pure work
+# that must be tested without a model: language mapping, char-anchored word
+# timing, provider provenance, and the config identity hash.
+
+_WORD_RE = re.compile(r"\w+(?:['’]\w+)*", re.UNICODE)
+
+# Qwen3-ASR emits a language *name*; the reading layer needs a stable BCP-47
+# primary subtag.  This covers every language the 0.6B model supports.  An
+# unrecognized value is a provider output error, never a silent fall back to
+# English.
+_QWEN_NAME_TO_TAG = {
+    "chinese": "zh",
+    "english": "en",
+    "cantonese": "yue",
+    "arabic": "ar",
+    "german": "de",
+    "french": "fr",
+    "spanish": "es",
+    "portuguese": "pt",
+    "indonesian": "id",
+    "italian": "it",
+    "korean": "ko",
+    "russian": "ru",
+    "thai": "th",
+    "vietnamese": "vi",
+    "japanese": "ja",
+    "turkish": "tr",
+    "hindi": "hi",
+    "malay": "ms",
+    "dutch": "nl",
+    "swedish": "sv",
+    "danish": "da",
+    "finnish": "fi",
+    "polish": "pl",
+    "czech": "cs",
+    "filipino": "fil",
+    "persian": "fa",
+    "greek": "el",
+    "romanian": "ro",
+    "hungarian": "hu",
+    "macedonian": "mk",
+}
+_TAG_TO_QWEN_NAME = {
+    tag: name.capitalize() for name, tag in _QWEN_NAME_TO_TAG.items()
+}
+
+# SenseVoiceSmall emits ``<|lang|>`` / ``<|emotion|>`` / ``<|event|>`` meta
+# tags.  Only these language tags become the reading language; everything else
+# is stripped from the transcript text.
+_SENSEVOICE_TAG_TO_TAG = {
+    "zh": "zh",
+    "en": "en",
+    "yue": "yue",
+    "ja": "ja",
+    "ko": "ko",
+}
+_META_TAG_RE = re.compile(r"<\|[^|>]*\|>")
+
+QWEN3_ASR_PROVIDER_ID = "qwen3-asr"
+QWEN3_ASR_PROVIDER_VERSION = "v1"
+QWEN3_ASR_CORE_SCHEMA = "listen_gen.qwen3-asr-core.v1"
+QWEN3_ASR_DEFAULT_MODEL_ID = "Qwen/Qwen3-ASR-0.6B"
+QWEN3_ASR_DEFAULT_ALIGNER_MODEL_ID = "Qwen/Qwen3-ForcedAligner-0.6B"
+
+SENSEVOICE_PROVIDER_ID = "sensevoice"
+SENSEVOICE_PROVIDER_VERSION = "v1"
+SENSEVOICE_CORE_SCHEMA = "listen_gen.sensevoice-asr-core.v1"
+SENSEVOICE_DEFAULT_MODEL_ID = "iic/SenseVoiceSmall"
+SENSEVOICE_DEFAULT_VAD_MODEL = "fsmn-vad"
 
 
-class FasterWhisperAsrAdapter:
-    """High-throughput local Whisper transcription using faster-whisper (CTranslate2)."""
-
-    def __init__(
-        self,
-        *,
-        model_size_or_path: str = "base",
-        device: str = "auto",
-        compute_type: str = "default",
-        language: str = "auto",
-        beam_size: int = 5,
-        word_timestamps: bool = True,
-        vad_filter: bool = True,
-        engine: Any = None,
-    ) -> None:
-        self.model_size_or_path = model_size_or_path
-        self.device = device
-        self.compute_type = compute_type
-        self.language = language
-        self.beam_size = beam_size
-        self.word_timestamps = word_timestamps
-        self.vad_filter = vad_filter
-        self._engine = engine
-        self.config_sha256 = f"sha256:{hashlib.sha256(json.dumps({"schema": "listen_gen.faster-whisper-config.v1", "model": model_size_or_path, "device": device, "compute_type": compute_type, "beam_size": beam_size}, sort_keys=True).encode()).hexdigest()}"
-
-    def _resolve_model(self) -> Any:
-        if self._engine is not None:
-            return self._engine
-        try:
-            from faster_whisper import WhisperModel
-
-            return WhisperModel(
-                self.model_size_or_path,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
-        except ImportError as e:
-            raise ConversionError(
-                "faster-whisper is not installed. Install with 'pip install faster-whisper'"
-            ) from e
-
-    def transcribe(self, media_path: Path) -> AsrTranscript:
-        if not media_path.is_file():
-            raise ConversionError("media input is not a regular file")
-        model = self._resolve_model()
-        try:
-            kwargs: dict[str, Any] = {
-                "beam_size": self.beam_size,
-                "word_timestamps": self.word_timestamps,
-                "vad_filter": self.vad_filter,
-            }
-            if self.language != "auto":
-                kwargs["language"] = self.language
-            segments_gen, info = model.transcribe(str(media_path), **kwargs)
-            detected_lang = (
-                getattr(info, "language", "en")
-                if self.language == "auto"
-                else self.language
-            )
-            if not LANGUAGE_RE.fullmatch(detected_lang):
-                detected_lang = "en"
-            segments: list[AsrSegment] = []
-            previous_end = 0
-            for seg in segments_gen:
-                start_ms = int(seg.start * 1000)
-                end_ms = max(start_ms + 1, int(seg.end * 1000))
-                if start_ms < previous_end:
-                    start_ms = previous_end
-                if end_ms <= start_ms:
-                    end_ms = start_ms + 1
-                text = seg.text.strip()
-                if not text:
-                    continue
-                words: list[AsrWord] = []
-                if getattr(seg, "words", None):
-                    prev_char = 0
-                    prev_word_end = start_ms
-                    for w in seg.words:
-                        w_text = w.word.strip()
-                        if not w_text:
-                            continue
-                        w_start = max(start_ms, int(w.start * 1000))
-                        w_end = min(end_ms, max(w_start + 1, int(w.end * 1000)))
-                        if w_start < prev_word_end:
-                            w_start = prev_word_end
-                        if w_end <= w_start:
-                            w_end = w_start + 1
-                        char_pos = text.find(w_text, prev_char)
-                        if char_pos == -1:
-                            char_pos = prev_char
-                        char_end = char_pos + len(w_text)
-                        words.append(
-                            AsrWord(
-                                start_char=char_pos,
-                                end_char=char_end,
-                                start_ms=w_start,
-                                end_ms=w_end,
-                                confidence=float(getattr(w, "probability", 0.9)),
-                                timing_source="asr_reported",
-                            )
-                        )
-                        prev_char = char_end
-                        prev_word_end = w_end
-                segments.append(
-                    AsrSegment(
-                        start_ms=start_ms,
-                        end_ms=end_ms,
-                        text=text,
-                        display_text=text,
-                        words=tuple(words),
-                    )
-                )
-                previous_end = end_ms
-            if not segments:
-                raise ConversionError("faster-whisper produced no speech segments")
-            return AsrTranscript(
-                language=detected_lang,
-                segments=tuple(segments),
-                provider_id="faster-whisper",
-                provider_version="1.0.0",
-                model_id=str(self.model_size_or_path),
-                model_version="ctranslate2",
-                config_sha256=self.config_sha256,
-            )
-        except ConversionError:
-            raise
-        except Exception as error:
-            raise ConversionError(f"faster-whisper transcription failed: {error}") from error
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
-class OpenAiAudioAsrAdapter:
-    """Cloud / Remote ASR adapter using OpenAI Audio Transcriptions API."""
+def _fold_token(text: str) -> str:
+    """Fold a unit to case-folded alphanumerics for text-vs-item matching.
 
-    def __init__(
-        self,
-        *,
-        base_url: str = "https://api.openai.com/v1",
-        api_key: str | None = None,
-        model: str = "whisper-1",
-        language: str = "auto",
-        timeout_seconds: float = 300.0,
-        client: Any = None,
-    ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
-        self.model = model
-        self.language = language
-        self.timeout_seconds = timeout_seconds
-        self._client = client
-        self.config_sha256 = f"sha256:{hashlib.sha256(json.dumps({"schema": "listen_gen.openai-audio-config.v1", "base_url": self.base_url, "model": self.model}, sort_keys=True).encode()).hexdigest()}"
+    The forced aligner may tokenize differently from the reading (``don't`` as
+    ``do`` + ``n't``, CJK per character, surrounding punctuation).  Reducing to
+    alphanumerics collapses those differences so a reading word and the
+    provider item(s) that spell it fold to the same key.
+    """
+    return "".join(
+        ch for ch in unicodedata.normalize("NFC", text).casefold() if ch.isalnum()
+    )
 
-    def transcribe(self, media_path: Path) -> AsrTranscript:
-        if not media_path.is_file():
-            raise ConversionError("media input is not a regular file")
-        if self._client is not None:
-            raw = self._client(media_path)
-        else:
-            if not self.api_key:
-                raise ConversionError("OpenAI API key is required for cloud ASR transcription")
-            import urllib.request
-            import uuid
 
-            boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
-            body = bytearray()
-
-            def add_field(name: str, value: str):
-                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n".encode())
-
-            def add_file(name: str, filename: str, data: bytes, content_type: str):
-                body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n".encode())
-                body.extend(data)
-                body.extend(b"\r\n")
-
-            add_field("model", self.model)
-            add_field("response_format", "verbose_json")
-            add_field("timestamp_granularities[]", "word")
-            add_field("timestamp_granularities[]", "segment")
-            if self.language != "auto":
-                add_field("language", self.language)
-            add_file("file", media_path.name, media_path.read_bytes(), "audio/wav")
-            body.extend(f"--{boundary}--\r\n".encode())
-
-            req = urllib.request.Request(
-                f"{self.base_url}/audio/transcriptions",
-                data=bytes(body),
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": f"multipart/form-data; boundary={boundary}",
-                },
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
-                    raw = json.loads(resp.read().decode("utf-8"))
-            except Exception as e:
-                raise ConversionError(f"OpenAI audio transcription request failed: {e}") from e
-
-        # Parse verbose_json format from OpenAI API
-        language = raw.get("language", "en") if self.language == "auto" else self.language
-        if not LANGUAGE_RE.fullmatch(language):
-            language = "en"
-        raw_segments = raw.get("segments") or []
-        segments: list[AsrSegment] = []
-        previous_end = 0
-        for seg in raw_segments:
-            start_ms = int(seg.get("start", 0) * 1000)
-            end_ms = max(start_ms + 1, int(seg.get("end", 0) * 1000))
-            if start_ms < previous_end:
-                start_ms = previous_end
-            if end_ms <= start_ms:
-                end_ms = start_ms + 1
-            text = str(seg.get("text", "")).strip()
-            if not text:
-                continue
-            words: list[AsrWord] = []
-            for w in seg.get("words", []):
-                w_text = str(w.get("word", "")).strip()
-                if not w_text:
-                    continue
-                w_start = max(start_ms, int(w.get("start", 0) * 1000))
-                w_end = min(end_ms, max(w_start + 1, int(w.get("end", 0) * 1000)))
-                words.append(
-                    AsrWord(
-                        start_char=0,
-                        end_char=len(w_text),
-                        start_ms=w_start,
-                        end_ms=w_end,
-                        confidence=0.9,
-                        timing_source="asr_reported",
-                    )
-                )
-            segments.append(
-                AsrSegment(
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    text=text,
-                    display_text=text,
-                    words=tuple(words),
-                )
-            )
-            previous_end = end_ms
-
-        if not segments:
-            raise ConversionError("OpenAI audio transcription returned no segments")
-
-        return AsrTranscript(
-            language=language,
-            segments=tuple(segments),
-            provider_id="openai-audio",
-            provider_version="1.0.0",
-            model_id=self.model,
-            model_version=None,
-            config_sha256=self.config_sha256,
+def _run_sidecar(argv: list[str], timeout_seconds: float) -> str:
+    try:
+        completed = run_argv(
+            argv,
+            timeout_seconds=timeout_seconds,
+            stdout_limit_bytes=ASR_STDOUT_LIMIT_BYTES,
         )
+    except ProcessTimedOut as error:
+        raise ConversionError("asr wrapper timed out") from error
+    except ProcessOutputTooLarge as error:
+        raise ConversionError("asr wrapper output exceeded the safety limit") from error
+    except OSError as error:
+        raise ConversionError("asr wrapper could not be started") from error
+    if completed.returncode != 0:
+        raise ConversionError(
+            f"asr wrapper failed with exit status {completed.returncode}"
+        )
+    return completed.stdout
+
+
+def _core_document(stdout: str, schema: str, provider: str) -> dict[str, Any]:
+    try:
+        document = json.loads(stdout)
+    except json.JSONDecodeError as error:
+        raise ConversionError(f"{provider} wrapper returned invalid json") from error
+    if not isinstance(document, dict) or document.get("schema") != schema:
+        raise ConversionError(f"{provider} wrapper returned an unexpected schema")
+    return document
+
+
+def _core_runtime_version(document: dict[str, Any], provider: str) -> str:
+    version = document.get("runtime_version")
+    if not isinstance(version, str) or not version.strip():
+        raise ConversionError(f"{provider} wrapper omitted its runtime version")
+    return version.strip()
+
+
+def _normalize_core_items(raw_items: Any, provider: str) -> list[tuple[str, int, int]]:
+    """Validate the flat forced-align items a wrapper reports (absolute ms)."""
+    if raw_items is None:
+        return []
+    if not isinstance(raw_items, list):
+        raise ConversionError(f"{provider} wrapper items must be an array")
+    items: list[tuple[str, int, int]] = []
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            raise ConversionError(f"{provider} wrapper item must be an object")
+        text = raw_item.get("text")
+        start_ms = raw_item.get("start_ms")
+        end_ms = raw_item.get("end_ms")
+        if not isinstance(text, str):
+            raise ConversionError(f"{provider} wrapper item text must be a string")
+        if (
+            not isinstance(start_ms, int)
+            or isinstance(start_ms, bool)
+            or not isinstance(end_ms, int)
+            or isinstance(end_ms, bool)
+            or start_ms < 0
+            or end_ms < start_ms
+        ):
+            raise ConversionError(f"{provider} wrapper item timing is invalid")
+        items.append((text, start_ms, end_ms))
+    return items
+
+
+def _words_from_aligned_items(
+    text: str, items: list[tuple[str, int, int]]
+) -> list[dict[str, Any]]:
+    """Anchor flat forced-align items onto the reading word tokens.
+
+    Every emitted word is exactly a ``_WORD_RE`` token span of ``text`` (so its
+    span coincides with the sentence-assembly lexical spans that decide
+    boundaries), and its timing comes from the provider item(s) that spell it.
+
+    The forced aligner tokenizes the exact transcript text, so the folded
+    reading words and the folded items are the same character stream — only the
+    token boundaries differ (``red-eye`` reads as two words but aligns as one
+    ``redeye`` item; ``don't`` reads as one word but aligns as ``do`` + ``n't``;
+    CJK reads as one run but aligns per character).  Walking that shared folded
+    stream character-by-character reunites each reading word with the item(s)
+    that spell it, handling 1:1, provider sub-splits, and provider merges
+    uniformly.  A reading word the aligner never spells carries no timing —
+    nothing is fabricated or interpolated from character counts.
+    """
+    word_spans = [(match.start(), match.end()) for match in _WORD_RE.finditer(text)]
+    item_folds = [_fold_token(item_text) for item_text, _start, _end in items]
+    char_item: list[int] = []
+    for index, folded in enumerate(item_folds):
+        char_item.extend([index] * len(folded))
+    stream = "".join(item_folds)
+    total = len(stream)
+    words: list[dict[str, Any]] = []
+    position = 0
+    previous_end_ms = 0
+    for start_char, end_char in word_spans:
+        target = _fold_token(text[start_char:end_char])
+        if not target:
+            continue
+        length = len(target)
+        if position + length <= total and stream[position : position + length] == target:
+            begin = position
+        else:
+            # Divergence should not happen (same underlying text); if the
+            # aligner ever omits a word, resync to its next occurrence rather
+            # than desyncing the whole stream.
+            begin = stream.find(target, position)
+            if begin == -1:
+                continue
+        end = begin + length
+        position = end
+        start_ms = items[char_item[begin]][1]
+        end_ms = items[char_item[end - 1]][2]
+        if start_ms < previous_end_ms:
+            start_ms = previous_end_ms
+        if end_ms <= start_ms:
+            continue
+        words.append(
+            {
+                "start_char": start_char,
+                "end_char": end_char,
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "timing_source": "asr_reported",
+            }
+        )
+        previous_end_ms = end_ms
+    return words
+
+
+def _qwen_language_to_tag(raw_language: str) -> str:
+    first = raw_language.split(",")[0].strip().lower() if raw_language else ""
+    tag = _QWEN_NAME_TO_TAG.get(first)
+    if tag is None:
+        raise ConversionError("qwen3 asr returned an unrecognized language")
+    return tag
+
+
+class Qwen3AsrAdapter:
+    """Default local ASR provider backed by Qwen3-ASR-0.6B via a sidecar.
+
+    The ``tools/qwen3_asr_wrapper.py`` subprocess runs the official ``qwen-asr``
+    Transformers backend with the Qwen3 forced aligner attached, so the wrapper
+    already handles long-audio chunking and returns real per-token timestamps.
+    This adapter maps the wrapper's language name to a BCP-47 tag, anchors the
+    forced-align items onto reading word tokens, and stamps provider
+    provenance.  The word timings are only *evidence* for sentence assembly; the
+    authoritative word timeline is still produced by the configured forced
+    aligner in the rich chain.
+    """
+
+    def __init__(
+        self,
+        python: Path,
+        sidecar: Path,
+        *,
+        model_id: str = QWEN3_ASR_DEFAULT_MODEL_ID,
+        forced_aligner_model_id: str = QWEN3_ASR_DEFAULT_ALIGNER_MODEL_ID,
+        language: str = "auto",
+        device: str = "auto",
+        dtype: str = "auto",
+        timeout_seconds: float = 3600.0,
+        progress: Callable[[str], None] | None = None,
+    ) -> None:
+        if not python.is_file():
+            raise ConversionError("qwen3 asr python interpreter must be a regular file")
+        if not sidecar.is_file():
+            raise ConversionError("qwen3 asr sidecar must be a regular file")
+        if not model_id.strip():
+            raise ConversionError("qwen3 asr model id must be non-empty")
+        if not forced_aligner_model_id.strip():
+            raise ConversionError("qwen3 asr forced aligner model id must be non-empty")
+        if timeout_seconds <= 0:
+            raise ConversionError("qwen3 asr timeout must be positive")
+        self.python = python
+        self.sidecar = sidecar
+        self.model_id = model_id.strip()
+        self.forced_aligner_model_id = forced_aligner_model_id.strip()
+        self.language = (language or "auto").strip() or "auto"
+        self.device = (device or "auto").strip() or "auto"
+        self.dtype = (dtype or "auto").strip() or "auto"
+        self.timeout_seconds = timeout_seconds
+        self.progress = progress
+
+    def _request_language(self) -> str:
+        lang = self.language.lower()
+        if lang in ("", "auto", "und"):
+            return "auto"
+        name = _TAG_TO_QWEN_NAME.get(lang.split("-")[0])
+        if name is None:
+            raise ConversionError("qwen3 asr language is unsupported")
+        return name
+
+    def _config_sha256(self, runtime_version: str) -> str:
+        config = {
+            "schema": "listen_gen.qwen3-asr-config.v1",
+            "provider": QWEN3_ASR_PROVIDER_ID,
+            "model_id": self.model_id,
+            "forced_aligner_model_id": self.forced_aligner_model_id,
+            "language": self.language,
+            "device": self.device,
+            "dtype": self.dtype,
+            "sidecar_sha256": _file_sha256(self.sidecar),
+            "runtime_version": runtime_version,
+        }
+        return "sha256:" + hashlib.sha256(
+            json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+    def transcribe(self, media_path: Path) -> AsrTranscript:
+        if not media_path.is_file():
+            raise ConversionError("media input is not a regular file")
+        if self.progress is not None:
+            self.progress("transcribing")
+        argv = [
+            str(self.python),
+            str(self.sidecar),
+            "--audio",
+            str(media_path),
+            "--model-id",
+            self.model_id,
+            "--forced-aligner-model-id",
+            self.forced_aligner_model_id,
+            "--language",
+            self._request_language(),
+            "--device",
+            self.device,
+            "--dtype",
+            self.dtype,
+        ]
+        document = _core_document(
+            _run_sidecar(argv, self.timeout_seconds),
+            QWEN3_ASR_CORE_SCHEMA,
+            "qwen3 asr",
+        )
+        runtime_version = _core_runtime_version(document, "qwen3 asr")
+        raw_language = document.get("language")
+        text = document.get("text")
+        if not isinstance(raw_language, str) or not isinstance(text, str):
+            raise ConversionError("qwen3 asr wrapper returned invalid fields")
+        text = text.strip()
+        if not text:
+            raise ConversionError("qwen3 asr produced an empty transcript")
+        language = _qwen_language_to_tag(raw_language)
+        items = _normalize_core_items(document.get("items"), "qwen3 asr")
+        words = _words_from_aligned_items(text, items)
+        if words:
+            segment_start = words[0]["start_ms"]
+            segment_end = words[-1]["end_ms"]
+        else:
+            duration_ms = document.get("duration_ms")
+            if (
+                not isinstance(duration_ms, int)
+                or isinstance(duration_ms, bool)
+                or duration_ms <= 0
+            ):
+                raise ConversionError("qwen3 asr produced neither timing nor duration")
+            segment_start, segment_end = 0, duration_ms
+        if segment_end <= segment_start:
+            segment_end = segment_start + 1
+        normalized = {
+            "schema": "listen_gen.asr-result.v1",
+            "language": language,
+            "provider": {
+                "id": QWEN3_ASR_PROVIDER_ID,
+                "version": QWEN3_ASR_PROVIDER_VERSION,
+            },
+            "model": {"id": self.model_id, "version": runtime_version},
+            "config_sha256": self._config_sha256(runtime_version),
+            "segments": [
+                {
+                    "start_ms": segment_start,
+                    "end_ms": segment_end,
+                    "text": text,
+                    "display_text": text,
+                    "words": words,
+                }
+            ],
+        }
+        return _parse_transcript(normalized)
+
+
+class SenseVoiceAsrAdapter:
+    """Fast / CPU ASR provider backed by SenseVoiceSmall via a sidecar.
+
+    The ``tools/sensevoice_asr_wrapper.py`` subprocess runs the FunASR
+    SenseVoice + FSMN-VAD pipeline and returns one timed fragment per VAD speech
+    region.  This adapter strips the SenseVoice ``<|...|>`` meta tags out of the
+    reading text, maps the language tag to a stable BCP-47 tag, and emits
+    segments without word timings (``words=()``) — a VAD region is coarse timed
+    evidence, and forced alignment supplies the final word timeline.
+    """
+
+    def __init__(
+        self,
+        python: Path,
+        sidecar: Path,
+        *,
+        model_id: str = SENSEVOICE_DEFAULT_MODEL_ID,
+        language: str = "auto",
+        device: str = "auto",
+        vad_model: str = SENSEVOICE_DEFAULT_VAD_MODEL,
+        timeout_seconds: float = 3600.0,
+        progress: Callable[[str], None] | None = None,
+    ) -> None:
+        if not python.is_file():
+            raise ConversionError("sensevoice python interpreter must be a regular file")
+        if not sidecar.is_file():
+            raise ConversionError("sensevoice sidecar must be a regular file")
+        if not model_id.strip():
+            raise ConversionError("sensevoice model id must be non-empty")
+        if timeout_seconds <= 0:
+            raise ConversionError("sensevoice timeout must be positive")
+        self.python = python
+        self.sidecar = sidecar
+        self.model_id = model_id.strip()
+        self.language = (language or "auto").strip() or "auto"
+        self.device = (device or "auto").strip() or "auto"
+        self.vad_model = (vad_model or SENSEVOICE_DEFAULT_VAD_MODEL).strip()
+        self.timeout_seconds = timeout_seconds
+        self.progress = progress
+
+    def _config_sha256(self, runtime_version: str) -> str:
+        config = {
+            "schema": "listen_gen.sensevoice-asr-config.v1",
+            "provider": SENSEVOICE_PROVIDER_ID,
+            "model_id": self.model_id,
+            "language": self.language,
+            "device": self.device,
+            "vad_model": self.vad_model,
+            "sidecar_sha256": _file_sha256(self.sidecar),
+            "runtime_version": runtime_version,
+        }
+        return "sha256:" + hashlib.sha256(
+            json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+    def transcribe(self, media_path: Path) -> AsrTranscript:
+        if not media_path.is_file():
+            raise ConversionError("media input is not a regular file")
+        if self.progress is not None:
+            self.progress("transcribing")
+        argv = [
+            str(self.python),
+            str(self.sidecar),
+            "--audio",
+            str(media_path),
+            "--model-id",
+            self.model_id,
+            "--language",
+            self.language,
+            "--device",
+            self.device,
+            "--vad-model",
+            self.vad_model,
+        ]
+        document = _core_document(
+            _run_sidecar(argv, self.timeout_seconds),
+            SENSEVOICE_CORE_SCHEMA,
+            "sensevoice",
+        )
+        runtime_version = _core_runtime_version(document, "sensevoice")
+        raw_segments = document.get("segments")
+        if not isinstance(raw_segments, list) or not raw_segments:
+            raise ConversionError("sensevoice wrapper returned no segments")
+        language: str | None = None
+        segments: list[dict[str, Any]] = []
+        for raw_segment in raw_segments:
+            if not isinstance(raw_segment, dict):
+                raise ConversionError("sensevoice segment must be an object")
+            start_ms = raw_segment.get("start_ms")
+            end_ms = raw_segment.get("end_ms")
+            raw_text = raw_segment.get("text")
+            if (
+                not isinstance(start_ms, int)
+                or isinstance(start_ms, bool)
+                or not isinstance(end_ms, int)
+                or isinstance(end_ms, bool)
+                or not isinstance(raw_text, str)
+            ):
+                raise ConversionError("sensevoice segment fields are invalid")
+            segment_language, clean_text = _clean_sensevoice_text(raw_text)
+            if not clean_text:
+                continue
+            if segment_language is not None and language is None:
+                language = segment_language
+            segments.append(
+                {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "text": clean_text,
+                    "display_text": clean_text,
+                    "words": [],
+                }
+            )
+        if not segments:
+            raise ConversionError("sensevoice produced an empty transcript")
+        if language is None:
+            language = _sensevoice_language(self.language)
+        if language is None:
+            raise ConversionError("sensevoice returned an unrecognized language")
+        normalized = {
+            "schema": "listen_gen.asr-result.v1",
+            "language": language,
+            "provider": {
+                "id": SENSEVOICE_PROVIDER_ID,
+                "version": SENSEVOICE_PROVIDER_VERSION,
+            },
+            "model": {"id": self.model_id, "version": runtime_version},
+            "config_sha256": self._config_sha256(runtime_version),
+            "segments": segments,
+        }
+        return _parse_transcript(normalized)
+
+
+def _sensevoice_language(value: str) -> str | None:
+    return _SENSEVOICE_TAG_TO_TAG.get((value or "").strip().lower())
+
+
+def _clean_sensevoice_text(raw_text: str) -> tuple[str | None, str]:
+    """Split a SenseVoice hypothesis into (language tag, clean reading text).
+
+    SenseVoice prefixes meta tags such as ``<|en|><|NEUTRAL|><|Speech|>``.  The
+    first language tag becomes the reading language; every ``<|...|>`` tag is
+    removed from the text so audio-event and emotion markers never leak into
+    Structured Reading.
+    """
+    language: str | None = None
+    for match in _META_TAG_RE.finditer(raw_text):
+        token = match.group(0)[2:-2].strip().lower()
+        if language is None and token in _SENSEVOICE_TAG_TO_TAG:
+            language = _SENSEVOICE_TAG_TO_TAG[token]
+    clean = _META_TAG_RE.sub("", raw_text)
+    return language, " ".join(clean.split()).strip()

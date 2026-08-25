@@ -945,7 +945,7 @@ def _tts_rich_stages(
             if segments:
                 try:
                     aligned_result = stages.aligner.align(
-                        AlignmentRequest(audio_path, segments)
+                        AlignmentRequest(audio_path, segments, language=language)
                     )
                     align_segments = segments
                 except ConversionError as error:
@@ -1091,7 +1091,11 @@ def _media_rich_stages(
             if segments:
                 try:
                     aligned_result = stages.aligner.align(
-                        AlignmentRequest(audio_path, segments)
+                        AlignmentRequest(
+                            audio_path,
+                            segments,
+                            language=derived.resource.content_language,
+                        )
                     )
                     align_segments = segments
                 except ConversionError as error:

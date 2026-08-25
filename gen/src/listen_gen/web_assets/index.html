@@ -898,39 +898,134 @@
           </div>
         </div>
 
-        <!-- 2. Local ASR (Whisper.cpp) -->
+        <!-- 2. Local ASR -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">🎙️ 语音识别 (ASR) — Whisper.cpp 本地模型</h3>
+            <h3 class="card-title">🎙️ 语音识别 (ASR)</h3>
             <span class="badge badge-warning" id="asr-status-badge"><span class="badge-dot"></span> 待检测</span>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Whisper CLI 可执行文件路径</label>
-              <input type="text" class="form-input" id="asr-whisper-cli" value="whisper-cli">
-            </div>
-            <div class="form-group">
-              <label class="form-label">本地 GGML 模型文件路径 (.bin)</label>
-              <input type="text" class="form-input" id="asr-whisper-model" placeholder="/path/to/ggml-base.en.bin">
-            </div>
-          </div>
+          <p class="hint" style="margin-bottom: 1rem;">ASR 负责识别文本与带时间的片段；最终词级时间轴由强制对齐 (Forced Aligner) 生成。</p>
 
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">识别语言</label>
-              <input type="text" class="form-input" id="asr-whisper-lang" value="auto">
-            </div>
-            <div class="form-group" style="display: flex; align-items: center; margin-top: 1.5rem;">
-              <label class="checkbox-item">
-                <input type="checkbox" id="asr-whisper-translate">
-                <span class="checkbox-label-title">翻译为英文 (Translate to English)</span>
-              </label>
+              <label class="form-label">ASR 提供者 (Provider)</label>
+              <select class="form-select" id="asr-provider">
+                <option value="qwen3">Qwen3-ASR-0.6B（默认 / 本地）</option>
+                <option value="sensevoice">SenseVoiceSmall（快速 / CPU）</option>
+                <option value="whisper-cpp">Whisper.cpp large-v3-turbo（兼容 / 多语言）</option>
+                <option value="none">关闭 (None)</option>
+              </select>
             </div>
           </div>
 
-          <button class="btn btn-secondary btn-sm" id="btn-test-whisper">🔍 检测 Whisper CLI 与模型文件</button>
-          <div class="test-feedback" id="whisper-test-feedback"></div>
+          <!-- Qwen3 -->
+          <div id="asr-group-qwen3" class="asr-group">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Sidecar 独立 Python 解释器</label>
+                <input type="text" class="form-input" id="asr-qwen3-python" placeholder="python3">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sidecar 脚本路径 (qwen3_asr_wrapper.py)</label>
+                <input type="text" class="form-input" id="asr-qwen3-sidecar" placeholder="/path/to/tools/qwen3_asr_wrapper.py">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Model ID</label>
+                <input type="text" class="form-input" id="asr-qwen3-model" value="Qwen/Qwen3-ASR-0.6B">
+              </div>
+              <div class="form-group">
+                <label class="form-label">识别语言 (auto / en / zh …)</label>
+                <input type="text" class="form-input" id="asr-qwen3-lang" value="auto">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">运行设备 (Device)</label>
+                <select class="form-select" id="asr-qwen3-device">
+                  <option value="auto">自动 (auto)</option>
+                  <option value="mps">Apple MPS</option>
+                  <option value="cuda">CUDA</option>
+                  <option value="cpu">CPU</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">强制对齐 Model ID（供 ASR 阶段时间证据）</label>
+                <input type="text" class="form-input" id="asr-qwen3-aligner" value="Qwen/Qwen3-ForcedAligner-0.6B">
+              </div>
+            </div>
+          </div>
+
+          <!-- SenseVoice -->
+          <div id="asr-group-sensevoice" class="asr-group" style="display:none;">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Sidecar 独立 Python 解释器</label>
+                <input type="text" class="form-input" id="asr-sensevoice-python" placeholder="python3">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sidecar 脚本路径 (sensevoice_asr_wrapper.py)</label>
+                <input type="text" class="form-input" id="asr-sensevoice-sidecar" placeholder="/path/to/tools/sensevoice_asr_wrapper.py">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Model ID</label>
+                <input type="text" class="form-input" id="asr-sensevoice-model" value="iic/SenseVoiceSmall">
+              </div>
+              <div class="form-group">
+                <label class="form-label">识别语言 (auto / zh / en / yue / ja / ko)</label>
+                <input type="text" class="form-input" id="asr-sensevoice-lang" value="auto">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">运行设备 (Device)</label>
+                <select class="form-select" id="asr-sensevoice-device">
+                  <option value="auto">自动 (auto)</option>
+                  <option value="mps">Apple MPS</option>
+                  <option value="cuda">CUDA</option>
+                  <option value="cpu">CPU</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Whisper.cpp -->
+          <div id="asr-group-whisper-cpp" class="asr-group" style="display:none;">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Whisper CLI 可执行文件路径</label>
+                <input type="text" class="form-input" id="asr-whisper-cli" value="whisper-cli">
+              </div>
+              <div class="form-group">
+                <label class="form-label">本地 GGML 模型文件路径 (.bin)</label>
+                <input type="text" class="form-input" id="asr-whisper-model" placeholder="/path/to/ggml-large-v3-turbo.bin">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Model ID</label>
+                <input type="text" class="form-input" id="asr-whisper-model-id" value="ggml-large-v3-turbo.bin">
+              </div>
+              <div class="form-group">
+                <label class="form-label">识别语言</label>
+                <input type="text" class="form-input" id="asr-whisper-lang" value="auto">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="display: flex; align-items: center; margin-top: 1.5rem;">
+                <label class="checkbox-item">
+                  <input type="checkbox" id="asr-whisper-translate">
+                  <span class="checkbox-label-title">翻译为英文 (Translate to English)</span>
+                </label>
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-test-whisper">🔍 检测 Whisper CLI 与模型文件</button>
+            <div class="test-feedback" id="whisper-test-feedback"></div>
+          </div>
         </div>
 
         <!-- 3. Phones & Aligner -->
@@ -952,9 +1047,23 @@
 
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">TorchAudio 强制对齐脚本路径</label>
-              <input type="text" class="form-input" id="aligner-script" placeholder="/path/to/aligner_sidecar.py">
+              <label class="form-label">强制对齐 Provider (Forced Aligner)</label>
+              <select class="form-select" id="aligner-provider">
+                <option value="none">关闭 (None)</option>
+                <option value="qwen">Qwen3-ForcedAligner-0.6B</option>
+              </select>
             </div>
+            <div class="form-group">
+              <label class="form-label">强制对齐运行设备 (Device)</label>
+              <select class="form-select" id="aligner-device">
+                <option value="auto">自动 (auto)</option>
+                <option value="mps">Apple MPS</option>
+                <option value="cuda">CUDA</option>
+                <option value="cpu">CPU</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
             <div class="form-group">
               <label class="form-label">Sidecar 独立 Python 解释器</label>
               <input type="text" class="form-input" id="phones-python" value="python3">
@@ -1868,10 +1977,27 @@
       renderLlmForm(state.currentLlmTab);
 
       const asr = state.config.asr || {};
-      document.getElementById('asr-whisper-cli').value = asr.whisper_cli || 'whisper-cli';
-      document.getElementById('asr-whisper-model').value = asr.whisper_model || '';
-      document.getElementById('asr-whisper-lang').value = asr.whisper_language || 'auto';
-      document.getElementById('asr-whisper-translate').checked = !!asr.whisper_translate_to_english;
+      const qwen3 = asr.qwen3 || {};
+      const sensevoice = asr.sensevoice || {};
+      const whisperCpp = asr.whisper_cpp || {};
+      document.getElementById('asr-provider').value = asr.provider || 'qwen3';
+      document.getElementById('asr-qwen3-python').value = qwen3.python || '';
+      document.getElementById('asr-qwen3-sidecar').value = qwen3.sidecar || '';
+      document.getElementById('asr-qwen3-model').value = qwen3.model_id || 'Qwen/Qwen3-ASR-0.6B';
+      document.getElementById('asr-qwen3-lang').value = qwen3.language || 'auto';
+      document.getElementById('asr-qwen3-device').value = qwen3.device || 'auto';
+      document.getElementById('asr-qwen3-aligner').value = qwen3.forced_aligner_model_id || 'Qwen/Qwen3-ForcedAligner-0.6B';
+      document.getElementById('asr-sensevoice-python').value = sensevoice.python || '';
+      document.getElementById('asr-sensevoice-sidecar').value = sensevoice.sidecar || '';
+      document.getElementById('asr-sensevoice-model').value = sensevoice.model_id || 'iic/SenseVoiceSmall';
+      document.getElementById('asr-sensevoice-lang').value = sensevoice.language || 'auto';
+      document.getElementById('asr-sensevoice-device').value = sensevoice.device || 'auto';
+      document.getElementById('asr-whisper-cli').value = whisperCpp.cli || 'whisper-cli';
+      document.getElementById('asr-whisper-model').value = whisperCpp.model || '';
+      document.getElementById('asr-whisper-model-id').value = whisperCpp.model_id || 'ggml-large-v3-turbo.bin';
+      document.getElementById('asr-whisper-lang').value = whisperCpp.language || 'auto';
+      document.getElementById('asr-whisper-translate').checked = !!whisperCpp.translate_to_english;
+      updateAsrGroups();
 
       const phones = state.config.phones || {};
       document.getElementById('phones-sidecar').value = phones.wav2vec2_sidecar || '';
@@ -1879,7 +2005,8 @@
       document.getElementById('phones-python').value = phones.wav2vec2_python || 'python3';
 
       const aligner = state.config.aligner || {};
-      document.getElementById('aligner-script').value = aligner.aligner_script || '';
+      document.getElementById('aligner-provider').value = aligner.provider || 'none';
+      document.getElementById('aligner-device').value = aligner.device || 'auto';
 
       const tts = state.config.tts || {};
       document.getElementById('tts-provider').value = tts.provider || 'kokoro';
@@ -1948,10 +2075,32 @@
 
       state.config.asr = {
         ...(state.config.asr || {}),
-        whisper_cli: document.getElementById('asr-whisper-cli').value,
-        whisper_model: document.getElementById('asr-whisper-model').value,
-        whisper_language: document.getElementById('asr-whisper-lang').value,
-        whisper_translate_to_english: document.getElementById('asr-whisper-translate').checked,
+        provider: document.getElementById('asr-provider').value,
+        qwen3: {
+          ...((state.config.asr || {}).qwen3 || {}),
+          python: document.getElementById('asr-qwen3-python').value,
+          sidecar: document.getElementById('asr-qwen3-sidecar').value,
+          model_id: document.getElementById('asr-qwen3-model').value,
+          language: document.getElementById('asr-qwen3-lang').value,
+          device: document.getElementById('asr-qwen3-device').value,
+          forced_aligner_model_id: document.getElementById('asr-qwen3-aligner').value,
+        },
+        sensevoice: {
+          ...((state.config.asr || {}).sensevoice || {}),
+          python: document.getElementById('asr-sensevoice-python').value,
+          sidecar: document.getElementById('asr-sensevoice-sidecar').value,
+          model_id: document.getElementById('asr-sensevoice-model').value,
+          language: document.getElementById('asr-sensevoice-lang').value,
+          device: document.getElementById('asr-sensevoice-device').value,
+        },
+        whisper_cpp: {
+          ...((state.config.asr || {}).whisper_cpp || {}),
+          cli: document.getElementById('asr-whisper-cli').value,
+          model: document.getElementById('asr-whisper-model').value,
+          model_id: document.getElementById('asr-whisper-model-id').value,
+          language: document.getElementById('asr-whisper-lang').value,
+          translate_to_english: document.getElementById('asr-whisper-translate').checked,
+        },
       };
 
       state.config.phones = {
@@ -1962,7 +2111,8 @@
       };
       state.config.aligner = {
         ...(state.config.aligner || {}),
-        aligner_script: document.getElementById('aligner-script').value,
+        provider: document.getElementById('aligner-provider').value,
+        device: document.getElementById('aligner-device').value,
       };
 
       state.config.tts = {
@@ -2087,6 +2237,14 @@
         fb.textContent = `❌ 请求错误: ${err.message}`;
       }
     });
+
+    function updateAsrGroups() {
+      const provider = document.getElementById('asr-provider').value;
+      document.querySelectorAll('.asr-group').forEach(el => { el.style.display = 'none'; });
+      const active = document.getElementById('asr-group-' + provider);
+      if (active) active.style.display = '';
+    }
+    document.getElementById('asr-provider').addEventListener('change', updateAsrGroups);
 
     document.getElementById('btn-test-whisper').addEventListener('click', async () => {
       const payload = {

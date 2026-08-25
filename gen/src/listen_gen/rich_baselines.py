@@ -46,9 +46,12 @@ from typing import Any
 
 from .rich import (
     RichStageFailure,
+    AcousticFrame,
     AcousticMeasurement,
     AcousticsRequest,
     AcousticsResult,
+    AcousticTrackRequest,
+    AcousticTrackResult,
     ProsodicChunk,
     ProsodyAnchor,
     ProsodyRequest,
@@ -57,6 +60,9 @@ from .rich import (
     SenseGroup,
     SenseGroupRequest,
     SenseGroupResult,
+    SpeechActivityRequest,
+    SpeechActivityResult,
+    SpeechSpan,
 )
 
 NORMALIZED_SAMPLE_RATE_HZ = 16000
@@ -814,3 +820,311 @@ class ParselmouthAcousticsBaseline:
                 )
             )
         return measurements
+
+
+# ---------------------------------------------------------------------------
+# Frame-level acoustic evidence (AcousticTrack) and speech activity
+# ---------------------------------------------------------------------------
+#
+# These two producers are audio-only: they read the normalized WAV and never
+# see the word timeline, the sentences, or any language-specific unit. They
+# share the same low-level primitives as the word-acoustics baselines
+# (``_read_normalized_wav``, ``_rms_dbfs``, ``_median``) so the same audio is
+# not analyzed by two unrelated algorithms; the word-acoustics baselines still
+# aggregate per word window and are unchanged.
+
+ACOUSTIC_TRACK_CONFIG_SCHEMA = "listen_gen.acoustic-track-baseline-config.v1"
+SPEECH_ACTIVITY_CONFIG_SCHEMA = "listen_gen.speech-activity-baseline-config.v1"
+
+# Fixed analysis hop. 10 ms is the conventional frame step for energy/F0 tracks.
+DEFAULT_FRAME_STEP_MS = 10
+
+# Speech/non-speech thresholds. A frame is speech when its energy rises a clear
+# margin above the recording's own noise floor (estimated as a low energy
+# percentile). Short interior silences are bridged and short speech blips are
+# dropped so ordinary intra-word gaps do not over-segment the audio. These are
+# ordinary VAD smoothing constants, not perceptual-boundary parameters.
+SPEECH_ENERGY_MARGIN_DB = 6.0
+SPEECH_NOISE_FLOOR_PERCENTILE = 10
+SPEECH_MIN_SILENCE_MS = 120
+SPEECH_MIN_SPEECH_MS = 60
+
+
+def _frame_energy_dbfs(path: Path, frame_step_ms: int) -> tuple[int, int, list[float], int]:
+    """Per-frame RMS energy (dBFS) over the normalized WAV.
+
+    Returns ``(sample_rate_hz, frame_step_samples, energies, total_ms)``. Only
+    whole frames are measured; the trailing partial frame is dropped. Raises
+    ``ValueError`` when the audio is not the normalized format or is shorter
+    than one frame.
+    """
+    sample_rate, samples = _read_normalized_wav(path)
+    if sample_rate != NORMALIZED_SAMPLE_RATE_HZ:
+        raise ValueError("audio is not normalized 16 kHz mono PCM")
+    step = sample_rate * frame_step_ms // 1000
+    if step <= 0:
+        raise ValueError("frame step is too small for the sample rate")
+    sample_count = len(samples)
+    energies: list[float] = []
+    index = 0
+    while index + step <= sample_count:
+        window = samples[index : index + step]
+        rms = math.sqrt(sum(sample * sample for sample in window) / step)
+        energies.append(_rms_dbfs(rms))
+        index += step
+    if not energies:
+        raise ValueError("audio is shorter than one analysis frame")
+    total_ms = sample_count * 1000 // sample_rate
+    return sample_rate, step, energies, total_ms
+
+
+def _percentile(ordered: list[float], percentile: int) -> float:
+    """A deterministic percentile of an already-sorted, non-empty list."""
+    if not ordered:
+        raise ValueError("percentile of an empty list")
+    position = (len(ordered) - 1) * percentile // 100
+    return ordered[position]
+
+
+class AcousticTrackBaseline:
+    """Audio-backed frame-level acoustic-track producer over the normalized WAV.
+
+    Every frame carries raw energy in dBFS and its value relative to the
+    recording's own median (so recordings of different loudness are
+    comparable). When ``praat-parselmouth`` is available it also carries F0 in
+    Hz, F0 relative to the recording's median in semitones, and a voiced flag;
+    without it the pitch fields stay ``null`` and ``voiced`` stays ``null``
+    (energy-only track) rather than fabricating a pitch. No field is an
+    interpretation: prominence, anchors, weakness, and boundaries are left to
+    Core, which knows the language.
+    """
+
+    provider_id = "baseline-acoustic-track"
+    provider_version = "1"
+    energy_baseline_label = "recording_median_dbfs"
+    pitch_baseline_label = "recording_median_f0_hz"
+
+    def __init__(
+        self,
+        *,
+        frame_step_ms: int = DEFAULT_FRAME_STEP_MS,
+        pitch_floor: float = 75.0,
+        pitch_ceiling: float = 600.0,
+    ) -> None:
+        if frame_step_ms <= 0:
+            raise ValueError("frame_step_ms must be positive")
+        self.frame_step_ms = frame_step_ms
+        self.pitch_floor = pitch_floor
+        self.pitch_ceiling = pitch_ceiling
+        self.config_sha256 = _config_sha256(
+            {
+                "schema": ACOUSTIC_TRACK_CONFIG_SCHEMA,
+                "provider_id": self.provider_id,
+                "frame_step_ms": self.frame_step_ms,
+                "pitch_floor": self.pitch_floor,
+                "pitch_ceiling": self.pitch_ceiling,
+                "energy_baseline": self.energy_baseline_label,
+                "pitch_baseline": self.pitch_baseline_label,
+                "input": {
+                    "container": "wav",
+                    "channels": NORMALIZED_CHANNELS,
+                    "sample_format": NORMALIZED_SAMPLE_FORMAT,
+                    "sample_rate_hz": NORMALIZED_SAMPLE_RATE_HZ,
+                },
+            }
+        )
+
+    def measure(self, request: AcousticTrackRequest) -> AcousticTrackResult:
+        try:
+            sample_rate, step, energies, _total_ms = _frame_energy_dbfs(
+                request.audio_path, self.frame_step_ms
+            )
+        except (OSError, ValueError) as error:
+            raise _fail("acoustic_track", "failed") from error
+
+        f0_by_frame = self._measure_pitch(request.audio_path, len(energies))
+        # When no pitch tracker is available every entry is ``None`` and voicing
+        # was not measured, so the voiced flag stays ``null`` rather than a
+        # false ``False``.
+        pitch_measured = any(value is not None for value in f0_by_frame)
+        energy_baseline = _median(energies)
+        voiced_f0 = [value for value in f0_by_frame if value is not None]
+        pitch_baseline = _median(voiced_f0) if voiced_f0 else None
+
+        frames: list[AcousticFrame] = []
+        for index, energy_dbfs in enumerate(energies):
+            f0_hz = f0_by_frame[index]
+            if f0_hz is not None and pitch_baseline and pitch_baseline > 0 and f0_hz > 0:
+                f0_rel_st: float | None = _round1(12.0 * math.log2(f0_hz / pitch_baseline))
+            else:
+                f0_rel_st = None
+            frames.append(
+                AcousticFrame(
+                    time_ms=index * self.frame_step_ms,
+                    energy_dbfs=_round1(energy_dbfs),
+                    energy_rel_db=_round1(energy_dbfs - energy_baseline),
+                    f0_hz=_round1(f0_hz) if f0_hz is not None else None,
+                    f0_rel_st=f0_rel_st,
+                    voiced=(f0_hz is not None) if pitch_measured else None,
+                )
+            )
+        return AcousticTrackResult(
+            sample_rate_hz=sample_rate,
+            frame_step_ms=self.frame_step_ms,
+            energy_baseline=self.energy_baseline_label,
+            pitch_baseline=self.pitch_baseline_label,
+            frames=tuple(frames),
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+            config_sha256=self.config_sha256,
+        )
+
+    def _measure_pitch(self, path: Path, frame_count: int) -> list[float | None]:
+        """F0 (Hz) sampled at each frame centre, or ``None`` per frame.
+
+        Returns a list of ``None`` of length ``frame_count`` when no pitch
+        tracker is available; the caller then leaves both pitch fields and the
+        voiced flag null rather than fabricating a measurement.
+        """
+        try:
+            import parselmouth
+        except ImportError:
+            return [None] * frame_count
+        try:
+            sound = parselmouth.Sound(str(path))
+            pitch_obj = sound.to_pitch(
+                time_step=self.frame_step_ms / 1000.0,
+                pitch_floor=self.pitch_floor,
+                pitch_ceiling=self.pitch_ceiling,
+            )
+        except Exception:
+            return [None] * frame_count
+        step_s = self.frame_step_ms / 1000.0
+        values: list[float | None] = []
+        for index in range(frame_count):
+            centre = (index + 0.5) * step_s
+            try:
+                value = pitch_obj.get_value_at_time(centre)
+            except Exception:
+                value = None
+            if value is not None and not math.isnan(value) and value > 0:
+                values.append(float(value))
+            else:
+                values.append(None)
+        return values
+
+
+class SpeechActivityBaseline:
+    """Audio-backed speech/non-speech producer over the normalized WAV.
+
+    A frame counts as speech when its energy rises ``SPEECH_ENERGY_MARGIN_DB``
+    above the recording's own noise floor (a low energy percentile). Short
+    interior silences are bridged and short speech blips are dropped with
+    ordinary VAD smoothing so intra-word gaps do not over-segment the audio.
+    The result is measured speech/silence evidence only; it never claims a
+    silence is a sentence, prosodic, or audible boundary.
+    """
+
+    provider_id = "baseline-speech-activity"
+    provider_version = "1"
+
+    def __init__(
+        self,
+        *,
+        frame_step_ms: int = DEFAULT_FRAME_STEP_MS,
+        energy_margin_db: float = SPEECH_ENERGY_MARGIN_DB,
+        noise_floor_percentile: int = SPEECH_NOISE_FLOOR_PERCENTILE,
+        min_silence_ms: int = SPEECH_MIN_SILENCE_MS,
+        min_speech_ms: int = SPEECH_MIN_SPEECH_MS,
+    ) -> None:
+        if frame_step_ms <= 0:
+            raise ValueError("frame_step_ms must be positive")
+        self.frame_step_ms = frame_step_ms
+        self.energy_margin_db = energy_margin_db
+        self.noise_floor_percentile = noise_floor_percentile
+        self.min_silence_ms = min_silence_ms
+        self.min_speech_ms = min_speech_ms
+        self.config_sha256 = _config_sha256(
+            {
+                "schema": SPEECH_ACTIVITY_CONFIG_SCHEMA,
+                "provider_id": self.provider_id,
+                "frame_step_ms": self.frame_step_ms,
+                "energy_margin_db": self.energy_margin_db,
+                "noise_floor_percentile": self.noise_floor_percentile,
+                "min_silence_ms": self.min_silence_ms,
+                "min_speech_ms": self.min_speech_ms,
+                "input": {
+                    "container": "wav",
+                    "channels": NORMALIZED_CHANNELS,
+                    "sample_format": NORMALIZED_SAMPLE_FORMAT,
+                    "sample_rate_hz": NORMALIZED_SAMPLE_RATE_HZ,
+                },
+            }
+        )
+
+    def measure(self, request: SpeechActivityRequest) -> SpeechActivityResult:
+        try:
+            _sample_rate, _step, energies, total_ms = _frame_energy_dbfs(
+                request.audio_path, self.frame_step_ms
+            )
+        except (OSError, ValueError) as error:
+            raise _fail("speech_activity", "failed") from error
+        labels = self._label_frames(energies)
+        spans = self._spans_from_labels(labels, total_ms)
+        return SpeechActivityResult(
+            spans=tuple(spans),
+            provider_id=self.provider_id,
+            provider_version=self.provider_version,
+            config_sha256=self.config_sha256,
+        )
+
+    def _label_frames(self, energies: list[float]) -> list[str]:
+        ordered = sorted(energies)
+        noise_floor = _percentile(ordered, self.noise_floor_percentile)
+        threshold = noise_floor + self.energy_margin_db
+        labels = ["speech" if energy > threshold else "silence" for energy in energies]
+        min_silence_frames = max(1, self.min_silence_ms // self.frame_step_ms)
+        min_speech_frames = max(1, self.min_speech_ms // self.frame_step_ms)
+        # Bridge short interior silences (edge silences are kept: real leading
+        # and trailing silence is honest evidence).
+        for label, start, end in _label_runs(labels):
+            if (
+                label == "silence"
+                and (end - start) < min_silence_frames
+                and start > 0
+                and end < len(labels)
+            ):
+                for index in range(start, end):
+                    labels[index] = "speech"
+        # Drop short speech blips.
+        for label, start, end in _label_runs(labels):
+            if label == "speech" and (end - start) < min_speech_frames:
+                for index in range(start, end):
+                    labels[index] = "silence"
+        return labels
+
+    def _spans_from_labels(self, labels: list[str], total_ms: int) -> list[SpeechSpan]:
+        spans: list[SpeechSpan] = []
+        runs = _label_runs(labels)
+        for position, (label, start, end) in enumerate(runs):
+            start_ms = start * self.frame_step_ms
+            if position == len(runs) - 1:
+                # The final run extends to the true audio end so the spans
+                # cover the whole recording without a trailing gap.
+                end_ms = max(total_ms, end * self.frame_step_ms)
+            else:
+                end_ms = end * self.frame_step_ms
+            spans.append(SpeechSpan(start_ms=start_ms, end_ms=end_ms, activity=label))
+        return spans
+
+
+def _label_runs(labels: list[str]) -> list[tuple[str, int, int]]:
+    """Maximal same-label runs as ``(label, start_frame, end_frame_exclusive)``."""
+    runs: list[tuple[str, int, int]] = []
+    for index, label in enumerate(labels):
+        if runs and runs[-1][0] == label:
+            previous = runs[-1]
+            runs[-1] = (previous[0], previous[1], index + 1)
+        else:
+            runs.append((label, index, index + 1))
+    return runs

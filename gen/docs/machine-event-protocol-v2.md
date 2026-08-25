@@ -93,7 +93,7 @@ listen-gen package from-capability REQUEST --output OUT \
   [--tts-provider none|fixture|say|fake] [--tts-fixture P] \
   [--tts-alignment-fixture P] [--tts-voice V] \
   [--ocr-provider none|fixture] [--ocr-fixture P] \
-  [--provider none|fixture|command|whisper-cpp] [--fixture P] ... \
+  [--provider none|fixture|command|qwen3|sensevoice|whisper-cpp] [--fixture P] ... \
   [--machine-events]
 ```
 
