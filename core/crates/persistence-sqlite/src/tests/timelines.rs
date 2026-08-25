@@ -336,6 +336,260 @@ fn lltimeline_resource_metadata_and_artifacts_round_trip() {
     assert_eq!(saved_artifacts[0].kind, "production_report");
 }
 
+// End-to-end for the C / Audible-Structure ingest -> interpret chain: a package's
+// observed phones, frame-level acoustic track, and speech-activity spans, once
+// persisted the way `project_package_candidates` lands them, must flow through
+// `export_lltimeline_document` into each sentence's RhythmFrame:
+//   * observed phones light phone evidence (Reference C plumbing),
+//   * frame-level energy (with no Gen cues) derives a prominence cue,
+//   * a measured silence corroborates a boundary the detector already found,
+// while a sentence with no observed phones stays on the phone-less path with zero
+// phone-evidence coverage. This guards the whole projection+interpretation seam,
+// not just the unit-level builders.
+#[test]
+fn export_lltimeline_lights_audible_structure_evidence_from_ingested_package() {
+    let (repo, media) = lltimeline_import_services();
+    MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
+
+    // sentence-a "go now": a 120 ms pause gap (80..200) yields one boundary at
+    // 200 ms. sentence-b "again": the control, with no observed phones.
+    let track = SubtitleTrack {
+        id: SubtitleTrackId::parse("track-1").unwrap(),
+        media_id: MediaId::parse("media-1").unwrap(),
+        fingerprint: "track-fp".into(),
+        language: Some(LanguageCode::parse("en").unwrap()),
+        source: "test".into(),
+        status: SubtitleTrackStatus::Available,
+        sentences: vec![
+            SubtitleSentence {
+                id: SubtitleSentenceId::parse("sentence-a").unwrap(),
+                index: 0,
+                start: TimeMs::new(0),
+                end: TimeMs::new(400),
+                original_text: "go now".into(),
+                display_text: "go now".into(),
+                tokens: vec![
+                    SubtitleToken {
+                        index: 0,
+                        kind: SubtitleTokenKind::Word,
+                        text: "go".into(),
+                        normalized: Some("go".into()),
+                        start_char: 0,
+                        end_char: 2,
+                    },
+                    SubtitleToken {
+                        index: 1,
+                        kind: SubtitleTokenKind::Word,
+                        text: "now".into(),
+                        normalized: Some("now".into()),
+                        start_char: 3,
+                        end_char: 6,
+                    },
+                ],
+            },
+            SubtitleSentence {
+                id: SubtitleSentenceId::parse("sentence-b").unwrap(),
+                index: 1,
+                start: TimeMs::new(1000),
+                end: TimeMs::new(1400),
+                original_text: "again".into(),
+                display_text: "again".into(),
+                tokens: vec![SubtitleToken {
+                    index: 0,
+                    kind: SubtitleTokenKind::Word,
+                    text: "again".into(),
+                    normalized: Some("again".into()),
+                    start_char: 0,
+                    end_char: 5,
+                }],
+            },
+        ],
+    };
+    repo.save_track(&track).unwrap();
+
+    let word_timing = |sentence: &str, token_index: u32, text: &str, start_ms: u64, end_ms: u64| {
+        WordTiming {
+            sentence_id: SubtitleSentenceId::parse(sentence).unwrap(),
+            token_index,
+            text: text.into(),
+            start_ms,
+            end_ms,
+            confidence: Some(0.9),
+            timing_source: TimingSource::ForcedAligned,
+            provider_id: "forced-aligner".into(),
+            provider_version: "v1".into(),
+        }
+    };
+    let word_timeline = WordTimeline {
+        id: WordTimelineId::parse("word-timeline-1").unwrap(),
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        algorithm_id: "forced-aligner".into(),
+        algorithm_version: "v1".into(),
+        config_hash: "cfg".into(),
+        parent_timeline_id: None,
+        created_by: TimelineCreator::Algorithm,
+        status: TimelineStatus::Active,
+        metrics_json: serde_json::json!({}).into(),
+        words: vec![
+            word_timing("sentence-a", 0, "go", 0, 80),
+            word_timing("sentence-a", 1, "now", 200, 360),
+            word_timing("sentence-b", 0, "again", 1000, 1300),
+        ],
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    repo.save_word_timeline(&word_timeline).unwrap();
+
+    // Observed phones for sentence-a only, shipped as IPA the way Gen's wav2vec2
+    // phone adapter does; Core maps them to its ARPABET-internal pipeline.
+    let ipa = |symbol: &str, token_index: u32, start_ms: u64, end_ms: u64| DetectedPhone {
+        symbol: symbol.into(),
+        display_ipa: symbol.into(),
+        phone_set: "ipa".into(),
+        start_ms,
+        end_ms,
+        confidence: Some(0.8),
+        token_index: Some(token_index),
+        provider_id: "wav2vec2-ctc-phoneme".into(),
+        provider_version: "fb-espeak-v1".into(),
+        model_revision: "main".into(),
+    };
+    let phone_timeline = PhoneTimeline {
+        id: PhoneTimelineId::parse("phone-timeline-1").unwrap(),
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        sentence_id: Some(SubtitleSentenceId::parse("sentence-a").unwrap()),
+        parent_word_timeline_id: Some(word_timeline.id.clone()),
+        parent_phonetic_analysis_id: None,
+        provider_id: "wav2vec2-ctc-phoneme".into(),
+        provider_version: "fb-espeak-v1".into(),
+        model_id: Some(PhoneticAnalysisModelId::parse("wav2vec2-ctc-phoneme:espeak@v1").unwrap()),
+        model_revision: Some("main".into()),
+        phone_set: "ipa".into(),
+        precision: PhoneTimelinePrecision::Approximate,
+        created_by: TimelineCreator::Algorithm,
+        status: TimelineStatus::Active,
+        metrics_json: serde_json::json!({}).into(),
+        phones: vec![
+            ipa("g", 0, 0, 40),
+            ipa("oʊ", 0, 40, 80),
+            ipa("n", 1, 200, 260),
+            ipa("aʊ", 1, 260, 360),
+        ],
+        alignments: Vec::new(),
+        findings: Vec::new(),
+        sound_analysis: None,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    repo.save_phone_timeline(&phone_timeline).unwrap();
+
+    // Frame-level acoustic track (energy only, F0 absent — exactly what the
+    // baseline adapter ships without praat) and speech/silence spans, sliced to
+    // sentence-a the way `project_acoustic_track` / `project_speech_activity` do.
+    let mut frames = Vec::new();
+    for time_ms in [0, 20, 40, 60] {
+        frames.push(serde_json::json!({"time_ms": time_ms, "energy_rel_db": -6.0}));
+    }
+    for time_ms in [200, 220, 240, 260, 300, 340] {
+        frames.push(serde_json::json!({"time_ms": time_ms, "energy_rel_db": 6.0}));
+    }
+    let metadata = LLTimelineMetadata {
+        created_at_ms: 1,
+        generator: LLTimelineGenerator {
+            id: "test".into(),
+            version: "v1".into(),
+            mode: "production_engine".into(),
+        },
+        media: LLTimelineMedia {
+            id: track.media_id.clone(),
+            fingerprint: "media-fp".into(),
+            path: None,
+            title: "Media".into(),
+            duration_ms: Some(1400),
+        },
+        language: track.language.clone(),
+        human_reviewed: false,
+        extra: serde_json::json!({}),
+    };
+    let artifacts = vec![
+        LLTimelineArtifact {
+            kind: "rhythm_acoustic_track".into(),
+            provider_id: Some("gen-baseline".into()),
+            provider_version: Some("v1".into()),
+            payload: serde_json::json!({
+                "sentences": [{"sentence_id": "sentence-a", "frames": frames}]
+            }),
+        },
+        LLTimelineArtifact {
+            kind: "rhythm_speech_activity".into(),
+            provider_id: Some("gen-baseline".into()),
+            provider_version: Some("v1".into()),
+            payload: serde_json::json!({
+                "sentences": [{"sentence_id": "sentence-a", "spans": [
+                    {"start_ms": 0, "end_ms": 80, "activity": "speech"},
+                    {"start_ms": 80, "end_ms": 200, "activity": "silence"},
+                    {"start_ms": 200, "end_ms": 360, "activity": "speech"}
+                ]}]
+            }),
+        },
+    ];
+    repo.save_lltimeline_resource(&track.id, &metadata, &artifacts)
+        .unwrap();
+
+    let document = media.export_lltimeline_document(&track.id).unwrap();
+    let frame_a = document
+        .rhythm_frames
+        .iter()
+        .find(|frame| frame.sentence_id.as_str() == "sentence-a")
+        .expect("sentence-a rhythm frame")
+        .rhythm_frame
+        .clone();
+    let frame_b = document
+        .rhythm_frames
+        .iter()
+        .find(|frame| frame.sentence_id.as_str() == "sentence-b")
+        .expect("sentence-b rhythm frame")
+        .rhythm_frame
+        .clone();
+
+    // Observed phones flowed through build_sound_analysis: sentence-a carries
+    // phone evidence; sentence-b, with none ingested, stays on the phone-less
+    // path with zero coverage.
+    assert!(
+        frame_a.quality.phone_evidence_coverage > 0.0,
+        "ingested observed phones must light phone evidence for sentence-a"
+    );
+    assert_eq!(
+        frame_b.quality.phone_evidence_coverage, 0.0,
+        "a sentence with no observed phones must keep zero phone coverage"
+    );
+
+    // Frame-level energy (no Gen cues present) derived a prominence cue.
+    assert!(
+        frame_a
+            .quality
+            .prominence_sources
+            .contains(&domain::RhythmSignalSource::Energy),
+        "acoustic-track energy must derive an energy prominence source"
+    );
+
+    // The measured silence corroborated the one detected pause boundary, adding a
+    // `measured_silence` cue and Timing provenance — never inventing a boundary.
+    let corroborated = frame_a
+        .phrase_boundaries
+        .iter()
+        .find(|boundary| boundary.cues.iter().any(|cue| cue == "measured_silence"))
+        .expect("a boundary must gain the measured_silence cue");
+    assert!(
+        corroborated
+            .signal_sources
+            .contains(&domain::RhythmSignalSource::Timing),
+        "a measured-silence boundary must record Timing provenance"
+    );
+}
+
 fn sense_group_analysis(
     id: &str,
     track: &SubtitleTrack,
