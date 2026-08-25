@@ -29,6 +29,10 @@ pub const PHONE_TIMELINE_SCHEMA_V1: &str = "listen.payload.phone-timeline.v1";
 pub const SENSE_GROUP_ANALYSIS_SCHEMA_V1: &str = "listen.payload.sense-group-analysis.v1";
 pub const WORD_ACOUSTICS_SCHEMA_V1: &str = "listen.payload.word-acoustics.v1";
 pub const PROSODY_ANALYSIS_SCHEMA_V1: &str = "listen.payload.prosody-analysis.v1";
+/// Frame-level and speech/non-speech acoustic evidence payloads. Audio-only
+/// facts about a rendition (empty resource dependencies); optional resources.
+pub const ACOUSTIC_TRACK_SCHEMA_V1: &str = "listen.payload.acoustic-track.v1";
+pub const SPEECH_ACTIVITY_SCHEMA_V1: &str = "listen.payload.speech-activity.v1";
 
 /// Media rendition descriptor schema identifiers (v2 release entries only).
 pub const RENDITION_AUDIO_SCHEMA_V1: &str = "listen.rendition.audio.v1";

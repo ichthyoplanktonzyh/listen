@@ -807,7 +807,7 @@ fn validate_resource_descriptors(
     Ok(())
 }
 
-fn validate_provenance(
+pub(crate) fn validate_provenance(
     resource_id: &str,
     provenance: &Provenance,
     declared_ids: &HashSet<&str>,
@@ -848,7 +848,7 @@ fn validate_provenance(
     Ok(())
 }
 
-fn validate_quality(resource_id: &str, quality: &Quality) -> Result<(), V2Error> {
+pub(crate) fn validate_quality(resource_id: &str, quality: &Quality) -> Result<(), V2Error> {
     if quality
         .warnings
         .iter()
@@ -1071,7 +1071,10 @@ pub(crate) fn dependency_graph_has_cycle(graph: &HashMap<String, Vec<String>>) -
 /// Every node reachable from `start` through dependency edges (excluding the
 /// start node itself). Bounded: the graph is closed with at most the enforced
 /// node/edge budget, and each node is visited once.
-fn reachable<'a>(start: &'a str, graph: &HashMap<&'a str, Vec<&'a str>>) -> Vec<&'a str> {
+pub(crate) fn reachable<'a>(
+    start: &'a str,
+    graph: &HashMap<&'a str, Vec<&'a str>>,
+) -> Vec<&'a str> {
     let mut seen = HashSet::new();
     seen.insert(start);
     let mut pending = vec![start];
@@ -1141,6 +1144,8 @@ fn validate_known_payloads(
             KnownPayload::ProsodyAnalysis(value) => {
                 validate::validate_prosody_analysis(value, subtitle, timeline)
             }
+            KnownPayload::AcousticTrack(value) => validate::validate_acoustic_track(value),
+            KnownPayload::SpeechActivity(value) => validate::validate_speech_activity(value),
         };
         result.map_err(|message| invalid(&resource.resource_id, message))?;
     }
@@ -1263,7 +1268,7 @@ fn verify_catalog_inventory(
 
 /// Verifies every retained carrier file is an exact declared blob path with
 /// the declared size and raw-byte digest.
-fn verify_retained_blobs(
+pub(crate) fn verify_retained_blobs(
     files: &BTreeMap<String, Vec<u8>>,
     expected: &BTreeMap<String, u64>,
 ) -> Result<(), V2Error> {
@@ -1294,7 +1299,7 @@ fn verify_retained_blobs(
 /// Verifies every streamed entry is an exact declared blob path whose
 /// observed size and SHA-256 match the descriptor. Bodies were never
 /// retained; only the size and digest facts are available to check.
-fn verify_streamed_blobs(
+pub(crate) fn verify_streamed_blobs(
     streamed: &[StreamedFile],
     expected: &BTreeMap<String, u64>,
 ) -> Result<(), V2Error> {
@@ -1411,7 +1416,7 @@ fn streamed_blob_paths(release: &PackageRelease) -> Vec<String> {
 }
 
 /// Parses `blobs/sha256/<64 lowercase hex>` and returns the digest string.
-fn blob_digest_from_path(path: &str) -> Option<String> {
+pub(crate) fn blob_digest_from_path(path: &str) -> Option<String> {
     let hex = path.strip_prefix(&format!(
         "{BLOB_DIRECTORY}/{BLOB_HASH_ALGORITHM_DIRECTORY}/"
     ))?;
@@ -1425,7 +1430,7 @@ fn blob_digest_from_path(path: &str) -> Option<String> {
     Some(format!("sha256:{hex}"))
 }
 
-fn blob_path(digest: &str) -> String {
+pub(crate) fn blob_path(digest: &str) -> String {
     format!(
         "{BLOB_DIRECTORY}/{BLOB_HASH_ALGORITHM_DIRECTORY}/{}",
         digest.trim_start_matches("sha256:")
@@ -1447,7 +1452,7 @@ fn derive_profile(blobs: &BTreeMap<String, BlobRecord>) -> DeliveryProfile {
     }
 }
 
-fn validate_digest(value: &str) -> Result<(), &'static str> {
+pub(crate) fn validate_digest(value: &str) -> Result<(), &'static str> {
     let Some(hex) = value.strip_prefix("sha256:") else {
         return Err("identity must start with sha256:");
     };
@@ -1461,7 +1466,7 @@ fn validate_digest(value: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn validate_blob_descriptor(blob: &BlobDescriptor) -> Result<(), &'static str> {
+pub(crate) fn validate_blob_descriptor(blob: &BlobDescriptor) -> Result<(), &'static str> {
     validate_digest(&blob.digest)?;
     if blob.size_bytes == 0 {
         return Err("blob size_bytes must be >= 1");
@@ -1469,11 +1474,11 @@ fn validate_blob_descriptor(blob: &BlobDescriptor) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn sha256_id(bytes: &[u8]) -> String {
+pub(crate) fn sha256_id(bytes: &[u8]) -> String {
     format!("sha256:{}", hex::encode(Sha256::digest(bytes)))
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 

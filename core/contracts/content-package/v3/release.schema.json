@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v3/release.schema.json",
+  "title": "Listen Content Package v3 Release",
+  "description": "Canonical release.json identity document. Its canonical serialization is the release identity; the document never contains its own id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "created_at_ms",
+    "edition",
+    "material",
+    "document_renditions",
+    "media_renditions",
+    "resources",
+    "extensions"
+  ],
+  "properties": {
+    "schema": { "const": "listen.content-package.release.v3" },
+    "created_at_ms": { "type": "integer", "minimum": 0 },
+    "edition": { "$ref": "definitions.schema.json#/$defs/edition" },
+    "material": { "$ref": "definitions.schema.json#/$defs/material" },
+    "document_renditions": {
+      "type": "array",
+      "items": { "$ref": "resource.schema.json#/$defs/documentRenditionDeclaration" }
+    },
+    "media_renditions": {
+      "type": "array",
+      "items": { "$ref": "resource.schema.json#/$defs/mediaRenditionDeclaration" }
+    },
+    "resources": {
+      "type": "array",
+      "items": { "$ref": "resource.schema.json#/$defs/releaseResource" }
+    },
+    "extensions": { "$ref": "definitions.schema.json#/$defs/extensions" }
+  }
+}

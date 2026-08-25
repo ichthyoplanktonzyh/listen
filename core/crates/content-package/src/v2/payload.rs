@@ -13,14 +13,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::model::{
-    PhoneTimeline, ProsodyAnalysis, SenseGroupAnalysis, SubtitleTextTrack, WordAcoustics,
-    WordTimeline,
+    AcousticTrack, PhoneTimeline, ProsodyAnalysis, SenseGroupAnalysis, SpeechActivity,
+    SubtitleTextTrack, WordAcoustics, WordTimeline,
 };
 
 use super::model::{
-    DOCUMENT_TEXT_SCHEMA_V1, PHONE_TIMELINE_SCHEMA_V1, PROSODY_ANALYSIS_SCHEMA_V1,
-    SENSE_GROUP_ANALYSIS_SCHEMA_V1, SUBTITLE_TEXT_TRACK_SCHEMA_V1, TIMED_TEXT_TRACK_SCHEMA_V2,
-    TRANSLATION_SCHEMA_V1, WORD_ACOUSTICS_SCHEMA_V1, WORD_TIMELINE_SCHEMA_V1,
+    ACOUSTIC_TRACK_SCHEMA_V1, DOCUMENT_TEXT_SCHEMA_V1, PHONE_TIMELINE_SCHEMA_V1,
+    PROSODY_ANALYSIS_SCHEMA_V1, SENSE_GROUP_ANALYSIS_SCHEMA_V1, SPEECH_ACTIVITY_SCHEMA_V1,
+    SUBTITLE_TEXT_TRACK_SCHEMA_V1, TIMED_TEXT_TRACK_SCHEMA_V2, TRANSLATION_SCHEMA_V1,
+    WORD_ACOUSTICS_SCHEMA_V1, WORD_TIMELINE_SCHEMA_V1,
 };
 
 /// `document_text` v1: a plain-text document with per-segment BCP47 language
@@ -106,6 +107,8 @@ pub enum KnownPayload {
     SenseGroupAnalysis(SenseGroupAnalysis),
     WordAcoustics(WordAcoustics),
     ProsodyAnalysis(ProsodyAnalysis),
+    AcousticTrack(AcousticTrack),
+    SpeechActivity(SpeechActivity),
 }
 
 impl KnownPayload {
@@ -120,6 +123,8 @@ impl KnownPayload {
             Self::SenseGroupAnalysis(_) => SENSE_GROUP_ANALYSIS_SCHEMA_V1,
             Self::WordAcoustics(_) => WORD_ACOUSTICS_SCHEMA_V1,
             Self::ProsodyAnalysis(_) => PROSODY_ANALYSIS_SCHEMA_V1,
+            Self::AcousticTrack(_) => ACOUSTIC_TRACK_SCHEMA_V1,
+            Self::SpeechActivity(_) => SPEECH_ACTIVITY_SCHEMA_V1,
         }
     }
 
@@ -134,6 +139,8 @@ impl KnownPayload {
             Self::SenseGroupAnalysis(_) => "sense_group_analysis",
             Self::WordAcoustics(_) => "word_acoustics",
             Self::ProsodyAnalysis(_) => "prosody_analysis",
+            Self::AcousticTrack(_) => "acoustic_track",
+            Self::SpeechActivity(_) => "speech_activity",
         }
     }
 }
@@ -151,6 +158,8 @@ pub(crate) fn is_known(kind: &str, schema: &str) -> bool {
             | ("sense_group_analysis", SENSE_GROUP_ANALYSIS_SCHEMA_V1)
             | ("word_acoustics", WORD_ACOUSTICS_SCHEMA_V1)
             | ("prosody_analysis", PROSODY_ANALYSIS_SCHEMA_V1)
+            | ("acoustic_track", ACOUSTIC_TRACK_SCHEMA_V1)
+            | ("speech_activity", SPEECH_ACTIVITY_SCHEMA_V1)
     )
 }
 
@@ -191,7 +200,47 @@ pub(crate) fn decode_known(
         ("prosody_analysis", PROSODY_ANALYSIS_SCHEMA_V1) => {
             KnownPayload::ProsodyAnalysis(serde_json::from_slice(bytes)?)
         }
+        ("acoustic_track", ACOUSTIC_TRACK_SCHEMA_V1) => {
+            KnownPayload::AcousticTrack(serde_json::from_slice(bytes)?)
+        }
+        ("speech_activity", SPEECH_ACTIVITY_SCHEMA_V1) => {
+            KnownPayload::SpeechActivity(serde_json::from_slice(bytes)?)
+        }
         _ => return Ok(None),
     };
     Ok(Some(payload))
+}
+
+#[cfg(test)]
+mod acoustic_evidence_tests {
+    use super::{ACOUSTIC_TRACK_SCHEMA_V1, KnownPayload, SPEECH_ACTIVITY_SCHEMA_V1, decode_known,
+        is_known};
+
+    #[test]
+    fn recognizes_and_decodes_acoustic_track() {
+        assert!(is_known("acoustic_track", ACOUSTIC_TRACK_SCHEMA_V1));
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "sample_rate_hz": 16000,
+            "frame_step_ms": 10,
+            "energy_baseline": "recording_median_dbfs",
+            "pitch_baseline": "recording_median_f0_hz",
+            "frames": [
+                {"time_ms": 0, "energy_dbfs": -55.0, "energy_rel_db": -8.0, "f0_hz": null, "f0_rel_st": null, "voiced": false}
+            ]
+        }))
+        .unwrap();
+        let decoded = decode_known("acoustic_track", ACOUSTIC_TRACK_SCHEMA_V1, &bytes).unwrap();
+        assert!(matches!(decoded, Some(KnownPayload::AcousticTrack(_))));
+    }
+
+    #[test]
+    fn recognizes_and_decodes_speech_activity() {
+        assert!(is_known("speech_activity", SPEECH_ACTIVITY_SCHEMA_V1));
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "spans": [{"start_ms": 0, "end_ms": 100, "activity": "silence"}]
+        }))
+        .unwrap();
+        let decoded = decode_known("speech_activity", SPEECH_ACTIVITY_SCHEMA_V1, &bytes).unwrap();
+        assert!(matches!(decoded, Some(KnownPayload::SpeechActivity(_))));
+    }
 }

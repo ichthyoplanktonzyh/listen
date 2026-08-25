@@ -9,8 +9,50 @@ use super::constants::{
     LENGTHENING_BOUNDARY_REFERENCE_AFTER, LENGTHENING_BOUNDARY_REFERENCE_BEFORE, PAUSE_BOUNDARY_MS,
     PITCH_RESET_BOUNDARY_MIN,
 };
+use super::frame_cues::SpeechActivitySpan;
 use super::helpers::clamp01;
 use super::tokens::RhythmToken;
+
+/// How close a measured silence span must sit to a detected boundary to count as
+/// corroborating it. A pause boundary lands at the onset of the next word, i.e.
+/// the trailing edge of the measured silence, so a small tolerance absorbs the
+/// frame-vs-timing rounding without matching unrelated silences.
+const SILENCE_CORROBORATION_TOLERANCE_MS: u64 = 50;
+
+/// Records measured speech/silence evidence onto boundaries the detector already
+/// found: when a measured silence span coincides with a boundary, that boundary
+/// gains a `measured_silence` cue and a `Timing` signal source (a silence is a
+/// measured pause). This never invents, moves, or removes a boundary, and it is
+/// a no-op when no spans are provided, so all current behaviour is preserved
+/// when frame/activity evidence is absent.
+pub(super) fn corroborate_boundaries_with_activity(
+    mut boundaries: Vec<RhythmPhraseBoundary>,
+    speech_activity: Option<&[SpeechActivitySpan]>,
+) -> Vec<RhythmPhraseBoundary> {
+    let Some(spans) = speech_activity else {
+        return boundaries;
+    };
+    for boundary in &mut boundaries {
+        let low = boundary.at_ms.saturating_sub(SILENCE_CORROBORATION_TOLERANCE_MS);
+        let high = boundary.at_ms.saturating_add(SILENCE_CORROBORATION_TOLERANCE_MS);
+        let backed = spans
+            .iter()
+            .any(|span| span.silence && span.start_ms <= high && low < span.end_ms);
+        if !backed {
+            continue;
+        }
+        if !boundary.cues.iter().any(|cue| cue == "measured_silence") {
+            boundary.cues.push("measured_silence".into());
+        }
+        if !boundary
+            .signal_sources
+            .contains(&RhythmSignalSource::Timing)
+        {
+            boundary.signal_sources.push(RhythmSignalSource::Timing);
+        }
+    }
+    boundaries
+}
 
 pub(super) fn detect_phrase_boundaries(
     tokens: &[RhythmToken],

@@ -1,0 +1,21 @@
+{
+  "support_language": "zh-Hans",
+  "base_resource_id": "sha256:bb581c3451d21f6dc6fd5d0756483ba558e910ccd8e281db4c7335c17e7cb81d",
+  "segments": [
+    {
+      "id": "tr-1",
+      "index": 0,
+      "text": "大熊猫吃竹子。",
+      "source_segment_id": "anchor-1",
+      "extensions": {}
+    },
+    {
+      "id": "tr-2",
+      "index": 1,
+      "text": "它们住在中国。",
+      "source_segment_id": "anchor-2",
+      "extensions": {}
+    }
+  ],
+  "extensions": {}
+}

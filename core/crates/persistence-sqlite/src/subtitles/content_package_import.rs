@@ -1,5 +1,5 @@
 use application::{
-    ApplicationError, ContentPackageCandidateImport, ContentPackageImportRepository,
+    ApplicationError, ContentPackageCandidateImport, ContentPackageCandidateImportRepository,
 };
 use domain::{LLTimelineArtifact, TimelineStatus};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -99,13 +99,14 @@ fn artifact_identity(artifact: &LLTimelineArtifact) -> Result<String, Applicatio
     Ok(format!("content:{}", json(artifact)?))
 }
 
-fn merge_artifacts(
+/// Persists package metadata/artifacts against an existing track. When the
+/// track has no LLTimeline resource row yet (the package subtitle track was
+/// landed by the subtitle projection), create one; otherwise merge new
+/// artifacts without replacing artifacts from earlier imports.
+fn save_metadata_and_artifacts(
     tx: &Transaction<'_>,
     import: &ContentPackageCandidateImport,
 ) -> Result<(), ApplicationError> {
-    if import.artifacts.is_empty() {
-        return Ok(());
-    }
     let existing_json = tx
         .query_row(
             "SELECT artifacts_json FROM lltimeline_resources WHERE track_id=?1",
@@ -115,10 +116,16 @@ fn merge_artifacts(
         .optional()
         .map_err(repo)?;
     let Some(existing_json) = existing_json else {
-        return Err(ApplicationError::Invalid(
-            "content package track is missing resource metadata".into(),
-        ));
+        return save_lltimeline_resource_in_connection(
+            tx,
+            &import.track.id,
+            &import.metadata,
+            &import.artifacts,
+        );
     };
+    if import.artifacts.is_empty() {
+        return Ok(());
+    }
     let mut artifacts: Vec<LLTimelineArtifact> = from_json(&existing_json).map_err(repo)?;
     let mut identities = artifacts
         .iter()
@@ -143,7 +150,7 @@ fn merge_artifacts(
     Ok(())
 }
 
-impl ContentPackageImportRepository for SqliteRepository {
+impl ContentPackageCandidateImportRepository for SqliteRepository {
     fn import_content_package_candidates(
         &self,
         import: &ContentPackageCandidateImport,
@@ -183,7 +190,9 @@ impl ContentPackageImportRepository for SqliteRepository {
         let tx = connection.transaction().map_err(repo)?;
         let track_existed = guard_track_identity(&tx, import)?;
         guard_sentence_ownership(&tx, import)?;
-        if !track_existed {
+        if track_existed {
+            save_metadata_and_artifacts(&tx, import)?;
+        } else {
             save_track_in_transaction(&tx, &import.track)?;
             save_lltimeline_resource_in_connection(
                 &tx,
@@ -191,8 +200,6 @@ impl ContentPackageImportRepository for SqliteRepository {
                 &import.metadata,
                 &import.artifacts,
             )?;
-        } else {
-            merge_artifacts(&tx, import)?;
         }
 
         for timeline in &import.word_timelines {
@@ -244,7 +251,7 @@ impl ContentPackageImportRepository for SqliteRepository {
             }
         }
 
-        if !track_existed {
+        if !track_existed && !import.corpus_occurrences.is_empty() {
             for occurrence in &import.corpus_occurrences {
                 let existing_track = tx
                     .query_row(

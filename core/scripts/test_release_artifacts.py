@@ -9,30 +9,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import release_artifacts as artifacts
 
 
-V2_INVENTORY = (
-    "contracts/content-package/v2/README.md",
-    "contracts/content-package/v2/release.schema.json",
-    "contracts/content-package/v2/resource.schema.json",
-    "contracts/content-package/v2/delivery.schema.json",
-    "contracts/content-package/v2/payload/document-text.v1.schema.json",
-    "contracts/content-package/v2/payload/timed-text-track.v2.schema.json",
-    "contracts/content-package/v2/payload/translation.v1.schema.json",
-    "contracts/content-package/v2/payload/subtitle-text-track.v1.schema.json",
-    "contracts/content-package/v2/payload/word-timeline.v1.schema.json",
-    "contracts/content-package/v2/payload/phone-timeline.v1.schema.json",
-    "contracts/content-package/v2/payload/sense-group-analysis.v1.schema.json",
-    "contracts/content-package/v2/payload/word-acoustics.v1.schema.json",
-    "contracts/content-package/v2/payload/prosody-analysis.v1.schema.json",
-    "contracts/content-package/v2/examples/text-full/release.json",
-    "contracts/content-package/v2/examples/text-full/delivery.json",
-    "contracts/content-package/v2/examples/text-full/blobs/sha256/49128790cdb73915d8eef1a4c0cc9bb953c2d875e2e366bac8fd2276920f7c6f",
-    "contracts/content-package/v2/examples/detached-media/release.json",
-    "contracts/content-package/v2/examples/detached-media/delivery.json",
-    "contracts/content-package/v2/examples/detached-media/blobs/sha256/29ecf0e48149f3706ded9e9ea048df6635f977b55e20ecb29365e810cf58fbb9",
-    "contracts/content-package/v2/examples/hybrid-multilingual/release.json",
-    "contracts/content-package/v2/examples/hybrid-multilingual/delivery.json",
-    "contracts/content-package/v2/examples/hybrid-multilingual/blobs/sha256/1bee26b045e7c90d616405bb6d173a2db22b6d3f2851d02242e5adccda41cbff",
-    "contracts/content-package/v2/examples/hybrid-multilingual/blobs/sha256/a9c749023a1e0b8273c13317c591f974e4df6c9c2fc861865840e138e13d7b28",
+V3_INVENTORY = (
+    "contracts/content-package/v3/README.md",
+    "contracts/content-package/v3/release.schema.json",
+    "contracts/content-package/v3/resource.schema.json",
+    "contracts/content-package/v3/definitions.schema.json",
+    "contracts/content-package/v3/payload/structured-reading.v1.schema.json",
+    "contracts/content-package/v3/payload/anchor-time-alignment.v1.schema.json",
+    "contracts/content-package/v3/tests/negative-schemas.json",
+    "contracts/content-package/v3/examples/document-source/release.json",
+    "contracts/content-package/v3/examples/media-only/release.json",
+    "contracts/content-package/v3/examples/composed/release.json",
 )
 
 
@@ -69,7 +56,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual(manifest["contract_version"], "1.2.3")
             self.assertEqual(manifest["core_git_sha"], "a" * 40)
 
-    def test_contract_archive_packages_exact_v2_inventory_bytes(self):
+    def test_contract_archive_packages_exact_v3_inventory_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for relative in artifacts.CONTRACT_FILES:
@@ -94,24 +81,31 @@ class ReleaseArtifactTests(unittest.TestCase):
             manifest = artifacts.verify_artifact(artifact)
             files = manifest["files"]
 
-            for relative in V2_INVENTORY:
+            for relative in V3_INVENTORY:
                 self.assertIn(relative, files)
                 self.assertEqual(
                     files[relative],
                     artifacts.sha256_bytes(b"fixture-" + relative.encode("utf-8")),
                 )
 
-            # The v2 contract slice of the manifest is exactly V2_INVENTORY:
-            # no v2 path may be added or dropped without updating the
-            # inventory.
-            v2_files = {
+            # The v3 contract slice of the manifest is exactly the v3 entries
+            # of CONTRACT_FILES: no v3 path may be added or dropped without
+            # updating the inventory, and no v1/v2 content-package path may
+            # re-enter the active contract artifact.
+            v3_contract_files = {
+                relative
+                for relative in artifacts.CONTRACT_FILES
+                if relative.startswith("contracts/content-package/v3/")
+            }
+            content_package_files = {
                 relative
                 for relative in files
-                if relative.startswith("contracts/content-package/v2/")
+                if relative.startswith("contracts/content-package/")
             }
-            self.assertEqual(v2_files, set(V2_INVENTORY))
+            self.assertEqual(content_package_files, v3_contract_files)
+            self.assertTrue(v3_contract_files.issuperset(V3_INVENTORY))
 
-            (root / V2_INVENTORY[0]).unlink()
+            (root / V3_INVENTORY[0]).unlink()
             with self.assertRaises(FileNotFoundError):
                 artifacts.build_contract_artifact(
                     argparse.Namespace(

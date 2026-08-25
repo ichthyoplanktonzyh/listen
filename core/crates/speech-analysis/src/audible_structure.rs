@@ -17,7 +17,8 @@ pub use crate::sense_group_partition::{
     partition_sentence_with_syntax,
 };
 pub use crate::sound_analysis::{
-    RhythmWordAcousticCue, SoundAnalysisConfig, build_learning_phones,
-    build_rhythm_frame_from_word_timeline, build_sound_analysis, detect_prosodic_phrases,
-    explain_connected_speech, syllabify,
+    AcousticFrameSample, RhythmWordAcousticCue, SoundAnalysisConfig, SpeechActivitySpan,
+    build_learning_phones, build_rhythm_frame_from_word_timeline, build_sound_analysis,
+    derive_word_acoustic_cues_from_frames, detect_prosodic_phrases, explain_connected_speech,
+    syllabify,
 };

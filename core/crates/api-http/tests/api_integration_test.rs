@@ -8,13 +8,14 @@
 
 use std::sync::Arc;
 
-use api_http::{ApiState, router};
+use api_http::{ApiState, CONTRACT_VERSION, router};
 use application::AppServices;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use persistence_sqlite::SqliteRepository;
 use serde_json::{Value, json};
+use sha2::{Digest as _, Sha256};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -35,7 +36,9 @@ fn build_app() -> Router {
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_material_repository(repo.clone())
-    .with_package_lifecycle_repository(repo.clone());
+    .with_package_lifecycle_repository(repo.clone())
+    .with_capability_attempt_repository(repo.clone())
+    .with_source_identity_repository(repo.clone());
     router(ApiState::new(services, repo, TOKEN))
 }
 
@@ -184,10 +187,10 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The package-lifecycle contract is locked exactly: 3.3.0 is the
-    // additive minor over the learning-material 3.2.0 (itself additive over
-    // the material-retention 3.1.0, never the previously published R4 2.1.0).
-    assert_eq!(body["contract_version"], "3.3.0");
+    // The Phase 1 canonical contract is locked exactly: 4.0.0 is the contract
+    // that rebuilds the learning-material surface on source assets and typed
+    // document/media renditions.
+    assert_eq!(body["contract_version"], CONTRACT_VERSION);
     assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
 }
 
@@ -888,8 +891,47 @@ async fn retained_media_states_membership_in_every_response_shape() {
 // ---------------------------------------------------------------------------
 
 /// Create a learning material over HTTP and return the details response.
-async fn create_material(app: &Router, title: &str, assets: Value, retain: Option<bool>) -> Value {
-    let mut body = json!({ "title": title, "assets": assets });
+///
+/// Text-style document renditions (`"text": ...`) are a convenience for tests
+/// that only need a material: the helper encodes the text as exact UTF-8
+/// Source Asset bytes, computes the digest, and binds the rendition through
+/// its source asset index, mirroring what the App does for typed/pasted text.
+async fn create_material(
+    app: &Router,
+    title: &str,
+    document_renditions: Value,
+    media_renditions: Value,
+    retain: Option<bool>,
+) -> Value {
+    let mut source_assets = Vec::new();
+    let mut doc_renditions = Vec::new();
+    for rendition in document_renditions.as_array().expect("document renditions") {
+        let Some(text) = rendition.get("text").and_then(|value| value.as_str()) else {
+            doc_renditions.push(rendition.clone());
+            continue;
+        };
+        let digest = hex::encode(Sha256::digest(text.as_bytes()));
+        let media_type = rendition["media_type"].as_str().expect("media type");
+        source_assets.push(json!({
+            "media_type": media_type,
+            "byte_length": text.len(),
+            "sha256_digest": digest,
+            "binding": { "type": "managed" },
+        }));
+        let mut typed = rendition.clone();
+        let asset_index = source_assets.len() - 1;
+        typed["digest"] = json!(digest);
+        typed["byte_size"] = json!(text.len());
+        typed["source_asset_index"] = json!(asset_index);
+        typed.as_object_mut().expect("object").remove("text");
+        doc_renditions.push(typed);
+    }
+    let mut body = json!({
+        "title": title,
+        "source_assets": source_assets,
+        "document_renditions": doc_renditions,
+        "media_renditions": media_renditions,
+    });
     if let Some(retain) = retain {
         body["retain"] = json!(retain);
     }
@@ -945,14 +987,13 @@ async fn temporary_media_resolves_temporary_material_without_path() {
         "retain:false media registers a temporary material: {material}"
     );
     assert_eq!(material["shape"], "video");
-    let rendition = &material["current_revision"]["assets"][0];
-    assert_eq!(rendition["asset_type"], "media_rendition");
+    let rendition = &material["current_revision"]["media_renditions"][0];
     assert_eq!(rendition["media_id"], media_id);
-    assert_eq!(rendition["media_kind"], "video");
-    // No material, revision, or asset response exposes a path.
+    assert_eq!(rendition["kind"], "video");
+    // No material, revision, or rendition response exposes a path.
     assert!(
         rendition.get("path").is_none(),
-        "asset leaks path: {rendition}"
+        "rendition leaks path: {rendition}"
     );
     assert!(material["current_revision"].get("path").is_none());
     assert!(material["material"].get("path").is_none());
@@ -1162,6 +1203,7 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     // Exact bytes are never trimmed or mutated: leading/trailing spaces, a
     // newline, and non-ASCII characters.
     let text = "  Hello, 世界!  \n";
+    let digest = hex::encode(Sha256::digest(text.as_bytes()));
     let (status, created) = send(
         &app,
         post_json(
@@ -1169,9 +1211,18 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
             Some(TOKEN),
             &json!({
                 "title": "Exact Bytes",
-                "assets": [
-                    { "asset_type": "document_text", "text": text, "language": "en" },
+                "source_assets": [
+                    {
+                        "media_type": "text/plain",
+                        "byte_length": text.len(),
+                        "sha256_digest": digest,
+                        "binding": { "type": "managed" },
+                    },
                 ],
+                "document_renditions": [
+                    { "media_type": "text/plain", "language": "en", "digest": digest, "byte_size": text.len(), "source_asset_index": 0 },
+                ],
+                "media_renditions": [],
             }),
         ),
     )
@@ -1193,17 +1244,15 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     );
     assert_eq!(created["shape"], "text");
 
-    let asset = &created["current_revision"]["assets"][0];
-    assert_eq!(asset["asset_type"], "document_text");
-    assert_eq!(asset["text"], text, "stored text must be the exact bytes");
-    assert_eq!(asset["language"], "en");
-    assert_eq!(asset["byte_size"], text.len() as u64);
+    let rendition = &created["current_revision"]["document_renditions"][0];
+    assert_eq!(rendition["language"], "en");
+    assert_eq!(rendition["byte_size"], text.len() as u64);
     assert_eq!(
-        asset["sha256_digest"],
-        hex::encode(Sha256::digest(text.as_bytes())),
+        rendition["digest"], digest,
         "digest must be computed over the exact stored bytes"
     );
-    assert!(asset.get("path").is_none());
+    assert!(rendition.get("text").is_none(), "no inline extracted text");
+    assert!(rendition.get("path").is_none());
     assert!(created["current_revision"].get("path").is_none());
     assert!(created["material"].get("path").is_none());
 
@@ -1212,6 +1261,7 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
 
     // Append a revision with different exact bytes and a null language.
     let new_text = "  Second revision — 修正.  ";
+    let new_digest = hex::encode(Sha256::digest(new_text.as_bytes()));
     let (status, appended) = send(
         &app,
         post_json(
@@ -1219,9 +1269,18 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
             Some(TOKEN),
             &json!({
                 "title": "Exact Bytes v2",
-                "assets": [
-                    { "asset_type": "document_text", "text": new_text, "language": null },
+                "source_assets": [
+                    {
+                        "media_type": "text/plain",
+                        "byte_length": new_text.len(),
+                        "sha256_digest": new_digest,
+                        "binding": { "type": "managed" },
+                    },
                 ],
+                "document_renditions": [
+                    { "media_type": "text/plain", "language": null, "digest": new_digest, "byte_size": new_text.len(), "source_asset_index": 0 },
+                ],
+                "media_renditions": [],
             }),
         ),
     )
@@ -1229,10 +1288,13 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     assert_eq!(status, StatusCode::OK, "{appended}");
     let current = &appended["current_revision"];
     assert_eq!(current["title"], "Exact Bytes v2");
-    assert_eq!(current["assets"][0]["text"], new_text);
-    assert_eq!(current["assets"][0]["byte_size"], new_text.len() as u64);
+    assert_eq!(
+        current["document_renditions"][0]["byte_size"],
+        new_text.len() as u64
+    );
+    assert_eq!(current["document_renditions"][0]["digest"], new_digest);
     assert!(
-        current["assets"][0]["language"].is_null(),
+        current["document_renditions"][0]["language"].is_null(),
         "null language stays null"
     );
     let second_revision_id = current["id"].as_str().expect("revision id").to_owned();
@@ -1267,13 +1329,21 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     assert_eq!(historical["id"], first_revision_id);
     assert_eq!(historical["material_id"], material_id);
     assert_eq!(historical["title"], "Exact Bytes");
-    assert_eq!(historical["assets"][0]["text"], text);
+    assert_eq!(historical["document_renditions"][0]["digest"], digest);
     assert_eq!(
-        historical["assets"][0]["sha256_digest"],
-        asset["sha256_digest"]
+        historical["document_renditions"][0]["byte_size"],
+        text.len() as u64
+    );
+    assert!(
+        historical["document_renditions"][0]
+            .as_object()
+            .expect("rendition object")
+            .get("text")
+            .is_none(),
+        "historical rendition carries no inline extracted text"
     );
     assert!(historical.get("path").is_none());
-    assert!(historical["assets"][0].get("path").is_none());
+    assert!(historical["document_renditions"][0].get("path").is_none());
 
     // Current revision read through the revision endpoint.
     let (status, current_read) = send(
@@ -1297,6 +1367,7 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
 async fn explicit_null_retain_creates_a_retained_material() {
     let app = build_app();
     let unique_text = format!("explicit-null-retain-{}", application::now_ms());
+    let digest = hex::encode(Sha256::digest(unique_text.as_bytes()));
     let (status, created) = send(
         &app,
         post_json(
@@ -1304,9 +1375,18 @@ async fn explicit_null_retain_creates_a_retained_material() {
             Some(TOKEN),
             &json!({
                 "title": "Explicit Null Retain",
-                "assets": [
-                    { "asset_type": "document_text", "text": unique_text, "language": null },
+                "source_assets": [
+                    {
+                        "media_type": "text/plain",
+                        "byte_length": unique_text.len(),
+                        "sha256_digest": digest,
+                        "binding": { "type": "managed" },
+                    },
                 ],
+                "document_renditions": [
+                    { "media_type": "text/plain", "language": null, "digest": digest, "byte_size": unique_text.len(), "source_asset_index": 0 },
+                ],
+                "media_renditions": [],
                 "retain": null,
             }),
         ),
@@ -1377,7 +1457,8 @@ async fn material_unknown_and_malformed_ids_are_typed_4xx() {
     let material_a = create_material(
         &app,
         "Owner A",
-        json!([{ "asset_type": "document_text", "text": "alpha" }]),
+        json!([{ "media_type": "text/plain", "language": null, "text": "alpha", "source_asset_index": null }]),
+        json!([]),
         None,
     )
     .await;
@@ -1389,7 +1470,8 @@ async fn material_unknown_and_malformed_ids_are_typed_4xx() {
     let material_b = create_material(
         &app,
         "Owner B",
-        json!([{ "asset_type": "document_text", "text": "beta" }]),
+        json!([{ "media_type": "text/plain", "language": null, "text": "beta", "source_asset_index": null }]),
+        json!([]),
         None,
     )
     .await;
@@ -1443,9 +1525,11 @@ async fn mixed_and_unknown_media_inputs_map_through_application_errors() {
             Some(TOKEN),
             &json!({
                 "title": "Ambiguous Mix",
-                "assets": [
-                    { "asset_type": "media_rendition", "media_id": id_a },
-                    { "asset_type": "media_rendition", "media_id": id_b },
+                "source_assets": [],
+                "document_renditions": [],
+                "media_renditions": [
+                    { "media_id": id_a },
+                    { "media_id": id_b },
                 ],
             }),
         ),
@@ -1470,7 +1554,9 @@ async fn mixed_and_unknown_media_inputs_map_through_application_errors() {
             Some(TOKEN),
             &json!({
                 "title": "Unknown Media",
-                "assets": [{ "asset_type": "media_rendition", "media_id": unknown_media }],
+                "source_assets": [],
+                "document_renditions": [],
+                "media_renditions": [{ "media_id": unknown_media }],
             }),
         ),
     )

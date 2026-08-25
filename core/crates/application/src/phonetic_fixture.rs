@@ -63,11 +63,13 @@ impl MediaAnalysisUseCases {
                 job.audio_end_ms
             ),
         );
+        // English-only ARPABET canonical, expressed through the language profile
+        // rather than a hardcoded language-prefix check.
         let is_english = job
             .sentence_id
             .as_ref()
             .and_then(|sid| self.sentence_language(sid).ok())
-            .map(|lang| lang.as_str().starts_with("en"))
+            .map(|lang| domain::profile_for(&lang).uses_arpabet_canonical())
             .unwrap_or(true);
         let canonical = if is_english {
             sentence
@@ -109,6 +111,8 @@ impl MediaAnalysisUseCases {
                 sentence,
                 word_timings: (!word_timings.is_empty()).then_some(word_timings.as_slice()),
                 word_acoustic_cues: None,
+                acoustic_frames: None,
+                speech_activity: None,
             },
         );
         let analysis = PhoneticAnalysis {
@@ -205,6 +209,8 @@ impl MediaAnalysisUseCases {
                 sentence,
                 word_timings: (!word_timings.is_empty()).then_some(word_timings.as_slice()),
                 word_acoustic_cues: None,
+                acoustic_frames: None,
+                speech_activity: None,
             },
         );
         let analysis = PhoneticAnalysis {

@@ -29,11 +29,11 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 3.3.0 adds the package lifecycle surface (candidate-only Package
-    // Installation, Edition Listing, explicit Learning Edition Adoption) as
-    // an additive minor over the learning-material 3.2.0.
+    // 4.0.0 rebuilds the learning-material surface on the canonical Phase 1
+    // model (Source Assets and typed Document/Media Renditions) and adds the
+    // capability, source-asset availability, and source-identity surfaces.
     assert!(
-        openapi.contains("version: 3.3.0"),
+        openapi.contains("version: 4.0.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -84,12 +84,6 @@ fn openapi_version_snapshot_and_path_count() {
         "Health:",
         "MediaItem:",
         "RegisterMedia:",
-        "ImportContentPackageRequest:",
-        "ImportContentPackageResponse:",
-        "ContentPackageImportReceipt:",
-        "ContentPackageResourceDisposition:",
-        "ContentPackageResourceProducer:",
-        "ContentPackageResourceProvenance:",
         "SubtitleTrack:",
         "SubtitleSentence:",
         "SubtitleToken:",
@@ -106,13 +100,23 @@ fn openapi_version_snapshot_and_path_count() {
         "SubtitleSearchResult:",
         "UpdateLexicalLearningContent:",
         "LearningMaterial:",
-        "MaterialAsset:",
-        "DocumentTextAsset:",
-        "MediaRenditionAsset:",
+        "SourceAsset:",
+        "DocumentRendition:",
+        "MediaRendition:",
         "MaterialRevision:",
         "MaterialDetails:",
         "CreateLearningMaterial:",
         "AppendMaterialRevision:",
+        "SourceAssetInput:",
+        "DocumentRenditionInput:",
+        "MediaRenditionInput:",
+        "MaterialCapabilityProjection:",
+        "CapabilityAttempt:",
+        "StartCapabilityAttemptRequest:",
+        "FinalizeCapabilityAttemptRequest:",
+        "SourceIdentityMapping:",
+        "SourceItemEvidence:",
+        "RegisterSourceIdentityMappingRequest:",
         "InstallMaterialPackageRequest:",
         "AdoptLearningEditionRequest:",
         "LearningEditionDetails:",
@@ -135,6 +139,7 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
         "not_found",
         "package_installation_invalid",
         "edition_adoption_conflict",
+        "cannot_delete_adopted_edition",
         "package_lifecycle_failed",
     ] {
         assert!(
@@ -147,6 +152,7 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
     for message in [
         "package release is invalid or incompatible",
         "learning edition cannot be adopted",
+        "cannot delete currently adopted package release; switch adoption first",
         "local package lifecycle operation failed",
     ] {
         assert!(
@@ -158,6 +164,7 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
     // Each operation must formally declare its exact error responses.
     let install = operation_response_block(openapi, "installMaterialPackage");
     let editions = operation_response_block(openapi, "listLearningEditions");
+    let delete_edition = operation_response_block(openapi, "deleteLearningEdition");
     let adoption = operation_response_block(openapi, "adoptLearningEdition");
     for status in ["\"404\"", "\"422\"", "\"500\""] {
         assert!(
@@ -169,6 +176,12 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
         assert!(
             editions.contains(status),
             "listLearningEditions must declare {status} responses"
+        );
+    }
+    for status in ["\"204\"", "\"404\"", "\"409\"", "\"500\""] {
+        assert!(
+            delete_edition.contains(status),
+            "deleteLearningEdition must declare {status} responses"
         );
     }
     for status in ["\"404\"", "\"409\"", "\"500\""] {

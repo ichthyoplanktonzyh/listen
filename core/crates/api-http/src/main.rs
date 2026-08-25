@@ -9,6 +9,7 @@ use api_http::{
     API_VERSION, ApiState, CONTRACT_VERSION, KeychainSecretStore, SyntaxCapabilityManager, router,
 };
 use application::AppServices;
+use application::now_ms;
 use embedding_provider::ManagedFastEmbedProvider;
 use local_runtime::{
     LocalRealtimeCascadeConfig, LocalRealtimeCascadeRuntime, SpeechSynthesisManager,
@@ -73,11 +74,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_llm_provider_profile_repository(repository.clone())
     .with_realtime_conversation_repository(repository.clone())
     .with_material_repository(repository.clone())
-    .with_package_lifecycle_repository(repository.clone());
+    .with_package_lifecycle_repository(repository.clone())
+    .with_content_package_candidate_import_repository(repository.clone())
+    .with_capability_attempt_repository(repository.clone())
+    .with_source_identity_repository(repository.clone());
     let services = services
         .with_coach_dashboard_repository(repository.clone())
         .with_semantic_embedding(repository.clone(), semantic_embedding.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
+    // Startup reconciliation: every capability attempt left running by a
+    // previous process is honestly superseded (interrupted), so no capability
+    // ever projects `generating` forever after a restart.
+    match services
+        .material_capability()
+        .reconcile_running_attempts(now_ms())
+    {
+        Ok(0) => {}
+        Ok(count) => tracing::info!(
+            event = "capability_attempts.reconciled",
+            count,
+            "superseded running capability attempts from a previous process"
+        ),
+        Err(error) => {
+            tracing::warn!(
+                event = "capability_attempts.reconcile_failed",
+                error = %error,
+                "running capability attempts will be reconciled on the next startup"
+            );
+        }
+    }
     let secret_store = Arc::new(KeychainSecretStore::new());
     let llm_cleanup = services
         .llm_providers()

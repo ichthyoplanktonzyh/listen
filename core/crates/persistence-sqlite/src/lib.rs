@@ -1,5 +1,6 @@
 mod anki;
 mod background_jobs;
+mod capability_attempts;
 mod coach_dashboard;
 mod connection;
 mod content_fit;
@@ -24,6 +25,7 @@ mod recording;
 mod secret_cleanup;
 mod semantic_embedding;
 mod semantic_task;
+mod source_identity;
 mod subtitles;
 mod support;
 mod transcription;

@@ -1,44 +1,61 @@
-//! Focused learning-material wire tests (contract `3.2.0`).
+//! Focused learning-material wire tests (contract `4.0.0`).
 //!
 //! These complement the full-stack HTTP acceptance tests by pinning the
 //! explicit response/input DTO shapes defined in `routes/material.rs` and the
-//! material schema facts in the canonical OpenAPI document: assets are flat
-//! `asset_type`-discriminated objects, never the externally-tagged domain
-//! serialization, and no material, revision, or asset wire shape carries a
-//! path.
+//! material schema facts in the canonical OpenAPI document: source assets and
+//! document/media renditions are separated typed collections, never the
+//! externally-tagged domain serialization, and no material, revision, or
+//! rendition wire shape carries a path.
 
-use crate::routes::material::{MaterialAssetInputRequest, MaterialDetailsResponse};
-use domain::{
-    DocumentTextAsset, LanguageCode, LearningMaterial, MaterialAsset, MaterialRevision,
-    MediaAvailability, MediaId, MediaKind, MediaRenditionAsset, initial_material_id,
+use crate::routes::material::{
+    DocumentRenditionInputRequest, MaterialDetailsResponse, MediaRenditionInputRequest,
+    SourceAssetInputRequest,
 };
+use domain::{
+    DocumentRendition, LanguageCode, LearningMaterial, MaterialRevision, MediaId, MediaKind,
+    MediaRendition, Rendition, RenditionOrigin, initial_material_id,
+};
+use sha2::Digest as _;
 
-fn media_asset() -> MaterialAsset {
-    MaterialAsset::MediaRendition(
-        MediaRenditionAsset::new(
-            MediaId::parse("media-1").expect("media id"),
+fn media_rendition() -> Rendition {
+    Rendition::Media(
+        MediaRendition::new(
+            RenditionOrigin::Source,
             MediaKind::Video,
+            "video/mp4",
             "fp-media-1",
-            MediaAvailability::Available,
+            domain::MediaAvailability::Available,
+            Some(MediaId::parse("media-1").expect("media id")),
+            None,
+            None,
+            None,
+            None,
         )
-        .expect("valid rendition asset"),
+        .expect("valid media rendition"),
     )
 }
 
-fn text_asset() -> MaterialAsset {
-    MaterialAsset::DocumentText(
-        DocumentTextAsset::new(
-            "  exact 字节\n",
+fn document_rendition() -> Rendition {
+    let bytes = "  exact 字节\n".as_bytes();
+    Rendition::Document(
+        DocumentRendition::new(
+            RenditionOrigin::Source,
+            "text/plain",
             Some(LanguageCode::parse("en").expect("language")),
+            hex::encode(sha2::Sha256::digest(bytes)),
+            bytes.len() as u64,
+            Some(domain::SourceAssetId::parse("asset-1").expect("asset id")),
+            None,
+            None,
         )
-        .expect("valid text asset"),
+        .expect("valid document rendition"),
     )
 }
 
-fn details_with(assets: Vec<MaterialAsset>) -> MaterialDetailsResponse {
-    let material_id = initial_material_id(&assets).expect("deterministic material id");
-    let revision =
-        MaterialRevision::new(material_id, "Wire Title", assets, 7).expect("valid revision");
+fn details_with(renditions: Vec<Rendition>) -> MaterialDetailsResponse {
+    let material_id = initial_material_id(&[], &renditions).expect("deterministic material id");
+    let revision = MaterialRevision::new(material_id, "Wire Title", Vec::new(), renditions, 7)
+        .expect("valid revision");
     let material = LearningMaterial::new(&revision, Some(7), 7, 7).expect("valid material");
     MaterialDetailsResponse::from(application::MaterialDetails {
         material,
@@ -68,9 +85,10 @@ fn assert_no_path_key(value: &serde_json::Value) {
 }
 
 #[test]
-fn material_wire_dtos_are_flat_discriminated_and_path_free() {
-    // A mixed revision (text + media rendition) exercises both asset shapes.
-    let response = details_with(vec![text_asset(), media_asset()]);
+fn material_wire_dtos_are_typed_collections_and_path_free() {
+    // A mixed revision (document + media rendition) exercises both rendition
+    // shapes.
+    let response = details_with(vec![document_rendition(), media_rendition()]);
     let wire = serde_json::to_value(response).expect("serialize details response");
 
     // MaterialDetails: material, current_revision, shape.
@@ -100,20 +118,32 @@ fn material_wire_dtos_are_flat_discriminated_and_path_free() {
             keys.sort_unstable();
             keys
         },
-        vec!["assets", "created_at_ms", "id", "material_id", "title"]
+        vec![
+            "created_at_ms",
+            "document_renditions",
+            "id",
+            "material_id",
+            "media_renditions",
+            "source_assets",
+            "title"
+        ]
     );
     assert_eq!(revision["title"], "Wire Title");
     assert_eq!(revision["created_at_ms"], 7);
+    assert_eq!(
+        revision["source_assets"]
+            .as_array()
+            .expect("source assets array")
+            .len(),
+        0
+    );
 
-    // Assets are flat `asset_type`-discriminated objects (never the
-    // externally-tagged `{"document_text": {...}}` domain form).
-    let assets = revision["assets"].as_array().expect("assets array");
-    assert_eq!(assets.len(), 2);
-
-    let text = assets
-        .iter()
-        .find(|asset| asset["asset_type"] == "document_text")
-        .expect("document_text asset");
+    // Document renditions are flat typed objects.
+    let documents = revision["document_renditions"]
+        .as_array()
+        .expect("document renditions array");
+    assert_eq!(documents.len(), 1);
+    let text = &documents[0];
     assert_eq!(
         {
             let mut keys: Vec<_> = text.as_object().unwrap().keys().collect();
@@ -121,27 +151,30 @@ fn material_wire_dtos_are_flat_discriminated_and_path_free() {
             keys
         },
         vec![
-            "asset_type",
             "byte_size",
+            "digest",
             "id",
             "language",
-            "sha256_digest",
-            "text"
+            "media_type",
+            "origin",
+            "source_asset_id"
         ]
     );
-    assert_eq!(text["text"], "  exact 字节\n");
+    assert_eq!(text["origin"], "source");
     assert_eq!(text["byte_size"], "  exact 字节\n".len() as u64);
     assert_eq!(text["language"], "en");
     assert!(
-        text["sha256_digest"]
+        text["digest"]
             .as_str()
             .is_some_and(|digest| digest.len() == 64)
     );
 
-    let rendition = assets
-        .iter()
-        .find(|asset| asset["asset_type"] == "media_rendition")
-        .expect("media_rendition asset");
+    // Media renditions are flat typed objects too.
+    let renditions = revision["media_renditions"]
+        .as_array()
+        .expect("media renditions array");
+    assert_eq!(renditions.len(), 1);
+    let rendition = &renditions[0];
     assert_eq!(
         {
             let mut keys: Vec<_> = rendition.as_object().unwrap().keys().collect();
@@ -149,53 +182,66 @@ fn material_wire_dtos_are_flat_discriminated_and_path_free() {
             keys
         },
         vec![
-            "asset_type",
             "availability",
             "fingerprint",
             "id",
+            "kind",
+            "media_byte_size",
             "media_id",
-            "media_kind"
+            "media_sha256",
+            "media_type",
+            "origin"
         ]
     );
+    assert_eq!(rendition["origin"], "source");
     assert_eq!(rendition["media_id"], "media-1");
-    assert_eq!(rendition["media_kind"], "video");
+    assert_eq!(rendition["kind"], "video");
     assert_eq!(rendition["availability"], "available");
     assert_eq!(rendition["fingerprint"], "fp-media-1");
 
-    // No material, revision, or asset value anywhere carries a path.
+    // No material, revision, or rendition value anywhere carries a path.
     assert_no_path_key(&wire);
 }
 
 #[test]
-fn material_input_dtos_deserialize_by_asset_type_discriminator() {
-    let text: MaterialAssetInputRequest = serde_json::from_value(serde_json::json!({
-        "asset_type": "document_text",
-        "text": "typed input",
-        "language": null,
+fn material_input_dtos_deserialize_typed_components() {
+    let source: serde_json::Value = serde_json::from_value(serde_json::json!({
+        "media_type": "audio/mpeg",
+        "byte_length": 1024,
+        "sha256_digest": "ab12",
+        "binding": { "type": "managed" },
     }))
-    .expect("document_text input");
-    assert!(matches!(
-        text,
-        MaterialAssetInputRequest::DocumentText { ref text, ref language }
-            if text == "typed input" && language.is_none()
-    ));
+    .expect("source asset input");
+    let _: SourceAssetInputRequest =
+        serde_json::from_value(source.clone()).expect("typed source asset input");
+    assert_eq!(source["media_type"], "audio/mpeg");
 
-    let rendition: MaterialAssetInputRequest = serde_json::from_value(serde_json::json!({
-        "asset_type": "media_rendition",
+    let text: serde_json::Value = serde_json::from_value(serde_json::json!({
+        "media_type": "text/plain",
+        "language": null,
+        "digest": "abcd",
+        "byte_size": 4,
+        "source_asset_index": 0,
+    }))
+    .expect("document rendition input");
+    let _: DocumentRenditionInputRequest =
+        serde_json::from_value(text.clone()).expect("typed document rendition input");
+    assert_eq!(text["digest"], "abcd");
+
+    let rendition: serde_json::Value = serde_json::from_value(serde_json::json!({
         "media_id": "media-1",
     }))
-    .expect("media_rendition input");
-    assert!(matches!(
-        rendition,
-        MaterialAssetInputRequest::MediaRendition { ref media_id } if media_id == "media-1"
-    ));
+    .expect("media rendition input");
+    let _: MediaRenditionInputRequest =
+        serde_json::from_value(rendition.clone()).expect("typed media rendition input");
+    assert_eq!(rendition["media_id"], "media-1");
 }
 
 #[test]
 fn openapi_material_schemas_match_wire_semantics() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
-    // All material schemas were appended contiguously at the end of the
-    // components section, so the tail from LearningMaterial covers them.
+    // The canonical material schemas were appended contiguously, so the tail
+    // from LearningMaterial covers them.
     let tail = openapi
         .split("    LearningMaterial:\n")
         .nth(1)
@@ -203,9 +249,9 @@ fn openapi_material_schemas_match_wire_semantics() {
 
     // Membership evidence is required but nullable on the material.
     let learning_material = tail
-        .split("    MaterialAsset:\n")
+        .split("    MaterialRevision:\n")
         .next()
-        .expect("LearningMaterial block precedes MaterialAsset");
+        .expect("LearningMaterial block precedes MaterialRevision");
     assert!(
         learning_material.contains(
             "required: [id, current_revision_id, retained_at_ms, created_at_ms, updated_at_ms]"
@@ -229,53 +275,65 @@ fn openapi_material_schemas_match_wire_semantics() {
         "shape enum must list text, audio, video, mixed"
     );
 
-    // The asset unions are real oneOf discriminator unions over their two
-    // concrete variants — never a plain object that only declares asset_type.
-    let material_asset = schema_block(openapi, "MaterialAsset");
+    // The revision carries three separated typed component collections.
+    for fragment in [
+        "source_assets:",
+        "document_renditions:",
+        "media_renditions:",
+    ] {
+        assert!(
+            tail.contains(fragment),
+            "MaterialRevision must carry a {fragment} collection"
+        );
+    }
     assert!(
-        material_asset.contains("oneOf:"),
-        "MaterialAsset must be a oneOf union: {material_asset}"
+        tail.contains("items: { $ref: \"#/components/schemas/SourceAsset\" }"),
+        "source_assets must reference the SourceAsset schema"
     );
     assert!(
-        material_asset.contains("- $ref: \"#/components/schemas/DocumentTextAsset\"")
-            && material_asset.contains("- $ref: \"#/components/schemas/MediaRenditionAsset\""),
-        "MaterialAsset must reference both concrete asset variants: {material_asset}"
+        tail.contains("items: { $ref: \"#/components/schemas/DocumentRendition\" }"),
+        "document_renditions must reference the DocumentRendition schema"
     );
     assert!(
-        material_asset.contains("propertyName: asset_type")
-            && material_asset.contains("document_text: \"#/components/schemas/DocumentTextAsset\"")
-            && material_asset
-                .contains("media_rendition: \"#/components/schemas/MediaRenditionAsset\""),
-        "MaterialAsset discriminator must map both asset types: {material_asset}"
-    );
-    assert!(
-        !material_asset.contains("properties:"),
-        "MaterialAsset must not degrade to a properties-only object: {material_asset}"
-    );
-
-    let material_asset_input = schema_block(openapi, "MaterialAssetInput");
-    assert!(
-        material_asset_input.contains("oneOf:")
-            && material_asset_input
-                .contains("- $ref: \"#/components/schemas/DocumentTextAssetInput\"")
-            && material_asset_input
-                .contains("- $ref: \"#/components/schemas/MediaRenditionAssetInput\""),
-        "MaterialAssetInput must oneOf both concrete input variants: {material_asset_input}"
-    );
-    assert!(
-        material_asset_input.contains("propertyName: asset_type"),
-        "MaterialAssetInput discriminator must key on asset_type"
+        tail.contains("items: { $ref: \"#/components/schemas/MediaRendition\" }"),
+        "media_renditions must reference the MediaRendition schema"
     );
 
-    // Revision and create/append request arrays reference the unions.
-    assert!(
-        tail.contains("items: { $ref: \"#/components/schemas/MaterialAsset\" }"),
-        "MaterialRevision assets must reference the MaterialAsset union"
-    );
-    assert!(
-        tail.contains("items: { $ref: \"#/components/schemas/MaterialAssetInput\" }"),
-        "CreateLearningMaterial and AppendMaterialRevision assets must reference MaterialAssetInput"
-    );
+    // The concrete component schemas never degrade to free-form objects.
+    for (name, required_fragment) in [
+        (
+            "SourceAsset",
+            "id, media_type, byte_length, sha256_digest, binding, availability, created_at_ms",
+        ),
+        (
+            "DocumentRendition",
+            "id, origin, media_type, language, digest, byte_size, source_asset_id",
+        ),
+        (
+            "MediaRendition",
+            "id, origin, kind, media_type, fingerprint, availability, media_id, media_sha256, media_byte_size",
+        ),
+    ] {
+        let block = schema_block(openapi, name);
+        assert!(
+            block.contains(&format!("required: [{required_fragment}]")),
+            "{name} must require its typed columns: {block}"
+        );
+    }
+
+    // Source Asset input and rendition input request schemas exist for the
+    // create/append bodies.
+    for name in [
+        "SourceAssetInput",
+        "DocumentRenditionInput",
+        "MediaRenditionInput",
+    ] {
+        let block = schema_block(openapi, name);
+        assert!(
+            block.contains("required:"),
+            "{name} must exist with required fields: {block}"
+        );
+    }
 
     // Material schemas must not define a path property anywhere.
     assert!(

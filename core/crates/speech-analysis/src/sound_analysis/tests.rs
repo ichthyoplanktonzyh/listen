@@ -276,6 +276,8 @@ fn builds_rhythm_frame_l1_l3_from_word_timeline_without_phone_evidence() {
             sentence: Some(&sentence),
             word_timings: Some(&word_timings),
             word_acoustic_cues: None,
+            acoustic_frames: None,
+            speech_activity: None,
         },
     );
     let frame = analysis.rhythm_frame.as_ref().unwrap();
@@ -397,6 +399,8 @@ fn estimated_word_timing_stays_predicted_and_does_not_select_nuclei() {
             sentence: Some(&sentence),
             word_timings: Some(&word_timings),
             word_acoustic_cues: None,
+            acoustic_frames: None,
+            speech_activity: None,
         },
     );
     let frame = analysis.rhythm_frame.as_ref().unwrap();
@@ -453,7 +457,8 @@ fn short_timed_content_sound_can_be_audible_anchor() {
     ]);
     let word_timings = word_timings(&sentence, &[(0, "go", 0, 80), (1, "now", 100, 260)]);
 
-    let frame = build_rhythm_frame_from_word_timeline(&sentence, &canonical, &word_timings, None);
+    let frame =
+        build_rhythm_frame_from_word_timeline(&sentence, &canonical, &word_timings, None, None, None);
     let go_anchor = frame
         .stress_anchors
         .iter()
@@ -529,6 +534,8 @@ fn word_acoustic_energy_cues_drive_prominence_provenance() {
             sentence: Some(&sentence),
             word_timings: Some(&word_timings),
             word_acoustic_cues: Some(&acoustic_cues),
+            acoustic_frames: None,
+            speech_activity: None,
         },
     );
     let frame = analysis.rhythm_frame.as_ref().unwrap();
@@ -608,6 +615,8 @@ fn word_acoustic_pitch_cues_drive_prominence_and_boundary_provenance() {
         &canonical,
         &word_timings,
         Some(&acoustic_cues),
+        None,
+        None,
     );
     let hear_anchor = frame
         .stress_anchors
@@ -673,6 +682,8 @@ fn information_structure_prior_downweights_repeated_content() {
             sentence: Some(&sentence),
             word_timings: Some(&word_timings),
             word_acoustic_cues: None,
+            acoustic_frames: None,
+            speech_activity: None,
         },
     );
     let frame = analysis.rhythm_frame.as_ref().unwrap();
@@ -730,6 +741,107 @@ fn explains_single_phone_deletion_as_low_confidence_hint() {
     assert_eq!(analysis.connected_speech[0].label, "possible deletion");
 }
 
+#[test]
+fn frames_derive_word_cues_when_gen_cues_absent_and_gen_wins_when_present() {
+    let sentence = sentence(&["go", "now"]);
+    let canonical =
+        canonical_with_stress(&[(0, "G", None), (0, "OW", None), (1, "N", None), (1, "AW", Some(1))]);
+    let word_timings = word_timings(&sentence, &[(0, "go", 0, 80), (1, "now", 100, 260)]);
+    // "go" is the loud/high word, "now" is the quiet/low word.
+    let frames = vec![
+        AcousticFrameSample { time_ms: 0, energy_rel_db: Some(6.0), f0_rel_st: Some(2.0) },
+        AcousticFrameSample { time_ms: 40, energy_rel_db: Some(6.0), f0_rel_st: Some(2.0) },
+        AcousticFrameSample { time_ms: 120, energy_rel_db: Some(-6.0), f0_rel_st: Some(-2.0) },
+        AcousticFrameSample { time_ms: 200, energy_rel_db: Some(-6.0), f0_rel_st: Some(-2.0) },
+    ];
+    // No Gen cues → Core derives energy prominence from the frames, so the frame
+    // records an Energy prominence source it would not have from timing alone.
+    let derived = build_rhythm_frame_from_word_timeline(
+        &sentence,
+        &canonical,
+        &word_timings,
+        None,
+        Some(&frames),
+        None,
+    );
+    assert!(
+        derived
+            .quality
+            .prominence_sources
+            .contains(&RhythmSignalSource::Energy)
+    );
+
+    // Gen cues present (here carrying no energy) take precedence: the frames are
+    // not consulted, so no Energy source appears.
+    let gen_cues = vec![RhythmWordAcousticCue {
+        token_index: 0,
+        energy_prominence: None,
+        pitch_prominence: None,
+        pitch_reset_after: None,
+    }];
+    let gen_frame = build_rhythm_frame_from_word_timeline(
+        &sentence,
+        &canonical,
+        &word_timings,
+        Some(&gen_cues),
+        Some(&frames),
+        None,
+    );
+    assert!(
+        !gen_frame
+            .quality
+            .prominence_sources
+            .contains(&RhythmSignalSource::Energy)
+    );
+}
+
+#[test]
+fn measured_silence_corroborates_a_detected_boundary_without_inventing_one() {
+    let sentence = sentence(&["go", "now"]);
+    let canonical =
+        canonical_with_stress(&[(0, "G", None), (0, "OW", None), (1, "N", None), (1, "AW", Some(1))]);
+    // A 120 ms gap between the aligned words yields one pause boundary at 200 ms.
+    let word_timings = word_timings(&sentence, &[(0, "go", 0, 80), (1, "now", 200, 360)]);
+
+    let without =
+        build_rhythm_frame_from_word_timeline(&sentence, &canonical, &word_timings, None, None, None);
+    assert_eq!(without.phrase_boundaries.len(), 1);
+    assert!(
+        !without.phrase_boundaries[0]
+            .cues
+            .iter()
+            .any(|cue| cue == "measured_silence")
+    );
+
+    let spans = vec![SpeechActivitySpan { start_ms: 80, end_ms: 200, silence: true }];
+    let with = build_rhythm_frame_from_word_timeline(
+        &sentence,
+        &canonical,
+        &word_timings,
+        None,
+        None,
+        Some(&spans),
+    );
+    // The same single boundary, only its provenance enriched: nothing invented.
+    assert_eq!(with.phrase_boundaries.len(), without.phrase_boundaries.len());
+    assert!(
+        with.phrase_boundaries[0]
+            .cues
+            .iter()
+            .any(|cue| cue == "measured_silence")
+    );
+    assert!(
+        with.phrase_boundaries[0]
+            .signal_sources
+            .contains(&RhythmSignalSource::Timing)
+    );
+    assert!(
+        with.quality
+            .boundary_sources
+            .contains(&RhythmSignalSource::Timing)
+    );
+}
+
 fn observed(values: &[(&str, u64, u64)]) -> Vec<DetectedPhone> {
     values
         .iter()
@@ -769,6 +881,8 @@ fn config(sentence: Option<&SubtitleSentence>) -> SoundAnalysisConfig<'_> {
         sentence,
         word_timings: None,
         word_acoustic_cues: None,
+        acoustic_frames: None,
+        speech_activity: None,
     }
 }
 

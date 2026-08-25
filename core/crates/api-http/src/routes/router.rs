@@ -2,6 +2,9 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 
+use super::composition::{
+    read_composition_rendition_blob, read_composition_resource_payload, read_material_composition,
+};
 use super::corpus::{reindex_corpus, search_corpus};
 use super::dictionary::{diagnose_sentence, dictionary_lookup};
 use super::language::{language_profile, list_languages};
@@ -15,17 +18,21 @@ use super::llm::{
 use super::material::{
     append_learning_material_revision, create_learning_material, list_learning_materials,
     read_learning_material, read_learning_material_revision, resolve_learning_material_for_media,
-    retain_learning_material, unretain_learning_material,
+    retain_learning_material, unretain_learning_material, update_source_asset_availability,
+};
+use super::material_capability::{
+    finalize_material_capability_attempt, list_material_capabilities,
+    start_material_capability_attempt,
 };
 use super::media::{
     archive_subtitle, cold_start_words, content_fit_calibration_samples, delete_subtitle,
-    export_subtitle, import_content_package, import_lltimeline, import_lltimeline_for_media,
-    import_subtitle, list_media_library, media_subtitles, read_media, read_subtitle,
-    register_media, restore_subtitle, retain_media, set_media_triage_intent, track_content_fit,
-    unretain_media, update_track_language,
+    export_subtitle, import_lltimeline, import_lltimeline_for_media, import_subtitle,
+    list_media_library, media_subtitles, read_media, read_subtitle, register_media,
+    restore_subtitle, retain_media, set_media_triage_intent, track_content_fit, unretain_media,
+    update_track_language,
 };
 use super::package_lifecycle::{
-    adopt_learning_edition, install_material_package, list_learning_editions,
+    adopt_learning_edition, delete_learning_edition, install_material_package, list_learning_editions,
 };
 use super::personal_expression::{
     create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
@@ -89,6 +96,9 @@ use super::sound_line::{
     cancel_sound_line_job, create_sound_line_job, retry_sound_line_job, sound_line_job,
     sound_line_jobs,
 };
+use super::source_identity::{
+    register_source_identity_mapping, resolve_source_identity, resolve_source_identity_path,
+};
 use super::speech::{
     cancel_speech_job, create_speech_job, retry_speech_job, speech_job, speech_jobs,
 };
@@ -130,12 +140,13 @@ pub(crate) fn protected_router(state: &ApiState) -> Router<ApiState> {
     media_analysis_routes()
         .merge(learning_routes())
         .merge(material_routes())
+        .merge(source_identity_routes())
         .merge(generative_routes())
         .merge(provider_and_event_routes())
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize))
 }
 
-/// Learning-material routes (contract `3.2.0`). The router only wires
+/// Learning-material routes (contract `4.0.0`). The router only wires
 /// handlers; every policy decision stays in the application layer.
 fn material_routes() -> Router<ApiState> {
     Router::new()
@@ -157,6 +168,22 @@ fn material_routes() -> Router<ApiState> {
             put(retain_learning_material).delete(unretain_learning_material),
         )
         .route(
+            "/v1/materials/{material_id}/source-assets/{source_asset_id}/availability",
+            put(update_source_asset_availability),
+        )
+        .route(
+            "/v1/materials/{material_id}/capabilities",
+            get(list_material_capabilities),
+        )
+        .route(
+            "/v1/materials/{material_id}/capability-attempts",
+            post(start_material_capability_attempt),
+        )
+        .route(
+            "/v1/materials/{material_id}/capability-attempts/{attempt_id}",
+            put(finalize_material_capability_attempt),
+        )
+        .route(
             "/v1/materials/{material_id}/package-installations",
             post(install_material_package),
         )
@@ -165,12 +192,44 @@ fn material_routes() -> Router<ApiState> {
             get(list_learning_editions),
         )
         .route(
+            "/v1/materials/{material_id}/editions/{release_id}",
+            delete(delete_learning_edition),
+        )
+        .route(
             "/v1/materials/{material_id}/edition-adoption",
             put(adopt_learning_edition),
         )
         .route(
+            "/v1/materials/{material_id}/composition",
+            get(read_material_composition),
+        )
+        .route(
+            "/v1/materials/{material_id}/composition/resources/{resource_id}/payload",
+            get(read_composition_resource_payload),
+        )
+        .route(
+            "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob",
+            get(read_composition_rendition_blob),
+        )
+        .route(
             "/v1/media/{media_id}/material",
             get(resolve_learning_material_for_media),
+        )
+}
+
+fn source_identity_routes() -> Router<ApiState> {
+    Router::new()
+        .route(
+            "/v1/source-identities/mappings",
+            post(register_source_identity_mapping),
+        )
+        .route(
+            "/v1/source-identities/resolve",
+            get(resolve_source_identity),
+        )
+        .route(
+            "/v1/source-identities/{source_id}/items/{item_id}",
+            get(resolve_source_identity_path),
         )
 }
 
@@ -190,10 +249,6 @@ fn media_analysis_routes() -> Router<ApiState> {
         .route(
             "/v1/media/{media_id}/lltimeline/import",
             post(import_lltimeline_for_media),
-        )
-        .route(
-            "/v1/media/{media_id}/content-packages/import",
-            post(import_content_package),
         )
         .route(
             "/v1/media/{media_id}/subtitles",

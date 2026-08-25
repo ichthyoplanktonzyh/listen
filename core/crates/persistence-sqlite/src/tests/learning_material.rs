@@ -7,12 +7,12 @@
 //! detection, membership synchronization).
 
 use application::{
-    AppendMaterialRevision, CreateLearningMaterial, MaterialAssetInput, MaterialRepository,
-    PlaybackProgressRepository,
+    AppendMaterialRevision, CreateLearningMaterial, DocumentRenditionInput, MaterialRepository,
+    MediaRenditionInput, PlaybackProgressRepository, SourceAssetInput,
 };
 
 use super::*;
-use crate::learning_material::{LEGACY_BLANK_TITLE_FALLBACK, backfill_legacy_media_materials};
+use crate::learning_material::LEGACY_BLANK_TITLE_FALLBACK;
 
 /// AppServices with the real SQLite repository behind the material and media
 /// seams.
@@ -51,15 +51,67 @@ fn register_media(repo: &Arc<SqliteRepository>, id: &str, kind: MediaKind) -> Me
     .unwrap()
 }
 
-fn text_input(text: &str) -> MaterialAssetInput {
-    MaterialAssetInput::DocumentText {
-        text: text.to_owned(),
+fn text_assets(text: &str) -> Vec<SourceAssetInput> {
+    let digest = {
+        use sha2::Digest as _;
+        hex::encode(sha2::Sha256::digest(text.as_bytes()))
+    };
+    vec![SourceAssetInput {
+        media_type: "text/plain".to_owned(),
+        byte_length: text.len() as u64,
+        sha256_digest: digest,
+        binding: SourceAssetBinding::Managed,
+    }]
+}
+
+fn text_input(text: &str) -> DocumentRenditionInput {
+    let digest = {
+        use sha2::Digest as _;
+        hex::encode(sha2::Sha256::digest(text.as_bytes()))
+    };
+    DocumentRenditionInput {
+        media_type: "text/plain".to_owned(),
         language: None,
+        digest,
+        byte_size: text.len() as u64,
+        source_asset_index: 0,
     }
 }
 
-fn media_input(id: &str) -> MaterialAssetInput {
-    MaterialAssetInput::MediaRendition {
+/// A Source Document Rendition bound to a fresh managed Source Asset of the
+/// exact text bytes, for direct-repository fixtures.
+fn text_rendition_with_asset(text: &str) -> (domain::SourceAsset, domain::Rendition) {
+    let digest = {
+        use sha2::Digest as _;
+        hex::encode(sha2::Sha256::digest(text.as_bytes()))
+    };
+    let asset = domain::SourceAsset::new(
+        "text/plain",
+        text.len() as u64,
+        digest.clone(),
+        domain::SourceAssetBinding::Managed,
+        domain::SourceAssetAvailability::Available,
+        1,
+    )
+    .unwrap();
+    let rendition = domain::Rendition::Document(
+        DocumentRendition::new(
+            domain::RenditionOrigin::Source,
+            "text/plain",
+            None,
+            digest,
+            text.len() as u64,
+            Some(asset.id.clone()),
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    (asset, rendition)
+}
+
+fn media_input(id: &str) -> MediaRenditionInput {
+    MediaRenditionInput {
         media_id: MediaId::parse(id).unwrap(),
     }
 }
@@ -75,11 +127,13 @@ fn count(repo: &SqliteRepository, table: &str) -> u32 {
 
 /// Graph row counts in a fixed order, used to prove that a rejected
 /// candidate leaves no graph rows behind.
-fn graph_counts(repo: &SqliteRepository) -> (u32, u32, u32, u32) {
+fn graph_counts(repo: &SqliteRepository) -> (u32, u32, u32, u32, u32, u32) {
     (
         count(repo, "learning_materials"),
         count(repo, "material_revisions"),
-        count(repo, "material_assets"),
+        count(repo, "material_source_assets"),
+        count(repo, "material_document_renditions"),
+        count(repo, "material_media_renditions"),
         count(repo, "material_media_bindings"),
     )
 }
@@ -144,14 +198,15 @@ fn media_row(repo: &SqliteRepository, id: &str) -> serde_json::Value {
     .unwrap()
 }
 
-/// Stored `material_assets.asset_json` values for one revision, in ordinal
-/// order.
-fn stored_asset_json(repo: &SqliteRepository, revision_id: &str) -> Vec<String> {
+/// Stored media rendition `fingerprint` values for one revision, in canonical
+/// id order. Media renditions are typed snapshot columns, never free-form
+/// JSON blobs.
+fn stored_media_fingerprints(repo: &SqliteRepository, revision_id: &str) -> Vec<String> {
     let conn = repo.connection.lock();
     let mut statement = conn
         .prepare(
-            "SELECT asset_json FROM material_assets
-             WHERE revision_id=?1 ORDER BY ordinal",
+            "SELECT fingerprint FROM material_media_renditions
+             WHERE revision_id=?1 ORDER BY rendition_id",
         )
         .unwrap();
     statement
@@ -170,7 +225,9 @@ fn create_covers_text_media_and_mixed_shapes_and_reads_back_faithfully() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Notes".into(),
-            assets: vec![text_input("plain notes")],
+            source_assets: text_assets("plain notes"),
+            document_renditions: vec![text_input("plain notes")],
+            media_renditions: Vec::new(),
             retain: None,
         })
         .unwrap();
@@ -181,7 +238,9 @@ fn create_covers_text_media_and_mixed_shapes_and_reads_back_faithfully() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Audio".into(),
-            assets: vec![media_input("media-audio")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("media-audio")],
             retain: None,
         })
         .unwrap();
@@ -192,7 +251,9 @@ fn create_covers_text_media_and_mixed_shapes_and_reads_back_faithfully() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Video".into(),
-            assets: vec![media_input("media-video")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("media-video")],
             retain: None,
         })
         .unwrap();
@@ -202,7 +263,9 @@ fn create_covers_text_media_and_mixed_shapes_and_reads_back_faithfully() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Mixed".into(),
-            assets: vec![text_input("with notes"), media_input("media-audio")],
+            source_assets: text_assets("with notes"),
+            document_renditions: vec![text_input("with notes")],
+            media_renditions: vec![media_input("media-audio")],
             retain: None,
         })
         .unwrap();
@@ -223,19 +286,19 @@ fn create_covers_text_media_and_mixed_shapes_and_reads_back_faithfully() {
         .unwrap();
     assert_eq!(read.material, mixed.material);
     assert_eq!(read.current_revision, mixed.current_revision);
-    let assets = read.current_revision.assets;
+    let assets = read.current_revision.renditions;
     assert_eq!(assets.len(), 2);
     assert_eq!(
         assets
             .iter()
-            .filter(|asset| matches!(asset, MaterialAsset::MediaRendition(_)))
+            .filter(|asset| matches!(asset, domain::Rendition::Media(_)))
             .count(),
         1
     );
     assert_eq!(
         assets
             .iter()
-            .filter(|asset| matches!(asset, MaterialAsset::DocumentText(_)))
+            .filter(|asset| matches!(asset, domain::Rendition::Document(_)))
             .count(),
         1
     );
@@ -250,7 +313,9 @@ fn retained_and_temporary_materials_list_deterministically() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Kept".into(),
-            assets: vec![text_input("kept content")],
+            source_assets: text_assets("kept content"),
+            document_renditions: vec![text_input("kept content")],
+            media_renditions: Vec::new(),
             retain: None,
         })
         .unwrap();
@@ -258,7 +323,9 @@ fn retained_and_temporary_materials_list_deterministically() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Explicit".into(),
-            assets: vec![text_input("explicit content")],
+            source_assets: text_assets("explicit content"),
+            document_renditions: vec![text_input("explicit content")],
+            media_renditions: Vec::new(),
             retain: Some(true),
         })
         .unwrap();
@@ -266,7 +333,9 @@ fn retained_and_temporary_materials_list_deterministically() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Temporary".into(),
-            assets: vec![text_input("temporary content")],
+            source_assets: text_assets("temporary content"),
+            document_renditions: vec![text_input("temporary content")],
+            media_renditions: Vec::new(),
             retain: Some(false),
         })
         .unwrap();
@@ -305,7 +374,9 @@ fn current_and_historical_revisions_read_back() {
         .materials()
         .create(CreateLearningMaterial {
             title: "V1".into(),
-            assets: vec![text_input("first content")],
+            source_assets: text_assets("first content"),
+            document_renditions: vec![text_input("first content")],
+            media_renditions: Vec::new(),
             retain: None,
         })
         .unwrap();
@@ -318,7 +389,9 @@ fn current_and_historical_revisions_read_back() {
             &material_id,
             AppendMaterialRevision {
                 title: "V2".into(),
-                assets: vec![text_input("second content")],
+                source_assets: text_assets("second content"),
+                document_renditions: vec![text_input("second content")],
+                media_renditions: Vec::new(),
             },
         )
         .unwrap();
@@ -330,7 +403,9 @@ fn current_and_historical_revisions_read_back() {
             &material_id,
             AppendMaterialRevision {
                 title: "V3".into(),
-                assets: vec![text_input("third content")],
+                source_assets: text_assets("third content"),
+                document_renditions: vec![text_input("third content")],
+                media_renditions: Vec::new(),
             },
         )
         .unwrap();
@@ -363,14 +438,16 @@ fn current_and_historical_revisions_read_back() {
         .expect("historical revision stored");
     assert_eq!(direct.title, "V2");
     assert_eq!(direct.material_id, material_id);
-    assert_eq!(direct.assets.len(), 1);
+    assert_eq!(direct.renditions.len(), 1);
 
     // A revision belongs to exactly one material.
     let other = services
         .materials()
         .create(CreateLearningMaterial {
             title: "Other".into(),
-            assets: vec![text_input("other content")],
+            source_assets: text_assets("other content"),
+            document_renditions: vec![text_input("other content")],
+            media_renditions: Vec::new(),
             retain: None,
         })
         .unwrap();
@@ -404,7 +481,9 @@ fn equal_content_retry_converges_without_duplicates_or_overwrites() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Same".into(),
-            assets: vec![text_input("identical content")],
+            source_assets: text_assets("identical content"),
+            document_renditions: vec![text_input("identical content")],
+            media_renditions: Vec::new(),
             retain: None,
         })
         .unwrap();
@@ -412,7 +491,9 @@ fn equal_content_retry_converges_without_duplicates_or_overwrites() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Same".into(),
-            assets: vec![text_input("identical content")],
+            source_assets: text_assets("identical content"),
+            document_renditions: vec![text_input("identical content")],
+            media_renditions: Vec::new(),
             retain: None,
         })
         .unwrap();
@@ -442,12 +523,44 @@ fn equal_content_retry_converges_without_duplicates_or_overwrites() {
 
     // A different create under an existing material identity must never
     // silently overwrite the stored aggregate.
-    let asset = DocumentTextAsset::new("identical content", None).unwrap();
-    let assets = vec![MaterialAsset::DocumentText(asset)];
-    let material_id = initial_material_id(&assets).unwrap();
+    let rendition_text = "identical content";
+    let rendition_asset = domain::SourceAsset::new(
+        "text/plain",
+        rendition_text.len() as u64,
+        {
+            use sha2::Digest as _;
+            hex::encode(sha2::Sha256::digest(rendition_text.as_bytes()))
+        },
+        domain::SourceAssetBinding::Managed,
+        domain::SourceAssetAvailability::Available,
+        1,
+    )
+    .unwrap();
+    let rendition = domain::Rendition::Document(
+        DocumentRendition::new(
+            domain::RenditionOrigin::Source,
+            "text/plain",
+            None,
+            rendition_asset.sha256_digest.clone(),
+            rendition_asset.byte_length,
+            Some(rendition_asset.id.clone()),
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    let renditions = vec![rendition];
+    let material_id =
+        initial_material_id(std::slice::from_ref(&rendition_asset), &renditions).unwrap();
     assert_eq!(material_id, first.material.id);
-    let different =
-        MaterialRevision::new(material_id.clone(), "Different title", assets, 1).unwrap();
+    let different = MaterialRevision::new(
+        material_id.clone(),
+        "Different title",
+        vec![rendition_asset],
+        renditions.clone(),
+        1,
+    )
+    .unwrap();
     let material = LearningMaterial::new(&different, None, 1, 1).unwrap();
     let err = MaterialRepository::create_material(repo.as_ref(), &material, &different)
         .expect_err("different create under an existing identity");
@@ -467,16 +580,31 @@ fn forged_material_candidates_are_rejected_atomically() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     register_media(&repo, "media-forged", MediaKind::Audio);
 
-    let rendition = MediaRenditionAsset::new(
-        MediaId::parse("media-forged").unwrap(),
-        MediaKind::Audio,
-        "media-forged-fp".to_owned(),
-        MediaAvailability::Available,
+    let rendition = domain::Rendition::Media(
+        MediaRendition::new(
+            domain::RenditionOrigin::Source,
+            MediaKind::Audio,
+            "audio/mpeg",
+            "media-forged-fp".to_owned(),
+            MediaAvailability::Available,
+            Some(MediaId::parse("media-forged").unwrap()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    let renditions = vec![rendition];
+    let material_id = initial_material_id(&[], &renditions).unwrap();
+    let revision = MaterialRevision::new(
+        material_id.clone(),
+        "Canonical",
+        Vec::new(),
+        renditions,
+        1000,
     )
     .unwrap();
-    let assets = vec![MaterialAsset::MediaRendition(rendition)];
-    let material_id = initial_material_id(&assets).unwrap();
-    let revision = MaterialRevision::new(material_id.clone(), "Canonical", assets, 1000).unwrap();
     let valid = LearningMaterial::new(&revision, Some(1000), 1000, 1000).unwrap();
 
     let before = graph_counts(&repo);
@@ -523,7 +651,9 @@ fn forged_revision_candidates_are_rejected_atomically() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Canonical".into(),
-            assets: vec![text_input("canonical text")],
+            source_assets: text_assets("canonical text"),
+            document_renditions: vec![text_input("canonical text")],
+            media_renditions: Vec::new(),
             retain: Some(false),
         })
         .unwrap();
@@ -540,28 +670,35 @@ fn forged_revision_candidates_are_rejected_atomically() {
     let mut forged_title = revision.clone();
     forged_title.title = "Tampered title".into();
 
-    // Forged asset content: text mutated while id/digest/byte_size stay stale.
+    // Forged asset content: digest mutated while id/byte_size stay stale.
     let mut forged_text = revision.clone();
-    let MaterialAsset::DocumentText(asset) = &mut forged_text.assets[0] else {
+    let domain::Rendition::Document(asset) = &mut forged_text.renditions[0] else {
         panic!("expected a document text asset");
     };
-    asset.text = "tampered text".into();
+    asset.digest = "0".repeat(64);
 
-    // Forged digest.
-    let mut forged_digest = revision.clone();
-    let MaterialAsset::DocumentText(asset) = &mut forged_digest.assets[0] else {
-        panic!("expected a document text asset");
+    // Forged media type: the identity key changes, so the rebuilt rendition
+    // id diverges from the stored id.
+    let mut forged_media_type = revision.clone();
+    let domain::Rendition::Document(asset) = &mut forged_media_type.renditions[0] else {
+        panic!("expected a document rendition");
     };
-    asset.sha256_digest = "0".repeat(64);
+    asset.media_type = "text/markdown".into();
 
     // Internally inconsistent: the same revision id with an extra media asset.
     let mut forged_new_media = revision.clone();
-    forged_new_media.assets.push(MaterialAsset::MediaRendition(
-        MediaRenditionAsset::new(
-            MediaId::parse("media-forge-b").unwrap(),
+    forged_new_media.renditions.push(domain::Rendition::Media(
+        MediaRendition::new(
+            domain::RenditionOrigin::Source,
             MediaKind::Video,
+            "video/mp4",
             "media-forge-b-fp".to_owned(),
             MediaAvailability::Available,
+            Some(MediaId::parse("media-forge-b").unwrap()),
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap(),
     ));
@@ -569,7 +706,7 @@ fn forged_revision_candidates_are_rejected_atomically() {
     for (label, forged) in [
         ("forged title", forged_title),
         ("forged asset text", forged_text),
-        ("forged asset digest", forged_digest),
+        ("forged asset media type", forged_media_type),
     ] {
         let err = MaterialRepository::create_material(repo.as_ref(), &material, &forged)
             .expect_err("create with {label}");
@@ -608,7 +745,9 @@ fn forged_revision_candidates_are_rejected_atomically() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Mixed canonical".into(),
-            assets: vec![text_input("mixed note"), media_input("media-forge-b")],
+            source_assets: text_assets("mixed note"),
+            document_renditions: vec![text_input("mixed note")],
+            media_renditions: vec![media_input("media-forge-b")],
             retain: Some(false),
         })
         .unwrap();
@@ -619,8 +758,8 @@ fn forged_revision_candidates_are_rejected_atomically() {
     let mixed_material = repo.get_material(&mixed.material.id).unwrap().unwrap();
     let mixed_before = graph_counts(&repo);
     let mut swapped = mixed_revision.clone();
-    swapped.assets.swap(0, 1);
-    assert_ne!(swapped.assets, mixed_revision.assets);
+    swapped.renditions.swap(0, 1);
+    assert_ne!(swapped.renditions, mixed_revision.renditions);
     let err = MaterialRepository::create_material(repo.as_ref(), &mixed_material, &swapped)
         .expect_err("create with a non-canonical asset order");
     assert!(matches!(err, ApplicationError::Repository(_)));
@@ -639,7 +778,9 @@ fn materials_survive_reopening_a_file_database() {
             .materials()
             .create(CreateLearningMaterial {
                 title: "Persisted".into(),
-                assets: vec![media_input("media-reopen")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-reopen")],
                 retain: None,
             })
             .unwrap();
@@ -676,7 +817,9 @@ fn material_for_media_resolves_bound_media_only() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Bound".into(),
-            assets: vec![media_input("media-bound")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("media-bound")],
             retain: None,
         })
         .unwrap();
@@ -712,7 +855,9 @@ fn create_and_append_synchronize_registered_media_membership() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Draft".into(),
-            assets: vec![media_input("media-sync-a")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("media-sync-a")],
             retain: Some(false),
         })
         .unwrap();
@@ -756,7 +901,9 @@ fn create_and_append_synchronize_registered_media_membership() {
             &material_id,
             AppendMaterialRevision {
                 title: "Draft v2".into(),
-                assets: vec![media_input("media-sync-a"), media_input("media-sync-b")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-sync-a"), media_input("media-sync-b")],
             },
         )
         .expect_err("cross-material append");
@@ -769,19 +916,28 @@ fn create_and_append_synchronize_registered_media_membership() {
     // follows aggregate membership: registration converges on the existing
     // retained material (never a duplicate graph) inside the same transaction,
     // and the new media row mirrors the material's membership authority.
-    let late_rendition = MediaRenditionAsset::new(
-        MediaId::parse("media-late-register").unwrap(),
-        MediaKind::Audio,
-        "fp-late-register".to_owned(),
-        MediaAvailability::Available,
-    )
-    .unwrap();
-    let late_assets = vec![MaterialAsset::MediaRendition(late_rendition)];
-    let late_material_id = initial_material_id(&late_assets).unwrap();
+    let late_rendition = domain::Rendition::Media(
+        MediaRendition::new(
+            domain::RenditionOrigin::Source,
+            MediaKind::Audio,
+            "audio/mpeg",
+            "fp-late-register".to_owned(),
+            MediaAvailability::Available,
+            Some(MediaId::parse("media-late-register").unwrap()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    let late_renditions = vec![late_rendition];
+    let late_material_id = initial_material_id(&[], &late_renditions).unwrap();
     let late_revision = MaterialRevision::new(
         late_material_id.clone(),
         "Retained late register",
-        late_assets,
+        Vec::new(),
+        late_renditions,
         2000,
     )
     .unwrap();
@@ -857,7 +1013,9 @@ fn create_and_append_synchronize_registered_media_membership() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Kept now".into(),
-            assets: vec![media_input("media-sync-c")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("media-sync-c")],
             retain: None,
         })
         .unwrap();
@@ -879,17 +1037,31 @@ fn create_and_append_synchronize_registered_media_membership() {
     // Media bindings stay durable when `media_items` is absent: a direct
     // create with an unregistered media persists the graph without touching
     // any media row.
-    let unregistered = MediaRenditionAsset::new(
-        MediaId::parse("media-unregistered").unwrap(),
-        MediaKind::Audio,
-        "fp-unregistered".to_owned(),
-        MediaAvailability::Available,
+    let unregistered = domain::Rendition::Media(
+        MediaRendition::new(
+            domain::RenditionOrigin::Source,
+            MediaKind::Audio,
+            "audio/mpeg",
+            "fp-unregistered".to_owned(),
+            MediaAvailability::Available,
+            Some(MediaId::parse("media-unregistered").unwrap()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    let renditions = vec![unregistered];
+    let material_id = initial_material_id(&[], &renditions).unwrap();
+    let revision = MaterialRevision::new(
+        material_id.clone(),
+        "Unregistered media",
+        Vec::new(),
+        renditions,
+        1000,
     )
     .unwrap();
-    let assets = vec![MaterialAsset::MediaRendition(unregistered)];
-    let material_id = initial_material_id(&assets).unwrap();
-    let revision =
-        MaterialRevision::new(material_id.clone(), "Unregistered media", assets, 1000).unwrap();
     let material = LearningMaterial::new(&revision, Some(1000), 1000, 1000).unwrap();
     let media_count_before = count(&repo, "media_items");
     MaterialRepository::create_material(repo.as_ref(), &material, &revision).unwrap();
@@ -925,7 +1097,9 @@ fn membership_mutation_changes_only_two_columns_and_keeps_graph_and_state() {
         .materials()
         .create(CreateLearningMaterial {
             title: "Proof".into(),
-            assets: vec![media_input("membership-proof")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("membership-proof")],
             retain: None,
         })
         .unwrap();
@@ -978,7 +1152,7 @@ fn membership_mutation_changes_only_two_columns_and_keeps_graph_and_state() {
     let graph_before = (
         count(&repo, "learning_materials"),
         count(&repo, "material_revisions"),
-        count(&repo, "material_assets"),
+        count(&repo, "material_media_renditions"),
         count(&repo, "material_media_bindings"),
     );
     let material_before = material_row(&repo, material_id.as_str());
@@ -1021,7 +1195,7 @@ fn membership_mutation_changes_only_two_columns_and_keeps_graph_and_state() {
         (
             count(&repo, "learning_materials"),
             count(&repo, "material_revisions"),
-            count(&repo, "material_assets"),
+            count(&repo, "material_media_renditions"),
             count(&repo, "material_media_bindings"),
         ),
         graph_before
@@ -1089,7 +1263,9 @@ fn binding_conflict_rolls_back_the_entire_append() {
         .materials()
         .create(CreateLearningMaterial {
             title: "A".into(),
-            assets: vec![media_input("media-conflict-a")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("media-conflict-a")],
             retain: None,
         })
         .unwrap();
@@ -1097,25 +1273,36 @@ fn binding_conflict_rolls_back_the_entire_append() {
         .materials()
         .create(CreateLearningMaterial {
             title: "B".into(),
-            assets: vec![media_input("media-conflict-b")],
+            source_assets: Vec::new(),
+            document_renditions: Vec::new(),
+            media_renditions: vec![media_input("media-conflict-b")],
             retain: None,
         })
         .unwrap();
     let a_id = a.material.id.clone();
     let a_before = material_row(&repo, a_id.as_str());
     let revisions_before = count(&repo, "material_revisions");
-    let assets_before = count(&repo, "material_assets");
+    let renditions_before = count(&repo, "material_media_renditions");
 
     // Direct repository append: media already bound to B joins A -> conflict.
-    let rendition = MediaRenditionAsset::new(
-        MediaId::parse("media-conflict-b").unwrap(),
-        MediaKind::Video,
-        "media-conflict-b-fp".to_owned(),
-        MediaAvailability::Available,
-    )
-    .unwrap();
-    let assets = vec![MaterialAsset::MediaRendition(rendition)];
-    let revision = MaterialRevision::new(a_id.clone(), "A conflict", assets, 5000).unwrap();
+    let rendition = domain::Rendition::Media(
+        MediaRendition::new(
+            domain::RenditionOrigin::Source,
+            MediaKind::Video,
+            "video/mp4",
+            "media-conflict-b-fp".to_owned(),
+            MediaAvailability::Available,
+            Some(MediaId::parse("media-conflict-b").unwrap()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    let renditions = vec![rendition];
+    let revision =
+        MaterialRevision::new(a_id.clone(), "A conflict", Vec::new(), renditions, 5000).unwrap();
     let err = MaterialRepository::append_revision(repo.as_ref(), &a_id, &revision, 9999)
         .expect_err("media bound to another material");
     assert!(matches!(
@@ -1127,7 +1314,7 @@ fn binding_conflict_rolls_back_the_entire_append() {
     // assets, and bindings are all unchanged.
     assert_eq!(material_row(&repo, a_id.as_str()), a_before);
     assert_eq!(count(&repo, "material_revisions"), revisions_before);
-    assert_eq!(count(&repo, "material_assets"), assets_before);
+    assert_eq!(count(&repo, "material_media_renditions"), renditions_before);
     let binding: String = {
         let conn = repo.connection.lock();
         conn.query_row(
@@ -1147,7 +1334,9 @@ fn binding_conflict_rolls_back_the_entire_append() {
             &a_id,
             AppendMaterialRevision {
                 title: "A conflict via use case".into(),
-                assets: vec![media_input("media-conflict-b")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-conflict-b")],
             },
         )
         .expect_err("use case conflict");
@@ -1167,9 +1356,10 @@ fn missing_rows_return_none_or_not_found() {
     assert!(repo.get_material(&missing).unwrap().is_none());
     assert!(services.materials().read(&missing).unwrap().is_none());
 
-    let asset = DocumentTextAsset::new("never stored", None).unwrap();
-    let assets = vec![MaterialAsset::DocumentText(asset)];
-    let revision = MaterialRevision::new(missing.clone(), "Never", assets, 1).unwrap();
+    let (asset, rendition) = text_rendition_with_asset("never stored");
+    let renditions = vec![rendition];
+    let revision =
+        MaterialRevision::new(missing.clone(), "Never", vec![asset], renditions, 1).unwrap();
     let err = MaterialRepository::append_revision(repo.as_ref(), &missing, &revision, 1)
         .expect_err("append to a missing material");
     assert!(matches!(err, ApplicationError::NotFound("material")));
@@ -1197,26 +1387,29 @@ fn corrupt_rows_surface_as_repository_errors() {
             .materials()
             .create(CreateLearningMaterial {
                 title: "Asset proof".into(),
-                assets: vec![text_input("original content")],
+                source_assets: text_assets("original content"),
+                document_renditions: vec![text_input("original content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .unwrap();
         let revision_id = created.material.current_revision_id.clone();
-        let tampered = serde_json::to_string(&MaterialAsset::DocumentText(
-            DocumentTextAsset::new("tampered content", None).unwrap(),
-        ))
-        .unwrap();
         {
             let conn = repo.connection.lock();
             conn.execute(
-                "UPDATE material_assets SET asset_json=?1 WHERE revision_id=?2",
-                params![tampered, revision_id.as_str()],
+                "UPDATE material_document_renditions SET digest=?1, byte_size=?2
+                 WHERE revision_id=?3",
+                params![
+                    "0".repeat(64),
+                    b"tampered content".len() as i64,
+                    revision_id.as_str()
+                ],
             )
             .unwrap();
         }
         let err = repo
             .get_revision(&revision_id)
-            .expect_err("tampered asset JSON is corruption");
+            .expect_err("tampered document byte facts are corruption");
         assert!(matches!(err, ApplicationError::Repository(_)));
     }
 
@@ -1227,33 +1420,36 @@ fn corrupt_rows_surface_as_repository_errors() {
             .materials()
             .create(CreateLearningMaterial {
                 title: "Kind proof".into(),
-                assets: vec![media_input("media-corrupt-kind")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-corrupt-kind")],
                 retain: None,
             })
             .unwrap();
         let revision_id = created.material.current_revision_id.clone();
         {
             let conn = repo.connection.lock();
+            // The schema rejects a foreign origin outright; the corruption
+            // path only exists for values the storage layer permits.
             conn.execute(
-                "UPDATE material_assets SET asset_kind='document_text' WHERE revision_id=?1",
+                "UPDATE material_media_renditions SET origin='futuristic' WHERE revision_id=?1",
                 [revision_id.as_str()],
             )
-            .unwrap();
+            .expect_err("unknown origin is rejected by the schema");
         }
-        let err = repo
-            .get_revision(&revision_id)
-            .expect_err("asset_kind mismatch is corruption");
-        assert!(matches!(err, ApplicationError::Repository(_)));
     }
 
-    // Non-contiguous asset ordinals.
+    // A stored media rendition id that no longer derives from its content is
+    // corruption: the rehydrated rendition must equal the stored id.
     {
-        register_media(&repo, "media-corrupt-ordinal", MediaKind::Audio);
+        register_media(&repo, "media-corrupt-id", MediaKind::Audio);
         let created = services
             .materials()
             .create(CreateLearningMaterial {
-                title: "Ordinal proof".into(),
-                assets: vec![text_input("notes"), media_input("media-corrupt-ordinal")],
+                title: "Id proof".into(),
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-corrupt-id")],
                 retain: None,
             })
             .unwrap();
@@ -1261,14 +1457,14 @@ fn corrupt_rows_surface_as_repository_errors() {
         {
             let conn = repo.connection.lock();
             conn.execute(
-                "UPDATE material_assets SET ordinal=5 WHERE revision_id=?1 AND ordinal=1",
+                "UPDATE material_media_renditions SET fingerprint='forged-fp' WHERE revision_id=?1",
                 [revision_id.as_str()],
             )
             .unwrap();
         }
         let err = repo
             .get_revision(&revision_id)
-            .expect_err("non-contiguous ordinals are corruption");
+            .expect_err("forged rendition id is corruption");
         assert!(matches!(err, ApplicationError::Repository(_)));
     }
 
@@ -1279,19 +1475,27 @@ fn corrupt_rows_surface_as_repository_errors() {
             .materials()
             .create(CreateLearningMaterial {
                 title: "Identity proof".into(),
-                assets: vec![text_input("identity content")],
+                source_assets: text_assets("identity content"),
+                document_renditions: vec![text_input("identity content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .unwrap();
         let revision_id = created.material.current_revision_id.clone();
-        let forged = DocumentTextAsset::new("forged content", None).unwrap();
-        let forged_json =
-            serde_json::to_string(&MaterialAsset::DocumentText(forged.clone())).unwrap();
         {
             let conn = repo.connection.lock();
             conn.execute(
-                "UPDATE material_assets SET asset_id=?1, asset_json=?2 WHERE revision_id=?3",
-                params![forged.id.as_str(), forged_json, revision_id.as_str()],
+                "UPDATE material_document_renditions
+                 SET digest=?1, byte_size=?2
+                 WHERE revision_id=?3",
+                params![
+                    {
+                        use sha2::Digest as _;
+                        hex::encode(sha2::Sha256::digest(b"forged content"))
+                    },
+                    b"forged content".len() as i64,
+                    revision_id.as_str(),
+                ],
             )
             .unwrap();
         }
@@ -1307,7 +1511,9 @@ fn corrupt_rows_surface_as_repository_errors() {
             .materials()
             .create(CreateLearningMaterial {
                 title: "Title proof".into(),
-                assets: vec![text_input("title content")],
+                source_assets: text_assets("title content"),
+                document_renditions: vec![text_input("title content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .unwrap();
@@ -1333,7 +1539,9 @@ fn corrupt_rows_surface_as_repository_errors() {
             .materials()
             .create(CreateLearningMaterial {
                 title: "Pointer proof".into(),
-                assets: vec![text_input("pointer content")],
+                source_assets: text_assets("pointer content"),
+                document_renditions: vec![text_input("pointer content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .unwrap();
@@ -1367,16 +1575,19 @@ fn corrupt_rows_surface_as_repository_errors() {
 
 #[test]
 fn forged_stored_typed_asset_fields_are_corruption() {
-    // Forge only the stored `byte_size` of a document asset, keeping text,
-    // digest, id, and kind consistent, so the revision identity still matches:
-    // only the per-asset constructor validation can catch the corruption.
+    // Forge only the stored `digest` of a document rendition, keeping the
+    // byte size and rendition id stale, so the rehydrated rendition's
+    // recomputed identity no longer matches: only the per-rendition
+    // constructor validation can catch the corruption.
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = services(&repo);
     let created = services
         .materials()
         .create(CreateLearningMaterial {
             title: "Stored proof".into(),
-            assets: vec![text_input("stored content")],
+            source_assets: text_assets("stored content"),
+            document_renditions: vec![text_input("stored content")],
+            media_renditions: Vec::new(),
             retain: None,
         })
         .unwrap();
@@ -1384,26 +1595,16 @@ fn forged_stored_typed_asset_fields_are_corruption() {
 
     {
         let conn = repo.connection.lock();
-        let stored: String = conn
-            .query_row(
-                "SELECT asset_json FROM material_assets WHERE revision_id=?1",
-                [revision_id.as_str()],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let mut value: serde_json::Value = serde_json::from_str(&stored).unwrap();
-        let byte_size = value["document_text"]["byte_size"].as_u64().unwrap();
-        value["document_text"]["byte_size"] = serde_json::json!(byte_size + 1);
         conn.execute(
-            "UPDATE material_assets SET asset_json=?1 WHERE revision_id=?2",
-            params![value.to_string(), revision_id.as_str()],
+            "UPDATE material_document_renditions SET digest=?1 WHERE revision_id=?2",
+            params!["0".repeat(64), revision_id.as_str()],
         )
         .unwrap();
     }
 
     let err = repo
         .get_revision(&revision_id)
-        .expect_err("forged stored byte_size is corruption");
+        .expect_err("forged stored digest is corruption");
     assert!(matches!(err, ApplicationError::Repository(_)));
 }
 
@@ -1416,39 +1617,62 @@ fn stored_asset_json_never_contains_a_path() {
         .materials()
         .create(CreateLearningMaterial {
             title: "No path".into(),
-            assets: vec![text_input("notes"), media_input("media-no-path")],
+            source_assets: text_assets("notes"),
+            document_renditions: vec![text_input("notes")],
+            media_renditions: vec![media_input("media-no-path")],
             retain: None,
         })
         .unwrap();
     let revision_id = created.material.current_revision_id.clone();
 
-    for asset_json in stored_asset_json(&repo, revision_id.as_str()) {
+    for fingerprint in stored_media_fingerprints(&repo, revision_id.as_str()) {
         assert!(
-            !asset_json.contains("\"path\""),
-            "stored asset JSON must never carry a path field: {asset_json}"
+            !fingerprint.contains("/tmp"),
+            "stored media rendition must never carry a media path: {fingerprint}"
         );
-        assert!(
-            !asset_json.contains("/tmp"),
-            "stored asset JSON must never carry a media path: {asset_json}"
+    }
+    let revision = repo
+        .get_revision(&revision_id)
+        .unwrap()
+        .expect("revision reads back");
+    for rendition in &revision.renditions {
+        let domain::Rendition::Media(media) = rendition else {
+            continue;
+        };
+        assert_eq!(
+            media.media_id.as_ref().map(domain::MediaId::as_str),
+            Some("media-no-path")
         );
-        let value: serde_json::Value = serde_json::from_str(&asset_json).unwrap();
-        if let Some(rendition) = value.get("media_rendition") {
-            let object = rendition.as_object().expect("rendition object");
-            assert!(
-                !object.contains_key("path"),
-                "media rendition JSON must never carry a path key"
-            );
-        }
     }
 }
 
 #[test]
 fn repository_reads_backfilled_legacy_materials() {
-    // Legacy `media_items` rows backfilled by the v59 migration are read back
-    // through the repository with typed values and the blank-title fallback.
+    // Legacy `media_items` rows backfilled by the v59 migration and converted
+    // to canonical renditions by v61 are read back through the repository with
+    // typed values and the blank-title fallback.
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     {
         let conn = repo.connection.lock();
+        // Rebuild the historical v58 fixture shape inside the migrated
+        // database, seed legacy rows, and run the real migration chain: the
+        // v59 backfill derives the graph, the v61 conversion moves the rows
+        // into the canonical media rendition table.
+        conn.execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE IF EXISTS source_identity_mappings;
+             DROP TABLE IF EXISTS capability_attempts;
+             DROP TABLE IF EXISTS material_document_renditions;
+             DROP TABLE IF EXISTS material_media_renditions;
+             DROP TABLE IF EXISTS material_source_assets;
+             DROP TABLE IF EXISTS material_assets;
+             DROP TABLE IF EXISTS material_media_bindings;
+             DROP TABLE IF EXISTS material_revisions;
+             DROP TABLE IF EXISTS learning_materials;
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 58).unwrap();
         conn.execute_batch(
             r#"
             INSERT INTO media_items
@@ -1459,9 +1683,7 @@ fn repository_reads_backfilled_legacy_materials() {
             "#,
         )
         .unwrap();
-        let tx = conn.unchecked_transaction().unwrap();
-        backfill_legacy_media_materials(&tx).unwrap();
-        tx.commit().unwrap();
+        migrate(&conn).unwrap();
     }
 
     let retained = repo
@@ -1477,8 +1699,8 @@ fn repository_reads_backfilled_legacy_materials() {
         .expect("backfilled revision rehydrates");
     assert_eq!(revision.title, "Legacy A");
     assert!(matches!(
-        revision.assets.first().unwrap(),
-        MaterialAsset::MediaRendition(_)
+        revision.renditions.first().unwrap(),
+        domain::Rendition::Media(_)
     ));
 
     let temporary = repo
@@ -1497,10 +1719,18 @@ fn repository_reads_backfilled_legacy_materials() {
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, retained.id);
 
-    // The backfill guarantee holds through the repository read path too.
-    for asset_json in stored_asset_json(&repo, revision.id.as_str()) {
-        assert!(!asset_json.contains("\"path\""));
-    }
+    // The backfill guarantee holds through the repository read path too:
+    // renditions are typed snapshot columns and never carry a path.
+    let media = revision
+        .renditions
+        .iter()
+        .filter_map(|component| match component {
+            domain::Rendition::Media(media) => Some(media),
+            domain::Rendition::Document(_) => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(media.len(), 1);
+    assert!(media[0].media_id.is_some());
 }
 
 #[test]
@@ -1560,7 +1790,7 @@ fn media_upsert_immediately_yields_one_deterministic_graph_without_paths() {
     // revision, one asset, one binding.
     assert_eq!(count(&repo, "learning_materials"), 2);
     assert_eq!(count(&repo, "material_revisions"), 2);
-    assert_eq!(count(&repo, "material_assets"), 2);
+    assert_eq!(count(&repo, "material_media_renditions"), 2);
     assert_eq!(count(&repo, "material_media_bindings"), 2);
 
     // The rendition asset is a typed snapshot: media id, kind, fingerprint,
@@ -1570,45 +1800,49 @@ fn media_upsert_immediately_yields_one_deterministic_graph_without_paths() {
             .get_revision(&material.current_revision_id)
             .unwrap()
             .unwrap();
-        assert_eq!(revision.assets.len(), 1);
-        let MaterialAsset::MediaRendition(rendition) = &revision.assets[0] else {
-            panic!("media material carries exactly one rendition asset");
+        assert_eq!(revision.renditions.len(), 1);
+        let domain::Rendition::Media(rendition) = &revision.renditions[0] else {
+            panic!("media material carries exactly one rendition");
         };
-        assert_eq!(rendition.media_id, material_media_id(&revision));
-        for asset_json in stored_asset_json(&repo, material.current_revision_id.as_str()) {
-            assert!(
-                !asset_json.contains("\"path\""),
-                "stored asset JSON must never carry a path: {asset_json}"
-            );
-            let value: serde_json::Value = serde_json::from_str(&asset_json).unwrap();
-            let object = value["media_rendition"]
-                .as_object()
-                .expect("rendition object");
-            for key in ["id", "media_id", "kind", "fingerprint", "availability"] {
-                assert!(object.contains_key(key), "missing key: {key}");
-            }
-        }
+        assert_eq!(
+            rendition.media_id.as_ref().expect("media id"),
+            &material_media_id(&revision)
+        );
+        let stored = stored_media_fingerprints(&repo, material.current_revision_id.as_str());
+        assert_eq!(stored, vec![rendition.fingerprint.clone()]);
     }
 
     // The material identity matches the domain derivation from the media id.
-    let rendition = MediaRenditionAsset::new(
-        temporary.id.clone(),
-        MediaKind::Video,
-        "media-graph-temp-fp".to_owned(),
-        MediaAvailability::Available,
-    )
-    .unwrap();
+    let rendition = domain::Rendition::Media(
+        MediaRendition::new(
+            domain::RenditionOrigin::Source,
+            MediaKind::Video,
+            "video/mp4",
+            "media-graph-temp-fp".to_owned(),
+            MediaAvailability::Available,
+            Some(temporary.id.clone()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
+    );
     assert_eq!(
         temporary_material.id,
-        initial_material_id(&[MaterialAsset::MediaRendition(rendition)]).unwrap()
+        initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap()
     );
 }
 
-/// The media id snapshotted by a media-backed revision's rendition asset.
+/// The media id snapshotted by a media-backed revision's rendition.
 fn material_media_id(revision: &MaterialRevision) -> MediaId {
-    match revision.assets.first().expect("revision carries assets") {
-        MaterialAsset::MediaRendition(rendition) => rendition.media_id.clone(),
-        MaterialAsset::DocumentText(_) => panic!("expected a media rendition"),
+    match revision
+        .renditions
+        .first()
+        .expect("revision carries renditions")
+    {
+        domain::Rendition::Media(rendition) => rendition.media_id.clone().expect("media id"),
+        domain::Rendition::Document(_) => panic!("expected a media rendition"),
     }
 }
 
@@ -1721,7 +1955,7 @@ fn repeated_registration_and_rebind_preserve_graph_identity_and_learner_state() 
     assert_eq!(revision, first_revision);
     assert_eq!(count(&repo, "learning_materials"), 1);
     assert_eq!(count(&repo, "material_revisions"), 1);
-    assert_eq!(count(&repo, "material_assets"), 1);
+    assert_eq!(count(&repo, "material_media_renditions"), 1);
     assert_eq!(count(&repo, "material_media_bindings"), 1);
 
     // The media row carries the rebound binding facts while the durable
@@ -1729,7 +1963,7 @@ fn repeated_registration_and_rebind_preserve_graph_identity_and_learner_state() 
     assert_eq!(rebound.path, "/managed-assets/rebind-v2.mp3");
     assert_eq!(rebound.title, "Rebound title");
     assert_eq!(rebound.kind, MediaKind::Audio);
-    let MaterialAsset::MediaRendition(rendition) = &revision.assets[0] else {
+    let domain::Rendition::Media(rendition) = &revision.renditions[0] else {
         panic!("expected a media rendition asset");
     };
     assert_eq!(
@@ -1829,7 +2063,7 @@ fn fingerprint_conflict_keeps_the_stored_identity_and_graph() {
     );
     assert_eq!(count(&repo, "learning_materials"), 1);
     assert_eq!(count(&repo, "material_revisions"), 1);
-    assert_eq!(count(&repo, "material_assets"), 1);
+    assert_eq!(count(&repo, "material_media_renditions"), 1);
     assert_eq!(count(&repo, "material_media_bindings"), 1);
 }
 
@@ -1864,10 +2098,11 @@ fn blank_title_media_uses_the_legacy_fallback_in_its_graph() {
 fn media_bound_to_another_material_conflicts_and_rolls_back_the_media_write() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     // A text material to serve as the corruption target.
-    let asset = DocumentTextAsset::new("other material", None).unwrap();
-    let assets = vec![MaterialAsset::DocumentText(asset)];
-    let other_id = initial_material_id(&assets).unwrap();
-    let revision = MaterialRevision::new(other_id.clone(), "Other", assets, 1).unwrap();
+    let (asset, rendition) = text_rendition_with_asset("other material");
+    let renditions = vec![rendition];
+    let other_id = initial_material_id(std::slice::from_ref(&asset), &renditions).unwrap();
+    let revision =
+        MaterialRevision::new(other_id.clone(), "Other", vec![asset], renditions, 1).unwrap();
     let material = LearningMaterial::new(&revision, None, 1, 1).unwrap();
     MaterialRepository::create_material(repo.as_ref(), &material, &revision).unwrap();
 
@@ -1953,7 +2188,7 @@ fn invalid_media_that_cannot_form_a_graph_rolls_back_atomically() {
         0,
         "the media row must not survive a graph construction failure"
     );
-    assert_eq!(graph_counts(&repo), (0, 0, 0, 0));
+    assert_eq!(graph_counts(&repo), (0, 0, 0, 0, 0, 0));
 
     // Inverted timestamps (updated before created) fail the material
     // constructor: nothing is persisted either.
@@ -1974,7 +2209,7 @@ fn invalid_media_that_cannot_form_a_graph_rolls_back_atomically() {
     );
     assert!(matches!(inverted, Err(ApplicationError::Repository(_))));
     assert_eq!(count(&repo, "media_items"), 0);
-    assert_eq!(graph_counts(&repo), (0, 0, 0, 0));
+    assert_eq!(graph_counts(&repo), (0, 0, 0, 0, 0, 0));
 
     // Retention evidence after the update time fails the material constructor
     // too: the media row written by the upsert rolls back with the graph.
@@ -1998,7 +2233,7 @@ fn invalid_media_that_cannot_form_a_graph_rolls_back_atomically() {
         Err(ApplicationError::Repository(_))
     ));
     assert_eq!(count(&repo, "media_items"), 0);
-    assert_eq!(graph_counts(&repo), (0, 0, 0, 0));
+    assert_eq!(graph_counts(&repo), (0, 0, 0, 0, 0, 0));
 }
 
 #[test]
@@ -2158,10 +2393,11 @@ fn cross_material_current_revision_pointer_is_corruption_and_rolls_back() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
 
     // A second material whose revision will be stolen by the corrupt pointer.
-    let asset = DocumentTextAsset::new("another material", None).unwrap();
-    let assets = vec![MaterialAsset::DocumentText(asset)];
-    let other_id = initial_material_id(&assets).unwrap();
-    let other_revision = MaterialRevision::new(other_id.clone(), "Other", assets, 1).unwrap();
+    let (asset, rendition) = text_rendition_with_asset("another material");
+    let renditions = vec![rendition];
+    let other_id = initial_material_id(std::slice::from_ref(&asset), &renditions).unwrap();
+    let other_revision =
+        MaterialRevision::new(other_id.clone(), "Other", vec![asset], renditions, 1).unwrap();
     let other_material = LearningMaterial::new(&other_revision, None, 1, 1).unwrap();
     MaterialRepository::create_material(repo.as_ref(), &other_material, &other_revision).unwrap();
 

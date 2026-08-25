@@ -25,43 +25,42 @@ CONTRACT_FILES = (
     "contracts/events/examples.json",
     "contracts/player-adapter/player-contract.schema.json",
     "contracts/player-adapter/examples.json",
-    "contracts/content-package/v1/README.md",
-    "contracts/content-package/v1/manifest.schema.json",
-    "contracts/content-package/v1/resource.schema.json",
-    "contracts/content-package/v1/examples/minimal/manifest.json",
-    "contracts/content-package/v1/examples/minimal/resources/subtitle-text-track.json",
-    "contracts/content-package/v1/examples/minimal/resources/word-timeline.json",
-    "contracts/content-package/v1/examples/minimal/resources/phone-timeline.json",
-    "contracts/content-package/v1/examples/minimal/resources/sense-group-analysis.json",
-    "contracts/content-package/v1/examples/minimal/resources/word-acoustics.json",
-    "contracts/content-package/v1/examples/minimal/resources/prosody-analysis.json",
-    "contracts/content-package/v2/README.md",
-    "contracts/content-package/v2/release.schema.json",
-    "contracts/content-package/v2/resource.schema.json",
-    "contracts/content-package/v2/delivery.schema.json",
-    "contracts/content-package/v2/payload/document-text.v1.schema.json",
-    "contracts/content-package/v2/payload/timed-text-track.v2.schema.json",
-    "contracts/content-package/v2/payload/translation.v1.schema.json",
-    "contracts/content-package/v2/payload/subtitle-text-track.v1.schema.json",
-    "contracts/content-package/v2/payload/word-timeline.v1.schema.json",
-    "contracts/content-package/v2/payload/phone-timeline.v1.schema.json",
-    "contracts/content-package/v2/payload/sense-group-analysis.v1.schema.json",
-    "contracts/content-package/v2/payload/word-acoustics.v1.schema.json",
-    "contracts/content-package/v2/payload/prosody-analysis.v1.schema.json",
-    "contracts/content-package/v2/examples/text-full/release.json",
-    "contracts/content-package/v2/examples/text-full/delivery.json",
-    "contracts/content-package/v2/examples/text-full/blobs/sha256/49128790cdb73915d8eef1a4c0cc9bb953c2d875e2e366bac8fd2276920f7c6f",
-    "contracts/content-package/v2/examples/detached-media/release.json",
-    "contracts/content-package/v2/examples/detached-media/delivery.json",
-    "contracts/content-package/v2/examples/detached-media/blobs/sha256/29ecf0e48149f3706ded9e9ea048df6635f977b55e20ecb29365e810cf58fbb9",
-    "contracts/content-package/v2/examples/hybrid-multilingual/release.json",
-    "contracts/content-package/v2/examples/hybrid-multilingual/delivery.json",
-    "contracts/content-package/v2/examples/hybrid-multilingual/blobs/sha256/1bee26b045e7c90d616405bb6d173a2db22b6d3f2851d02242e5adccda41cbff",
-    "contracts/content-package/v2/examples/hybrid-multilingual/blobs/sha256/a9c749023a1e0b8273c13317c591f974e4df6c9c2fc861865840e138e13d7b28",
+    "contracts/content-package/v3/README.md",
+    "contracts/content-package/v3/release.schema.json",
+    "contracts/content-package/v3/resource.schema.json",
+    "contracts/content-package/v3/definitions.schema.json",
+    "contracts/content-package/v3/payload/structured-reading.v1.schema.json",
+    "contracts/content-package/v3/payload/anchor-time-alignment.v1.schema.json",
+    "contracts/content-package/v3/tests/negative-schemas.json",
+    "contracts/content-package/v3/examples/document-source/release.json",
+    "contracts/content-package/v3/examples/document-source/blobs/sha256/b9f97d10ef4b46051d2810f8419a36386f279a60fa2646f99334fb48f14758b0",
+    "contracts/content-package/v3/examples/document-source/blobs/sha256/eabbe92d729020cfb0b845e5351b089d0c38f2693b30d7bfdc62604258e34c61",
+    "contracts/content-package/v3/examples/media-only/release.json",
+    "contracts/content-package/v3/examples/media-only/blobs/sha256/25840bb6a51589d4b050198cc79126e5aba07d176c1115d718db938deb9b81f6",
+    "contracts/content-package/v3/examples/media-only/blobs/sha256/e323d2d613e601e3a66bbd1ca397d1f2753a18675332353cf40e23477db18696",
+    "contracts/content-package/v3/examples/media-only/blobs/sha256/eefa7e5b7cf9f2fa4f8e68d69638840702c0311fb3d6a2d38bfcc9342d5cf22a",
+    "contracts/content-package/v3/examples/composed/release.json",
+    "contracts/content-package/v3/examples/composed/blobs/sha256/2d85f17b4ea7248b6620f4bbf67cd50650e6f696f2446e5c805511cae90b46f9",
+    "contracts/content-package/v3/examples/composed/blobs/sha256/5382c9ebe85e6c41cb3d3322a61a8a011c7d249225df9178ae48e47c57c3fa0b",
+    "contracts/content-package/v3/examples/composed/blobs/sha256/b974227035ff4e0d7ba60a6bde13d04101053b240696cadc293cbd5c056ded9b",
+    "contracts/content-package/v3/examples/composed/blobs/sha256/b9f97d10ef4b46051d2810f8419a36386f279a60fa2646f99334fb48f14758b0",
+    "contracts/content-package/v3/examples/composed/blobs/sha256/eabbe92d729020cfb0b845e5351b089d0c38f2693b30d7bfdc62604258e34c61",
     "testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json",
     "testdata/rhythm-frame-qa/fixture-rhythm.lltimeline.json",
     "testdata/semantic-task/gold-fixture-v1.json",
 )
+
+
+def contract_content_package_v3_files(root: Path) -> set[str]:
+    """The live v3 contract tree. The explicit inventory above must match it
+    exactly; drift fails the artifact build instead of silently shipping a
+    partial contract."""
+    prefix = "contracts/content-package/v3/"
+    return {
+        str(path.relative_to(root))
+        for path in (root / "contracts/content-package/v3").rglob("*")
+        if path.is_file() and str(path.relative_to(root)).startswith(prefix)
+    }
 
 
 @dataclass(frozen=True)
@@ -160,6 +159,16 @@ def build_contract_artifact(args: argparse.Namespace) -> Path:
         data = (root / relative).read_bytes()
         source_entries.append(ArtifactEntry(relative, data))
         file_hashes[relative] = sha256_bytes(data)
+    v3_inventory = {
+        relative
+        for relative in CONTRACT_FILES
+        if relative.startswith("contracts/content-package/v3/")
+    }
+    if v3_inventory != contract_content_package_v3_files(root):
+        raise SystemExit(
+            "contract inventory drift: CONTRACT_FILES v3 entries must match the "
+            "contracts/content-package/v3 tree exactly"
+        )
     version = openapi_contract_version((root / CONTRACT_FILES[0]).read_bytes())
     git_sha = args.git_sha or repository_git_sha(root, args.allow_dirty)
     manifest: dict[str, object] = {

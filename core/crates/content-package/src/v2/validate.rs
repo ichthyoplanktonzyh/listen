@@ -8,8 +8,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::model::{
-    PhoneTimeline, ProsodyAnalysis, SenseGroupAnalysis, SubtitleTextTrack, SubtitleToken, TokenRef,
-    WordAcoustics, WordTimeline,
+    AcousticTrack, PhoneTimeline, ProsodyAnalysis, SenseGroupAnalysis, SpeechActivity,
+    SubtitleTextTrack, SubtitleToken, TokenRef, WordAcoustics, WordTimeline,
 };
 
 use super::payload::{DocumentText, KnownPayload, TimedTextTrack, Translation};
@@ -399,6 +399,70 @@ pub(crate) fn validate_word_acoustics(
     Ok(())
 }
 
+/// Structural validation for `acoustic_track` v1, mirroring the invariants Gen
+/// already guarantees at qualification: at least one frame; strictly increasing
+/// frame `time_ms` that lands on the fixed `frame_step_ms`; finite energy; and
+/// `f0_rel_st` present only when `f0_hz` is present. Audio-only evidence, so
+/// there is no subtitle or timeline reference to cross-check.
+pub(crate) fn validate_acoustic_track(payload: &AcousticTrack) -> Result<(), String> {
+    if payload.sample_rate_hz == 0 {
+        return Err("acoustic_track sample_rate_hz must be positive".to_owned());
+    }
+    if payload.frame_step_ms == 0 {
+        return Err("acoustic_track frame_step_ms must be positive".to_owned());
+    }
+    if payload.frames.is_empty() {
+        return Err("acoustic_track must declare at least one frame".to_owned());
+    }
+    let step = u64::from(payload.frame_step_ms);
+    let mut previous_time: Option<u64> = None;
+    for frame in &payload.frames {
+        if !frame.energy_dbfs.is_finite() || !frame.energy_rel_db.is_finite() {
+            return Err("acoustic_track energy must be finite".to_owned());
+        }
+        if let Some(previous) = previous_time {
+            if frame.time_ms <= previous {
+                return Err("acoustic_track frame times must strictly increase".to_owned());
+            }
+            if frame.time_ms - previous != step {
+                return Err("acoustic_track frame times must land on frame_step_ms".to_owned());
+            }
+        }
+        previous_time = Some(frame.time_ms);
+        match (frame.f0_hz, frame.f0_rel_st) {
+            (None, Some(_)) => {
+                return Err("acoustic_track f0_rel_st must be null when f0_hz is null".to_owned());
+            }
+            (Some(hz), _) if !hz.is_finite() || hz <= 0.0 => {
+                return Err("acoustic_track f0_hz must be a positive finite value".to_owned());
+            }
+            _ => {}
+        }
+        if frame.f0_rel_st.is_some_and(|value| !value.is_finite()) {
+            return Err("acoustic_track f0_rel_st must be finite".to_owned());
+        }
+    }
+    Ok(())
+}
+
+/// Structural validation for `speech_activity` v1, mirroring Gen: at least one
+/// span; every span half-open and positive; spans ordered and non-overlapping.
+/// The `activity` label is constrained to speech/silence by the payload enum.
+pub(crate) fn validate_speech_activity(payload: &SpeechActivity) -> Result<(), String> {
+    if payload.spans.is_empty() {
+        return Err("speech_activity must declare at least one span".to_owned());
+    }
+    let mut previous_end: Option<u64> = None;
+    for span in &payload.spans {
+        validate_half_open(span.start_ms, span.end_ms, "speech activity span")?;
+        if previous_end.is_some_and(|previous| span.start_ms < previous) {
+            return Err("speech_activity spans must be ordered and non-overlapping".to_owned());
+        }
+        previous_end = Some(span.end_ms);
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_prosody_analysis(
     payload: &ProsodyAnalysis,
     subtitle: Option<&SubtitleTextTrack>,
@@ -560,4 +624,87 @@ pub(crate) fn validate_https_hint(url: &str) -> Result<(), String> {
         return Err("acquisition hint must name a host".to_owned());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod acoustic_evidence_tests {
+    use super::{validate_acoustic_track, validate_speech_activity};
+    use crate::model::{AcousticTrack, SpeechActivity};
+
+    // Mirrors the exact `listen.payload.acoustic-track.v1` payload Gen writes
+    // (see listen-gen rich.py `_acoustic_track_resource`): four 10 ms frames,
+    // unvoiced frames carry null pitch, voiced frames carry both f0 fields.
+    fn valid_track() -> AcousticTrack {
+        serde_json::from_value(serde_json::json!({
+            "sample_rate_hz": 16000,
+            "frame_step_ms": 10,
+            "energy_baseline": "recording_median_dbfs",
+            "pitch_baseline": "recording_median_f0_hz",
+            "frames": [
+                {"time_ms": 0, "energy_dbfs": -55.0, "energy_rel_db": -8.0, "f0_hz": null, "f0_rel_st": null, "voiced": false},
+                {"time_ms": 10, "energy_dbfs": -22.0, "energy_rel_db": 6.0, "f0_hz": 182.0, "f0_rel_st": 1.2, "voiced": true},
+                {"time_ms": 20, "energy_dbfs": -24.0, "energy_rel_db": 4.0, "f0_hz": 176.0, "f0_rel_st": 0.7, "voiced": true},
+                {"time_ms": 30, "energy_dbfs": -47.0, "energy_rel_db": -3.0, "f0_hz": null, "f0_rel_st": null, "voiced": false}
+            ]
+        }))
+        .expect("valid acoustic track payload decodes")
+    }
+
+    fn valid_activity() -> SpeechActivity {
+        serde_json::from_value(serde_json::json!({
+            "spans": [
+                {"start_ms": 0, "end_ms": 100, "activity": "silence"},
+                {"start_ms": 100, "end_ms": 1900, "activity": "speech"},
+                {"start_ms": 1900, "end_ms": 2200, "activity": "silence"}
+            ]
+        }))
+        .expect("valid speech activity payload decodes")
+    }
+
+    #[test]
+    fn accepts_gen_shaped_payloads() {
+        assert!(validate_acoustic_track(&valid_track()).is_ok());
+        assert!(validate_speech_activity(&valid_activity()).is_ok());
+    }
+
+    #[test]
+    fn rejects_empty_frames_and_spans() {
+        let mut track = valid_track();
+        track.frames.clear();
+        assert!(validate_acoustic_track(&track).is_err());
+        let mut activity = valid_activity();
+        activity.spans.clear();
+        assert!(validate_speech_activity(&activity).is_err());
+    }
+
+    #[test]
+    fn rejects_frame_time_off_the_fixed_hop() {
+        let mut track = valid_track();
+        track.frames[2].time_ms = 25; // 15 ms gap, not the declared 10 ms hop
+        assert!(validate_acoustic_track(&track).is_err());
+    }
+
+    #[test]
+    fn rejects_non_increasing_frame_time() {
+        let mut track = valid_track();
+        track.frames[2].time_ms = 10; // equal to the previous frame
+        assert!(validate_acoustic_track(&track).is_err());
+    }
+
+    #[test]
+    fn rejects_pitch_rel_without_pitch_hz() {
+        let mut track = valid_track();
+        track.frames[0].f0_rel_st = Some(0.5); // f0_hz is null → relative pitch is impossible
+        assert!(validate_acoustic_track(&track).is_err());
+    }
+
+    #[test]
+    fn rejects_overlapping_or_backwards_spans() {
+        let mut activity = valid_activity();
+        activity.spans[1].start_ms = 50; // overlaps the previous span [0,100)
+        assert!(validate_speech_activity(&activity).is_err());
+        let mut activity = valid_activity();
+        activity.spans[1].end_ms = activity.spans[1].start_ms; // empty span
+        assert!(validate_speech_activity(&activity).is_err());
+    }
 }

@@ -31,16 +31,18 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
-use content_package::v2::{
-    InstallationPlan, KnownPayload, PlanRendition, PlanResource, ResourceDisposition, ResourceRole,
-    ReviewStatus, V2Error, V2Inspection, inspect_v2_path, installation_plan,
+use content_package::v2::{PlanResource, ResourceDisposition, ResourceRole, ReviewStatus};
+use content_package::v3::{
+    PlanDocumentRendition, PlanMediaRendition, V3Error, V3Inspection, V3InstallationPlan,
+    inspect_v3_path, installation_plan_v3,
 };
 use domain::{
-    AdoptionCommitPlan, DocumentTextAsset, LanguageCode, LearningEdition, LearningMaterial,
-    LearningMaterialId, MaterialAsset, MaterialRevision, MaterialRevisionId, MediaAvailability,
-    MediaKind, MediaRenditionAsset, PackageInstallation, PackageLifecycleError, PackageReleaseId,
+    AdoptionCommitPlan, DocumentRendition, LanguageCode, LearningEdition, LearningMaterial,
+    LearningMaterialId, MaterialRevision, MaterialRevisionId, MediaAvailability, MediaId,
+    MediaKind, MediaRendition, PackageInstallation, PackageLifecycleError, PackageReleaseId,
     PackageRenditionFact, PackageResourceAvailability, PackageResourceFact,
-    PackageResourceProvenance, PackageResourceRole, PackageReviewStatus, adoption_commit_plan,
+    PackageResourceProvenance, PackageResourceRole, PackageReviewStatus, Rendition,
+    RenditionOrigin, adoption_commit_plan,
 };
 
 use crate::{ApplicationError, MaterialRepository, now_ms};
@@ -48,16 +50,21 @@ use crate::{ApplicationError, MaterialRepository, now_ms};
 /// The application-owned prepared installation input handed to the
 /// persistence seam: the path-free [`PackageInstallation`] domain facts plus
 /// the exact validated raw payload bytes of every present known and present
-/// opaque resource. The repository must make facts and payloads durable
-/// together in one atomic operation so an accepted installation never depends
-/// on the source carrier. Raw bytes never enter domain entities or
-/// learner-facing views.
+/// opaque resource and the exact embedded blob bytes of every present
+/// Document/Media Rendition. The repository must make facts, payloads, and
+/// rendition blobs durable together in one atomic operation so an accepted
+/// installation never depends on the source carrier. Raw bytes never enter
+/// domain entities or learner-facing views.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedPackageInstallation {
     pub installation: PackageInstallation,
     /// Every present payload body, sorted by resource id. Missing resources
     /// have no entry and remain explicitly unavailable.
     pub payloads: Vec<PreparedResourcePayload>,
+    /// Every present embedded Document/Media Rendition blob, sorted by
+    /// rendition id. Referenced (absent) rendition blobs have no entry and
+    /// remain explicitly unavailable.
+    pub rendition_blobs: Vec<PreparedRenditionBlob>,
 }
 
 /// One exact validated payload body with the identity, schema, digest, and
@@ -71,7 +78,26 @@ pub struct PreparedResourcePayload {
     pub digest: String,
     pub size_bytes: u64,
     /// The exact raw bytes, verified against `digest` and `size_bytes` by the
-    /// v2 inspection.
+    /// v3 inspection.
+    pub bytes: Vec<u8>,
+}
+
+/// One exact embedded Document/Media Rendition blob with the facts that let
+/// the repository verify the association with its rendition fact and durably
+/// store the body. Derived renditions carry the blob that makes them usable
+/// after the source carrier is deleted; Source rendition blobs embedded in
+/// the carrier are stored the same way, so adopted content never depends on a
+/// re-parse of the `.listenpkg`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedRenditionBlob {
+    /// The rendition id of the Document/Media Rendition this blob realizes.
+    pub rendition_id: String,
+    /// `document` or `media`.
+    pub kind: String,
+    pub digest: String,
+    pub size_bytes: u64,
+    /// The exact raw bytes, verified against `digest` and `size_bytes` by the
+    /// v3 inspection.
     pub bytes: Vec<u8>,
 }
 
@@ -146,6 +172,37 @@ pub trait PackageLifecycleRepository: Send + Sync {
         &self,
         commit: &AdoptionCommitPlan,
     ) -> Result<AdoptionCommitPlan, ApplicationError>;
+
+    /// Reads the exact durable payload bytes of one installed resource,
+    /// re-verifying digest and size against the stored fact. `Ok(None)` means
+    /// the installation or resource is absent; tampered bytes fail with a
+    /// repository error and are never returned.
+    fn read_resource_payload(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+        resource_id: &str,
+    ) -> Result<Option<Vec<u8>>, ApplicationError>;
+
+    /// Reads the exact durable embedded blob of one installed Document/Media
+    /// Rendition, re-verifying digest and size against the stored rendition
+    /// fact. `Ok(None)` means the installation or rendition is absent or its
+    /// blob is not stored (unavailable); tampered bytes fail with a
+    /// repository error and are never returned.
+    fn read_rendition_blob(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+        rendition_id: &str,
+    ) -> Result<Option<Vec<u8>>, ApplicationError>;
+
+    /// Deletes one installed candidate release for `material_id`. Returns true
+    /// if a release was found and deleted, false if no such installation existed.
+    fn delete_installation(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+    ) -> Result<bool, ApplicationError>;
 }
 
 /// Without configured persistence every package lifecycle operation errors
@@ -187,6 +244,32 @@ impl PackageLifecycleRepository for DisabledPackageLifecycleRepository {
         &self,
         _commit: &AdoptionCommitPlan,
     ) -> Result<AdoptionCommitPlan, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn read_resource_payload(
+        &self,
+        _material_id: &LearningMaterialId,
+        _release_id: &PackageReleaseId,
+        _resource_id: &str,
+    ) -> Result<Option<Vec<u8>>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn read_rendition_blob(
+        &self,
+        _material_id: &LearningMaterialId,
+        _release_id: &PackageReleaseId,
+        _rendition_id: &str,
+    ) -> Result<Option<Vec<u8>>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn delete_installation(
+        &self,
+        _material_id: &LearningMaterialId,
+        _release_id: &PackageReleaseId,
+    ) -> Result<bool, ApplicationError> {
         Err(Self::disabled())
     }
 }
@@ -259,16 +342,17 @@ impl PackageLifecycleUseCases {
         }
     }
 
-    /// Installs one local Content Package v2 release for an existing Learning
-    /// Material.
+    /// Installs one local Content Package release for an existing Learning
+    /// Material. Both the v2 and the v3 release schema are supported; the
+    /// declared schema of the carrier selects the inspection.
     ///
-    /// The carrier must be a v2 release whose `material_id` and
-    /// `material_revision_id` equal the Material's identity and current
-    /// revision exactly. Declared media renditions must match a bound
-    /// Material media asset by kind and normalized SHA-256 fingerprint, a
-    /// document-text base resource must agree with the matching Material text
-    /// asset, and every required known resource payload and its dependency
-    /// closure must be available. Ambiguous bindings fail rather than guess.
+    /// The carrier's `material_id` and `material_revision_id` must equal the
+    /// Material's identity and current revision exactly. Declared media
+    /// renditions must match a bound Material media asset by kind and
+    /// normalized SHA-256 fingerprint, a document-text base resource must
+    /// agree with the matching Material text asset, and every required known
+    /// resource payload and its dependency closure must be available.
+    /// Ambiguous bindings fail rather than guess.
     ///
     /// Installation is candidate-only: the Material's membership, revision,
     /// adoption, and active selections are never changed. The exact validated
@@ -289,10 +373,10 @@ impl PackageLifecycleUseCases {
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
         let current_revision = self.current_revision(&material)?;
-        let inspection = inspect_v2_path(package_path).map_err(map_inspection_error)?;
-        let plan = installation_plan(&inspection);
+        let inspection = inspect_v3_path(package_path).map_err(map_v3_inspection_error)?;
+        let plan = installation_plan_v3(&inspection);
         let prepared =
-            self.prepare_installation(&material, &current_revision, &inspection, &plan)?;
+            self.prepare_v3_installation(&material, &current_revision, &inspection, &plan)?;
         let persisted = self.package_lifecycle.save_installation(&prepared)?;
         let adoption = self.package_lifecycle.get_adoption(material_id)?;
         let adopted = adoption
@@ -369,6 +453,36 @@ impl PackageLifecycleUseCases {
         Ok(edition_view(installation, Some(&committed)))
     }
 
+    /// Deletes one installed Learning Edition candidate for the Material.
+    ///
+    /// The material must exist, and the release must not be currently adopted.
+    /// Deleting an adopted edition fails closed with `ApplicationError::Conflict`.
+    pub fn delete_for_material(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+    ) -> Result<(), ApplicationError> {
+        let _material = self
+            .materials
+            .get_material(material_id)?
+            .ok_or(ApplicationError::NotFound("material"))?;
+        let adoption = self.package_lifecycle.get_adoption(material_id)?;
+        if let Some(adopted) = adoption {
+            if adopted.release_id == *release_id {
+                return Err(ApplicationError::Conflict(
+                    "cannot delete currently adopted package release; switch adoption first".into(),
+                ));
+            }
+        }
+        let deleted = self
+            .package_lifecycle
+            .delete_installation(material_id, release_id)?;
+        if !deleted {
+            return Err(ApplicationError::NotFound("package release installation"));
+        }
+        Ok(())
+    }
+
     /// Loads the Material's actual current revision from the repository and
     /// revalidates ownership, mirroring the Material use cases: a repository
     /// must never point a Material's current-revision pointer at a revision
@@ -389,32 +503,32 @@ impl PackageLifecycleUseCases {
         Ok(revision)
     }
 
-    /// Validates the inspected release against the Material and projects it
-    /// into the prepared installation: the immutable facts plus the exact
-    /// validated bytes of every present resource payload. The bytes exist
-    /// only in the prepared input, which the repository persists durably with
-    /// the facts.
-    fn prepare_installation(
+    /// Validates the inspected v3 release against the Material and projects it
+    /// into the prepared installation. Source renditions must match the
+    /// Material's own renditions; Derived renditions carry producer facts
+    /// (already enforced by the v3 inspection) and are available only when
+    /// their declared blob is present in the carrier.
+    fn prepare_v3_installation(
         &self,
         material: &LearningMaterial,
         current_revision: &MaterialRevision,
-        inspection: &V2Inspection,
-        plan: &InstallationPlan,
+        inspection: &V3Inspection,
+        plan: &V3InstallationPlan,
     ) -> Result<PreparedPackageInstallation, ApplicationError> {
         if plan.material_id != material.id.as_str() {
             return Err(ApplicationError::Invalid(
-                "content package v2 material id does not match the target material".into(),
+                "content package v3 material id does not match the target material".into(),
             ));
         }
         if plan.material_revision_id != current_revision.id.as_str() {
             return Err(ApplicationError::Invalid(
-                "content package v2 material revision does not match the material's current revision"
+                "content package v3 material revision does not match the material's current revision"
                     .into(),
             ));
         }
-        let rendition_availability = validate_media_sources(current_revision, plan)?;
-        validate_document_text_sources(current_revision, inspection)?;
-        verify_required_closure(plan, inspection)?;
+        let document_availability = validate_v3_document_sources(current_revision, inspection)?;
+        let media_availability = validate_v3_media_sources(current_revision, inspection)?;
+        verify_v3_required_closure(plan, inspection)?;
         let edition = LearningEdition {
             edition_id: domain::LearningEditionId::parse(&plan.edition_id)?,
             title: inspection.release.edition.title.clone(),
@@ -430,14 +544,10 @@ impl PackageLifecycleUseCases {
         let resources = plan
             .resources
             .iter()
-            .map(|resource| resource_fact(resource, inspection))
+            .map(|resource| resource_fact_v3(resource, inspection))
             .collect::<Result<Vec<_>, _>>()?;
-        let renditions = plan
-            .renditions
-            .iter()
-            .map(|rendition| rendition_fact(rendition, &rendition_availability))
-            .collect::<Result<Vec<_>, _>>()?;
-        let payloads = collect_prepared_payloads(plan, inspection)?;
+        let renditions = v3_rendition_facts(plan, &document_availability, &media_availability)?;
+        let (payloads, rendition_blobs) = collect_prepared_payloads_v3(plan, inspection)?;
         Ok(PreparedPackageInstallation {
             installation: PackageInstallation {
                 release_id: PackageReleaseId::parse(&plan.release_id)?,
@@ -450,136 +560,162 @@ impl PackageLifecycleUseCases {
                 installed_at_ms: now_ms(),
             },
             payloads,
+            rendition_blobs,
         })
     }
 }
 
-/// Validates every declared media rendition against the bound Material media
-/// assets: kind and normalized SHA-256 fingerprint must match exactly one
-/// bound asset. Returns the per-rendition availability fact; a rendition is
-/// available only when its bound usable Material source asset is available.
-/// Media embedded in the temporary carrier never makes a rendition available:
-/// core does not silently adopt ownership of source media bytes, and embedded
-/// media acquisition belongs to the separate App acquisition journey.
-fn validate_media_sources(
+/// Validates every declared v3 Document Rendition against the bound Material
+/// document renditions. A Source rendition must agree with exactly one
+/// Material document rendition by exact blob digest (and media type), must
+/// not contradict its declared language, and must bind the same Source Asset
+/// bytes the Material records; a Derived rendition is available when its
+/// declared text blob is present in the carrier. Returns the per-rendition
+/// availability fact and, for a Source rendition, the exact Source Asset it
+/// binds.
+fn validate_v3_document_sources(
     current_revision: &MaterialRevision,
-    plan: &InstallationPlan,
-) -> Result<HashMap<String, bool>, ApplicationError> {
-    let mut availability = HashMap::with_capacity(plan.renditions.len());
-    for rendition in &plan.renditions {
-        let matches = matching_media_assets(current_revision, rendition);
-        if matches.is_empty() {
-            return Err(ApplicationError::Invalid(
-                "content package v2 media rendition does not match a bound material media asset"
-                    .into(),
-            ));
-        }
-        if matches.len() > 1 {
-            return Err(ApplicationError::Invalid(
-                "content package v2 media rendition binding is ambiguous".into(),
-            ));
-        }
-        availability.insert(
-            rendition.rendition_id.clone(),
-            matches[0].availability == MediaAvailability::Available,
-        );
+    inspection: &V3Inspection,
+) -> Result<HashMap<String, (bool, Option<domain::SourceAssetId>)>, ApplicationError> {
+    let mut availability = HashMap::with_capacity(inspection.document_renditions.len());
+    for record in &inspection.document_renditions {
+        let entry = &record.entry;
+        let fact = match entry.origin {
+            content_package::v3::RenditionOrigin::Source => {
+                let digest_hex = entry.text_blob.digest.trim_start_matches("sha256:");
+                let matches: Vec<&DocumentRendition> = current_revision
+                    .renditions
+                    .iter()
+                    .filter_map(|component| match component {
+                        Rendition::Document(rendition) if rendition.digest == digest_hex => {
+                            Some(rendition)
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                if matches.is_empty() {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 source document rendition does not match a bound material document rendition"
+                            .into(),
+                    ));
+                }
+                if matches.len() > 1 {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 source document rendition binding is ambiguous".into(),
+                    ));
+                }
+                if matches[0].media_type != entry.media_type {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 source document rendition contradicts the material's media type"
+                            .into(),
+                    ));
+                }
+                if let (Some(declared), Some(stored)) = (&entry.language, &matches[0].language)
+                    && declared != stored.as_str()
+                {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 source document rendition contradicts the material's declared language"
+                            .into(),
+                    ));
+                }
+                // A Source rendition is available when the carrier embeds its
+                // exact bytes (managed sources always do). A referenced
+                // source rendition with no embedded blob stays a bound,
+                // adopted fact whose bytes are read through its Source Asset
+                // binding.
+                (record.text_present, matches[0].source_asset_id.clone())
+            }
+            content_package::v3::RenditionOrigin::Derived => {
+                debug_assert!(
+                    entry.producer.is_some(),
+                    "derived renditions carry producer facts by inspection"
+                );
+                (record.text_present, None)
+            }
+        };
+        availability.insert(entry.rendition_id.clone(), fact);
     }
     Ok(availability)
 }
 
-fn matching_media_assets<'a>(
-    current_revision: &'a MaterialRevision,
-    rendition: &PlanRendition,
-) -> Vec<&'a MediaRenditionAsset> {
-    current_revision
-        .assets
-        .iter()
-        .filter_map(|asset| {
-            let MaterialAsset::MediaRendition(asset) = asset else {
-                return None;
-            };
-            let kind_matches = match asset.kind {
-                MediaKind::Audio => rendition.kind == "audio",
-                MediaKind::Video => rendition.kind == "video",
-            };
-            (kind_matches && media_fingerprint_matches(&asset.fingerprint, &rendition.media_digest))
-                .then_some(asset)
-        })
-        .collect()
+/// Validates every declared v3 Media Rendition against the bound Material
+/// media renditions. A Source rendition must match exactly one bound asset by
+/// kind and fingerprint; a Derived rendition records its own producer facts
+/// and is available when its declared media blob is present in the carrier.
+/// Returns the per-rendition availability fact.
+fn validate_v3_media_sources(
+    current_revision: &MaterialRevision,
+    inspection: &V3Inspection,
+) -> Result<HashMap<String, (bool, Option<MediaId>)>, ApplicationError> {
+    let mut availability = HashMap::with_capacity(inspection.media_renditions.len());
+    for record in &inspection.media_renditions {
+        let entry = &record.entry;
+        let fact = match entry.origin {
+            content_package::v3::RenditionOrigin::Source => {
+                let matches: Vec<&MediaRendition> = current_revision
+                    .renditions
+                    .iter()
+                    .filter_map(|component| {
+                        let Rendition::Media(media) = component else {
+                            return None;
+                        };
+                        let kind_matches = match media.kind {
+                            MediaKind::Audio => entry.kind == "audio",
+                            MediaKind::Video => entry.kind == "video",
+                        };
+                        (kind_matches
+                            && media_fingerprint_equals(&media.fingerprint, &entry.fingerprint))
+                        .then_some(media)
+                    })
+                    .collect();
+                if matches.is_empty() {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 media rendition does not match a bound material media rendition"
+                            .into(),
+                    ));
+                }
+                if matches.len() > 1 {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 media rendition binding is ambiguous".into(),
+                    ));
+                }
+                (
+                    matches[0].availability == MediaAvailability::Available,
+                    matches[0].media_id.clone(),
+                )
+            }
+            content_package::v3::RenditionOrigin::Derived => {
+                debug_assert!(
+                    entry.producer.is_some(),
+                    "derived renditions carry producer facts by inspection"
+                );
+                (record.media_present, None)
+            }
+        };
+        availability.insert(entry.rendition_id.clone(), fact);
+    }
+    Ok(availability)
 }
 
-/// Whether the Material's stored media fingerprint matches the package
-/// rendition digest. The digest is always `sha256:<hex>`; the stored
-/// fingerprint may be the same `sha256:` form or a bare lowercase hex digest.
-/// Anything else never matches, so no cross-source equivalence is inferred.
-fn media_fingerprint_matches(stored: &str, packaged: &str) -> bool {
-    if stored == packaged {
+/// Whether the Material's stored media fingerprint equals the declared v3
+/// rendition fingerprint. Equal strings match; a `sha256:` prefix difference
+/// over an otherwise equal 64-hex digest matches; anything else never
+/// matches, so no cross-source equivalence is inferred.
+fn media_fingerprint_equals(stored: &str, declared: &str) -> bool {
+    if stored == declared {
         return true;
     }
-    let Some(packaged_hex) = packaged.strip_prefix("sha256:") else {
-        return false;
-    };
-    stored.len() == 64
-        && stored
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-        && stored == packaged_hex
-}
-
-/// Validates every present document-text base resource against the bound
-/// Material document-text assets: the payload text must agree with exactly
-/// one matching asset, and the payload language must not contradict the
-/// asset's declared language.
-fn validate_document_text_sources(
-    current_revision: &MaterialRevision,
-    inspection: &V2Inspection,
-) -> Result<(), ApplicationError> {
-    for record in &inspection.resources {
-        let entry = &record.entry;
-        if entry.descriptor.role != ResourceRole::Base || record.payload.kind() != "document_text" {
-            continue;
-        }
-        let KnownPayload::DocumentText(payload) = &record.payload else {
-            unreachable!("payload kind was checked above");
-        };
-        let matches: Vec<&DocumentTextAsset> = current_revision
-            .assets
-            .iter()
-            .filter_map(|asset| match asset {
-                MaterialAsset::DocumentText(asset) if asset.text == payload.text => Some(asset),
-                _ => None,
-            })
-            .collect();
-        if matches.is_empty() {
-            return Err(ApplicationError::Invalid(
-                "content package v2 document text does not agree with the material's document text"
-                    .into(),
-            ));
-        }
-        if matches.len() > 1 {
-            return Err(ApplicationError::Invalid(
-                "content package v2 document text binding is ambiguous".into(),
-            ));
-        }
-        let payload_language = LanguageCode::parse(&payload.language)?;
-        if let Some(language) = &matches[0].language
-            && language != &payload_language
-        {
-            return Err(ApplicationError::Invalid(
-                "content package v2 document text does not agree with the material's document text"
-                    .into(),
-            ));
-        }
-    }
-    Ok(())
+    let stored_hex = stored.strip_prefix("sha256:").unwrap_or(stored);
+    let declared_hex = declared.strip_prefix("sha256:").unwrap_or(declared);
+    stored_hex == declared_hex && stored_hex.len() == 64
 }
 
 /// Every required known resource payload and its transitive dependency
 /// closure must be available and verified; optional missing resources remain
 /// explicit unavailable facts.
-fn verify_required_closure(
-    plan: &InstallationPlan,
-    inspection: &V2Inspection,
+fn verify_v3_required_closure(
+    plan: &V3InstallationPlan,
+    inspection: &V3Inspection,
 ) -> Result<(), ApplicationError> {
     let dispositions: HashMap<&str, &PlanResource> = plan
         .resources
@@ -605,7 +741,7 @@ fn verify_required_closure(
     for resource in plan.resources.iter().filter(|resource| resource.required) {
         if resource.disposition != ResourceDisposition::Candidate {
             return Err(ApplicationError::Invalid(
-                "content package v2 required resource payload is unavailable".into(),
+                "content package v3 required resource payload is unavailable".into(),
             ));
         }
         let mut pending = vec![resource.resource_id.as_str()];
@@ -615,14 +751,14 @@ fn verify_required_closure(
                 continue;
             }
             let Some(dependencies) = edges.get(next) else {
-                return Err(closure_unavailable());
+                return Err(v3_closure_unavailable());
             };
             for dependency in dependencies {
                 let available = dispositions
                     .get(dependency)
                     .is_some_and(|entry| entry.disposition == ResourceDisposition::Candidate);
                 if !available {
-                    return Err(closure_unavailable());
+                    return Err(v3_closure_unavailable());
                 }
                 pending.push(dependency);
             }
@@ -631,22 +767,21 @@ fn verify_required_closure(
     Ok(())
 }
 
-fn closure_unavailable() -> ApplicationError {
+fn v3_closure_unavailable() -> ApplicationError {
     ApplicationError::Invalid(
-        "content package v2 required resource dependency closure is unavailable".into(),
+        "content package v3 required resource dependency closure is unavailable".into(),
     )
 }
 
-/// Collects the exact validated bytes of every present resource payload from
-/// the inspection: candidate payloads must be present, present opaque payloads
-/// are preserved with their bytes, and missing resources contribute no body.
-/// The inspection already verified digest and size; this function re-attaches
-/// the resource identity, schema, digest, and size facts so the repository can
-/// verify the association and durably store each body.
-fn collect_prepared_payloads(
-    plan: &InstallationPlan,
-    inspection: &V2Inspection,
-) -> Result<Vec<PreparedResourcePayload>, ApplicationError> {
+/// Collects the exact validated bytes of every present resource payload and
+/// every present Document/Media Rendition blob from the v3 inspection:
+/// candidate payloads must be present, present opaque payloads are preserved
+/// with their bytes, missing resources contribute no body, and rendition
+/// blobs are retained only when present in the carrier.
+fn collect_prepared_payloads_v3(
+    plan: &V3InstallationPlan,
+    inspection: &V3Inspection,
+) -> Result<(Vec<PreparedResourcePayload>, Vec<PreparedRenditionBlob>), ApplicationError> {
     let mut payloads = Vec::new();
     for resource in &plan.resources {
         let present = inspection
@@ -685,14 +820,39 @@ fn collect_prepared_payloads(
         }
     }
     payloads.sort_by(|a, b| a.resource_id.cmp(&b.resource_id));
-    Ok(payloads)
+
+    let mut rendition_blobs = Vec::new();
+    for rendition in &plan.document_renditions {
+        if let Some(bytes) = inspection.rendition_blobs.get(&rendition.text_digest) {
+            rendition_blobs.push(PreparedRenditionBlob {
+                rendition_id: rendition.rendition_id.clone(),
+                kind: "document".to_owned(),
+                digest: rendition.text_digest.clone(),
+                size_bytes: rendition.text_size_bytes,
+                bytes: bytes.clone(),
+            });
+        }
+    }
+    for rendition in &plan.media_renditions {
+        if let Some(bytes) = inspection.rendition_blobs.get(&rendition.media_digest) {
+            rendition_blobs.push(PreparedRenditionBlob {
+                rendition_id: rendition.rendition_id.clone(),
+                kind: "media".to_owned(),
+                digest: rendition.media_digest.clone(),
+                size_bytes: rendition.media_size_bytes,
+                bytes: bytes.clone(),
+            });
+        }
+    }
+    rendition_blobs.sort_by(|a, b| a.rendition_id.cmp(&b.rendition_id));
+    Ok((payloads, rendition_blobs))
 }
 
-/// Projects one plan resource into the immutable domain fact, joining the
+/// Projects one v3 plan resource into the immutable domain fact, joining the
 /// descriptor facts from the inspected release.
-fn resource_fact(
+fn resource_fact_v3(
     plan_resource: &PlanResource,
-    inspection: &V2Inspection,
+    inspection: &V3Inspection,
 ) -> Result<PackageResourceFact, ApplicationError> {
     let entry = inspection
         .release
@@ -732,6 +892,7 @@ fn resource_fact(
             .iter()
             .map(|dependency| dependency.resource_id.clone())
             .collect(),
+        anchor_resource_ids: descriptor.subject.anchor_resource_ids.to_vec(),
         payload_digest: descriptor.payload_blob.digest.clone(),
         payload_size_bytes: descriptor.payload_blob.size_bytes,
         provenance: PackageResourceProvenance {
@@ -769,42 +930,118 @@ fn resource_fact(
     })
 }
 
-fn rendition_fact(
-    plan_rendition: &PlanRendition,
-    availability: &HashMap<String, bool>,
+/// Projects every v3 rendition into the immutable domain facts: document
+/// renditions carry kind `document` and media renditions kind `media`, both
+/// with their exact origin, availability, digest, and size snapshot.
+fn v3_rendition_facts(
+    plan: &V3InstallationPlan,
+    document_availability: &HashMap<String, (bool, Option<domain::SourceAssetId>)>,
+    media_availability: &HashMap<String, (bool, Option<MediaId>)>,
+) -> Result<Vec<PackageRenditionFact>, ApplicationError> {
+    let mut facts =
+        Vec::with_capacity(plan.document_renditions.len() + plan.media_renditions.len());
+    for rendition in &plan.document_renditions {
+        facts.push(document_rendition_fact(rendition, document_availability)?);
+    }
+    for rendition in &plan.media_renditions {
+        facts.push(media_rendition_fact(rendition, media_availability)?);
+    }
+    Ok(facts)
+}
+
+fn document_rendition_fact(
+    plan_rendition: &PlanDocumentRendition,
+    availability: &HashMap<String, (bool, Option<domain::SourceAssetId>)>,
 ) -> Result<PackageRenditionFact, ApplicationError> {
-    let available = availability
+    let (available, source_asset_id) = availability
         .get(&plan_rendition.rendition_id)
-        .copied()
+        .cloned()
         .ok_or_else(|| {
-            ApplicationError::Repository("package release rendition is missing".into())
+            ApplicationError::Repository("package release document rendition is missing".into())
         })?;
     Ok(PackageRenditionFact {
         rendition_id: plan_rendition.rendition_id.clone(),
-        kind: plan_rendition.kind.clone(),
+        kind: "document".to_owned(),
+        origin: match plan_rendition.origin {
+            content_package::v3::RenditionOrigin::Source => RenditionOrigin::Source,
+            content_package::v3::RenditionOrigin::Derived => RenditionOrigin::Derived,
+        },
+        media_type: plan_rendition.media_type.clone(),
+        available,
+        media_digest: plan_rendition.text_digest.clone(),
+        media_size_bytes: plan_rendition.text_size_bytes,
+        media_id: None,
+        source_asset_id,
+        producer: plan_rendition
+            .producer
+            .as_ref()
+            .map(|producer| PackageResourceProvenance {
+                created_at_ms: producer.created_at_ms,
+                tool_id: producer.tool_id.clone(),
+                tool_version: producer.tool_version.clone(),
+                provider_id: producer.provider_id.clone(),
+                provider_version: producer.provider_version.clone(),
+                model_id: producer.model_id.clone(),
+                model_version: producer.model_version.clone(),
+                config_sha256: producer.config_sha256.clone(),
+            }),
+    })
+}
+
+fn media_rendition_fact(
+    plan_rendition: &PlanMediaRendition,
+    availability: &HashMap<String, (bool, Option<MediaId>)>,
+) -> Result<PackageRenditionFact, ApplicationError> {
+    let (available, media_id) = availability
+        .get(&plan_rendition.rendition_id)
+        .cloned()
+        .ok_or_else(|| {
+            ApplicationError::Repository("package release media rendition is missing".into())
+        })?;
+    Ok(PackageRenditionFact {
+        rendition_id: plan_rendition.rendition_id.clone(),
+        kind: "media".to_owned(),
+        origin: match plan_rendition.origin {
+            content_package::v3::RenditionOrigin::Source => RenditionOrigin::Source,
+            content_package::v3::RenditionOrigin::Derived => RenditionOrigin::Derived,
+        },
         media_type: plan_rendition.media_type.clone(),
         available,
         media_digest: plan_rendition.media_digest.clone(),
         media_size_bytes: plan_rendition.media_size_bytes,
+        media_id,
+        source_asset_id: None,
+        producer: plan_rendition
+            .producer
+            .as_ref()
+            .map(|producer| PackageResourceProvenance {
+                created_at_ms: producer.created_at_ms,
+                tool_id: producer.tool_id.clone(),
+                tool_version: producer.tool_version.clone(),
+                provider_id: producer.provider_id.clone(),
+                provider_version: producer.provider_version.clone(),
+                model_id: producer.model_id.clone(),
+                model_version: producer.model_version.clone(),
+                config_sha256: producer.config_sha256.clone(),
+            }),
     })
 }
 
-/// Maps bounded v2 inspection failures into stable application errors. Local
+/// Maps bounded v3 inspection failures into stable application errors. Local
 /// package paths, payloads, and raw validation text never leak into the
 /// error surface.
-fn map_inspection_error(error: V2Error) -> ApplicationError {
+fn map_v3_inspection_error(error: V3Error) -> ApplicationError {
     let message = match error {
-        V2Error::Io(_) | V2Error::Zip(_) => "content package v2 could not be read",
-        V2Error::Limit(_) => "content package v2 exceeds inspection limits",
-        V2Error::UnsafePath(_) => "content package v2 contains an unsafe entry path",
-        V2Error::Symlink(_) => "content package v2 contains a symbolic link",
-        V2Error::DuplicatePath(_) => "content package v2 contains duplicate entries",
-        V2Error::MissingRelease => "content package v2 is missing release.json",
-        V2Error::ReleaseJson(_) => "content package v2 release.json is not valid JSON",
-        V2Error::DeliveryJson(_) => "content package v2 delivery.json is not valid JSON",
-        V2Error::PayloadJson { .. } => "content package v2 resource payload is not valid JSON",
-        V2Error::Invalid { .. } => "content package v2 carrier is invalid",
-        V2Error::Incompatible { .. } => "content package v2 release is incompatible",
+        V3Error::Io(_) | V3Error::Zip(_) => "content package v3 could not be read",
+        V3Error::Limit(_) => "content package v3 exceeds inspection limits",
+        V3Error::UnsafePath(_) => "content package v3 contains an unsafe entry path",
+        V3Error::Symlink(_) => "content package v3 contains a symbolic link",
+        V3Error::DuplicatePath(_) => "content package v3 contains duplicate entries",
+        V3Error::MissingRelease => "content package v3 is missing release.json",
+        V3Error::ReleaseJson(_) => "content package v3 release.json is not valid JSON",
+        V3Error::PayloadJson { .. } => "content package v3 resource payload is not valid JSON",
+        V3Error::Invalid { .. } => "content package v3 carrier is invalid",
+        V3Error::Incompatible { .. } => "content package v3 release is incompatible",
     };
     ApplicationError::Invalid(message.into())
 }
@@ -880,7 +1117,8 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use content_package::v2::{RELEASE_SCHEMA_V2, serialize_canonical};
+    use content_package::v2::serialize_canonical;
+    use content_package::v3::RELEASE_SCHEMA_V3;
     use domain::{LearningMaterial, MaterialRevision, MediaId, initial_material_id};
     use serde_json::{Value, json};
     use sha2::{Digest as _, Sha256};
@@ -1033,12 +1271,22 @@ mod tests {
         ) -> Result<Option<LearningMaterial>, ApplicationError> {
             Ok(None)
         }
+
+        fn set_source_asset_availability(
+            &self,
+            _material_id: &LearningMaterialId,
+            _source_asset_id: &domain::SourceAssetId,
+            _availability: domain::SourceAssetAvailability,
+        ) -> Result<Option<MaterialRevision>, ApplicationError> {
+            Ok(None)
+        }
     }
 
     #[derive(Clone)]
     struct StoredInstallation {
         installation: PackageInstallation,
         payloads: BTreeMap<String, PreparedResourcePayload>,
+        rendition_blobs: BTreeMap<String, PreparedRenditionBlob>,
     }
 
     #[derive(Clone, Default)]
@@ -1070,6 +1318,24 @@ mod tests {
 
         fn installation_count(&self) -> usize {
             self.state.lock().unwrap().installations.len()
+        }
+
+        /// Every stored installation for one material, in insertion order.
+        fn stored_installations(
+            &self,
+            material_id: &LearningMaterialId,
+        ) -> Vec<PackageInstallation> {
+            let mut stored: Vec<PackageInstallation> = self
+                .state
+                .lock()
+                .unwrap()
+                .installations
+                .values()
+                .filter(|entry| entry.installation.material_id == *material_id)
+                .map(|entry| entry.installation.clone())
+                .collect();
+            stored.sort_by(|a, b| a.release_id.as_str().cmp(b.release_id.as_str()));
+            stored
         }
 
         fn set_fail_commit_adoption(&self, fail: bool) {
@@ -1165,6 +1431,11 @@ mod tests {
                     } else {
                         payload_map(prepared)
                     },
+                    rendition_blobs: prepared
+                        .rendition_blobs
+                        .iter()
+                        .map(|blob| (blob.rendition_id.clone(), blob.clone()))
+                        .collect(),
                 },
             );
             Ok(prepared.installation.clone())
@@ -1270,6 +1541,64 @@ mod tests {
                 .insert(commit.material_id.as_str().to_owned(), commit.clone());
             Ok(commit.clone())
         }
+
+        fn read_resource_payload(
+            &self,
+            material_id: &LearningMaterialId,
+            release_id: &PackageReleaseId,
+            resource_id: &str,
+        ) -> Result<Option<Vec<u8>>, ApplicationError> {
+            Ok(self
+                .state
+                .lock()
+                .unwrap()
+                .installations
+                .get(&(
+                    material_id.as_str().to_owned(),
+                    release_id.as_str().to_owned(),
+                ))
+                .and_then(|stored| stored.payloads.get(resource_id))
+                .map(|payload| payload.bytes.clone()))
+        }
+
+        fn read_rendition_blob(
+            &self,
+            material_id: &LearningMaterialId,
+            release_id: &PackageReleaseId,
+            rendition_id: &str,
+        ) -> Result<Option<Vec<u8>>, ApplicationError> {
+            Ok(self
+                .state
+                .lock()
+                .unwrap()
+                .installations
+                .get(&(
+                    material_id.as_str().to_owned(),
+                    release_id.as_str().to_owned(),
+                ))
+                .and_then(|stored| stored.rendition_blobs.get(rendition_id))
+                .map(|blob| blob.bytes.clone()))
+        }
+
+        fn delete_installation(
+            &self,
+            material_id: &LearningMaterialId,
+            release_id: &PackageReleaseId,
+        ) -> Result<bool, ApplicationError> {
+            let mut state = self.state.lock().unwrap();
+            if let Some(adoption) = state.adoptions.get(material_id.as_str()) {
+                if adoption.release_id == *release_id {
+                    return Err(ApplicationError::Conflict(
+                        "cannot delete currently adopted package release; switch adoption first".into(),
+                    ));
+                }
+            }
+            let key = (
+                material_id.as_str().to_owned(),
+                release_id.as_str().to_owned(),
+            );
+            Ok(state.installations.remove(&key).is_some())
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -1322,55 +1651,12 @@ mod tests {
         LanguageCode::parse(code).unwrap()
     }
 
+    fn text_digest(text: &str) -> String {
+        hex::encode(Sha256::digest(text.as_bytes()))
+    }
+
     fn media_hex() -> String {
         hex::encode(Sha256::digest(MEDIA_BYTES))
-    }
-
-    fn base_descriptor(
-        kind: &str,
-        schema: &str,
-        language: &str,
-        dependencies: &[&str],
-        digest: &str,
-        size: u64,
-        revision_id: &str,
-    ) -> Value {
-        json!({
-            "schema": schema,
-            "kind": kind,
-            "role": "base",
-            "content_language": language,
-            "support_languages": [],
-            "subject": {"material_revision_id": revision_id, "rendition_ids": [], "anchor_resource_ids": []},
-            "dependencies": dependencies.iter().map(|dep| json!({"resource_id": dep})).collect::<Vec<_>>(),
-            "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "input_resource_ids": [], "extensions": {}},
-            "quality": {"review_status": "human_reviewed", "warnings": [], "extensions": {}},
-            "payload_blob": {"digest": digest, "size_bytes": size},
-            "extensions": {},
-        })
-    }
-
-    fn assistance_descriptor(
-        kind: &str,
-        schema: &str,
-        support: &[&str],
-        dependencies: &[&str],
-        digest: &str,
-        size: u64,
-        revision_id: &str,
-    ) -> Value {
-        json!({
-            "schema": schema,
-            "kind": kind,
-            "role": "assistance",
-            "support_languages": support,
-            "subject": {"material_revision_id": revision_id, "rendition_ids": [], "anchor_resource_ids": []},
-            "dependencies": dependencies.iter().map(|dep| json!({"resource_id": dep})).collect::<Vec<_>>(),
-            "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "input_resource_ids": [], "extensions": {}},
-            "quality": {"review_status": "machine_checked", "warnings": [], "extensions": {}},
-            "payload_blob": {"digest": digest, "size_bytes": size},
-            "extensions": {},
-        })
     }
 
     fn resource_entry(descriptor: &Value, required: bool) -> Value {
@@ -1381,41 +1667,17 @@ mod tests {
         })
     }
 
-    fn rendition_descriptor(
-        kind: &str,
-        media_type: &str,
-        digest: &str,
-        size: u64,
-        revision_id: &str,
-    ) -> Value {
-        let schema = if kind == "audio" {
-            "listen.rendition.audio.v1"
-        } else {
-            "listen.rendition.video.v1"
-        };
-        json!({
-            "schema": schema,
-            "kind": kind,
-            "media_type": media_type,
-            "material_revision_id": revision_id,
-            "media_blob": {"digest": digest, "size_bytes": size},
-            "extensions": {},
-        })
-    }
-
-    fn rendition_entry(descriptor: &Value) -> Value {
-        json!({
-            "rendition_id": sha256_id(&canonical_bytes(descriptor)),
-            "descriptor": descriptor.clone(),
-        })
-    }
-
+    /// A v3 Structured Reading payload over the exact text, with one
+    /// byte-validated sentence anchor.
     fn document_payload(text: &str, language: &str) -> (Value, Vec<u8>) {
-        let end = text.chars().count() as u32;
+        let byte_len = text.len();
         let payload = json!({
             "language": language,
             "text": text,
-            "segments": [{"id": "s1", "index": 0, "language": language, "start_char": 0, "end_char": end, "extensions": {}}],
+            "anchors": [{"anchor_id": "s1", "kind": "sentence", "start_offset": 0, "end_offset": byte_len}],
+            "blocks": [{"block_id": "b1", "kind": "root", "order": 0, "span_anchor_ids": ["s1"], "parent_block_id": null}],
+            "spans": [{"span_id": "sp1", "anchor_id": "s1", "parent_anchor_id": null}],
+            "document_mappings": [],
             "extensions": {},
         });
         let bytes = serde_json::to_vec(&payload).unwrap();
@@ -1442,34 +1704,6 @@ mod tests {
         revision_id: String,
     }
 
-    fn release_value(
-        ids: &FixtureIds,
-        edition_id: &str,
-        entrypoints: Value,
-        resources: Vec<Value>,
-        renditions: Vec<Value>,
-    ) -> Value {
-        json!({
-            "schema": RELEASE_SCHEMA_V2,
-            "created_at_ms": 1u64,
-            "edition": {
-                "edition_id": edition_id,
-                "title": EDITION_TITLE,
-                "target_language": "en",
-                "support_languages": ["zh-Hans"],
-            },
-            "material": {
-                "material_id": ids.material_id,
-                "material_revision_id": ids.revision_id,
-                "title": "Fixture Material",
-            },
-            "entrypoints": entrypoints,
-            "resources": resources,
-            "renditions": renditions,
-            "extensions": {},
-        })
-    }
-
     fn write_carrier(files: &BTreeMap<String, Vec<u8>>) -> (TestDirectory, PathBuf) {
         let directory = TestDirectory::new();
         for (name, bytes) in files {
@@ -1491,478 +1725,27 @@ mod tests {
         blobs
     }
 
-    /// A release with one embedded base document_text resource.
-    fn text_only_release(ids: &FixtureIds, edition_id: &str) -> (Value, BTreeMap<String, Vec<u8>>) {
-        text_only_release_with_text(ids, edition_id, TEXT)
-    }
-
-    fn text_only_release_with_text(
-        ids: &FixtureIds,
-        edition_id: &str,
-        text: &str,
-    ) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, bytes) = document_payload(text, "en");
-        let digest = sha256_id(&bytes);
-        let descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &digest,
-            bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let resource = resource_entry(&descriptor, true);
-        let resource_id = resource["resource_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            edition_id,
-            json!([{"entrypoint_id": "primary", "resource_id": resource_id}]),
-            vec![resource],
-            vec![],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&digest), bytes);
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A release whose base document text differs from the Material's text.
-    fn mismatched_text_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, bytes) = document_payload("Different text entirely.", "en");
-        let digest = sha256_id(&bytes);
-        let descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &digest,
-            bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let resource = resource_entry(&descriptor, true);
-        let resource_id = resource["resource_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            "edition-mismatch",
-            json!([{"entrypoint_id": "primary", "resource_id": resource_id}]),
-            vec![resource],
-            vec![],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&digest), bytes);
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A release whose base document text declares a different language.
-    fn mismatched_text_language_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, bytes) = document_payload(TEXT, "zh-Hans");
-        let digest = sha256_id(&bytes);
-        let descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "zh-Hans",
-            &[],
-            &digest,
-            bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let resource = resource_entry(&descriptor, true);
-        let resource_id = resource["resource_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            "edition-language-mismatch",
-            json!([{"entrypoint_id": "primary", "resource_id": resource_id}]),
-            vec![resource],
-            vec![],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&digest), bytes);
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A mixed media + text release: an audio rendition, a base document
-    /// text, and an optional translation assistance. The rendition digest is
-    /// the real SHA-256 of [`MEDIA_BYTES`]; `embed_media` controls whether
-    /// the media blob is carried or satisfied by the local Material asset.
-    fn media_text_translation_release(
-        ids: &FixtureIds,
-        embed_media: bool,
-        edition_id: &str,
-    ) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, text_bytes) = document_payload(TEXT, "en");
-        let text_digest = sha256_id(&text_bytes);
-        let text_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &text_digest,
-            text_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let text_resource = resource_entry(&text_descriptor, true);
-        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
-
-        let (_, translation_bytes) = translation_payload("zh-Hans", &text_resource_id, "译文。");
-        let translation_digest = sha256_id(&translation_bytes);
-        let translation_descriptor = assistance_descriptor(
-            "translation",
-            "listen.payload.translation.v1",
-            &["zh-Hans"],
-            &[&text_resource_id],
-            &translation_digest,
-            translation_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let translation_resource = resource_entry(&translation_descriptor, false);
-
-        let media_digest = format!("sha256:{}", media_hex());
-        let rendition_descriptor = rendition_descriptor(
-            "audio",
-            "audio/mpeg",
-            &media_digest,
-            MEDIA_BYTES.len() as u64,
-            &ids.revision_id,
-        );
-        let rendition = rendition_entry(&rendition_descriptor);
-        let rendition_id = rendition["rendition_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            edition_id,
-            json!([{"entrypoint_id": "primary", "rendition_id": rendition_id}]),
-            vec![text_resource, translation_resource],
-            vec![rendition],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-        blobs.insert(blob_path(&translation_digest), translation_bytes);
-        if embed_media {
-            blobs.insert(blob_path(&media_digest), MEDIA_BYTES.to_vec());
-        }
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A rendition-only carrier whose audio rendition uses the real media
-    /// digest and embeds the media bytes.
-    fn audio_rendition_carrier(ids: &FixtureIds, edition_id: &str) -> BTreeMap<String, Vec<u8>> {
-        let media_digest = format!("sha256:{}", media_hex());
-        let rendition_descriptor = rendition_descriptor(
-            "audio",
-            "audio/mpeg",
-            &media_digest,
-            MEDIA_BYTES.len() as u64,
-            &ids.revision_id,
-        );
-        let rendition = rendition_entry(&rendition_descriptor);
-        let rendition_id = rendition["rendition_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            edition_id,
-            json!([{"entrypoint_id": "primary", "rendition_id": rendition_id}]),
-            vec![],
-            vec![rendition],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert("release.json".into(), canonical_bytes(&release));
-        blobs.insert(blob_path(&media_digest), MEDIA_BYTES.to_vec());
-        blobs
-    }
-
-    /// A rendition-only carrier whose rendition kind is `video` and whose
-    /// media digest is the real media digest.
-    fn video_rendition_carrier(ids: &FixtureIds, edition_id: &str) -> BTreeMap<String, Vec<u8>> {
-        let media_digest = format!("sha256:{}", media_hex());
-        let rendition_descriptor = rendition_descriptor(
-            "video",
-            "video/mp4",
-            &media_digest,
-            MEDIA_BYTES.len() as u64,
-            &ids.revision_id,
-        );
-        let rendition = rendition_entry(&rendition_descriptor);
-        let rendition_id = rendition["rendition_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            edition_id,
-            json!([{"entrypoint_id": "primary", "rendition_id": rendition_id}]),
-            vec![],
-            vec![rendition],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert("release.json".into(), canonical_bytes(&release));
-        blobs.insert(blob_path(&media_digest), MEDIA_BYTES.to_vec());
-        blobs
-    }
-
-    /// A release with a required document-text resource whose payload blob is
-    /// absent from the carrier.
-    fn missing_required_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &format!("sha256:{}", "3".repeat(64)),
-            9,
-            &ids.revision_id,
-        );
-        let resource = resource_entry(&descriptor, true);
-        let resource_id = resource["resource_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            "edition-missing-required",
-            json!([{"entrypoint_id": "primary", "resource_id": resource_id}]),
-            vec![resource],
-            vec![],
-        );
-        let files = carrier_with_release(&release, BTreeMap::new());
-        (release, files)
-    }
-
-    /// A release with a required base resource that depends on a declared
-    /// optional resource whose payload is absent.
-    fn broken_closure_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, text_bytes) = document_payload(TEXT, "en");
-        let text_digest = sha256_id(&text_bytes);
-        let missing_digest = format!("sha256:{}", "0".repeat(64));
-        let missing_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &missing_digest,
-            42,
-            &ids.revision_id,
-        );
-        let missing_resource = resource_entry(&missing_descriptor, false);
-        let missing_resource_id = missing_resource["resource_id"].as_str().unwrap().to_owned();
-
-        let dependent_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[&missing_resource_id],
-            &text_digest,
-            text_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let dependent = resource_entry(&dependent_descriptor, true);
-        let dependent_id = dependent["resource_id"].as_str().unwrap().to_owned();
-        let release = release_value(
-            ids,
-            "edition-broken-closure",
-            json!([{"entrypoint_id": "primary", "resource_id": dependent_id}]),
-            vec![dependent, missing_resource],
-            vec![],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A release with an optional known resource whose payload is absent.
-    fn optional_missing_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, text_bytes) = document_payload(TEXT, "en");
-        let text_digest = sha256_id(&text_bytes);
-        let text_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &text_digest,
-            text_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let text_resource = resource_entry(&text_descriptor, true);
-        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
-
-        let missing_descriptor = assistance_descriptor(
-            "translation",
-            "listen.payload.translation.v1",
-            &["zh-Hans"],
-            &[&text_resource_id],
-            &format!("sha256:{}", "1".repeat(64)),
-            42,
-            &ids.revision_id,
-        );
-        let missing_resource = resource_entry(&missing_descriptor, false);
-        let release = release_value(
-            ids,
-            "edition-optional-missing",
-            json!([{"entrypoint_id": "primary", "resource_id": text_resource_id}]),
-            vec![text_resource, missing_resource],
-            vec![],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A release with an optional unknown-kind opaque resource whose payload
-    /// blob is absent from the carrier, or embedded when `present` is set.
-    fn optional_opaque_release(
-        ids: &FixtureIds,
-        present: bool,
-    ) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, text_bytes) = document_payload(TEXT, "en");
-        let text_digest = sha256_id(&text_bytes);
-        let text_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &text_digest,
-            text_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let text_resource = resource_entry(&text_descriptor, true);
-        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
-
-        let opaque_bytes = b"opaque payload body".to_vec();
-        let opaque_digest = if present {
-            sha256_id(&opaque_bytes)
-        } else {
-            format!("sha256:{}", "2".repeat(64))
-        };
-        let opaque_descriptor = assistance_descriptor(
-            "future_analysis",
-            "listen.payload.future-analysis.v1",
-            &["zh-Hans"],
-            &[],
-            &opaque_digest,
-            opaque_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let opaque_resource = resource_entry(&opaque_descriptor, false);
-        let release = release_value(
-            ids,
-            "edition-opaque",
-            json!([{"entrypoint_id": "primary", "resource_id": text_resource_id}]),
-            vec![text_resource, opaque_resource],
-            vec![],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-        if present {
-            blobs.insert(blob_path(&opaque_digest), opaque_bytes);
-        }
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A release with two candidate translations for the same support
-    /// language, distinguished by distinct payload content.
-    fn ambiguous_translation_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, text_bytes) = document_payload(TEXT, "en");
-        let text_digest = sha256_id(&text_bytes);
-        let text_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &text_digest,
-            text_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let text_resource = resource_entry(&text_descriptor, true);
-        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
-
-        let mut resources = vec![text_resource];
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-        for text in ["第一版译文。", "第二版译文。"] {
-            let (_, translation_bytes) = translation_payload("zh-Hans", &text_resource_id, text);
-            let translation_digest = sha256_id(&translation_bytes);
-            let translation_descriptor = assistance_descriptor(
-                "translation",
-                "listen.payload.translation.v1",
-                &["zh-Hans"],
-                &[&text_resource_id],
-                &translation_digest,
-                translation_bytes.len() as u64,
-                &ids.revision_id,
-            );
-            resources.push(resource_entry(&translation_descriptor, false));
-            blobs.insert(blob_path(&translation_digest), translation_bytes);
-        }
-        let release = release_value(
-            ids,
-            "edition-ambiguous",
-            json!([{"entrypoint_id": "primary", "resource_id": text_resource_id}]),
-            resources,
-            vec![],
-        );
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A release with an optional translation candidate whose dependency is a
-    /// declared optional resource with an absent payload.
-    fn optional_broken_closure_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (_, text_bytes) = document_payload(TEXT, "en");
-        let text_digest = sha256_id(&text_bytes);
-        let text_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &text_digest,
-            text_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let text_resource = resource_entry(&text_descriptor, true);
-        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
-
-        let missing_digest = format!("sha256:{}", "0".repeat(64));
-        let missing_descriptor = base_descriptor(
-            "document_text",
-            "listen.payload.document-text.v1",
-            "en",
-            &[],
-            &missing_digest,
-            42,
-            &ids.revision_id,
-        );
-        let missing_resource = resource_entry(&missing_descriptor, false);
-        let missing_resource_id = missing_resource["resource_id"].as_str().unwrap().to_owned();
-
-        let (_, translation_bytes) = translation_payload("zh-Hans", &text_resource_id, "译文。");
-        let translation_digest = sha256_id(&translation_bytes);
-        let translation_descriptor = assistance_descriptor(
-            "translation",
-            "listen.payload.translation.v1",
-            &["zh-Hans"],
-            &[&text_resource_id, &missing_resource_id],
-            &translation_digest,
-            translation_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let translation_resource = resource_entry(&translation_descriptor, false);
-        let release = release_value(
-            ids,
-            "edition-broken-optional-closure",
-            json!([{"entrypoint_id": "primary", "resource_id": text_resource_id}]),
-            vec![text_resource, missing_resource, translation_resource],
-            vec![],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-        blobs.insert(blob_path(&translation_digest), translation_bytes);
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
+    fn v3_assistance_descriptor(
+        kind: &str,
+        schema: &str,
+        support: &[&str],
+        dependencies: &[&str],
+        digest: &str,
+        size: u64,
+        revision_id: &str,
+    ) -> Value {
+        json!({
+            "schema": schema,
+            "kind": kind,
+            "role": "assistance",
+            "support_languages": support,
+            "subject": {"material_revision_id": revision_id, "rendition_ids": [], "anchor_resource_ids": []},
+            "dependencies": dependencies.iter().map(|dep| json!({"resource_id": dep})).collect::<Vec<_>>(),
+            "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "input_resource_ids": [], "extensions": {}},
+            "quality": {"review_status": "machine_checked", "warnings": [], "extensions": {}},
+            "payload_blob": v3_blob_declaration(digest, size, false),
+            "extensions": {},
+        })
     }
 
     // ---------------------------------------------------------------------
@@ -1998,13 +1781,41 @@ mod tests {
         retained: bool,
         text: &str,
     ) -> (LearningMaterial, MaterialRevision) {
-        let asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(text, Some(language("en"))).expect("valid text asset"),
+        let asset = domain::SourceAsset::new(
+            "text/plain",
+            text.len() as u64,
+            text_digest(text),
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            1,
+        )
+        .expect("valid source asset");
+        let rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                text_digest(text),
+                text.len() as u64,
+                Some(asset.id.clone()),
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let material_id =
-            initial_material_id(std::slice::from_ref(&asset)).expect("deterministic id");
-        let revision = MaterialRevision::new(material_id.clone(), "Material", vec![asset], 1)
-            .expect("valid revision");
+        let material_id = initial_material_id(
+            std::slice::from_ref(&asset),
+            std::slice::from_ref(&rendition),
+        )
+        .expect("deterministic id");
+        let revision = MaterialRevision::new(
+            material_id.clone(),
+            "Material",
+            vec![asset],
+            vec![rendition],
+            1,
+        )
+        .expect("valid revision");
         let material =
             LearningMaterial::new(&revision, retained.then_some(1), 1, 1).expect("valid material");
         setup
@@ -2022,24 +1833,51 @@ mod tests {
         fingerprint: &str,
         media_availability: MediaAvailability,
     ) -> (LearningMaterial, MaterialRevision) {
-        let text_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(TEXT, Some(language("en"))).expect("valid text asset"),
+        let text_asset = domain::SourceAsset::new(
+            "text/plain",
+            TEXT.len() as u64,
+            text_digest(TEXT),
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            1,
+        )
+        .expect("valid source asset");
+        let text_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                text_digest(TEXT),
+                TEXT.len() as u64,
+                Some(text_asset.id.clone()),
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let media_asset = MaterialAsset::MediaRendition(
-            MediaRenditionAsset::new(
-                MediaId::parse("media-1").expect("valid media id"),
+        let media_rendition = domain::Rendition::Media(
+            MediaRendition::new(
+                RenditionOrigin::Source,
                 MediaKind::Audio,
+                "audio/mpeg",
                 fingerprint,
                 media_availability,
+                Some(MediaId::parse("media-1").expect("valid media id")),
+                None,
+                None,
+                None,
+                None,
             )
             .expect("valid media rendition"),
         );
-        let material_id = initial_material_id(&[text_asset.clone(), media_asset.clone()])
-            .expect("deterministic id");
+        let material_id =
+            initial_material_id(&[], &[text_rendition.clone(), media_rendition.clone()])
+                .expect("deterministic id");
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Material",
-            vec![text_asset, media_asset],
+            vec![text_asset],
+            vec![text_rendition, media_rendition],
             1,
         )
         .expect("valid revision");
@@ -2084,6 +1922,966 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
+    // v3 release fixtures
+    // ---------------------------------------------------------------------
+
+    fn v3_blob_declaration(digest: &str, size: u64, embedded: bool) -> Value {
+        json!({"digest": digest, "size_bytes": size, "embedded": embedded})
+    }
+
+    /// A v3 Document Rendition with the identity derived from the canonical
+    /// `{media_type, language, text_blob}` descriptor.
+    fn v3_document_rendition(
+        origin: &str,
+        media_type: &str,
+        language: Option<&str>,
+        text_blob: &Value,
+        source_asset_id: Option<&str>,
+        producer: Option<&Value>,
+        compatibility: Option<&Value>,
+    ) -> Value {
+        let identity = json!({
+            "media_type": media_type,
+            "language": language,
+            "text_blob": text_blob,
+        });
+        let rendition_id = sha256_id(&canonical_bytes(&identity));
+        json!({
+            "rendition_id": rendition_id,
+            "origin": origin,
+            "media_type": media_type,
+            "language": language,
+            "text_blob": text_blob.clone(),
+            "source_asset_id": source_asset_id,
+            "producer": producer,
+            "compatibility": compatibility,
+            "extensions": {},
+        })
+    }
+
+    /// A v3 Media Rendition with the identity derived from the canonical
+    /// `{kind, media_type, media_blob, media_id, fingerprint}` descriptor.
+    #[allow(clippy::too_many_arguments)]
+    fn v3_media_rendition(
+        origin: &str,
+        kind: &str,
+        media_type: &str,
+        media_blob: &Value,
+        media_id: Option<&str>,
+        fingerprint: &str,
+        producer: Option<&Value>,
+        compatibility: Option<&Value>,
+    ) -> Value {
+        let identity = json!({
+            "kind": kind,
+            "media_type": media_type,
+            "media_blob": media_blob,
+            "media_id": media_id,
+            "fingerprint": fingerprint,
+        });
+        let rendition_id = sha256_id(&canonical_bytes(&identity));
+        json!({
+            "rendition_id": rendition_id,
+            "origin": origin,
+            "kind": kind,
+            "media_type": media_type,
+            "media_blob": media_blob.clone(),
+            "media_id": media_id,
+            "fingerprint": fingerprint,
+            "producer": producer,
+            "compatibility": compatibility,
+            "extensions": {},
+        })
+    }
+
+    fn v3_producer() -> Value {
+        json!({
+            "created_at_ms": 1,
+            "tool": {"id": "listen-gen", "version": "0.4.0"},
+            "provider": null,
+            "model": null,
+            "config_sha256": null,
+        })
+    }
+
+    fn v3_compatibility() -> Value {
+        json!({
+            "verified_inputs": [],
+            "checks": ["exact_text_match"],
+        })
+    }
+
+    fn v3_base_descriptor(
+        kind: &str,
+        schema: &str,
+        language: &str,
+        dependencies: &[&str],
+        digest: &str,
+        size: u64,
+        revision_id: &str,
+    ) -> Value {
+        json!({
+            "schema": schema,
+            "kind": kind,
+            "role": "base",
+            "content_language": language,
+            "support_languages": [],
+            "subject": {"material_revision_id": revision_id, "rendition_ids": [], "anchor_resource_ids": []},
+            "dependencies": dependencies.iter().map(|dep| json!({"resource_id": dep})).collect::<Vec<_>>(),
+            "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "input_resource_ids": [], "extensions": {}},
+            "quality": {"review_status": "human_reviewed", "warnings": [], "extensions": {}},
+            "payload_blob": v3_blob_declaration(digest, size, true),
+            "extensions": {},
+        })
+    }
+
+    fn v3_release(
+        ids: &FixtureIds,
+        edition_id: &str,
+        document_renditions: Vec<Value>,
+        media_renditions: Vec<Value>,
+        resources: Vec<Value>,
+    ) -> Value {
+        json!({
+            "schema": RELEASE_SCHEMA_V3,
+            "created_at_ms": 1u64,
+            "edition": {
+                "edition_id": edition_id,
+                "title": EDITION_TITLE,
+                "target_language": "en",
+                "support_languages": ["zh-Hans"],
+            },
+            "material": {
+                "material_id": ids.material_id,
+                "material_revision_id": ids.revision_id,
+                "title": "Fixture Material",
+            },
+            "document_renditions": document_renditions,
+            "media_renditions": media_renditions,
+            "resources": resources,
+            "extensions": {},
+        })
+    }
+
+    /// A release with one embedded base document_text resource.
+    fn text_only_release(ids: &FixtureIds, edition_id: &str) -> (Value, BTreeMap<String, Vec<u8>>) {
+        text_only_release_with_text(ids, edition_id, TEXT)
+    }
+
+    fn text_only_release_with_text(
+        ids: &FixtureIds,
+        edition_id: &str,
+        text: &str,
+    ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let text_bytes = text.as_bytes().to_vec();
+        let text_digest = sha256_id(&text_bytes);
+        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
+        let document = v3_document_rendition(
+            "source",
+            "text/plain",
+            Some("en"),
+            &text_blob,
+            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+            None,
+        );
+        let (_, payload_bytes) = document_payload(text, "en");
+        let payload_digest = sha256_id(&payload_bytes);
+        let descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &payload_digest,
+            payload_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let resource = resource_entry(&descriptor, true);
+        let release = v3_release(ids, edition_id, vec![document], vec![], vec![resource]);
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        blobs.insert(blob_path(&payload_digest), payload_bytes);
+
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A release whose base document text differs from the Material's text.
+    fn mismatched_text_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let text_bytes = "Different text entirely.".as_bytes().to_vec();
+        let text_digest = sha256_id(&text_bytes);
+        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
+        let document = v3_document_rendition(
+            "source",
+            "text/plain",
+            Some("en"),
+            &text_blob,
+            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+            None,
+        );
+        let (_, payload_bytes) = document_payload("Different text entirely.", "en");
+        let payload_digest = sha256_id(&payload_bytes);
+        let descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &payload_digest,
+            payload_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let resource = resource_entry(&descriptor, true);
+        let release = v3_release(
+            ids,
+            "edition-mismatch",
+            vec![document],
+            vec![],
+            vec![resource],
+        );
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        blobs.insert(blob_path(&payload_digest), payload_bytes);
+
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A release whose base document text declares a different language.
+    fn mismatched_text_language_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let text_bytes = TEXT.as_bytes().to_vec();
+        let text_digest = sha256_id(&text_bytes);
+        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
+        let document = v3_document_rendition(
+            "source",
+            "text/plain",
+            Some("zh-Hans"),
+            &text_blob,
+            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+            None,
+        );
+        let (_, payload_bytes) = document_payload(TEXT, "zh-Hans");
+        let payload_digest = sha256_id(&payload_bytes);
+        let descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "zh-Hans",
+            &[],
+            &payload_digest,
+            payload_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let resource = resource_entry(&descriptor, true);
+        let release = v3_release(
+            ids,
+            "edition-language-mismatch",
+            vec![document],
+            vec![],
+            vec![resource],
+        );
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        blobs.insert(blob_path(&payload_digest), payload_bytes);
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A mixed media + text release: an audio rendition, a base document
+    /// text, and an optional translation assistance. The rendition digest is
+    /// the real SHA-256 of [`MEDIA_BYTES`]; `embed_media` controls whether
+    /// the media blob is carried or satisfied by the local Material asset.
+    fn media_text_translation_release(
+        ids: &FixtureIds,
+        embed_media: bool,
+        edition_id: &str,
+    ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let text_bytes = TEXT.as_bytes().to_vec();
+        let text_digest = sha256_id(&text_bytes);
+        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
+        let document = v3_document_rendition(
+            "source",
+            "text/plain",
+            Some("en"),
+            &text_blob,
+            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+            None,
+        );
+        let (_, text_payload_bytes) = document_payload(TEXT, "en");
+        let text_payload_digest = sha256_id(&text_payload_bytes);
+        let text_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &text_payload_digest,
+            text_payload_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let text_resource = resource_entry(&text_descriptor, true);
+        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
+
+        let (_, translation_bytes) = translation_payload("zh-Hans", &text_resource_id, "译文。");
+        let translation_digest = sha256_id(&translation_bytes);
+        let translation_descriptor = v3_assistance_descriptor(
+            "translation",
+            "listen.payload.translation.v1",
+            &["zh-Hans"],
+            &[&text_resource_id],
+            &translation_digest,
+            translation_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let translation_resource = resource_entry(&translation_descriptor, false);
+
+        let media_digest = format!("sha256:{}", media_hex());
+        let media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, embed_media);
+        let media = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &media_blob,
+            Some("media-1"),
+            &media_hex(),
+            None,
+            None,
+        );
+        let release = v3_release(
+            ids,
+            edition_id,
+            vec![document],
+            vec![media],
+            vec![text_resource, translation_resource],
+        );
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        blobs.insert(blob_path(&text_payload_digest), text_payload_bytes);
+        blobs.insert(blob_path(&translation_digest), translation_bytes);
+        if embed_media {
+            blobs.insert(blob_path(&media_digest), MEDIA_BYTES.to_vec());
+        }
+
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A rendition-only carrier whose audio rendition uses the real media
+    /// digest and embeds the media bytes.
+    fn audio_rendition_carrier(ids: &FixtureIds, edition_id: &str) -> BTreeMap<String, Vec<u8>> {
+        let media_digest = format!("sha256:{}", media_hex());
+        let media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, true);
+        let media = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &media_blob,
+            Some("media-1"),
+            &media_hex(),
+            None,
+            None,
+        );
+        let release = v3_release(ids, edition_id, vec![], vec![media], vec![]);
+        let mut blobs = BTreeMap::new();
+        blobs.insert("release.json".into(), canonical_bytes(&release));
+        blobs.insert(blob_path(&media_digest), MEDIA_BYTES.to_vec());
+        blobs
+    }
+
+    /// A rendition-only carrier whose rendition kind is `video` and whose
+    /// media digest is the real media digest.
+    fn video_rendition_carrier(ids: &FixtureIds, edition_id: &str) -> BTreeMap<String, Vec<u8>> {
+        let media_digest = format!("sha256:{}", media_hex());
+        let media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, true);
+        let media = v3_media_rendition(
+            "source",
+            "video",
+            "video/mp4",
+            &media_blob,
+            Some("media-1"),
+            &media_hex(),
+            None,
+            None,
+        );
+        let release = v3_release(ids, edition_id, vec![], vec![media], vec![]);
+        let mut blobs = BTreeMap::new();
+        blobs.insert("release.json".into(), canonical_bytes(&release));
+        blobs.insert(blob_path(&media_digest), MEDIA_BYTES.to_vec());
+        blobs
+    }
+
+    /// A release with a required document-text resource whose payload blob is
+    /// absent from the carrier.
+    fn missing_required_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let mut descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &format!("sha256:{}", "3".repeat(64)),
+            9,
+            &ids.revision_id,
+        );
+        descriptor["payload_blob"]["embedded"] = json!(false);
+        let resource = resource_entry(&descriptor, true);
+        let release = v3_release(
+            ids,
+            "edition-missing-required",
+            vec![],
+            vec![],
+            vec![resource],
+        );
+        let files = carrier_with_release(&release, BTreeMap::new());
+        (release, files)
+    }
+
+    /// A release with a required base resource that depends on a declared
+    /// optional resource whose payload is absent.
+    fn broken_closure_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (_, text_bytes) = document_payload(TEXT, "en");
+        let text_digest = sha256_id(&text_bytes);
+        let missing_digest = format!("sha256:{}", "0".repeat(64));
+        let mut missing_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &missing_digest,
+            42,
+            &ids.revision_id,
+        );
+        missing_descriptor["payload_blob"]["embedded"] = json!(false);
+        let missing_resource = resource_entry(&missing_descriptor, false);
+        let missing_resource_id = missing_resource["resource_id"].as_str().unwrap().to_owned();
+
+        let dependent_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[&missing_resource_id],
+            &text_digest,
+            text_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let dependent = resource_entry(&dependent_descriptor, true);
+        let release = v3_release(
+            ids,
+            "edition-broken-closure",
+            vec![],
+            vec![],
+            vec![dependent, missing_resource],
+        );
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A release with an optional known resource whose payload is absent.
+    fn optional_missing_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (_, text_bytes) = document_payload(TEXT, "en");
+        let text_digest = sha256_id(&text_bytes);
+        let text_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &text_digest,
+            text_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let text_resource = resource_entry(&text_descriptor, true);
+        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
+
+        let missing_descriptor = v3_assistance_descriptor(
+            "translation",
+            "listen.payload.translation.v1",
+            &["zh-Hans"],
+            &[&text_resource_id],
+            &format!("sha256:{}", "1".repeat(64)),
+            42,
+            &ids.revision_id,
+        );
+        let missing_resource = resource_entry(&missing_descriptor, false);
+        let release = v3_release(
+            ids,
+            "edition-optional-missing",
+            vec![],
+            vec![],
+            vec![text_resource, missing_resource],
+        );
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A release with an optional unknown-kind opaque resource whose payload
+    /// blob is absent from the carrier, or embedded when `present` is set.
+    fn optional_opaque_release(
+        ids: &FixtureIds,
+        present: bool,
+    ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (_, text_bytes) = document_payload(TEXT, "en");
+        let text_digest = sha256_id(&text_bytes);
+        let text_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &text_digest,
+            text_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let text_resource = resource_entry(&text_descriptor, true);
+
+        let opaque_bytes = b"opaque payload body".to_vec();
+        let opaque_digest = if present {
+            sha256_id(&opaque_bytes)
+        } else {
+            format!("sha256:{}", "2".repeat(64))
+        };
+        let opaque_descriptor = v3_assistance_descriptor(
+            "future_analysis",
+            "listen.payload.future-analysis.v1",
+            &["zh-Hans"],
+            &[],
+            &opaque_digest,
+            opaque_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let opaque_resource = resource_entry(&opaque_descriptor, false);
+        let release = v3_release(
+            ids,
+            "edition-opaque",
+            vec![],
+            vec![],
+            vec![text_resource, opaque_resource],
+        );
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        if present {
+            blobs.insert(blob_path(&opaque_digest), opaque_bytes);
+        }
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A release with two candidate translations for the same support
+    /// language, distinguished by distinct payload content.
+    fn ambiguous_translation_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (_, text_bytes) = document_payload(TEXT, "en");
+        let text_digest = sha256_id(&text_bytes);
+        let text_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &text_digest,
+            text_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let text_resource = resource_entry(&text_descriptor, true);
+        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
+
+        let mut resources = vec![text_resource];
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        for text in ["第一版译文。", "第二版译文。"] {
+            let (_, translation_bytes) = translation_payload("zh-Hans", &text_resource_id, text);
+            let translation_digest = sha256_id(&translation_bytes);
+            let translation_descriptor = v3_assistance_descriptor(
+                "translation",
+                "listen.payload.translation.v1",
+                &["zh-Hans"],
+                &[&text_resource_id],
+                &translation_digest,
+                translation_bytes.len() as u64,
+                &ids.revision_id,
+            );
+            resources.push(resource_entry(&translation_descriptor, false));
+            blobs.insert(blob_path(&translation_digest), translation_bytes);
+        }
+        let release = v3_release(ids, "edition-ambiguous", vec![], vec![], resources);
+
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A release with an optional translation candidate whose dependency is a
+    /// declared optional resource with an absent payload.
+    fn optional_broken_closure_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (_, text_bytes) = document_payload(TEXT, "en");
+        let text_digest = sha256_id(&text_bytes);
+        let text_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &text_digest,
+            text_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let text_resource = resource_entry(&text_descriptor, true);
+        let text_resource_id = text_resource["resource_id"].as_str().unwrap().to_owned();
+
+        let missing_digest = format!("sha256:{}", "0".repeat(64));
+        let mut missing_descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &missing_digest,
+            42,
+            &ids.revision_id,
+        );
+        missing_descriptor["payload_blob"]["embedded"] = json!(false);
+        let missing_resource = resource_entry(&missing_descriptor, false);
+        let missing_resource_id = missing_resource["resource_id"].as_str().unwrap().to_owned();
+
+        let (_, translation_bytes) = translation_payload("zh-Hans", &text_resource_id, "译文。");
+        let translation_digest = sha256_id(&translation_bytes);
+        let translation_descriptor = v3_assistance_descriptor(
+            "translation",
+            "listen.payload.translation.v1",
+            &["zh-Hans"],
+            &[&text_resource_id, &missing_resource_id],
+            &translation_digest,
+            translation_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let translation_resource = resource_entry(&translation_descriptor, false);
+        let release = v3_release(
+            ids,
+            "edition-broken-optional-closure",
+            vec![],
+            vec![],
+            vec![text_resource, missing_resource, translation_resource],
+        );
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        blobs.insert(blob_path(&translation_digest), translation_bytes);
+
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    fn v3_composed_release(
+        ids: &FixtureIds,
+        edition_id: &str,
+    ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (release, mut files) = text_only_release(ids, edition_id);
+
+        let media_digest = format!("sha256:{}", media_hex());
+        let source_media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, false);
+        let source_media = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &source_media_blob,
+            Some("media-1"),
+            &media_hex(),
+            None,
+            None,
+        );
+
+        let derived_bytes = b"listen fixture derived media".to_vec();
+        let derived_digest = sha256_id(&derived_bytes);
+        let derived_blob = v3_blob_declaration(&derived_digest, derived_bytes.len() as u64, true);
+        let derived_media = v3_media_rendition(
+            "derived",
+            "audio",
+            "audio/mpeg",
+            &derived_blob,
+            None,
+            "fp-derived",
+            Some(&v3_producer()),
+            Some(&v3_compatibility()),
+        );
+
+        let mut release = release;
+        release["media_renditions"] = json!([source_media, derived_media]);
+        files.insert(blob_path(&derived_digest), derived_bytes);
+        let files = carrier_with_release(&release, {
+            files.remove("release.json");
+            files
+        });
+        (release, files)
+    }
+
+    // ---------------------------------------------------------------------
+    // v3 installation
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn v3_install_prepares_candidate_only_edition() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, files) = text_only_release(&ids, "edition-v3-text");
+
+        let view = install_ok(&setup, &material.id, &files);
+        assert_eq!(view.release_id.as_str().len(), 71);
+        assert_eq!(view.edition_id.as_str(), "edition-v3-text");
+        assert!(!view.adopted);
+        assert_eq!(view.resources.len(), 1);
+        assert_eq!(
+            view.resources[0].availability,
+            PackageResourceAvailability::Available
+        );
+        assert_eq!(view.renditions.len(), 1);
+        assert_eq!(view.renditions[0].kind, "document");
+        assert!(view.renditions[0].available);
+        assert_eq!(setup.package_lifecycle.installation_count(), 1);
+        // Candidate-only: membership is never touched.
+        assert_eq!(setup.materials.membership_calls(), 0);
+    }
+
+    #[test]
+    fn v3_install_supports_source_and_derived_renditions() {
+        let setup = setup();
+        let (material, revision) = seed_mixed_media_material(
+            &setup,
+            &format!("sha256:{}", media_hex()),
+            MediaAvailability::Available,
+        );
+        let ids = ids_of(&material, &revision);
+        let (release, files) = v3_composed_release(&ids, "edition-v3-composed");
+
+        let view = install_ok(&setup, &material.id, &files);
+        assert_eq!(view.renditions.len(), 3);
+        let document = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.kind == "document")
+            .expect("document rendition");
+        assert!(document.available);
+        // The source media blob is referenced, not embedded: availability
+        // comes from the bound Material media asset, which is available.
+        let source_media_id = release["media_renditions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["origin"] == "source")
+            .unwrap()["rendition_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let source_media = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.rendition_id.as_str() == source_media_id)
+            .expect("source media rendition");
+        assert!(source_media.available);
+        // The installed facts keep the origin and producer snapshot.
+        let stored = setup
+            .package_lifecycle
+            .stored_installations(&material.id)
+            .pop()
+            .expect("stored installation");
+        let derived = stored
+            .renditions
+            .iter()
+            .find(|rendition| rendition.origin == RenditionOrigin::Derived)
+            .expect("derived rendition fact");
+        assert_eq!(derived.kind, "media");
+        assert_eq!(
+            derived.producer.as_ref().expect("producer").tool_id,
+            "listen-gen"
+        );
+        let source = stored
+            .renditions
+            .iter()
+            .find(|rendition| {
+                rendition.origin == RenditionOrigin::Source && rendition.kind == "media"
+            })
+            .expect("source media rendition fact");
+        assert_eq!(
+            source.media_id.as_ref().expect("media id").as_str(),
+            "media-1"
+        );
+    }
+
+    #[test]
+    fn v3_install_rejects_unmatched_source_document_rendition() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, files) = text_only_release(&ids, "edition-v3-text");
+        // Swap in a document rendition that does not match the Material text.
+        // The blob is referenced (not embedded) so inspection passes and the
+        // install-time binding check is the one that rejects the release.
+        let other_bytes = b"unrelated text".to_vec();
+        let other_digest = sha256_id(&other_bytes);
+        let other_blob = v3_blob_declaration(&other_digest, other_bytes.len() as u64, false);
+        let document = v3_document_rendition(
+            "source",
+            "text/plain",
+            Some("en"),
+            &other_blob,
+            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+            None,
+        );
+        let mut release: Value = serde_json::from_slice(&files["release.json"]).unwrap();
+        release["document_renditions"] = json!([document]);
+        // The original text blob is no longer referenced by any rendition or
+        // resource; drop it so the carrier inventory stays exact.
+        let mut files = files;
+        files.remove(&blob_path(&sha256_id(TEXT.as_bytes())));
+        files.insert("release.json".to_owned(), canonical_bytes(&release));
+
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 source document rendition does not match a bound material document rendition"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_source_document_language_contradiction() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, mut files) = text_only_release(&ids, "edition-v3-text");
+        let mut release: Value = serde_json::from_slice(&files["release.json"]).unwrap();
+        let entry = release["document_renditions"][0].clone();
+        let identity = json!({
+            "media_type": entry["media_type"],
+            "language": "zh-Hans",
+            "text_blob": entry["text_blob"],
+        });
+        release["document_renditions"][0]["language"] = json!("zh-Hans");
+        release["document_renditions"][0]["rendition_id"] =
+            json!(sha256_id(&canonical_bytes(&identity)));
+        files.insert("release.json".to_owned(), canonical_bytes(&release));
+
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 source document rendition contradicts the material's declared language"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_unmatched_source_media_rendition() {
+        let setup = setup();
+        let (material, revision) =
+            seed_mixed_media_material(&setup, &media_hex(), MediaAvailability::Available);
+        let ids = ids_of(&material, &revision);
+        let (release, mut files) = text_only_release(&ids, "edition-v3-text");
+        let mut release = release;
+        let media_blob = v3_blob_declaration(&format!("sha256:{}", "c".repeat(64)), 100, false);
+        let media = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &media_blob,
+            Some("media-1"),
+            "unrelated-fingerprint",
+            None,
+            None,
+        );
+        release["media_renditions"] = json!([media]);
+        files.insert("release.json".to_owned(), canonical_bytes(&release));
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 media rendition does not match a bound material media rendition"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_derived_media_without_producer_facts() {
+        let setup = setup();
+        let (material, revision) =
+            seed_mixed_media_material(&setup, &media_hex(), MediaAvailability::Available);
+        let ids = ids_of(&material, &revision);
+        let (release, _) = text_only_release(&ids, "edition-v3-text");
+        let mut release = release;
+        let derived_bytes = b"listen fixture derived media".to_vec();
+        let derived_digest = sha256_id(&derived_bytes);
+        let derived_blob = v3_blob_declaration(&derived_digest, derived_bytes.len() as u64, true);
+        let derived = v3_media_rendition(
+            "derived",
+            "audio",
+            "audio/mpeg",
+            &derived_blob,
+            None,
+            "fp-derived",
+            None,
+            None,
+        );
+        release["media_renditions"] = json!([derived]);
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&derived_digest), derived_bytes);
+        let files = carrier_with_release(&release, blobs);
+
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 carrier is invalid"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_stale_material_revision() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = FixtureIds {
+            material_id: material.id.as_str().to_owned(),
+            revision_id: revision.id.as_str().to_owned(),
+        };
+        let (_, files) = text_only_release(&ids, "edition-v3-text");
+        // Append a newer revision to the same Material so the package binds
+        // the stale revision.
+        let second_text = "Second revision text.";
+        let second_asset = domain::SourceAsset::new(
+            "text/plain",
+            second_text.len() as u64,
+            text_digest(second_text),
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            2,
+        )
+        .expect("valid source asset");
+        let second = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                text_digest(second_text),
+                second_text.len() as u64,
+                Some(second_asset.id.clone()),
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
+        );
+        let appended = MaterialRevision::new(
+            material.id.clone(),
+            "Material",
+            vec![second_asset],
+            vec![second],
+            2,
+        )
+        .expect("valid revision");
+        setup.materials.append_revision_fake(appended, 2);
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 material revision does not match the material's current revision"
+        ));
+    }
+
+    // ---------------------------------------------------------------------
     // Installation tests
     // ---------------------------------------------------------------------
 
@@ -2093,7 +2891,7 @@ mod tests {
         let (material, revision) = seed_text_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (release, blobs) = text_only_release(&ids, "edition-1");
-        assert_eq!(release["schema"], RELEASE_SCHEMA_V2);
+        assert_eq!(release["schema"], RELEASE_SCHEMA_V3);
 
         let view = install_ok(&setup, &material.id, &blobs);
 
@@ -2107,7 +2905,7 @@ mod tests {
         assert!(view.adopted_at_ms.is_none());
         assert_eq!(view.resources.len(), 1);
         let resource = &view.resources[0];
-        assert_eq!(resource.kind, "document_text");
+        assert_eq!(resource.kind, "structured_reading");
         assert_eq!(resource.role, PackageResourceRole::Base);
         assert!(resource.required);
         assert_eq!(
@@ -2116,7 +2914,9 @@ mod tests {
         );
         assert_eq!(resource.review_status, PackageReviewStatus::HumanReviewed);
         assert_eq!(resource.content_language, Some(language("en")));
-        assert!(view.renditions.is_empty());
+        assert_eq!(view.renditions.len(), 1);
+        assert_eq!(view.renditions[0].kind, "document");
+        assert!(view.renditions[0].available);
 
         assert_eq!(setup.package_lifecycle.installation_count(), 1);
         assert_eq!(
@@ -2142,8 +2942,8 @@ mod tests {
         assert_eq!(stored.len(), 1);
         let payload = &stored[0];
         assert_eq!(payload.resource_id, view.resources[0].resource_id);
-        assert_eq!(payload.kind, "document_text");
-        assert_eq!(payload.schema, "listen.payload.document-text.v1");
+        assert_eq!(payload.kind, "structured_reading");
+        assert_eq!(payload.schema, "listen.payload.structured-reading.v1");
         assert_eq!(payload.digest, sha256_id(&expected_bytes));
         assert_eq!(payload.size_bytes, expected_bytes.len() as u64);
         assert_eq!(
@@ -2237,7 +3037,7 @@ mod tests {
         assert!(matches!(
             error,
             ApplicationError::Invalid(message)
-                if message == "content package v2 material id does not match the target material"
+                if message == "content package v3 material id does not match the target material"
         ));
         assert_eq!(setup.package_lifecycle.installation_count(), 0);
     }
@@ -2255,7 +3055,7 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 material revision does not match the material's current revision"
+                    == "content package v3 material revision does not match the material's current revision"
         ));
     }
 
@@ -2275,7 +3075,7 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 media rendition does not match a bound material media asset"
+                    == "content package v3 media rendition does not match a bound material media rendition"
         ));
     }
 
@@ -2295,7 +3095,7 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 media rendition does not match a bound material media asset"
+                    == "content package v3 media rendition does not match a bound material media rendition"
         ));
     }
 
@@ -2310,9 +3110,12 @@ mod tests {
         let ids = ids_of(&material, &revision);
         let (_, blobs) = media_text_translation_release(&ids, false, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
-        assert_eq!(view.renditions.len(), 1);
-        assert!(view.renditions[0].available);
-        assert_eq!(view.renditions[0].kind, "audio");
+        let media = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.kind == "media")
+            .expect("media rendition present");
+        assert!(media.available);
     }
 
     #[test]
@@ -2326,8 +3129,12 @@ mod tests {
         let ids = ids_of(&material, &revision);
         let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
-        assert_eq!(view.renditions.len(), 1);
-        assert!(view.renditions[0].available);
+        let media = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.kind == "media")
+            .expect("media rendition present");
+        assert!(media.available);
     }
 
     #[test]
@@ -2338,8 +3145,12 @@ mod tests {
         let ids = ids_of(&material, &revision);
         let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
-        assert_eq!(view.renditions.len(), 1);
-        assert!(view.renditions[0].available);
+        let media = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.kind == "media")
+            .expect("media rendition present");
+        assert!(media.available);
     }
 
     #[test]
@@ -2354,9 +3165,13 @@ mod tests {
         let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
 
-        assert_eq!(view.renditions.len(), 1);
+        let media = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.kind == "media")
+            .expect("media rendition present");
         assert!(
-            !view.renditions[0].available,
+            !media.available,
             "media embedded in the temporary carrier never makes a rendition available \
              without a usable bound material asset"
         );
@@ -2371,7 +3186,7 @@ mod tests {
             .unwrap()
             .expect("adoption exists");
         assert!(
-            plan.selected_rendition_ids.is_empty(),
+            !plan.selected_rendition_ids.contains(&media.rendition_id),
             "unavailable renditions are never selected"
         );
     }
@@ -2388,7 +3203,7 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 document text does not agree with the material's document text"
+                    == "content package v3 source document rendition does not match a bound material document rendition"
         ));
     }
 
@@ -2404,25 +3219,58 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 document text does not agree with the material's document text"
+                    == "content package v3 source document rendition contradicts the material's declared language"
         ));
     }
 
     #[test]
     fn install_rejects_ambiguous_document_text_binding() {
         let setup = setup();
-        let text_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(TEXT, Some(language("en"))).expect("valid text asset"),
+        let asset = domain::SourceAsset::new(
+            "text/plain",
+            TEXT.len() as u64,
+            text_digest(TEXT),
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            1,
+        )
+        .expect("valid source asset");
+        let text_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                text_digest(TEXT),
+                TEXT.len() as u64,
+                Some(asset.id.clone()),
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let zh_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(TEXT, Some(language("zh-Hans"))).expect("valid text asset"),
+        let zh_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("zh-Hans")),
+                text_digest(TEXT),
+                TEXT.len() as u64,
+                Some(asset.id.clone()),
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let material_id =
-            initial_material_id(&[text_asset.clone(), zh_asset.clone()]).expect("deterministic id");
+        let material_id = initial_material_id(
+            std::slice::from_ref(&asset),
+            &[text_rendition.clone(), zh_rendition.clone()],
+        )
+        .expect("deterministic id");
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Material",
-            vec![text_asset, zh_asset],
+            vec![asset],
+            vec![text_rendition, zh_rendition],
             1,
         )
         .expect("valid revision");
@@ -2438,33 +3286,46 @@ mod tests {
         assert!(matches!(
             error,
             ApplicationError::Invalid(message)
-                if message == "content package v2 document text binding is ambiguous"
+                if message == "content package v3 source document rendition binding is ambiguous"
         ));
     }
 
     #[test]
     fn install_rejects_ambiguous_media_binding() {
         let setup = setup();
-        let first = MediaRenditionAsset::new(
-            MediaId::parse("media-a").unwrap(),
+        let first = MediaRendition::new(
+            RenditionOrigin::Source,
             MediaKind::Audio,
+            "audio/mpeg",
             format!("sha256:{}", media_hex()),
             MediaAvailability::Available,
+            Some(MediaId::parse("media-a").unwrap()),
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap();
-        let second = MediaRenditionAsset::new(
-            MediaId::parse("media-b").unwrap(),
+        let second = MediaRendition::new(
+            RenditionOrigin::Source,
             MediaKind::Audio,
+            "audio/mpeg",
             format!("sha256:{}", media_hex()),
             MediaAvailability::Available,
+            Some(MediaId::parse("media-b").unwrap()),
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap();
         let revision = MaterialRevision::new(
             LearningMaterialId::parse("material-ambiguous").unwrap(),
             "Material",
+            Vec::new(),
             vec![
-                MaterialAsset::MediaRendition(first),
-                MaterialAsset::MediaRendition(second),
+                domain::Rendition::Media(first),
+                domain::Rendition::Media(second),
             ],
             1,
         )
@@ -2486,7 +3347,7 @@ mod tests {
         assert!(matches!(
             error,
             ApplicationError::Invalid(message)
-                if message == "content package v2 media rendition binding is ambiguous"
+                if message == "content package v3 media rendition binding is ambiguous"
         ));
     }
 
@@ -2501,7 +3362,7 @@ mod tests {
         assert!(matches!(
             error,
             ApplicationError::Invalid(message)
-                if message == "content package v2 required resource payload is unavailable"
+                if message == "content package v3 required resource payload is unavailable"
         ));
     }
 
@@ -2525,7 +3386,7 @@ mod tests {
         let document = view
             .resources
             .iter()
-            .find(|resource| resource.kind == "document_text")
+            .find(|resource| resource.kind == "structured_reading")
             .expect("document fact");
         assert_eq!(
             document.availability,
@@ -2651,7 +3512,7 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 required resource dependency closure is unavailable"
+                    == "content package v3 required resource dependency closure is unavailable"
         ));
     }
 
@@ -2700,6 +3561,7 @@ mod tests {
             .save_installation(&PreparedPackageInstallation {
                 installation: different_facts,
                 payloads: Vec::new(),
+                rendition_blobs: Vec::new(),
             })
             .expect_err("unequal facts");
         assert!(matches!(error, ApplicationError::Repository(_)));
@@ -2727,6 +3589,7 @@ mod tests {
             .save_installation(&PreparedPackageInstallation {
                 installation: stored.clone(),
                 payloads: tampered_payloads,
+                rendition_blobs: Vec::new(),
             })
             .expect_err("unequal bytes");
         assert!(matches!(error, ApplicationError::Repository(_)));
@@ -2796,7 +3659,28 @@ mod tests {
         );
         assert!(matches!(
             error,
-            ApplicationError::Invalid(message) if message == "content package v2 is missing release.json"
+            ApplicationError::Invalid(message) if message == "content package v3 is missing release.json"
+        ));
+    }
+
+    #[test]
+    fn install_unsupported_release_schema_is_a_stable_error() {
+        let setup = setup();
+        let (material, _) = seed_text_material(&setup, false);
+        let directory = TestDirectory::new();
+        fs::write(
+            directory.path().join("release.json"),
+            r#"{"schema":"listen.content-package.release.v99","resources":[]}"#,
+        )
+        .unwrap();
+
+        let error = setup
+            .use_cases
+            .install_for_material(&material.id, directory.path())
+            .expect_err("unsupported schema fails");
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message) if message == "content package v3 carrier is invalid"
         ));
     }
 
@@ -3085,7 +3969,7 @@ mod tests {
         let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
         let installed = install_ok(&setup, &material.id, &blobs);
         assert_eq!(installed.resources.len(), 2);
-        assert_eq!(installed.renditions.len(), 1);
+        assert_eq!(installed.renditions.len(), 2);
 
         let view = setup
             .use_cases
@@ -3099,17 +3983,20 @@ mod tests {
             .unwrap()
             .expect("adoption exists");
         assert_eq!(plan.selected_resource_ids.len(), 2);
-        assert_eq!(plan.selected_rendition_ids.len(), 1);
+        assert_eq!(plan.selected_rendition_ids.len(), 2);
         assert_eq!(plan.exclusive_selections.len(), 2);
         assert_eq!(
             plan.exclusive_selections[0].family,
-            "exclusive:document_text"
+            "exclusive:structured_reading"
         );
         assert_eq!(plan.exclusive_selections[1].family, "translation:zh-hans");
-        assert_eq!(
-            plan.selected_rendition_ids[0],
-            installed.renditions[0].rendition_id
-        );
+        for rendition in &installed.renditions {
+            assert!(
+                plan.selected_rendition_ids
+                    .contains(&rendition.rendition_id),
+                "every available rendition is selected"
+            );
+        }
     }
 
     #[test]
@@ -3137,13 +4024,37 @@ mod tests {
         let (_, blobs) = text_only_release(&ids, "edition-1");
         let installed = install_ok(&setup, &material.id, &blobs);
 
-        let next_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new("Second revision.", Some(language("en")))
-                .expect("valid text asset"),
+        let second_text = "Second revision.";
+        let second_asset = domain::SourceAsset::new(
+            "text/plain",
+            second_text.len() as u64,
+            text_digest(second_text),
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            2,
+        )
+        .expect("valid source asset");
+        let next_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                text_digest(second_text),
+                second_text.len() as u64,
+                Some(second_asset.id.clone()),
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let next_revision =
-            MaterialRevision::new(material.id.clone(), "Material v2", vec![next_asset], 2)
-                .expect("valid revision");
+        let next_revision = MaterialRevision::new(
+            material.id.clone(),
+            "Material v2",
+            vec![second_asset],
+            vec![next_rendition],
+            2,
+        )
+        .expect("valid revision");
         setup.materials.append_revision_fake(next_revision, 2);
 
         let error = setup
@@ -3225,14 +4136,15 @@ mod tests {
             },
             resources: vec![domain::PackageResourceFact {
                 resource_id: "resource-missing-required".into(),
-                kind: "document_text".into(),
-                schema: "listen.payload.document-text.v1".into(),
+                kind: "structured_reading".into(),
+                schema: "listen.payload.structured-reading.v1".into(),
                 role: PackageResourceRole::Base,
                 required: true,
                 availability: PackageResourceAvailability::Missing,
                 content_language: Some(language("en")),
                 support_languages: Vec::new(),
                 dependencies: Vec::new(),
+                anchor_resource_ids: Vec::new(),
                 payload_digest: format!("sha256:{}", "a".repeat(64)),
                 payload_size_bytes: 1,
                 provenance: domain::PackageResourceProvenance {
@@ -3256,6 +4168,7 @@ mod tests {
             .save_installation(&PreparedPackageInstallation {
                 installation: installation.clone(),
                 payloads: Vec::new(),
+                rendition_blobs: Vec::new(),
             })
             .expect("seam stores durable state");
 
@@ -3512,19 +4425,19 @@ mod tests {
     #[test]
     fn media_fingerprint_matches_normalizes_only_sha256_forms() {
         let hex = media_hex();
-        assert!(media_fingerprint_matches(
+        assert!(media_fingerprint_equals(
             &format!("sha256:{hex}"),
             &format!("sha256:{hex}")
         ));
-        assert!(media_fingerprint_matches(&hex, &format!("sha256:{hex}")));
-        assert!(!media_fingerprint_matches(
+        assert!(media_fingerprint_equals(&hex, &format!("sha256:{hex}")));
+        assert!(!media_fingerprint_equals(
             &hex.to_uppercase(),
             &format!("sha256:{hex}")
         ));
-        assert!(!media_fingerprint_matches(
+        assert!(!media_fingerprint_equals(
             "fp-xyz",
             &format!("sha256:{hex}")
         ));
-        assert!(!media_fingerprint_matches(&hex, "fp-xyz"));
+        assert!(!media_fingerprint_equals(&hex, "fp-xyz"));
     }
 }

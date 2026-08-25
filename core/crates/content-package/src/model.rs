@@ -16,48 +16,6 @@ pub const SENSE_GROUP_ANALYSIS_SCHEMA_V1: &str = "listen.resource.sense-group-an
 pub const WORD_ACOUSTICS_SCHEMA_V1: &str = "listen.resource.word-acoustics.v1";
 pub const PROSODY_ANALYSIS_SCHEMA_V1: &str = "listen.resource.prosody-analysis.v1";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PackageManifest {
-    pub schema: String,
-    pub created_at_ms: u64,
-    pub content_document: ContentDocument,
-    pub resources: Vec<ResourceManifestEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ContentDocument {
-    pub media_fingerprint: String,
-    pub title: String,
-    pub media_kind: MediaKind,
-    pub duration_ms: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MediaKind {
-    Audio,
-    Video,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResourceManifestEntry {
-    pub resource_id: String,
-    pub path: String,
-    pub kind: String,
-    pub schema: String,
-    pub size_bytes: u64,
-    pub required: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResourceSubject {
-    pub media_fingerprint: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceEnvelope<P> {
@@ -68,6 +26,12 @@ pub struct ResourceEnvelope<P> {
     pub provenance: Provenance,
     pub quality: Quality,
     pub payload: P,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceSubject {
+    pub media_fingerprint: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -410,6 +374,65 @@ pub struct DurationMeasurement {
     pub duration_ms: u64,
     #[serde(deserialize_with = "deserialize_required_option")]
     pub local_ratio: Option<f64>,
+}
+
+/// `acoustic_track` v1 payload: frame-level acoustic evidence over a fixed hop.
+/// Audio-only measurement (no word or sentence coordinate): every frame carries
+/// raw energy in dBFS plus its value relative to the recording's own median, and
+/// optional pitch (Hz and semitones relative to the recording median) with a
+/// voiced flag. Pitch fields are `null` on an unvoiced frame; `voiced` is `null`
+/// when voicing was not measured. Prominence, anchors, and boundaries are never
+/// stated here — that interpretation belongs to Core.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcousticTrack {
+    pub sample_rate_hz: u32,
+    pub frame_step_ms: u32,
+    pub energy_baseline: String,
+    pub pitch_baseline: String,
+    pub frames: Vec<AcousticFrame>,
+}
+
+/// One fixed-hop acoustic measurement at `time_ms` (absolute media time). Every
+/// field is a raw measurement, never an interpretation. `f0_hz`/`f0_rel_st` are
+/// `null` on an unvoiced frame; `voiced` is `null` when voicing was not measured.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcousticFrame {
+    pub time_ms: u64,
+    pub energy_dbfs: f64,
+    pub energy_rel_db: f64,
+    #[serde(deserialize_with = "deserialize_required_option")]
+    pub f0_hz: Option<f64>,
+    #[serde(deserialize_with = "deserialize_required_option")]
+    pub f0_rel_st: Option<f64>,
+    #[serde(deserialize_with = "deserialize_required_option")]
+    pub voiced: Option<bool>,
+}
+
+/// `speech_activity` v1 payload: ordered, non-overlapping speech/silence spans
+/// over the audio rendition. Audio-only measurement: it reports where speech and
+/// silence are and never interprets a silence as any kind of boundary.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpeechActivity {
+    pub spans: Vec<SpeechSpan>,
+}
+
+/// One half-open absolute-media-time span labelled speech or silence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpeechSpan {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub activity: SpeechActivityKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechActivityKind {
+    Speech,
+    Silence,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

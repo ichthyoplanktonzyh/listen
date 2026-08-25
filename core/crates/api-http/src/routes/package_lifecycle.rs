@@ -241,14 +241,71 @@ pub(crate) async fn adopt_learning_edition(
     state
         .application
         .execute("package_lifecycle.adopt", move |services| {
-            services
+            // Materialize the package's subtitle track and rich candidates
+            // before committing the learner's adoption. A package with a
+            // selected subtitle track is not adoptable until Core owns the
+            // corresponding global sentence ids and candidate resources.
+            // This ordering keeps a landing failure from returning an error
+            // after the adoption row has already been committed.
+            let newly_landed_track =
+                services.land_adopted_subtitle_track(&material_id, &release_id)?;
+            match services
                 .package_lifecycle()
                 .adopt_for_material(&material_id, &release_id)
+            {
+                Ok(view) => Ok(view),
+                Err(error) => {
+                    // The landing is idempotent. If the adoption commit
+                    // itself fails, remove only the track created by this
+                    // attempt so the previously adopted track remains the
+                    // material's sole resolved source.
+                    if let Some(track_id) = newly_landed_track {
+                        services.media_analysis().delete_subtitle_track(&track_id)?;
+                    }
+                    Err(error)
+                }
+            }
         })
         .await
         .map(LearningEditionDetails::from)
         .map(Json)
         .map_err(package_adoption_error)
+}
+
+/// DELETE /v1/materials/{material_id}/editions/{release_id} — deletes one
+/// installed Learning Edition candidate for the Material. A candidate
+/// currently adopted cannot be deleted (typed 409 conflict).
+pub(crate) async fn delete_learning_edition(
+    State(state): State<ApiState>,
+    Path((material_id, release_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    let material_id = LearningMaterialId::parse(material_id).map_err(ApplicationError::from)?;
+    let release_id =
+        domain::PackageReleaseId::parse(release_id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("package_lifecycle.delete", move |services| {
+            services
+                .package_lifecycle()
+                .delete_for_material(&material_id, &release_id)
+        })
+        .await
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(package_deletion_error)
+}
+
+fn package_deletion_error(error: ApplicationError) -> ApiError {
+    match error {
+        ApplicationError::NotFound(entity) => ApiError::not_found(entity),
+        ApplicationError::Conflict(message) => ApiError::internal(
+            StatusCode::CONFLICT,
+            "cannot_delete_adopted_edition",
+            "cannot delete currently adopted package release; switch adoption first",
+            message,
+            false,
+        ),
+        other => package_lifecycle_failed(other),
+    }
 }
 
 /// Maps Package Installation failures. Invalid carriers, unreadable or

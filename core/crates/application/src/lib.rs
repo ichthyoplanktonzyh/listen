@@ -54,8 +54,8 @@ pub mod batch_governor;
 
 mod chunks;
 mod coach_dashboard;
+mod composition;
 mod content_fit;
-mod content_package_import;
 mod corpus;
 mod diagnosis;
 mod dictionary;
@@ -69,7 +69,9 @@ mod learning_preparation;
 mod lexical;
 mod listening;
 mod llm_provider;
+mod material_capability;
 mod media;
+mod package_candidates;
 mod package_lifecycle;
 mod personal_expression;
 mod phones;
@@ -89,6 +91,7 @@ mod secret_store;
 mod semantic_embedding;
 mod semantic_task;
 mod sense_groups;
+mod source_identity;
 mod speech_synthesis;
 mod subtitles;
 mod syntactic_consumers;
@@ -106,11 +109,7 @@ pub use coach_dashboard::{
     CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
     CoachSuggestion, CoachSuggestionDestination,
 };
-pub use content_package_import::{
-    ContentPackageImportReceipt, ImportedContentPackage, PreparedContentPackageImport,
-    ResourceImportDisposition, ResourceImportOutcome, ResourceImportProducer,
-    ResourceImportProvenance, ResourceImportReviewStatus, prepare_content_package_document,
-};
+pub use composition::*;
 pub(crate) use corpus::prosody_chunk_projections_from_document;
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;
@@ -121,6 +120,7 @@ pub use learning_material::*;
 pub use learning_preparation::*;
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
+pub use material_capability::*;
 pub use media::MediaAnalysisUseCases;
 pub use package_lifecycle::*;
 pub use personal_expression::PersonalExpressionUseCases;
@@ -139,6 +139,7 @@ pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use semantic_embedding::*;
 pub use semantic_task::SemanticUseCases;
 pub use sense_groups::foundation_rule_sense_group_policy;
+pub use source_identity::*;
 pub use speech_synthesis::*;
 pub use syntactic_consumers::*;
 pub use util::now_ms;
@@ -161,8 +162,10 @@ pub struct AppServices {
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
-    pub(crate) content_package_imports: Arc<dyn ContentPackageImportRepository>,
+    pub(crate) content_package_candidates: Arc<dyn ContentPackageCandidateImportRepository>,
     pub(crate) package_lifecycle: Arc<dyn PackageLifecycleRepository>,
+    pub(crate) capability_attempts: Arc<dyn CapabilityAttemptRepository>,
+    pub(crate) source_identity: Arc<dyn SourceIdentityRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
     pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
@@ -207,6 +210,26 @@ impl AppServices {
 
     pub fn package_lifecycle(&self) -> PackageLifecycleUseCases {
         PackageLifecycleUseCases::new(self.materials.clone(), self.package_lifecycle.clone())
+    }
+
+    pub fn material_capability(&self) -> MaterialCapabilityUseCases {
+        MaterialCapabilityUseCases::new(
+            self.materials.clone(),
+            self.package_lifecycle.clone(),
+            self.capability_attempts.clone(),
+        )
+    }
+
+    pub fn composition(&self) -> CompositionUseCases {
+        CompositionUseCases::new(
+            self.materials.clone(),
+            self.media.clone(),
+            self.package_lifecycle.clone(),
+        )
+    }
+
+    pub fn source_identity(&self) -> SourceIdentityUseCases {
+        SourceIdentityUseCases::new(self.source_identity.clone(), self.materials.clone())
     }
 
     pub fn lexical_learning(&self) -> LexicalLearningUseCases {
@@ -276,6 +299,237 @@ impl AppServices {
         SemanticEmbeddingUseCases::from_services(self)
     }
 
+    /// Materializes a package's `subtitle_text_track` as a real Core subtitle
+    /// track, then re-keys and lands the package's analysis resources as
+    /// candidate Core records against that track. The workbench therefore
+    /// faces one sentence-identity space whether the content came from a
+    /// source subtitle file or a generated package.
+    ///
+    /// This is a pre-adoption gate. The caller must complete it before
+    /// committing the Learning Edition adoption, so a malformed/missing
+    /// package payload or an unavailable media anchor is an adoption failure,
+    /// never a silently accepted detached projection. Packages without a
+    /// selected subtitle resource do not need this materialization.
+    pub fn land_adopted_subtitle_track(
+        &self,
+        material_id: &domain::LearningMaterialId,
+        release_id: &domain::PackageReleaseId,
+    ) -> Result<Option<SubtitleTrackId>, ApplicationError> {
+        let material = self
+            .materials
+            .get_material(material_id)?
+            .ok_or(ApplicationError::NotFound("material"))?;
+        let revision = self
+            .materials
+            .get_revision(&material.current_revision_id)?
+            .ok_or(ApplicationError::NotFound("material revision"))?;
+        let installation = self
+            .package_lifecycle
+            .get_installation(material_id, release_id)?
+            .ok_or(ApplicationError::NotFound("package release installation"))?;
+        if installation.material_revision_id != revision.id {
+            return Err(ApplicationError::Invalid(
+                "package release is installed for a stale material revision".into(),
+            ));
+        }
+        let Some(resource) = installation.resources.iter().find(|resource| {
+            resource.kind == "subtitle_text_track"
+                && resource.availability == domain::PackageResourceAvailability::Available
+        }) else {
+            if installation.resources.iter().any(|resource| {
+                resource.kind == "subtitle_text_track"
+                    && resource.required
+                    && resource.availability != domain::PackageResourceAvailability::Available
+            }) {
+                return Err(ApplicationError::Invalid(
+                    "required package subtitle_text_track is unavailable".into(),
+                ));
+            }
+            return Ok(None);
+        };
+
+        let (media_id, media) = if let Some(source_media_id) =
+            revision
+                .renditions
+                .iter()
+                .find_map(|rendition| match rendition {
+                    domain::Rendition::Media(media)
+                        if media.origin == domain::RenditionOrigin::Source =>
+                    {
+                        media.media_id.clone()
+                    }
+                    _ => None,
+                }) {
+            let media = self
+                .media
+                .get(&source_media_id)?
+                .ok_or(ApplicationError::NotFound("media item"))?;
+            if media.availability != MediaAvailability::Available {
+                return Err(ApplicationError::Invalid(
+                    "package subtitle_text_track requires an available source media".into(),
+                ));
+            }
+            (source_media_id, media)
+        } else {
+            // Text/document materials have no source MediaId. Gen must carry
+            // an available derived audio/video rendition for the same
+            // workbench contract; Core gives that rendition a deterministic
+            // media identity and persists it as a first-class MediaItem.
+            let derived = installation
+                .renditions
+                .iter()
+                .filter(|rendition| {
+                    rendition.kind == "media"
+                        && rendition.origin == domain::RenditionOrigin::Derived
+                        && rendition.available
+                        && (rendition.media_type.starts_with("audio/")
+                            || rendition.media_type.starts_with("video/"))
+                })
+                .min_by(|left, right| left.rendition_id.cmp(&right.rendition_id))
+                .ok_or_else(|| {
+                    ApplicationError::Invalid(
+                        "package subtitle_text_track requires an available derived media rendition"
+                            .into(),
+                    )
+                })?;
+            let kind = if derived.media_type.starts_with("video/") {
+                MediaKind::Video
+            } else {
+                MediaKind::Audio
+            };
+            let media_id = crate::composition::package_derived_media_id(
+                &derived.media_digest,
+                &derived.media_type,
+            );
+            let fingerprint = format!(
+                "package-derived:{}:{}",
+                derived.media_digest, derived.media_type
+            );
+            let now = now_ms();
+            let media = self.media.upsert(&MediaItem {
+                id: media_id.clone(),
+                path: detached_media_path(&media_id),
+                fingerprint,
+                title: revision.title.clone(),
+                kind,
+                duration: None,
+                // The package blob is readable through the adopted
+                // composition, but `lltimeline://` is not a playable local
+                // file path. Keep the MediaItem honest: it is a synthetic
+                // identity used by Core-owned subtitle/timeline records,
+                // not an available playback source.
+                availability: MediaAvailability::Missing,
+                retained_at_ms: None,
+                created_at_ms: now,
+                updated_at_ms: now,
+            })?;
+            (media.id.clone(), media)
+        };
+        let Some(bytes) = self.package_lifecycle.read_resource_payload(
+            material_id,
+            release_id,
+            &resource.resource_id,
+        )?
+        else {
+            return Err(ApplicationError::Repository(
+                "selected package subtitle_text_track payload is unavailable".into(),
+            ));
+        };
+        let payload: content_package::SubtitleTextTrack =
+            serde_json::from_slice(&bytes).map_err(|error| {
+                ApplicationError::Repository(format!(
+                    "subtitle_text_track payload is not decodable: {error}"
+                ))
+            })?;
+        let language = LanguageCode::parse(&payload.language)?;
+        let identity_fingerprint = format!(
+            "{}:{}:{}",
+            material.id.as_str(),
+            revision.id.as_str(),
+            resource.resource_id
+        );
+        let payloads =
+            self.package_candidates_payloads(material_id, release_id, &installation.resources)?;
+        validate_package_candidate_payloads(&installation.resources, &payloads)?;
+        let track_exists = self
+            .subtitle_tracks
+            .get_by_media_fingerprint(&media_id, &identity_fingerprint)?
+            .is_some();
+        let track = self.media_analysis().adopt_package_subtitle_track(
+            &media_id,
+            &identity_fingerprint,
+            &language,
+            &payload,
+        )?;
+
+        // Attach the package's analysis resources to the just-landed track as
+        // candidates, with every package-local sentence id re-keyed to the
+        // track's global sentence ids. Every available rich resource must be
+        // readable before the adoption can be committed; malformed payloads
+        // are explicit failures rather than silently discarded candidates.
+        let import = match crate::package_candidates::project_package_candidates(
+            &track,
+            &media,
+            installation.release_created_at_ms,
+            &payload,
+            crate::package_candidates::PackageResourcePayloads::new(
+                installation.resources.clone(),
+                payloads,
+            ),
+        ) {
+            Ok(import) => import,
+            Err(error) => {
+                if !track_exists {
+                    self.subtitle_tracks.delete_track(&track.id)?;
+                }
+                return Err(error);
+            }
+        };
+        match self
+            .content_package_candidates
+            .import_content_package_candidates(&import)
+        {
+            Ok(()) => Ok((!track_exists).then_some(track.id)),
+            Err(error) => {
+                if !track_exists {
+                    self.subtitle_tracks.delete_track(&track.id)?;
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn package_candidates_payloads(
+        &self,
+        material_id: &domain::LearningMaterialId,
+        release_id: &domain::PackageReleaseId,
+        resources: &[domain::PackageResourceFact],
+    ) -> Result<std::collections::HashMap<String, Vec<u8>>, ApplicationError> {
+        const CANDIDATE_KINDS: &[&str] = &[
+            "word_timeline",
+            "phone_timeline",
+            "sense_group_analysis",
+            "word_acoustics",
+            "prosody_analysis",
+            "acoustic_track",
+            "speech_activity",
+        ];
+        let mut payloads = std::collections::HashMap::new();
+        for resource in resources
+            .iter()
+            .filter(|resource| CANDIDATE_KINDS.contains(&resource.kind.as_str()))
+        {
+            if let Some(bytes) = self.package_lifecycle.read_resource_payload(
+                material_id,
+                release_id,
+                &resource.resource_id,
+            )? {
+                payloads.insert(resource.resource_id.clone(), bytes);
+            }
+        }
+        Ok(payloads)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<R, L>(
         media: Arc<dyn MediaRepository>,
@@ -293,7 +547,6 @@ impl AppServices {
             + ProsodyAnalysisRepository
             + PhoneTimelineRepository
             + LLTimelineImportRepository
-            + ContentPackageImportRepository
             + 'static,
         L: LexicalCapabilityRepository
             + LexicalEntryRepository
@@ -314,8 +567,10 @@ impl AppServices {
             phone_timelines: timelines.clone(),
             lltimeline_resources,
             lltimeline_imports: timelines.clone(),
-            content_package_imports: timelines,
+            content_package_candidates: Arc::new(DisabledContentPackageCandidateImportRepository),
             package_lifecycle: Arc::new(DisabledPackageLifecycleRepository),
+            capability_attempts: Arc::new(DisabledCapabilityAttemptRepository),
+            source_identity: Arc::new(DisabledSourceIdentityRepository),
             dictionary,
             lexical_capabilities: learning_assets.clone(),
             lexical_entries: learning_assets.clone(),
@@ -364,6 +619,30 @@ impl AppServices {
         package_lifecycle: Arc<dyn PackageLifecycleRepository>,
     ) -> Self {
         self.package_lifecycle = package_lifecycle;
+        self
+    }
+
+    pub fn with_content_package_candidate_import_repository(
+        mut self,
+        content_package_candidates: Arc<dyn ContentPackageCandidateImportRepository>,
+    ) -> Self {
+        self.content_package_candidates = content_package_candidates;
+        self
+    }
+
+    pub fn with_capability_attempt_repository(
+        mut self,
+        capability_attempts: Arc<dyn CapabilityAttemptRepository>,
+    ) -> Self {
+        self.capability_attempts = capability_attempts;
+        self
+    }
+
+    pub fn with_source_identity_repository(
+        mut self,
+        source_identity: Arc<dyn SourceIdentityRepository>,
+    ) -> Self {
+        self.source_identity = source_identity;
         self
     }
 
@@ -482,6 +761,69 @@ impl AppServices {
         self.pronunciation_providers = Arc::new(providers);
         self
     }
+}
+
+/// Validates every available rich package payload before adoption. The
+/// projection module deliberately works with optional candidates for legacy
+/// callers, but an adopted Learning Edition cannot silently drop a declared
+/// available resource: malformed or missing bytes are a package failure.
+fn validate_package_candidate_payloads(
+    resources: &[domain::PackageResourceFact],
+    payloads: &HashMap<String, Vec<u8>>,
+) -> Result<(), ApplicationError> {
+    const CANDIDATE_KINDS: &[&str] = &[
+        "word_timeline",
+        "phone_timeline",
+        "sense_group_analysis",
+        "word_acoustics",
+        "prosody_analysis",
+        "acoustic_track",
+        "speech_activity",
+    ];
+    for resource in resources.iter().filter(|resource| {
+        CANDIDATE_KINDS.contains(&resource.kind.as_str())
+            && resource.availability == domain::PackageResourceAvailability::Available
+    }) {
+        let bytes = payloads.get(&resource.resource_id).ok_or_else(|| {
+            ApplicationError::Repository(format!(
+                "available package {} payload is missing",
+                resource.kind
+            ))
+        })?;
+        let decoded = match resource.kind.as_str() {
+            "word_timeline" => serde_json::from_slice::<content_package::WordTimeline>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            "phone_timeline" => serde_json::from_slice::<content_package::PhoneTimeline>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            "sense_group_analysis" => {
+                serde_json::from_slice::<content_package::SenseGroupAnalysis>(bytes)
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            }
+            "word_acoustics" => serde_json::from_slice::<content_package::WordAcoustics>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            "prosody_analysis" => serde_json::from_slice::<content_package::ProsodyAnalysis>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            "acoustic_track" => serde_json::from_slice::<content_package::AcousticTrack>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            "speech_activity" => serde_json::from_slice::<content_package::SpeechActivity>(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string()),
+            _ => Ok(()),
+        };
+        decoded.map_err(|error| {
+            ApplicationError::Invalid(format!(
+                "package {} payload is not decodable: {error}",
+                resource.kind
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 struct DisabledSemanticEmbeddingIndexRepository;

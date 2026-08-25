@@ -6,6 +6,7 @@ use super::{
     SqliteRepository, domain_sql, from_json, json,
     learning_material::{
         apply_media_membership_in_transaction, ensure_media_material_in_transaction,
+        reconcile_media_material_membership,
     },
     repo,
 };
@@ -282,7 +283,25 @@ impl MediaRepository for SqliteRepository {
         // every media bound to it — all inside this transaction.
         let persisted = query_media_in_transaction(&tx, "id=?1", id.as_str())?;
         ensure_media_material_in_transaction(&tx, &persisted)?;
-        apply_media_membership_in_transaction(&tx, id.as_str(), retained_at_ms, updated_at_ms)?;
+        reconcile_media_material_membership(&tx, &persisted)?;
+        // The aggregate membership lives on the material: every media bound to
+        // it follows the exact retained/update pair.
+        let material_id: Option<String> = tx
+            .query_row(
+                "SELECT material_id FROM material_media_bindings WHERE media_id=?1",
+                [id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(repo)?;
+        if let Some(material_id) = material_id {
+            apply_media_membership_in_transaction(
+                &tx,
+                &material_id,
+                retained_at_ms,
+                updated_at_ms,
+            )?;
+        }
         tx.commit().map_err(repo)?;
         drop(conn);
         MediaRepository::get(self, id)?.ok_or(ApplicationError::NotFound("media"))

@@ -94,6 +94,19 @@ fn map_ipa_phone(ipa: &str, map: &HashMap<&str, (&str, &str)>) -> (String, Strin
     }
 }
 
+/// Normalize one observed phone symbol to ARPABET plus an IPA display form,
+/// reusing the same table the local recognizer applies to sidecar output. This
+/// lets externally-provided (e.g. package `phone_set: "ipa"`) observed phones be
+/// aligned against the ARPABET-internal audible-structure pipeline. Returns
+/// `None` for non-phone skip tokens; symbols already in ARPABET (or otherwise
+/// unmapped) pass through uppercased.
+pub fn map_ipa_symbol_to_arpabet(symbol: &str) -> Option<(String, String)> {
+    if skip_tokens().contains(&symbol) {
+        return None;
+    }
+    Some(map_ipa_phone(symbol, ipa_to_arpabet_map()))
+}
+
 fn sidecar_python() -> String {
     if let Ok(path) = std::env::var("LLPLAYERNEXT_PYTHON")
         && std::path::Path::new(&path).is_file()

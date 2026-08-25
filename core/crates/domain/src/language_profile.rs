@@ -214,6 +214,16 @@ impl LanguageLearningProfile {
     pub fn has_sound_feature(&self, kind: &str) -> bool {
         self.sound_features.iter().any(|value| value == kind)
     }
+
+    /// Whether Core's built-in ARPABET canonical G2P (`analyze_sentence`) and the
+    /// ARPABET-internal audible-structure pipeline apply to this language.
+    /// Canonical phones are English-only today; other languages declare their own
+    /// pronunciation system and receive no ARPABET canonical. Expressing the gate
+    /// through the profile keeps it a provider/configuration decision rather than a
+    /// hardcoded `starts_with("en")` language check.
+    pub fn uses_arpabet_canonical(&self) -> bool {
+        self.pronunciation == "en.ipa"
+    }
 }
 
 /// Language codes with a declared (non-degraded) profile.
@@ -321,5 +331,14 @@ mod tests {
         assert_eq!(profile.phone_timeline, CapabilitySupport::Unsupported);
         // Degradation never panics and answers capability queries as false.
         assert!(!profile.supports_listening_unit("anything"));
+    }
+
+    #[test]
+    fn arpabet_canonical_is_english_only() {
+        assert!(profile_for(&lang("en")).uses_arpabet_canonical());
+        assert!(profile_for(&lang("en-GB")).uses_arpabet_canonical());
+        assert!(!profile_for(&lang("zh")).uses_arpabet_canonical());
+        assert!(!profile_for(&lang("ja")).uses_arpabet_canonical());
+        assert!(!profile_for(&lang("xx")).uses_arpabet_canonical());
     }
 }

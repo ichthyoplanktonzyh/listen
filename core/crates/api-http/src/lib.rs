@@ -67,7 +67,14 @@ pub const API_VERSION: u16 = 1;
 /// version stays `0.7.0`, the SQLite schema stays v60 with no new migration,
 /// and the Content Package v1/v2 schema versions are unchanged; `3.3.0` is
 /// the current unreleased contract.
-pub const CONTRACT_VERSION: &str = "3.3.0";
+pub fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_millis() as u64
+}
+
+pub const CONTRACT_VERSION: &str = "4.0.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))
@@ -461,6 +468,18 @@ impl From<ApplicationError> for ApiError {
                 "repository_error",
                 "local data operation failed",
                 error,
+                true,
+            ),
+            ApplicationError::CompositionIntegrity => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "composition_integrity_failure",
+                "adopted composition content is missing or fails integrity verification",
+                false,
+            ),
+            ApplicationError::SourceUnavailable => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "source_unavailable",
+                "a referenced source asset is unavailable",
                 true,
             ),
             ApplicationError::Subtitle(error) => Self::new(

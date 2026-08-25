@@ -7,8 +7,11 @@ use domain::{
 use crate::phonetic_alignment::CanonicalPhone;
 
 use super::anchors::{build_information_anchors, detect_stress_anchors};
-use super::boundaries::detect_phrase_boundaries;
+use super::boundaries::{corroborate_boundaries_with_activity, detect_phrase_boundaries};
 use super::config::{RhythmWordAcousticCue, SoundAnalysisConfig};
+use super::frame_cues::{
+    AcousticFrameSample, SpeechActivitySpan, derive_word_acoustic_cues_from_frames,
+};
 use super::connected::{connected_speech_with_default, explain_connected_speech};
 use super::grouping::{detect_compression_spans, detect_weak_groups};
 use super::hotspots::build_listening_hotspots;
@@ -39,6 +42,8 @@ pub fn build_sound_analysis(
         canonical,
         config.word_timings,
         config.word_acoustic_cues,
+        config.acoustic_frames,
+        config.speech_activity,
         &learning_phones,
         &syllables,
         &prosodic_phrases,
@@ -62,11 +67,14 @@ pub fn build_sound_analysis(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_rhythm_frame_from_word_timeline(
     sentence: &SubtitleSentence,
     canonical: &[CanonicalPhone],
     word_timings: &[WordTiming],
     word_acoustic_cues: Option<&[RhythmWordAcousticCue]>,
+    acoustic_frames: Option<&[AcousticFrameSample]>,
+    speech_activity: Option<&[SpeechActivitySpan]>,
 ) -> RhythmFrame {
     let connected_speech = connected_speech_with_default(Some(sentence), Vec::new());
     build_rhythm_frame(
@@ -74,6 +82,8 @@ pub fn build_rhythm_frame_from_word_timeline(
         canonical,
         Some(word_timings),
         word_acoustic_cues,
+        acoustic_frames,
+        speech_activity,
         &[],
         &[],
         &[],
@@ -89,11 +99,27 @@ fn build_rhythm_frame(
     canonical: &[CanonicalPhone],
     word_timings: Option<&[WordTiming]>,
     word_acoustic_cues: Option<&[RhythmWordAcousticCue]>,
+    acoustic_frames: Option<&[AcousticFrameSample]>,
+    speech_activity: Option<&[SpeechActivitySpan]>,
     learning_phones: &[SoundLearningPhone],
     syllables: &[SoundSyllable],
     prosodic_phrases: &[SoundProsodicPhrase],
     connected_speech: &[ConnectedSpeechExplanation],
 ) -> RhythmFrame {
+    // Cue precedence: Gen-supplied `word_acoustics` cues win; otherwise Core
+    // derives the cues from frame-level AcousticTrack evidence for this
+    // sentence. Absent both, the frame degrades to exactly its prior behaviour.
+    let derived_cues: Vec<RhythmWordAcousticCue>;
+    let word_acoustic_cues: Option<&[RhythmWordAcousticCue]> = match word_acoustic_cues {
+        Some(cues) if !cues.is_empty() => Some(cues),
+        _ => match (acoustic_frames, word_timings) {
+            (Some(frames), Some(timings)) => {
+                derived_cues = derive_word_acoustic_cues_from_frames(frames, timings);
+                (!derived_cues.is_empty()).then_some(derived_cues.as_slice())
+            }
+            _ => word_acoustic_cues,
+        },
+    };
     let tokens = rhythm_tokens(
         sentence,
         canonical,
@@ -116,7 +142,12 @@ fn build_rhythm_frame(
     let connected_speech_refs = build_connected_speech_refs(sentence, connected_speech);
     let connected_speech_source = connected_speech_quality_source(connected_speech);
     let stress_anchors = detect_stress_anchors(&tokens);
-    let phrase_boundaries = detect_phrase_boundaries(&tokens, syllables, prosodic_phrases);
+    // Measured silence spans corroborate boundaries the detector already found
+    // (adding provenance, never new boundaries); a no-op when spans are absent.
+    let phrase_boundaries = corroborate_boundaries_with_activity(
+        detect_phrase_boundaries(&tokens, syllables, prosodic_phrases),
+        speech_activity,
+    );
     let nuclei = select_nuclei(&tokens, &stress_anchors, &phrase_boundaries);
     let stress_anchors = mark_anchor_nuclei(stress_anchors, &nuclei);
     let information_anchors = build_information_anchors(
