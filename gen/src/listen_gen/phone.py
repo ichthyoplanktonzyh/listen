@@ -1,4 +1,15 @@
-"""Audio-backed package-native Phone Timeline production."""
+"""Audio-backed package-native Observed Phone Timeline production.
+
+The phone timeline is *observed* evidence: every phone's ``start_ms``/``end_ms``
+is its real, audio-derived time and is the phone's primary identity. Text
+association is only an optional annotation — a phone is tied to a word token
+only when it lies unambiguously inside that one word's window. A phone that
+spans a word boundary (linking, assimilation, coalescence across words) or
+falls in a gap keeps ``word_ref`` null. Phones are never dropped and their
+times are never clamped to a word window, so cross-word phonetic structure is
+preserved for any language. Canonical (dictionary) phonemes are a different,
+text-derived fact and never enter this observed timeline.
+"""
 
 from __future__ import annotations
 
@@ -241,10 +252,18 @@ def _tree_sha256(path: Path) -> str:
 
 
 class G2pPhoneAdapter:
-    """G2P-based canonical phoneme adapter.
+    """Canonical (dictionary) phoneme adapter — abstains from observed timing.
 
-    Generates standard IPA phonemes for each word in the Word Timeline,
-    distributing the word duration evenly across its phonemes.
+    G2P states only *which* phonemes a word canonically has; it measures no
+    audio and therefore has no real per-phone timing. It used to fabricate
+    timing by spreading the word duration evenly across the phonemes, which
+    mixed a text-derived citation fact into the observed measurement layer.
+    That is exactly the confusion the observed phone timeline must avoid, so
+    this adapter no longer emits into it: it degrades honestly instead of
+    inventing boundaries. Canonical pronunciation is layer-A (Citation)
+    evidence and needs its own resource, which does not exist in the current
+    package schema; ``_resolve_g2p`` is kept so that resource can reuse the
+    same phoneme extraction once it lands.
     """
 
     provider_id = "g2p-phoneme"
@@ -294,44 +313,10 @@ class G2pPhoneAdapter:
         raise RichStageFailure("phones", "failed")
 
     def analyze(self, request: PhoneRequest) -> PhoneResult:
-        if not request.words:
-            raise _failure("upstream_missing")
-        g2p_func = self._resolve_g2p()
-        detected_phones: list[DetectedPhone] = []
-        for idx, word in enumerate(request.words):
-            raw_text = getattr(word, "text", f"word_{idx}").strip()
-            if not raw_text:
-                continue
-            try:
-                phonemes = g2p_func(raw_text)
-            except Exception:
-                continue
-            if not phonemes:
-                continue
-            duration = max(1, word.end_ms - word.start_ms)
-            step = duration / len(phonemes)
-            for i, p in enumerate(phonemes):
-                p_start = int(word.start_ms + i * step)
-                p_end = int(word.start_ms + (i + 1) * step) if i < len(phonemes) - 1 else word.end_ms
-                detected_phones.append(
-                    DetectedPhone(
-                        symbol=p,
-                        start_ms=p_start,
-                        end_ms=p_end,
-                        display_ipa=p,
-                        confidence=0.9,
-                    )
-                )
-        if not detected_phones:
-            raise _failure("qualification_failed")
-        return PhoneResult(
-            phone_set="ipa",
-            phones=tuple(detected_phones),
-            provider_id=self.provider_id,
-            provider_version=self.provider_version,
-            model_id=self.backend,
-            config_sha256=self.config_sha256,
-        )
+        # Canonical phonemes carry no audio-observed timing, so this adapter
+        # cannot populate the observed phone timeline without fabricating it.
+        # Degrade honestly rather than inventing per-phone boundaries.
+        raise _failure("qualification_failed")
 
 
 class Wav2Vec2CtcPhoneAdapter:
@@ -395,43 +380,56 @@ class Wav2Vec2CtcPhoneAdapter:
             raise _failure("output_invalid") from error
 
 
-def _anchor_phones(
+def _word_ref_for(
+    phone: DetectedPhone, words: tuple[RichWord, ...]
+) -> dict[str, Any] | None:
+    """The optional word annotation for an observed phone, or ``None``.
+
+    A phone is annotated only when it lies wholly inside exactly one word's
+    window — then it is unambiguously that word's sound and its time is already
+    inside the word's (and therefore the sentence's) window, which the package
+    contract accepts. A phone that crosses a word boundary or falls in a gap is
+    never forced onto the left or right word: its ``word_ref`` stays null.
+    """
+    containing = [
+        word
+        for word in words
+        if word.start_ms <= phone.start_ms and phone.end_ms <= word.end_ms
+    ]
+    if len(containing) == 1:
+        word = containing[0]
+        return {"sentence_id": word.sentence_id, "token_index": word.token_index}
+    return None
+
+
+def _annotate_phones(
     result: PhoneResult, words: tuple[RichWord, ...]
 ) -> tuple[dict[str, Any], ...]:
-    if not words:
-        raise _failure("upstream_missing")
-    anchored: list[dict[str, Any]] = []
+    """Project observed phones into the payload, preserving their real times.
+
+    The detected ``start_ms``/``end_ms`` are the phone's primary identity and
+    are kept verbatim: nothing is clamped to a word window and no phone is ever
+    dropped for not aligning to a word. ``word_ref`` is the optional word
+    annotation (or null). Word timings are only used to compute that
+    annotation; when no words are available every phone keeps a null
+    ``word_ref``.
+    """
+    if not result.phones:
+        raise _failure("qualification_failed")
+    annotated: list[dict[str, Any]] = []
     for phone in result.phones:
-        overlaps = [
-            (max(0, min(phone.end_ms, word.end_ms) - max(phone.start_ms, word.start_ms)), word)
-            for word in words
-        ]
-        overlap, word = max(overlaps, key=lambda item: (item[0], -item[1].start_ms))
-        phone_dur = max(1, phone.end_ms - phone.start_ms)
-        if overlap <= 0 or (overlap / phone_dur) < 0.5:
-            continue
-        # A phone anchored to a word is that word's sound: its time must lie
-        # inside the word's window, which itself lies inside the subtitle
-        # sentence window the package contract validates against. The overlap
-        # guard above already ensures the clamped window is non-empty.
-        start_ms = max(phone.start_ms, word.start_ms)
-        end_ms = min(phone.end_ms, word.end_ms)
-        if end_ms <= start_ms:
-            continue
         entry: dict[str, Any] = {
             "symbol": phone.symbol,
-            "start_ms": start_ms,
-            "end_ms": end_ms,
-            "word_ref": {"sentence_id": word.sentence_id, "token_index": word.token_index},
+            "start_ms": phone.start_ms,
+            "end_ms": phone.end_ms,
+            "word_ref": _word_ref_for(phone, words),
         }
         if phone.display_ipa is not None:
             entry["display_ipa"] = phone.display_ipa
         if phone.confidence is not None:
             entry["confidence"] = phone.confidence
-        anchored.append(entry)
-    if not anchored or len(anchored) / len(result.phones) < 0.6:
-        raise _failure("qualification_failed")
-    return tuple(anchored)
+        annotated.append(entry)
+    return tuple(annotated)
 
 
 def run_phone(
@@ -443,7 +441,11 @@ def run_phone(
         progress("analyzing_phones")
     try:
         result = analyzer.analyze(PhoneRequest(audio_path, words))
-        phones = _anchor_phones(result, words)
+        phones = _annotate_phones(result, words)
+        # ``phone_set`` names the phone notation and ``content_language`` (on the
+        # resource) names the language, so a consumer never has to guess the
+        # inventory from the provider or model name. The symbols are whatever the
+        # provider declared for this language's audio, English or otherwise.
         payload = {
             "phone_set": result.phone_set,
             "precision": "detected",

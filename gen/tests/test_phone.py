@@ -19,7 +19,7 @@ from listen_gen.phone import (
     PhoneRequest,
     PhoneResult,
     Wav2Vec2CtcPhoneAdapter,
-    _anchor_phones,
+    _annotate_phones,
     _parse_result,
     run_phone,
 )
@@ -57,42 +57,29 @@ def _result(phones: list[DetectedPhone]) -> PhoneResult:
     )
 
 
-class PhoneAnchoringTests(unittest.TestCase):
-    def test_every_phone_anchored_is_retained(self) -> None:
-        phones = _anchor_phones(
-            _result([
-                DetectedPhone("t", 200, 400),
-                DetectedPhone("u", 500, 700),
-                DetectedPhone("v", 800, 1000),
-            ]),
-            _words(),
-        )
-        self.assertEqual([phone["symbol"] for phone in phones], ["t", "u", "v"])
-        self.assertEqual(phones[0]["word_ref"], {"sentence_id": "s0", "token_index": 0})
-
-    def test_gap_phones_are_dropped_when_most_anchor(self) -> None:
-        phones = _anchor_phones(
-            _result([
-                DetectedPhone("t", 200, 400),
-                DetectedPhone("g", 400, 500),
-                DetectedPhone("u", 500, 700),
-                DetectedPhone("v", 800, 1000),
-            ]),
-            _words(),
-        )
-        self.assertEqual([phone["symbol"] for phone in phones], ["t", "u", "v"])
-
-    def test_phone_time_is_clamped_into_its_anchored_word(self) -> None:
-        phones = _anchor_phones(
+class ObservedPhoneAnnotationTests(unittest.TestCase):
+    def test_detected_times_are_preserved_verbatim(self) -> None:
+        # Observed phones keep their real audio-derived time; nothing is
+        # clamped to a word window.
+        phones = _annotate_phones(
             _result([
                 DetectedPhone("t", 150, 450),
-                DetectedPhone("u", 450, 750),
+                DetectedPhone("u", 450, 720),
             ]),
             _words(),
         )
         self.assertEqual(
             [(phone["symbol"], phone["start_ms"], phone["end_ms"]) for phone in phones],
-            [("t", 200, 400), ("u", 500, 700)],
+            [("t", 150, 450), ("u", 450, 720)],
+        )
+
+    def test_phone_wholly_inside_one_word_is_annotated(self) -> None:
+        phones = _annotate_phones(
+            _result([
+                DetectedPhone("t", 200, 400),
+                DetectedPhone("u", 520, 680),
+            ]),
+            _words(),
         )
         self.assertEqual(
             [phone["word_ref"] for phone in phones],
@@ -102,33 +89,53 @@ class PhoneAnchoringTests(unittest.TestCase):
             ],
         )
 
-    def test_low_anchoring_ratio_abstains(self) -> None:
+    def test_cross_boundary_phone_keeps_null_word_ref_and_is_retained(self) -> None:
+        # A phone that spans the gap between two words (linking / assimilation)
+        # is never forced onto the left or right word and is never dropped.
+        phones = _annotate_phones(
+            _result([
+                DetectedPhone("t", 200, 400),
+                DetectedPhone("dʒ", 380, 520),  # spans word 0 -> word 1
+                DetectedPhone("u", 520, 680),
+            ]),
+            _words(),
+        )
+        self.assertEqual([phone["symbol"] for phone in phones], ["t", "dʒ", "u"])
+        self.assertIsNone(phones[1]["word_ref"])
+        self.assertEqual(phones[1]["start_ms"], 380)
+        self.assertEqual(phones[1]["end_ms"], 520)
+
+    def test_gap_phone_keeps_null_word_ref_and_is_retained(self) -> None:
+        phones = _annotate_phones(
+            _result([
+                DetectedPhone("t", 200, 400),
+                DetectedPhone("g", 410, 490),  # entirely in the inter-word gap
+                DetectedPhone("u", 500, 700),
+            ]),
+            _words(),
+        )
+        self.assertEqual(len(phones), 3)
+        self.assertIsNone(phones[1]["word_ref"])
+
+    def test_no_words_keeps_every_phone_with_null_word_ref(self) -> None:
+        # Phone identity is time, not word: with no word timeline every phone is
+        # still emitted, only the optional annotation is null.
+        phones = _annotate_phones(_result([DetectedPhone("t", 200, 400)]), ())
+        self.assertEqual(len(phones), 1)
+        self.assertIsNone(phones[0]["word_ref"])
+
+    def test_empty_phones_abstains(self) -> None:
         with self.assertRaises(RichStageFailure) as caught:
-            _anchor_phones(
-                _result([
-                    DetectedPhone("t", 200, 400),
-                    DetectedPhone("g", 400, 500),
-                    DetectedPhone("g", 700, 800),
-                    DetectedPhone("g", 1000, 1100),
-                ]),
-                _words(),
-            )
+            _annotate_phones(_result([]), _words())
         self.assertEqual(caught.exception.code, "phone_qualification_failed")
-
-    def test_no_words_is_upstream_missing(self) -> None:
-        with self.assertRaises(RichStageFailure) as caught:
-            _anchor_phones(_result([DetectedPhone("t", 200, 400)]), ())
-        self.assertEqual(caught.exception.code, "phone_upstream_missing")
-
-
 
 
 class G2pPhoneAdapterTests(unittest.TestCase):
-    def test_g2p_phone_adapter_with_custom_fn(self) -> None:
+    def test_g2p_no_longer_fabricates_observed_timing(self) -> None:
+        # Canonical phonemes carry no audio-observed timing, so the adapter
+        # abstains instead of spreading a word's duration across its phonemes.
         def mock_g2p(word: str) -> list[str]:
-            if "0" in word or word == "hello":
-                return ["h", "e", "l", "o"]
-            return ["w", "r", "l", "d"]
+            return ["h", "e", "l", "o"]
 
         adapter = G2pPhoneAdapter(g2p_fn=mock_g2p)
         words = (
@@ -136,13 +143,9 @@ class G2pPhoneAdapterTests(unittest.TestCase):
             RichWord(sentence_id="s0", sentence_index=0, token_index=1, start_ms=500, end_ms=900),
         )
         request = PhoneRequest(audio_path=Path("/fake/audio.wav"), words=words)
-        result = adapter.analyze(request)
-        self.assertEqual(result.phone_set, "ipa")
-        self.assertEqual(result.provider_id, "g2p-phoneme")
-        self.assertEqual(len(result.phones), 8)
-        self.assertEqual(result.phones[0].symbol, "h")
-        self.assertEqual(result.phones[0].start_ms, 0)
-        self.assertEqual(result.phones[0].end_ms, 100)
+        with self.assertRaises(RichStageFailure) as caught:
+            adapter.analyze(request)
+        self.assertEqual(caught.exception.code, "phone_qualification_failed")
 
 
 if __name__ == "__main__":
