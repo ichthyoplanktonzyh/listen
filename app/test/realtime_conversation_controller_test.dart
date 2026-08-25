@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/services/local_realtime_speech_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
 
@@ -688,6 +689,53 @@ void main() {
         expect(harness.controller.state.error?.kind, 'provider_error');
       },
     );
+
+    test(
+      'local conversation ensures local speech service is started when not ready',
+      () async {
+        final localService = _FakeLocalRealtimeSpeechService(ready: false);
+        final harness = _Harness(
+          transcripts: const [],
+          adapterKind: 'local_cascade_realtime',
+          localSpeechService: localService,
+        );
+
+        await harness.start();
+
+        expect(localService.ensureStartedCalls, 1);
+        expect(localService.markActiveCalls, 1);
+        expect(harness.controller.state.phase, RealtimeConversationPhase.live);
+
+        await harness.controller.cancel();
+        expect(localService.markInactiveCalls, 1);
+      },
+    );
+
+    test(
+      'local conversation fails cleanly when local speech service is not installed',
+      () async {
+        final localService = _FakeLocalRealtimeSpeechService(
+          ready: false,
+          ensureStartedError: const LocalRealtimeSpeechNotInstalledException(),
+        );
+        final harness = _Harness(
+          transcripts: const [],
+          adapterKind: 'local_cascade_realtime',
+          localSpeechService: localService,
+        );
+
+        await harness.start(expectLive: false);
+
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.failed,
+        );
+        expect(
+          harness.controller.state.error?.kind,
+          'local_speech_not_installed',
+        );
+      },
+    );
   });
 }
 
@@ -700,7 +748,9 @@ class _Harness {
     this.holdTranscription = false,
     this.providerDrainTimeout = const Duration(seconds: 15),
     this.idleTimeout = const Duration(minutes: 5),
-  }) : _transcripts = List<String?>.from(transcripts) {
+    LocalRealtimeSpeechService? localSpeechService,
+  }) : _transcripts = List<String?>.from(transcripts),
+       localSpeechService = localSpeechService ?? _FakeLocalRealtimeSpeechService() {
     audio = _FakeAudio(
       onStart: () => lifecycle.add('audio_start'),
       startFailures: audioStartFailures,
@@ -708,6 +758,7 @@ class _Harness {
     controller = RealtimeConversationController(
       repository: LocalRealtimeConversationRepository(() => api),
       audio: audio,
+      localSpeechService: this.localSpeechService,
       connect: (_, _) async {
         lifecycle.add('provider_connect');
         if (connectFailures > 0) {
@@ -734,6 +785,7 @@ class _Harness {
 
   final List<String?> _transcripts;
   final String adapterKind;
+  final LocalRealtimeSpeechService localSpeechService;
   int connectFailures;
   final int audioStartFailures;
   final bool holdTranscription;
@@ -754,13 +806,15 @@ class _Harness {
   String? get lastSessionStatus =>
       savedSessions.isEmpty ? null : savedSessions.last['status'] as String?;
 
-  Future<void> start() async {
+  Future<void> start({bool expectLive = true}) async {
     await controller.loadProfiles();
     await controller.start(
       RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
       acquireAudioFocus: () async => lifecycle.add('audio_focus'),
     );
-    expect(controller.state.phase, RealtimeConversationPhase.live);
+    if (expectLive) {
+      expect(controller.state.phase, RealtimeConversationPhase.live);
+    }
   }
 
   Future<void> learnerTurn(String itemId, String providerText) async {
@@ -1030,4 +1084,59 @@ class _FakeAudio implements RealtimeAudioSession {
 
   @override
   Future<void> cancel() async {}
+}
+
+class _FakeLocalRealtimeSpeechService implements LocalRealtimeSpeechService {
+  _FakeLocalRealtimeSpeechService({
+    this.ready = true,
+    this.ensureStartedError,
+  });
+
+  bool installed = true;
+  bool ready;
+  Object? ensureStartedError;
+  int ensureStartedCalls = 0;
+  int markActiveCalls = 0;
+  int markInactiveCalls = 0;
+  int stopCalls = 0;
+  int disposeCalls = 0;
+
+  @override
+  Future<bool> isInstalled() async => installed;
+
+  @override
+  Future<bool> isReady() async => ready;
+
+  @override
+  Future<void> ensureStarted({
+    void Function(String status)? onProgress,
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    ensureStartedCalls++;
+    if (ensureStartedError != null) {
+      throw ensureStartedError!;
+    }
+    ready = true;
+  }
+
+  @override
+  void markConversationActive() {
+    markActiveCalls++;
+  }
+
+  @override
+  void markConversationInactive() {
+    markInactiveCalls++;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls++;
+    ready = false;
+  }
+
+  @override
+  void dispose() {
+    disposeCalls++;
+  }
 }

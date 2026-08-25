@@ -6,6 +6,7 @@ import '../data/repositories/realtime_conversation_repository.dart';
 import '../models/api_failure.dart';
 import '../models/practice.dart';
 import '../models/realtime_conversation.dart';
+import '../services/local_realtime_speech_service.dart';
 import '../services/realtime_audio_bridge.dart';
 import '../services/realtime_transport_service.dart';
 import '../services/shadowing_recorder.dart';
@@ -262,6 +263,7 @@ class RealtimeConversationController extends ChangeNotifier {
     RealtimeAudioSession? audio,
     RealtimeTransportService? transport,
     RealtimeConnectionFactory? connect,
+    LocalRealtimeSpeechService? localSpeechService,
     Future<void> Function(Duration)? delay,
     int Function()? nowMs,
     this.providerDrainTimeout = const Duration(seconds: 15),
@@ -272,12 +274,15 @@ class RealtimeConversationController extends ChangeNotifier {
        _repository = repository,
        _audio = audio ?? RealtimeAudioBridge(),
        _transport = transport ?? IoRealtimeTransportService(connect: connect),
+       // ignore: prefer_initializing_formals
+       _localSpeechService = localSpeechService,
        _delay = delay ?? Future<void>.delayed,
        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final RealtimeConversationRepository _repository;
   final RealtimeAudioSession _audio;
   final RealtimeTransportService _transport;
+  final LocalRealtimeSpeechService? _localSpeechService;
   final Future<void> Function(Duration) _delay;
   final int Function() _nowMs;
   final Duration providerDrainTimeout;
@@ -464,6 +469,36 @@ class RealtimeConversationController extends ChangeNotifier {
       final selectedProfile = state.profiles.firstWhere(
         (profile) => profile.id == profileId,
       );
+      if (_isLocalProfile(profileId) && _localSpeechService != null) {
+        if (!await _localSpeechService.isReady()) {
+          try {
+            await _localSpeechService.ensureStarted();
+          } on LocalRealtimeSpeechNotInstalledException {
+            await _cleanup(discard: true);
+            state = state.copyWith(
+              phase: RealtimeConversationPhase.failed,
+              activity: RealtimeConversationActivity.inactive,
+              error: const RealtimeConversationNotice(
+                kind: 'local_speech_not_installed',
+              ),
+            );
+            notifyListeners();
+            return;
+          } catch (e) {
+            await _cleanup(discard: true);
+            state = state.copyWith(
+              phase: RealtimeConversationPhase.failed,
+              activity: RealtimeConversationActivity.inactive,
+              error: RealtimeConversationNotice(
+                kind: 'connection_failed_local',
+                detail: _transport.describeFailure(e),
+              ),
+            );
+            notifyListeners();
+            return;
+          }
+        }
+      }
       await acquireAudioFocus();
       // Native start owns permission acquisition. Do not open a billable/provider
       // socket until the microphone is actually available.
@@ -529,6 +564,9 @@ class RealtimeConversationController extends ChangeNotifier {
         phase: RealtimeConversationPhase.live,
         activity: RealtimeConversationActivity.listening,
       );
+      if (_isLocalProfile(profileId)) {
+        _localSpeechService?.markConversationActive();
+      }
       _idleCloseEnabled = !_isLocalProfile(profileId);
       _armIdleClose();
       notifyListeners();
@@ -1388,6 +1426,7 @@ class RealtimeConversationController extends ChangeNotifier {
     if (discard) await _audio.cancel();
     await _connection?.close();
     _connection = null;
+    _localSpeechService?.markConversationInactive();
   }
 
   Future<void> _failAndCleanup(RealtimeConversationNotice notice) async {
@@ -1466,6 +1505,7 @@ class RealtimeConversationController extends ChangeNotifier {
     ++_generation;
     _idleTimer?.cancel();
     _idleTimer = null;
+    _localSpeechService?.dispose();
     unawaited(_disposeActiveSession());
     super.dispose();
   }

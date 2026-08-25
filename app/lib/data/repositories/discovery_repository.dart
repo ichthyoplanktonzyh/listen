@@ -171,16 +171,22 @@ ChannelCoverTone _coverFromName(String name) => switch (name) {
 /// responsibility, which is why entries from this source are marked
 /// [AcquisitionMode.externalTool] rather than sharing the podcast enclosure
 /// path.
+typedef YoutubeFallbackFetcher =
+    Future<List<DiscoveryItem>> Function(String sourceId);
+
 final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   YoutubeDiscoveryRepository({
     SubscriptionStore? subscriptions,
     HttpClient? client,
     this.feedBaseUrl = 'https://www.youtube.com/feeds/videos.xml',
     this.retryBackoff = const Duration(milliseconds: 400),
+    this.fallbackFetcher,
   }) : _subscriptions = subscriptions ?? SubscriptionStore.inMemory(),
        _client = client ?? HttpClient();
 
   final HttpClient _client;
+  final YoutubeFallbackFetcher? fallbackFetcher;
+  final Map<String, List<DiscoveryItem>> _entriesBySource = {};
 
   /// Where the per-channel Atom feed lives. A field so a test can point it at
   /// a local server and drive the status codes this endpoint really returns.
@@ -297,17 +303,37 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   /// videos" — indistinguishable from offline or rate-limited.
   @override
   Future<List<DiscoveryItem>> entriesFor(String sourceId) async {
-    final body = await _fetchFeed(sourceId);
-    final feed = parseFeed(body, assumeFormat: FeedFormat.atom);
-    return [
-      for (final item in feed.items) _itemFrom(item, sourceId),
-    ];
+    final cached = _entriesBySource[sourceId];
+    if (cached != null) return List.unmodifiable(cached);
+
+    try {
+      final body = await _fetchFeed(sourceId);
+      final feed = parseFeed(body, assumeFormat: FeedFormat.atom);
+      final entries = [
+        for (final item in feed.items) _itemFrom(item, sourceId),
+      ];
+      _entriesBySource[sourceId] = entries;
+      return List.unmodifiable(entries);
+    } catch (error) {
+      final fallback = fallbackFetcher;
+      if (fallback != null) {
+        try {
+          final fallbackEntries = await fallback(sourceId);
+          if (fallbackEntries.isNotEmpty) {
+            _entriesBySource[sourceId] = fallbackEntries;
+            return List.unmodifiable(fallbackEntries);
+          }
+        } catch (_) {
+          // Fallback failed as well, rethrow original error below.
+        }
+      }
+      rethrow;
+    }
   }
 
   @override
   Future<void> refreshSource(String sourceId) async {
-    // YouTube's per-channel feed is fetched on every entriesFor read; there
-    // is no session cache to drop.
+    _entriesBySource.remove(sourceId);
   }
 
   DiscoveryItem _itemFrom(ParsedFeedItem item, String sourceId) {
@@ -351,6 +377,14 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
       final request = await _client
           .getUrl(uri)
           .timeout(const Duration(seconds: 10));
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
+      );
       final response = await request.close();
       if (response.statusCode == 200) {
         return response.transform(utf8.decoder).join();

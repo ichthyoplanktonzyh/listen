@@ -165,7 +165,7 @@ void main() {
       expect(arguments, contains('--whisper-model'));
       // The deterministic rich baselines are in-generator stages with no
       // external toolchain, so they are always on.
-      expect(arguments, containsAll(['--sense-groups', 'baseline']));
+      expect(arguments, containsAll(['--sense-groups', 'llm']));
       expect(arguments, containsAll(['--acoustics', 'baseline']));
       expect(arguments, containsAll(['--prosody', 'baseline']));
       // The wrapper protocol this replaced is gone: no placeholder, no script,

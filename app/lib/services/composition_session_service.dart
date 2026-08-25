@@ -79,6 +79,7 @@ class CompositionSessionService {
       derivedMediaPath: derivedMediaPath,
       transcript: projected.transcript,
       enhancements: projected.enhancements,
+      llTimelineDocument: projected.timeline,
     );
   }
 
@@ -95,8 +96,17 @@ class CompositionSessionService {
   /// The optional analysis export may be unavailable while the formal Core
   /// transcript remains usable. The transcript itself is never replaced by a
   /// detached payload or an App-generated timed-text fallback.
+  ///
+  /// The same export is also kept whole as an [LLTimelineDocument]. Core
+  /// derives one rhythm frame per sentence from the package's word timeline
+  /// and acoustic cues, and those frames only exist in the document — the
+  /// projection above deliberately covers word-level families only.
   Future<
-    ({CompositionResourceProjection enhancements, SubtitleTrack? transcript})
+    ({
+      CompositionResourceProjection enhancements,
+      SubtitleTrack? transcript,
+      LLTimelineDocument? timeline,
+    })
   >
   _readWorkbenchResources(AdoptedComposition adopted) async {
     final workbenchMediaId = adopted.workbenchMediaId;
@@ -104,6 +114,7 @@ class CompositionSessionService {
       return (
         enhancements: const CompositionResourceProjection(),
         transcript: null,
+        timeline: null,
       );
     }
     try {
@@ -113,26 +124,41 @@ class CompositionSessionService {
         return (
           enhancements: const CompositionResourceProjection(),
           transcript: null,
+          timeline: null,
         );
       }
       CompositionResourceProjection enhancements =
           const CompositionResourceProjection();
+      LLTimelineDocument? timeline;
       try {
         final document = await resources.exportTimelineJson(track.id);
         enhancements = projectCompositionResourcesFromCore(
           track: track,
           documentJson: document.json,
         );
+        timeline = _timelineDocument(document.json);
       } on Object {
         // The formal Core transcript remains usable when an optional export
         // family is unavailable.
       }
-      return (enhancements: enhancements, transcript: track);
+      return (enhancements: enhancements, transcript: track, timeline: timeline);
     } on Object {
       return (
         enhancements: const CompositionResourceProjection(),
         transcript: null,
+        timeline: null,
       );
+    }
+  }
+
+  /// Core's export parsed as a whole document, or null when this build cannot
+  /// read that shape. A document the model rejects costs the rhythm frames
+  /// alone — the word-level projection is parsed independently and survives.
+  static LLTimelineDocument? _timelineDocument(Map<String, dynamic> json) {
+    try {
+      return LLTimelineDocument.fromJson(json);
+    } on Object {
+      return null;
     }
   }
 

@@ -46,6 +46,7 @@ String conversationNoticeText(String kind, AppLocalizations l) =>
       'start_failed' => 'realtimeNoticeStartFailed',
       'connection_failed' => 'realtimeNoticeConnectionFailed',
       'connection_failed_local' => 'realtimeNoticeConnectionFailedLocal',
+      'local_speech_not_installed' => 'realtimeNoticeLocalSpeechNotInstalled',
       'idle_closed' => 'realtimeNoticeIdleClosed',
       'provider_disconnected' => 'realtimeNoticeProviderDisconnected',
       'provider_error' => 'realtimeNoticeProviderError',

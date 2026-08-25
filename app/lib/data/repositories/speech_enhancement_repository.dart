@@ -2,6 +2,7 @@ import '../../models/api_failure.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
+import '../../services/core_timeline_export.dart';
 
 /// Data boundary for timeline, pronunciation, chunking and sense-group reads.
 abstract interface class SpeechEnhancementRepository {
@@ -11,6 +12,13 @@ abstract interface class SpeechEnhancementRepository {
   Future<List<WordTimelineSummary>> wordTimelineSummaries(String trackId);
   Future<List<PhoneTimelineSummary>> phoneTimelineSummaries(String trackId);
   Future<LLTimelineDocument> exportTimeline(String trackId);
+
+  /// The same export as [exportTimeline], unparsed.
+  ///
+  /// The phone timeline family is read off this envelope at the service
+  /// boundary (`services/timeline_phone_projection.dart`) rather than through
+  /// the display model, which deliberately does not carry it.
+  Future<CoreTimelineExport> exportTimelineJson(String trackId);
   Future<List<WordTiming>> wordTimings(String trackId);
   Future<List<PronunciationProvider>> pronunciationProviders();
   Future<PhoneTimeline> phoneTimeline(String timelineId);
@@ -42,6 +50,9 @@ class UnavailableSpeechEnhancementRepository
       _unavailable();
   @override
   Future<LLTimelineDocument> exportTimeline(String trackId) => _unavailable();
+  @override
+  Future<CoreTimelineExport> exportTimelineJson(String trackId) =>
+      _unavailable();
   @override
   Future<SenseGroupAnalysis> generateSenseGroups(String trackId) =>
       _unavailable();
@@ -94,6 +105,10 @@ class LocalSpeechEnhancementRepository implements SpeechEnhancementRepository {
   @override
   Future<LLTimelineDocument> exportTimeline(String trackId) =>
       _api.exportTrackLLTimeline(trackId);
+
+  @override
+  Future<CoreTimelineExport> exportTimelineJson(String trackId) async =>
+      CoreTimelineExport(await _api.exportTrackLLTimelineJson(trackId));
 
   @override
   Future<List<WordTiming>> wordTimings(String trackId) =>

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -270,6 +272,38 @@ void main() {
     expect(generations, 1);
     expect(find.text('Manual review'), findsNothing);
   });
+
+  testWidgets('header action buttons appear once async loading finishes', (
+    tester,
+  ) async {
+    final completer = Completer<List<LearningEdition>>();
+    final repository = _FakeCapabilityRepository([
+      _edition(
+        releaseId: 'release-1',
+        adopted: true,
+        resourceKinds: learningResourceKinds,
+      ),
+    ])..listEditionsCompleter = completer;
+    final controller = LearningEditionController(repository: repository);
+    addTearDown(controller.dispose);
+
+    final loadFuture = controller.load('material-1');
+
+    await tester.pumpWidget(
+      _app(LearningEditionDialog(controller: controller)),
+    );
+    expect(find.byKey(const Key('learning-edition-regenerate')), findsNothing);
+    expect(find.byKey(const Key('learning-edition-import')), findsNothing);
+    expect(find.byKey(const Key('learning-edition-refresh')), findsNothing);
+
+    completer.complete(repository.editions);
+    await loadFuture;
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('learning-edition-regenerate')), findsOneWidget);
+    expect(find.byKey(const Key('learning-edition-import')), findsOneWidget);
+    expect(find.byKey(const Key('learning-edition-refresh')), findsOneWidget);
+  });
 }
 
 final class _FakeMediaImportFileService implements MediaImportFileService {
@@ -345,13 +379,18 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   _FakeCapabilityRepository(this.editions);
 
   List<LearningEdition> editions;
+  Completer<List<LearningEdition>>? listEditionsCompleter;
   final adoptedReleaseIds = <String>[];
   final deletedReleaseIds = <String>[];
   final installedPackagePaths = <String>[];
 
   @override
-  Future<List<LearningEdition>> listEditions(String materialId) async =>
-      editions;
+  Future<List<LearningEdition>> listEditions(String materialId) async {
+    if (listEditionsCompleter != null) {
+      return listEditionsCompleter!.future;
+    }
+    return editions;
+  }
 
   @override
   Future<LearningEdition> adoptEdition(

@@ -21,6 +21,7 @@ ResolvedComposition? resolveCompositionContent({
   SubtitleTrack? transcript,
   CompositionResourceProjection enhancements =
       const CompositionResourceProjection(),
+  LLTimelineDocument? llTimelineDocument,
 }) {
   final structuredReading = _decodePayload(structuredReadingPayload);
   if (structuredReading == null) return null;
@@ -88,6 +89,7 @@ ResolvedComposition? resolveCompositionContent({
     derivedMediaPath: derivedMediaPath,
     transcript: transcript,
     enhancements: enhancements,
+    llTimelineDocument: llTimelineDocument,
   );
 }
 

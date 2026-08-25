@@ -46,13 +46,16 @@ class LearningEditionController extends ChangeNotifier {
 
   Future<void> load(String materialId) async {
     final generation = ++_generation;
+    final isNewMaterial = _materialId != materialId;
     _materialId = materialId;
     _loading = true;
     _failed = false;
     _importing = false;
     _adoptingReleaseId = null;
     _deletingReleaseId = null;
-    _editions = const [];
+    if (isNewMaterial) {
+      _editions = const [];
+    }
     _publish();
     await _readEditions(materialId, generation);
   }

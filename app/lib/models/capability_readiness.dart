@@ -383,15 +383,21 @@ bool rhythmFrameHasAudioSupport(RhythmFrame frame) =>
     frame.listeningHotspots.any((value) => value.isAudioSupported);
 
 /// C is the observed audible structure, not a fallback presentation of A/B.
-/// Both the loaded sentence resource and the frame itself must carry phone
-/// evidence before the player may render the actual view.
+/// The loaded sentence must carry phones, and the frame itself must rest on
+/// audio evidence rather than on text priors.
+///
+/// The frame's own `phoneEvidenceCoverage` is deliberately not the gate. It
+/// reports whether the frame *builder* was handed learning phones, which is
+/// never the case for the per-sentence frames Core derives from a word
+/// timeline plus acoustic cues — the only shape an adopted package ever gets,
+/// leaving that field at 0 for frames built from real audio measurements.
+/// Whether this build actually holds phones for the sentence is what
+/// [hasPhoneEvidence] answers, and it answers it from the loaded resource.
 bool canDisplayActualRhythmFrame(
   RhythmFrame? frame, {
   required bool hasPhoneEvidence,
 }) =>
-    frame != null &&
-    hasPhoneEvidence &&
-    frame.quality.phoneEvidenceCoverage > 0;
+    frame != null && hasPhoneEvidence && rhythmFrameHasAudioSupport(frame);
 
 bool _hasAudioSource(List<String> values) => values.any(
   (value) =>

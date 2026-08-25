@@ -67,6 +67,7 @@ import 'data/repositories/feed_discovery_repository.dart';
 import 'services/listen_gen_process_service.dart';
 import 'services/composition_session_service.dart';
 import 'services/listen_gen_release_service.dart';
+import 'services/local_realtime_speech_service.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/pane_segments.dart';
 import 'widgets/navigation/shell_tools_menu.dart';
@@ -362,7 +363,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       // One store across both sides: a subscription is a subscription, and
       // only the composition root hands out one backed by a real directory.
       FeedDiscoveryRepository(subscriptions: subscriptionStore),
-      YoutubeDiscoveryRepository(subscriptions: subscriptionStore),
+      YoutubeDiscoveryRepository(
+        subscriptions: subscriptionStore,
+        fallbackFetcher: (sourceId) => tools.resolveChannelVideos(sourceId),
+      ),
     ),
     importRepository: mediaImportRepository,
     mediaLibraryRepository: coreRepositories.mediaLibrary,
@@ -454,8 +458,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     repository: coreRepositories.speakingTask,
   );
   late final speakingSessionRepository = coreRepositories.speakingSession;
+  late final localRealtimeSpeechService = DefaultLocalRealtimeSpeechService();
   late final realtimeConversationController = RealtimeConversationController(
     repository: coreRepositories.realtimeConversation,
+    localSpeechService: localRealtimeSpeechService,
   );
   late final writingTaskController = WritingTaskController(
     repository: coreRepositories.writingTask,
@@ -629,7 +635,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     providerArguments: () => [
       ...contentGeneratorProviderArguments(_generatorSetup),
       '--tts-provider',
-      'say',
+      'kokoro',
+      '--ocr-provider',
+      'rapidocr',
     ],
   );
   late final learningEditionController = LearningEditionController(
@@ -1462,6 +1470,15 @@ class _PlayerScreenState extends State<PlayerScreen>
           acousticsBySentence: enhancements.acousticsBySentence,
           prosodyAnchorsBySentence: enhancements.prosodyAnchorsBySentence,
           phonesBySentence: enhancements.phonesBySentence,
+        );
+        // The document carries this track's per-sentence rhythm frames, which
+        // the sound layer's `actual` reference reads. A composition owns no
+        // timeline summaries — those describe a media session's selectable
+        // runs, and this surface has none to offer.
+        subtitleController.setTimelineResource(
+          summaries: const [],
+          phoneSummaries: const [],
+          document: composition.llTimelineDocument,
         );
         subtitleController.setSubtitleResourceCapabilities({
           track.id: SubtitleResourceCapabilities.fromCounts(

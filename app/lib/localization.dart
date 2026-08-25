@@ -1844,6 +1844,7 @@ class AppLocalizations {
       'realtimeProviderCloudTag': 'cloud',
       'realtimeLocalPrivacyHint':
           'Local voice stays on this machine — no key, no cloud, fully offline.',
+      'realtimeLocalWakingUp': 'Starting local speech model...',
       'realtimeCloudBillingHint':
           'Cloud voices process audio on the provider side and bill by usage.',
       'realtimeCaptionLabel': 'Afterglow Captions',
@@ -1938,6 +1939,8 @@ class AppLocalizations {
       'realtimeNoticeConnectionFailedLocal':
           'The local voice service on this machine is not reachable. Start it, '
           'then try again.',
+      'realtimeNoticeLocalSpeechNotInstalled':
+          'The local speech service is not installed. Run tool/run_local_speech_to_speech.py --install first.',
       'realtimeNoticeIdleClosed':
           'This conversation ended after a quiet pause. The recording and '
           'transcript were saved.',
@@ -3976,6 +3979,7 @@ class AppLocalizations {
       'realtimeProviderLocalTag': '本地',
       'realtimeProviderCloudTag': '云端',
       'realtimeLocalPrivacyHint': '本地音色全程在本机处理——免密钥、不联网、离线可用。',
+      'realtimeLocalWakingUp': '正在唤醒本地语音模型...',
       'realtimeCloudBillingHint': '云端音色在服务方处理音频，按用量计费。',
       'realtimeCaptionLabel': '余音字幕',
       'realtimeCaptionDesc': '对方说话时显示淡出字幕',
@@ -4052,6 +4056,7 @@ class AppLocalizations {
       'realtimeNoticeStartFailed': '这次对话没能开始。',
       'realtimeNoticeConnectionFailed': '与语音服务的连接失败了。',
       'realtimeNoticeConnectionFailedLocal': '本机的本地语音服务没有运行。请先启动它，再重试。',
+      'realtimeNoticeLocalSpeechNotInstalled': '未安装本地语音服务环境。请先运行 tool/run_local_speech_to_speech.py --install。',
       'realtimeNoticeIdleClosed': '对话因长时间没有声音而自动结束。录音与转写均已保存。',
       'realtimeNoticeProviderDisconnected': '语音服务断开了连接。',
       'realtimeNoticeProviderError': '语音服务报告这次对话出了问题。',

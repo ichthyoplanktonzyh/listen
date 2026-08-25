@@ -177,25 +177,26 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
   Widget _titleBar(Size size, double width, double height, Offset offset) {
     final maxLeft = math.max(16.0, size.width - width - 16);
     final maxTop = math.max(16.0, size.height - height - 16);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) => setState(() {
-        final moved = offset + details.delta;
-        _offset = Offset(
-          moved.dx.clamp(16.0, maxLeft),
-          moved.dy.clamp(16.0, maxTop),
-        );
-      }),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          ListenSpacing.gap16,
-          ListenSpacing.gap12,
-          ListenSpacing.gap8,
-          ListenSpacing.gap8,
-        ),
-        child: Row(
-          children: [
-            Expanded(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        ListenSpacing.gap16,
+        ListenSpacing.gap12,
+        ListenSpacing.gap8,
+        ListenSpacing.gap8,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (details) => setState(() {
+                final current = _offset ?? offset;
+                final moved = current + details.delta;
+                _offset = Offset(
+                  moved.dx.clamp(16.0, maxLeft),
+                  moved.dy.clamp(16.0, maxTop),
+                );
+              }),
               child: Text(
                 l.text('aiAnalysis'),
                 style: Theme.of(
@@ -203,14 +204,14 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
-            IconButton(
-              key: const Key('analysis-window-close'),
-              tooltip: l.text('close'),
-              onPressed: widget.onClose,
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
+          ),
+          IconButton(
+            key: const Key('analysis-window-close'),
+            tooltip: l.text('close'),
+            onPressed: widget.onClose,
+            icon: const Icon(Icons.close),
+          ),
+        ],
       ),
     );
   }
@@ -353,9 +354,16 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
 
   /// The migrated per-sentence sound reference (citation/connected/actual),
   /// driven by [voiceClipPlayer]'s own position so the reader can play and
-  /// scrub this sentence here without moving the main stage. The `actual` (C)
-  /// data is the learning package's phone timeline, surfaced through
-  /// [SubtitleController.phoneticAnalysisBySentence] / the LL rhythm frames.
+  /// scrub this sentence here without moving the main stage.
+  ///
+  /// The `actual` (C) evidence is this audio's own phone timeline, and both
+  /// halves of it come from Core's one timeline export: the rhythm frame and
+  /// the phones. Prefer the richer sound analysis when a media session has
+  /// one — it adds syllables, prosodic phrases and findings — and otherwise
+  /// read [SubtitleController.phonesBySentence], which both session kinds
+  /// fill from Core's export. That map is the only phone source an adopted
+  /// package ever has: its resources all land as candidates, so the track
+  /// carries no active phone timeline for the sound analysis to come from.
   Widget _soundReferenceSection(Cue cue) => ListenableBuilder(
     listenable: Listenable.merge([settingsController, voiceClipPlayer]),
     builder: (context, _) {
@@ -368,9 +376,10 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
             cueId,
           ) ??
           soundAnalysis?.rhythmFrame;
-      final phones = soundAnalysis == null
-          ? const <DetectedPhone>[]
-          : buildSoundPatternPhones(soundAnalysis);
+      final phones = soundAnalysis != null
+          ? buildSoundPatternPhones(soundAnalysis)
+          : (subtitleController.phonesBySentence[cueId] ??
+                const <DetectedPhone>[]);
       final findings = soundAnalysis == null
           ? const <PhonemeRibbonFinding>[]
           : buildPhonemeRibbonFindings(
@@ -484,7 +493,10 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
             ),
           ),
         );
-        ribbon = hasPhoneEvidence && soundAnalysis != null
+        // Syllables, prosodic phrases and findings ride on the sound
+        // analysis, which a package never carries — its phones alone still
+        // earn the lane, unannotated.
+        ribbon = hasPhoneEvidence
             ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -496,8 +508,9 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
                     fontSize: base * 0.55,
                     height: base,
                     style: settingsController.settings.phonemeRibbonStyle,
-                    syllables: soundAnalysis.syllables,
-                    prosodicPhrases: soundAnalysis.prosodicPhrases,
+                    syllables: soundAnalysis?.syllables ?? const [],
+                    prosodicPhrases:
+                        soundAnalysis?.prosodicPhrases ?? const [],
                     findings: findings,
                     lane: PhonemeRibbonLane.sound,
                     tooltip: l.text('soundPatternRibbonHint'),

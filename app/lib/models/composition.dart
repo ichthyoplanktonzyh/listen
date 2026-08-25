@@ -58,6 +58,7 @@ class ResolvedComposition {
     this.derivedMediaPath,
     this.transcript,
     this.enhancements = const CompositionResourceProjection(),
+    this.llTimelineDocument,
   }) : _sentences = List.unmodifiable(sentences),
        _anchors = List.unmodifiable(anchors);
 
@@ -97,6 +98,18 @@ class ResolvedComposition {
   /// sense groups, acoustic measurements, prosodic chunks and anchors, and
   /// phone timings.
   final CompositionResourceProjection enhancements;
+
+  /// Core's LLTimeline export for the package track, kept whole rather than
+  /// projected.
+  ///
+  /// The sentence-level rhythm frames live here and nowhere else: Core builds
+  /// one per sentence from the package's word timeline and its
+  /// `rhythm_word_acoustic_cues` artifact, so they exist for package tracks
+  /// even though every package resource lands as a candidate. Projecting them
+  /// into a second App-side shape would only duplicate
+  /// `LLTimelineDocument.rhythmFrameForSentence`, which the sound layer
+  /// already reads for media sessions.
+  final LLTimelineDocument? llTimelineDocument;
 }
 
 /// Exact acoustic evidence measured for one word in the composition's Word

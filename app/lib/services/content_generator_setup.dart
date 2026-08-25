@@ -338,7 +338,7 @@ List<String> contentGeneratorProviderArguments(ContentGeneratorSetup setup) => [
   if (setup.ffprobePath.isNotEmpty) ...['--ffprobe-command', setup.ffprobePath],
   if (setup.ffmpegPath.isNotEmpty) ...['--ffmpeg-command', setup.ffmpegPath],
   '--sense-groups',
-  'baseline',
+  'llm',
   '--acoustics',
   'baseline',
   '--prosody',

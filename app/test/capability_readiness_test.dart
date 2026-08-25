@@ -127,7 +127,7 @@ void main() {
     },
   );
 
-  test('C requires loaded phones and phone evidence inside the frame', () {
+  test('C requires loaded phones and an audio-backed frame', () {
     expect(
       canDisplayActualRhythmFrame(
         _predictedRhythmFrame.rhythmFrame,
@@ -155,6 +155,32 @@ void main() {
         hasPhoneEvidence: true,
       ),
       isTrue,
+    );
+  });
+
+  // A package's frames are the shape Core builds from a word timeline and its
+  // acoustic cues, and that builder is never handed learning phones — so the
+  // frame reports `phoneEvidenceCoverage: 0` while resting entirely on
+  // measured energy. Gating C on that field hid every adopted package's
+  // actual view even though the phones were loaded and the frame was real.
+  test('C accepts an audio-backed frame that carries no phone coverage', () {
+    expect(
+      _packageRhythmFrame.rhythmFrame.quality.phoneEvidenceCoverage,
+      0.0,
+    );
+    expect(
+      canDisplayActualRhythmFrame(
+        _packageRhythmFrame.rhythmFrame,
+        hasPhoneEvidence: true,
+      ),
+      isTrue,
+    );
+    expect(
+      canDisplayActualRhythmFrame(
+        _packageRhythmFrame.rhythmFrame,
+        hasPhoneEvidence: false,
+      ),
+      isFalse,
     );
   });
 
@@ -447,6 +473,57 @@ const _predictedRhythmFrame = LLTimelineRhythmFrame(
       connectedSpeechSource: 'text_prior',
       phoneEvidenceCoverage: 0.0,
       rhythmConfidence: 0.5,
+    ),
+  ),
+  createdAt: Duration(milliseconds: 10),
+  updatedAt: Duration(milliseconds: 20),
+);
+
+/// The per-sentence frame Core derives for an adopted package: measured word
+/// energy carries the prominence, and the builder receives no learning
+/// phones, so the frame's own phone coverage stays at zero.
+const _packageRhythmFrame = LLTimelineRhythmFrame(
+  id: 'rhythm-package',
+  trackId: 'track-1',
+  mediaId: 'media-1',
+  sentenceId: 'sentence-1',
+  parentWordTimelineId: 'word-package-candidate',
+  providerId: 'wordtimeline-rhythm-frame',
+  providerVersion: '1.0',
+  status: 'active',
+  metricsJson: TimelineMetrics.empty(),
+  rhythmFrame: RhythmFrame(
+    generatedFrom: 'wordtimeline_estimated_acoustic_prominence_v1',
+    references: _refs,
+    stressAnchors: [
+      RhythmStressAnchor(
+        start: Duration.zero,
+        end: Duration(milliseconds: 300),
+        label: 'Hello',
+        reason: 'energy-supported anchor',
+        importance: 'primary',
+        isNucleus: true,
+        prominence: 0.7,
+        prominenceCues: ['energy'],
+        signalSources: ['energy'],
+        evidenceClass: 'heuristic_proxy',
+        claimStatus: 'audio_supported',
+        confidence: 0.7,
+      ),
+    ],
+    nuclei: [],
+    weakGroups: [],
+    compressionSpans: [],
+    phraseBoundaries: [],
+    connectedSpeechRefs: [],
+    listeningHotspots: [],
+    quality: RhythmFrameQuality(
+      timingSource: 'word_timeline',
+      prominenceSources: ['energy'],
+      boundarySources: [],
+      connectedSpeechSource: 'text_prior',
+      phoneEvidenceCoverage: 0.0,
+      rhythmConfidence: 0.6,
     ),
   ),
   createdAt: Duration(milliseconds: 10),

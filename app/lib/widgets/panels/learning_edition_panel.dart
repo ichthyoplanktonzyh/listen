@@ -189,15 +189,6 @@ class _LearningEditionDialogState extends State<LearningEditionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final editions = widget.controller.editions;
-    final selected = editions.isEmpty
-        ? null
-        : editions.firstWhere(
-            (e) => e.releaseId == _selectedReleaseId,
-            orElse: () =>
-                widget.controller.adoptedEdition ?? editions.first,
-          );
-
     return Dialog(
       shape: const RoundedRectangleBorder(borderRadius: ListenRadii.panelBorder),
       clipBehavior: Clip.antiAlias,
@@ -206,49 +197,60 @@ class _LearningEditionDialogState extends State<LearningEditionDialog> {
           maxWidth: ListenBreakpoints.contentColumnMax,
           maxHeight: 760,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _DialogHeader(
-              hasEditions: editions.isNotEmpty,
-              generating: _generating,
-              controller: widget.controller,
-              onRegenerate: _regenerate,
-              onImportPackage: _importPackage,
-            ),
-            Divider(
-              height: 1,
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-            Expanded(
-              child: AnimatedBuilder(
-                animation: Listenable.merge([
-                  widget.controller,
-                  ?widget.generationListenable,
-                ]),
-                builder: (context, _) => _LearningEditionBody(
-                  controller: widget.controller,
-                  selectedEdition: selected,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([
+            widget.controller,
+            ?widget.generationListenable,
+          ]),
+          builder: (context, _) {
+            final editions = widget.controller.editions;
+            final selected = editions.isEmpty
+                ? null
+                : editions.firstWhere(
+                    (e) => e.releaseId == _selectedReleaseId,
+                    orElse: () =>
+                        widget.controller.adoptedEdition ?? editions.first,
+                  );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DialogHeader(
+                  hasEditions: editions.isNotEmpty,
                   generating: _generating,
-                  runView: widget.runView?.call(),
-                  onSelectRelease: (releaseId) {
-                    setState(() => _selectedReleaseId = releaseId);
-                  },
-                  onAdoptEdition: (edition) async {
-                    await widget.controller.adopt(edition);
-                    if (mounted) {
-                      setState(() => _selectedReleaseId = edition.releaseId);
-                    }
-                  },
-                  onGenerate: widget.onGenerate == null ? null : _generate,
+                  controller: widget.controller,
                   onRegenerate: _regenerate,
                   onImportPackage: _importPackage,
-                  onDeleteEdition: _deleteEdition,
-                  onCancelGeneration: widget.onCancelGeneration,
                 ),
-              ),
-            ),
-          ],
+                Divider(
+                  height: 1,
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                Expanded(
+                  child: _LearningEditionBody(
+                    controller: widget.controller,
+                    selectedEdition: selected,
+                    generating: _generating,
+                    runView: widget.runView?.call(),
+                    onSelectRelease: (releaseId) {
+                      setState(() => _selectedReleaseId = releaseId);
+                    },
+                    onAdoptEdition: (edition) async {
+                      await widget.controller.adopt(edition);
+                      if (mounted) {
+                        setState(() => _selectedReleaseId = edition.releaseId);
+                      }
+                    },
+                    onGenerate: widget.onGenerate == null ? null : _generate,
+                    onRegenerate: _regenerate,
+                    onImportPackage: _importPackage,
+                    onDeleteEdition: _deleteEdition,
+                    onCancelGeneration: widget.onCancelGeneration,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

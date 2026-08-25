@@ -831,6 +831,7 @@ class MediaSessionCoordinator {
       pronunciationBySentence: result.pronunciationBySentence,
       pronunciationProviders: result.pronunciationProviders,
       phoneticAnalysisBySentence: result.phoneticAnalysisBySentence,
+      phonesBySentence: result.phonesBySentence,
     );
     subtitle.updateCurrentWord(
       player.position,

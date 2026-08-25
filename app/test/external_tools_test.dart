@@ -30,6 +30,31 @@ void main() {
     expect(result, 'https://media.example/video.mp4');
   });
 
+  test('yt-dlp adapter resolves channel video list via flat-playlist', () async {
+    final directory = await Directory.systemTemp.createTemp('llplayer-tools');
+    addTearDown(() => directory.delete(recursive: true));
+    final executable = File(
+      '${directory.path}/yt-dlp',
+    )..writeAsStringSync(
+        '#!/bin/sh\n'
+        'echo \'{"entries":[{"id":"vid123","title":"Channel Video","duration":120.0,"thumbnails":[{"url":"https://thumb.example/img.jpg"}],"view_count":5000,"upload_date":"20260818"}]}\'\n',
+      );
+    await Process.run('/bin/chmod', ['+x', executable.path]);
+
+    final items = await ExternalTools(
+      ytDlpPath: executable.path,
+    ).resolveChannelVideos('UC-test-channel');
+
+    expect(items, hasLength(1));
+    expect(items.first.id, 'vid123');
+    expect(items.first.sourceId, 'UC-test-channel');
+    expect(items.first.title, 'Channel Video');
+    expect(items.first.durationMs, 120000);
+    expect(items.first.publishedOn, '2026-08-18');
+    expect(items.first.thumbnailUrl, 'https://thumb.example/img.jpg');
+    expect(items.first.mediaUrl, 'https://www.youtube.com/watch?v=vid123');
+  });
+
   test('yt-dlp download reports progress and downloaded path', () async {
     final directory = await Directory.systemTemp.createTemp('llplayer-tools');
     addTearDown(() => directory.delete(recursive: true));
@@ -59,6 +84,13 @@ void main() {
     ).readAsLines();
     expect(arguments, containsAllInOrder(['--ffmpeg-location', ffmpeg.path]));
     expect(arguments, containsAllInOrder(['--merge-output-format', 'mp4']));
+    expect(
+      arguments,
+      containsAllInOrder([
+        '--extractor-args',
+        'youtube:player_client=android,web',
+      ]),
+    );
     expect(
       arguments,
       contains(
