@@ -2,6 +2,7 @@ import '../data/repositories/speech_enhancement_repository.dart';
 import '../models/api_failure.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
+import '../services/timeline_phone_projection.dart';
 
 class ExistingTimelineResourceState {
   ExistingTimelineResourceState({
@@ -25,11 +26,13 @@ class TimelineResourceLoadResult {
     List<WordTimelineSummary> wordSummaries = const [],
     List<PhoneTimelineSummary> phoneSummaries = const [],
     this.document,
+    Map<String, List<DetectedPhone>> phonesBySentence = const {},
     this.error,
     List<ApiFailure> failures = const [],
     this.unavailable = false,
   }) : _wordSummaries = List.unmodifiable(wordSummaries),
        _phoneSummaries = List.unmodifiable(phoneSummaries),
+       _phonesBySentence = Map.unmodifiable(phonesBySentence),
        _failures = List.unmodifiable(failures);
 
   final List<WordTimelineSummary> _wordSummaries;
@@ -39,6 +42,14 @@ class TimelineResourceLoadResult {
   List<PhoneTimelineSummary> get phoneSummaries =>
       List.unmodifiable(_phoneSummaries);
   final LLTimelineDocument? document;
+
+  /// The observed phones of each sentence, read off the same export as
+  /// [document]. The display model does not carry the phone timeline family,
+  /// and for an adopted package these candidates are the only phones there
+  /// are — the track has no active phone timeline at all.
+  final Map<String, List<DetectedPhone>> _phonesBySentence;
+  Map<String, List<DetectedPhone>> get phonesBySentence =>
+      Map.unmodifiable(_phonesBySentence);
 
   /// The named state, or null when nothing failed. One sentence — the four
   /// loaders' exceptions used to be joined into it with semicolons, which put
@@ -60,6 +71,7 @@ class SpeechEnhancementLoadResult {
     Map<String, PronunciationAnalysis> pronunciationBySentence = const {},
     List<PronunciationProvider> pronunciationProviders = const [],
     Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
+    Map<String, List<DetectedPhone>> phonesBySentence = const {},
     List<ApiFailure> errors = const [],
   }) : _timingsBySentence = Map.unmodifiable({
          for (final entry in timingsBySentence.entries)
@@ -75,6 +87,7 @@ class SpeechEnhancementLoadResult {
        _phoneticAnalysisBySentence = Map.unmodifiable(
          phoneticAnalysisBySentence,
        ),
+       _phonesBySentence = Map.unmodifiable(phonesBySentence),
        _errors = List.unmodifiable(errors);
 
   final TimelineResourceLoadResult timeline;
@@ -100,6 +113,9 @@ class SpeechEnhancementLoadResult {
   final Map<String, PhoneticAnalysis> _phoneticAnalysisBySentence;
   Map<String, PhoneticAnalysis> get phoneticAnalysisBySentence =>
       Map.unmodifiable(_phoneticAnalysisBySentence);
+  final Map<String, List<DetectedPhone>> _phonesBySentence;
+  Map<String, List<DetectedPhone>> get phonesBySentence =>
+      Map.unmodifiable(_phonesBySentence);
 
   /// Every optional loader that failed, as a typed failure rather than as a
   /// sentence. Callers report *that* some enhancements are missing; what the
@@ -151,6 +167,7 @@ class SpeechEnhancementWorkflowController {
       },
       pronunciationProviders: providers,
       phoneticAnalysisBySentence: soundPatterns,
+      phonesBySentence: timeline.phonesBySentence,
       errors: errors,
     );
   }
@@ -163,6 +180,7 @@ class SpeechEnhancementWorkflowController {
     late List<WordTimelineSummary> summaries;
     late List<PhoneTimelineSummary> phoneSummaries;
     LLTimelineDocument? document;
+    var phonesBySentence = const <String, List<DetectedPhone>>{};
 
     try {
       summaries = await repository.wordTimelineSummaries(trackId);
@@ -179,7 +197,11 @@ class SpeechEnhancementWorkflowController {
     }
 
     try {
-      final exportedDocument = await repository.exportTimeline(trackId);
+      // One request serves both: the typed document the workbench renders and
+      // the phone family it does not carry, read off the same map.
+      final exported = await repository.exportTimelineJson(trackId);
+      phonesBySentence = phonesBySentenceFromTimelineJson(exported.json);
+      final exportedDocument = LLTimelineDocument.fromJson(exported.json);
       final preservedArtifacts = previous.document?.artifacts ?? const [];
       // The export endpoint derives fresh rhythm frames from the current word
       // timeline. An older imported document may still carry artifacts that
@@ -213,6 +235,7 @@ class SpeechEnhancementWorkflowController {
         wordSummaries: summaries,
         phoneSummaries: phoneSummaries,
         document: document,
+        phonesBySentence: phonesBySentence,
         error: 'Timeline resource unavailable',
         failures: errors,
         unavailable: true,
@@ -222,6 +245,7 @@ class SpeechEnhancementWorkflowController {
       wordSummaries: summaries,
       phoneSummaries: phoneSummaries,
       document: document,
+      phonesBySentence: phonesBySentence,
       error: errors.isEmpty ? null : 'Timeline resource refresh warning',
       failures: errors,
     );

@@ -143,6 +143,49 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('a local voice that cannot be reached names the recovery step', (
+    tester,
+  ) async {
+    final api = _api(
+      onProviders: () => (
+        statusCode: 200,
+        body:
+            '[{"id":"profile-1","display_name":"Local","adapter_kind":'
+            '"local_cascade_realtime","base_url":'
+            '"ws://127.0.0.1:8765/v1/realtime","model_id":'
+            '"local-speech-to-speech","voice":"default","has_credential":'
+            'false,"timeout_ms":30000}]',
+      ),
+    );
+    final controller = _controller(
+      api,
+      connect: (uri, headers) async => throw const HttpException(envelope),
+    );
+    await _pump(tester, controller, api);
+
+    await controller.start(
+      RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
+      acquireAudioFocus: () async {},
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    // The local provider's recovery story is "start the service", and the
+    // learner hears exactly that — never the generic sentence, never the
+    // unreachable endpoint.
+    expect(
+      find.text(
+        'The local voice service on this machine is not reachable. Start it, '
+        'then try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('The conversation could not be started.'), findsNothing);
+    await expectNoTransportLeak(tester);
+
+    controller.dispose();
+  });
+
   testWidgets('a socket that errors mid-conversation says so', (tester) async {
     final connection = _FakeConnection();
     final api = _api();

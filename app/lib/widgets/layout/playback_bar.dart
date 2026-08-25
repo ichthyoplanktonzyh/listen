@@ -116,7 +116,16 @@ class _PlaybackBarState extends State<PlaybackBar> {
 
   @override
   Widget build(BuildContext context) {
-    if (playerController.mediaPath == null) return _noMediaControls();
+    if (playerController.mediaPath == null) {
+      // With no media loaded the transport's status line does not exist, so
+      // a status set outside a media session (e.g. a library row whose
+      // referenced file is missing) would be invisible. The no-media bar
+      // renders it instead — an honest, persistent report rather than a
+      // silent no-op.
+      final status = playerController.status;
+      if (status.isNotEmpty) return _noMediaStatus(status);
+      return _noMediaControls();
+    }
     final currentChunk = playbackActions.currentChunkRef();
     return PlaybackControls(
       adapter: adapter,
@@ -252,6 +261,58 @@ class _PlaybackBarState extends State<PlaybackBar> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+                ),
+                const SizedBox(width: ListenSpacing.gap12),
+                FilledButton.icon(
+                  onPressed: mediaSession.openMedia,
+                  icon: const Icon(Icons.folder_open_outlined),
+                  label: Text(l.text('openVideoAudio')),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The no-media bar variant that carries a status: the same 72px surface,
+  /// but the idle hint text is replaced by the status, error-styled when the
+  /// status is an error (matching the loaded-media transport's error row).
+  /// The open-media action stays available, so the failure is reported next
+  /// to the recovery path.
+  Widget _noMediaStatus(String status) {
+    final colors = Theme.of(context).colorScheme;
+    final isError = playerController.statusIsError;
+    return Material(
+      color: colors.surfaceContainerLowest,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: SizedBox(
+          height: 72,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: ListenSpacing.gap16,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isError ? Icons.error_outline : Icons.headset_outlined,
+                  size: ListenIconSize.control,
+                  color: isError ? colors.error : colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: ListenSpacing.gap12),
+                Expanded(
+                  child: Text(
+                    status,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isError ? colors.error : colors.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 const SizedBox(width: ListenSpacing.gap12),

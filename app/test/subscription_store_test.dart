@@ -20,17 +20,17 @@ void main() {
 
   SubscriptionStore store() => SubscriptionStore(directory: root);
 
-  MediaSource source(
+  ContentSource source(
     String id, {
     String name = 'Channel',
-    MediaSourceType type = MediaSourceType.podcast,
-  }) => MediaSource(
+    ContentSourceKind kind = ContentSourceKind.podcast,
+  }) => ContentSource(
     id: id,
     name: name,
     language: 'en',
     description: 'A description',
     cover: ChannelCoverTone.slate,
-    type: type,
+    kind: kind,
     avatarUrl: 'https://cdn.example.com/cover.jpg',
   );
 
@@ -42,7 +42,7 @@ void main() {
     final second = store();
     await second.load();
 
-    final restored = second.of(MediaSourceType.podcast);
+    final restored = second.of(ContentSourceKind.podcast);
     expect(restored, hasLength(1));
     expect(restored.single.id, 'https://feeds.npr.org/510318/podcast.xml');
     expect(restored.single.name, 'Channel');
@@ -54,13 +54,13 @@ void main() {
     final subject = store();
     await subject.load();
     await subject.add(source('https://feed.example/rss'));
-    await subject.add(source('UC-channel', type: MediaSourceType.youtube));
+    await subject.add(source('UC-channel', kind: ContentSourceKind.youtube));
 
     expect(
-      subject.of(MediaSourceType.podcast).single.id,
+      subject.of(ContentSourceKind.podcast).single.id,
       'https://feed.example/rss',
     );
-    expect(subject.of(MediaSourceType.youtube).single.id, 'UC-channel');
+    expect(subject.of(ContentSourceKind.youtube).single.id, 'UC-channel');
   });
 
   test('re-subscribing refreshes rather than duplicates', () async {
@@ -71,7 +71,7 @@ void main() {
     await subject.add(source('https://feed.example/rss', name: 'Old name'));
     await subject.add(source('https://feed.example/rss', name: 'New name'));
 
-    final stored = subject.of(MediaSourceType.podcast);
+    final stored = subject.of(ContentSourceKind.podcast);
     expect(stored, hasLength(1));
     expect(stored.single.name, 'New name');
   });
@@ -85,7 +85,7 @@ void main() {
     final second = store();
     await second.load();
 
-    expect(second.of(MediaSourceType.podcast), isEmpty);
+    expect(second.of(ContentSourceKind.podcast), isEmpty);
   });
 
   test('an in-memory store keeps nothing on disk', () async {
@@ -95,21 +95,21 @@ void main() {
     await subject.load();
     await subject.add(source('https://feed.example/rss'));
 
-    expect(subject.of(MediaSourceType.podcast), hasLength(1));
+    expect(subject.of(ContentSourceKind.podcast), hasLength(1));
     expect(root.listSync(), isEmpty);
   });
 
   test(
     'a corrupt file reads as empty rather than failing the launch',
     () async {
-      File('${root.path}/subscriptions-v1.json')
+      File('${root.path}/subscriptions-v2.json')
         ..createSync(recursive: true)
         ..writeAsStringSync('{"subscriptions": [not json');
 
       final subject = store();
       await subject.load();
 
-      expect(subject.of(MediaSourceType.podcast), isEmpty);
+      expect(subject.of(ContentSourceKind.podcast), isEmpty);
       expect(subject.isLoaded, isTrue);
     },
   );
@@ -118,7 +118,7 @@ void main() {
     // A row that cannot be reconstructed exactly is not one to reconstruct
     // approximately: a guessed type would file a podcast under YouTube and
     // send it down the wrong acquisition path entirely.
-    File('${root.path}/subscriptions-v1.json')
+    File('${root.path}/subscriptions-v2.json')
       ..createSync(recursive: true)
       ..writeAsStringSync(
         jsonEncode({
@@ -130,20 +130,20 @@ void main() {
               'language': 'en',
               'description': '',
               'cover': 'slate',
-              'type': 'podcast',
+              'kind': 'podcast',
             },
-            {'id': 'no-name', 'cover': 'slate', 'type': 'podcast'},
+            {'id': 'no-name', 'cover': 'slate', 'kind': 'podcast'},
             {
               'id': 'unknown-type',
               'name': 'X',
               'cover': 'slate',
-              'type': 'vimeo',
+              'kind': 'vimeo',
             },
             {
               'id': 'unknown-cover',
               'name': 'X',
               'cover': 'chartreuse',
-              'type': 'podcast',
+              'kind': 'podcast',
             },
           ],
         }),
@@ -152,7 +152,7 @@ void main() {
     final subject = store();
     await subject.load();
 
-    final restored = subject.of(MediaSourceType.podcast);
+    final restored = subject.of(ContentSourceKind.podcast);
     expect(restored, hasLength(1));
     expect(restored.single.id, 'https://good.example/rss');
   });
@@ -163,6 +163,6 @@ void main() {
     await subject.load();
 
     expect(subject.isLoaded, isTrue);
-    expect(subject.of(MediaSourceType.podcast), isEmpty);
+    expect(subject.of(ContentSourceKind.podcast), isEmpty);
   });
 }

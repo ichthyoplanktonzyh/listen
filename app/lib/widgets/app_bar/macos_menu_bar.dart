@@ -37,11 +37,9 @@ class MacosMenuBar extends StatelessWidget {
     required this.onImportSecondarySubtitle,
     required this.onImportEmbeddedSubtitle,
     required this.onArchiveMedia,
-    required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenReview,
     required this.onOpenCoach,
-    required this.onOpenPhoneticAnalysisCenter,
     required this.child,
   });
 
@@ -58,11 +56,9 @@ class MacosMenuBar extends StatelessWidget {
   final VoidCallback onImportSecondarySubtitle;
   final VoidCallback onImportEmbeddedSubtitle;
   final VoidCallback onArchiveMedia;
-  final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
-  final VoidCallback onOpenPhoneticAnalysisCenter;
   final Widget child;
 
   @override
@@ -78,11 +74,9 @@ class MacosMenuBar extends StatelessWidget {
       onImportSecondarySubtitle: onImportSecondarySubtitle,
       onImportEmbeddedSubtitle: onImportEmbeddedSubtitle,
       onArchiveMedia: onArchiveMedia,
-      onOpenSubtitleResources: onOpenSubtitleResources,
       onOpenVocabulary: onOpenVocabulary,
       onOpenReview: onOpenReview,
       onOpenCoach: onOpenCoach,
-      onOpenPhoneticAnalysisCenter: onOpenPhoneticAnalysisCenter,
     ),
     child: child,
   );
@@ -100,11 +94,9 @@ List<PlatformMenu> buildMacosMenus({
   required VoidCallback onImportSecondarySubtitle,
   required VoidCallback onImportEmbeddedSubtitle,
   required VoidCallback onArchiveMedia,
-  required VoidCallback onOpenSubtitleResources,
   required VoidCallback onOpenVocabulary,
   required VoidCallback onOpenReview,
   required VoidCallback onOpenCoach,
-  required VoidCallback onOpenPhoneticAnalysisCenter,
 }) {
   // A table row as a menu item: label from the table's l10n key, callback
   // from the shared actions map (missing id = wiring bug, fail fast), no key
@@ -330,12 +322,6 @@ List<PlatformMenu> buildMacosMenus({
         PlatformMenuItemGroup(
           members: [
             PlatformMenuItem(
-              label: l.text('subtitleResources'),
-              onSelected: capabilities.coreReady
-                  ? onOpenSubtitleResources
-                  : null,
-            ),
-            PlatformMenuItem(
               label: l.text('vocabulary'),
               onSelected: capabilities.coreReady ? onOpenVocabulary : null,
             ),
@@ -346,16 +332,6 @@ List<PlatformMenu> buildMacosMenus({
             PlatformMenuItem(
               label: l.text('coachDashboard'),
               onSelected: capabilities.coreReady ? onOpenCoach : null,
-            ),
-          ],
-        ),
-        PlatformMenuItemGroup(
-          members: [
-            PlatformMenuItem(
-              label: l.text('phoneticAnalysisCenter'),
-              onSelected: capabilities.coreReady
-                  ? onOpenPhoneticAnalysisCenter
-                  : null,
             ),
           ],
         ),

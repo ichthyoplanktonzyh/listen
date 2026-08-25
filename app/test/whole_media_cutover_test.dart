@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// surface: the job API methods, the wire model, the SSE event and the
 /// transcription center are gone. The retained surface is the provider/model
 /// operations the learner recording and realtime paths need, and every
-/// missing-transcript action opens the pinned listen-gen package journey.
+/// missing-transcript action opens the adopted listen-gen capability journey.
 ///
 /// These are source-level checks, the same style as
 /// `window_min_size_test.dart` pinning the Swift declaration: the app's own
@@ -71,13 +71,14 @@ void main() {
     }
   });
 
-  test('missing-transcript actions open the listen-gen package journey', () {
+  test('missing-transcript actions open the transcript readiness surface', () {
     final main = File('lib/main.dart').readAsStringSync();
-    // The workbench's generate action opens the pinned listen-gen path and
+    // The workbench's generate action opens the readiness surface (which
+    // drives the capability coordinator through resolution/production) and
     // its selection always activates the primary track, so the menu has no
     // secondary whole-media generate entry.
-    expect(main, contains('openContentPackageJourneyFlow'));
-    expect(main, contains('_createContentPackageJourney'));
+    expect(main, contains('_generateSubtitles'));
+    expect(main, contains('prepareLearningTranscript'));
 
     // No whole-media generate/regenerate flow remains to route to a Core job.
     expect(main, isNot(contains('generateSubtitlesFlow')));
@@ -117,7 +118,9 @@ void main() {
     // backend.lock verifies the Core runtime artifact, and the release
     // assembly ships and smoke-checks the same bundled tools beside api-http.
     final build = File('tool/build-macos-release.sh').readAsStringSync();
-    expect(build, contains('.backend/runtime'));
+    expect(build, contains('stage-macos-runtime.sh'));
+    final staging = File('tool/stage-macos-runtime.sh').readAsStringSync();
+    expect(staging, contains('.backend/runtime'));
     final smoke = File('tool/verify-macos-release.sh').readAsStringSync();
     for (final tool in ['whisper-cli', 'ffmpeg', 'ffprobe']) {
       expect(

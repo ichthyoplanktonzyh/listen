@@ -105,6 +105,18 @@ extension SubtitlesApi on LocalApi {
             as Map<String, dynamic>,
       );
 
+  /// The same export as a raw map. The adopted-composition projection parses
+  /// package candidate resource families directly from this wire shape; it is
+  /// not routed through the display-oriented [LLTimelineDocument] model.
+  Future<Map<String, dynamic>> exportTrackLLTimelineJson(
+    String trackId,
+  ) async =>
+      (await _request(
+            'GET',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/lltimeline/export',
+          ))
+          as Map<String, dynamic>;
+
   Future<String> exportSubtitleSrt(String trackId) async {
     final request = await _client.getUrl(
       Uri.parse(

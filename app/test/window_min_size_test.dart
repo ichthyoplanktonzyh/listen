@@ -70,15 +70,13 @@ void main() {
       body: Row(
         children: [
           AppSidebar(
-            currentRoute: AppRoute.listen,
+            currentRoute: AppRoute.library,
             onRouteSelected: (_) {},
             onOpenConversation: () {},
             onOpenSettings: () {},
             toolsMenu: ShellToolsMenu(
-              onOpenSubtitleResources: () {},
               onOpenLearningAssets: () {},
               onOpenLearningResources: () {},
-              onOpenPhoneticAnalysisCenter: () {},
               onExportLogs: () {},
               onExportVocabulary: () {},
               onImportVocabulary: () {},

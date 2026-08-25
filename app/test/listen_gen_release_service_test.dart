@@ -8,8 +8,8 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 /// The shebang the verifier requires as the artifact's first bytes.
 final _validArtifact = utf8.encode('#!/usr/bin/env python3\nPKbody');
-const _manifestName = 'listen-gen-0.2.0.release.json';
-const _artifactName = 'listen-gen-0.2.0.pyz';
+const _manifestName = 'listen-gen-0.5.0.release.json';
+const _artifactName = 'listen-gen-0.5.0.pyz';
 const _genCommit = 'c3564c357ecd46c3a52326f1362b78874379a56f';
 const _otherCommit = 'b980a20666f746685db1fd06bfa425d762d7a678';
 const _contractSha =
@@ -23,11 +23,26 @@ Map<String, dynamic> _runtimeIdentityTemplate() => {
     'schema': 'listen_gen.toolchain-identity.v1',
     'version': 1,
     'tools': [
-      {'id': 'asr-wrapper', 'roles': ['asr']},
-      {'id': 'ffmpeg', 'roles': ['media', 'asr', 'alignment', 'acoustics', 'phone']},
-      {'id': 'ffprobe', 'roles': ['media', 'asr', 'alignment', 'acoustics', 'phone']},
-      {'id': 'whisper-cli', 'roles': ['asr', 'alignment']},
-      {'id': 'whisper-model', 'roles': ['asr', 'alignment']},
+      {
+        'id': 'asr-wrapper',
+        'roles': ['asr'],
+      },
+      {
+        'id': 'ffmpeg',
+        'roles': ['media', 'asr', 'alignment', 'acoustics', 'phone'],
+      },
+      {
+        'id': 'ffprobe',
+        'roles': ['media', 'asr', 'alignment', 'acoustics', 'phone'],
+      },
+      {
+        'id': 'whisper-cli',
+        'roles': ['asr', 'alignment'],
+      },
+      {
+        'id': 'whisper-model',
+        'roles': ['asr', 'alignment'],
+      },
     ],
   },
 };
@@ -38,20 +53,18 @@ Map<String, dynamic> _manifestTemplate() => {
     'commit': _genCommit,
     'repository': 'https://github.com/ichthyoplanktonzyh/listen-gen',
   },
-  'tool': {'id': 'listen-gen', 'version': '0.2.0'},
-  'machine_protocol': {'schema': 'listen_gen.machine-event.v1', 'version': 1},
+  'tool': {'id': 'listen-gen', 'version': '0.5.0'},
+  'machine_protocol': {'schema': 'listen_gen.machine-event.v2', 'version': 2},
   'content_package_contract': {
     'authority': {
       'repository': 'ichthyoplanktonzyh/listen-core',
-      'path': 'contracts/content-package/v1',
+      'path': 'contracts/content-package/v3',
     },
     'canonical_sha256': _contractSha,
-    'manifest_schema_id':
-        'https://listen.dev/contracts/content-package/v1/manifest.schema.json',
-    'package_schema': 'listen.resource-package.v1',
-    'resource_schema_id':
-        'https://listen.dev/contracts/content-package/v1/resource.schema.json',
-    'schema_version': 1,
+    'package_schema': 'listen.content-package.release.v3',
+    'release_schema_id': 'listen.content-package.release.v3',
+    'schema_version': 3,
+    'contract_version': '4.0.0',
   },
   'runtime': {
     'provider_requirements': {
@@ -80,19 +93,17 @@ Map<String, dynamic> _lockTemplate() => {
     'filename': _manifestName,
     'sha256': 'sha256:${'0' * 64}',
   },
-  'tool': {'id': 'listen-gen', 'version': '0.2.0'},
-  'machine_protocol': {'schema': 'listen_gen.machine-event.v1', 'version': 1},
+  'tool': {'id': 'listen-gen', 'version': '0.5.0'},
+  'machine_protocol': {'schema': 'listen_gen.machine-event.v2', 'version': 2},
   'content_package_contract': {
     'authority': {
       'repository': 'ichthyoplanktonzyh/listen-core',
-      'path': 'contracts/content-package/v1',
+      'path': 'contracts/content-package/v3',
     },
-    'manifest_schema_id':
-        'https://listen.dev/contracts/content-package/v1/manifest.schema.json',
-    'resource_schema_id':
-        'https://listen.dev/contracts/content-package/v1/resource.schema.json',
-    'package_schema': 'listen.resource-package.v1',
-    'schema_version': 1,
+    'package_schema': 'listen.content-package.release.v3',
+    'release_schema_id': 'listen.content-package.release.v3',
+    'schema_version': 3,
+    'contract_version': '4.0.0',
     'canonical_sha256': _contractSha,
   },
   'runtime': {'python_requires': '>=3.11'},
@@ -209,7 +220,7 @@ void main() {
     final built = await _build(await _tempDir());
     final verified = await built.service.verify();
 
-    expect(verified.toolVersion, '0.2.0');
+    expect(verified.toolVersion, '0.5.0');
     expect(verified.sourceCommit, _genCommit);
     expect(verified.artifactPath, built.artifactPath);
     expect(verified.artifactSha256, _sha(_validArtifact));
@@ -274,7 +285,7 @@ void main() {
     final built = await _build(
       await _tempDir(),
       mutateManifest: (manifest) =>
-          (manifest['machine_protocol'] as Map)['version'] = 2,
+          (manifest['machine_protocol'] as Map)['version'] = 1,
     );
     await expectLater(
       built.service.verify(),
@@ -288,6 +299,19 @@ void main() {
       mutateManifest: (manifest) =>
           (manifest['content_package_contract'] as Map)['canonical_sha256'] =
               'sha256:${'a' * 64}',
+    );
+    await expectLater(
+      built.service.verify(),
+      _failsWith('generator_release_manifest_invalid'),
+    );
+  });
+
+  test('rejects a manifest Core contract version mismatch', () async {
+    final built = await _build(
+      await _tempDir(),
+      mutateManifest: (manifest) =>
+          (manifest['content_package_contract'] as Map)['contract_version'] =
+              '4.1.0',
     );
     await expectLater(
       built.service.verify(),
@@ -419,12 +443,73 @@ void main() {
     final service = LocalListenGenReleaseService(
       manifestPath: null,
       loadLockBytes: () async => utf8.encode(jsonEncode(_lockTemplate())),
+      environment: const {},
+      discoverDefaultLocations: false,
     );
     expect(service.isConfigured, isFalse);
     await expectLater(
       service.verify(),
       _failsWith('generator_release_manifest_missing'),
     );
+  });
+
+  test('discovers the hash-pinned sibling development release', () async {
+    final parent = await Directory.systemTemp.createTemp(
+      'listen-gen-discovery-',
+    );
+    addTearDown(() => parent.delete(recursive: true));
+    final app = Directory('${parent.path}/listen-app')..createSync();
+    final release = Directory('${parent.path}/listen-gen/dist/listen-gen-0.5.0')
+      ..createSync(recursive: true);
+    final built = await _build(release);
+    final manifestBytes = await File(built.manifestPath).readAsBytes();
+    final artifactBytes = await File(built.artifactPath).readAsBytes();
+    final lock = _lockTemplate();
+    (lock['release_manifest'] as Map)['sha256'] = _sha(manifestBytes);
+    (lock['artifact'] as Map)
+      ..['sha256'] = _sha(artifactBytes)
+      ..['size_bytes'] = artifactBytes.length;
+    final lockBytes = utf8.encode(jsonEncode(lock));
+    File('${app.path}/listen_gen.lock.json').writeAsBytesSync(lockBytes);
+
+    final service = LocalListenGenReleaseService(
+      loadLockBytes: () async => lockBytes,
+      environment: const {},
+      resolvedExecutablePath: '${parent.path}/empty/Contents/MacOS/listen',
+      workingDirectory: app,
+    );
+
+    expect(service.isConfigured, isTrue);
+    expect((await service.verify()).artifactPath, built.artifactPath);
+  });
+
+  test('discovers the release staged inside the app bundle', () async {
+    final parent = await Directory.systemTemp.createTemp(
+      'listen-gen-bundle-discovery-',
+    );
+    addTearDown(() => parent.delete(recursive: true));
+    final release = Directory(
+      '${parent.path}/listen.app/Contents/Resources/runtime/listen-gen',
+    )..createSync(recursive: true);
+    final built = await _build(release);
+    final manifestBytes = await File(built.manifestPath).readAsBytes();
+    final artifactBytes = await File(built.artifactPath).readAsBytes();
+    final lock = _lockTemplate();
+    (lock['release_manifest'] as Map)['sha256'] = _sha(manifestBytes);
+    (lock['artifact'] as Map)
+      ..['sha256'] = _sha(artifactBytes)
+      ..['size_bytes'] = artifactBytes.length;
+    final lockBytes = utf8.encode(jsonEncode(lock));
+
+    final service = LocalListenGenReleaseService(
+      loadLockBytes: () async => lockBytes,
+      environment: const {},
+      resolvedExecutablePath: '${parent.path}/listen.app/Contents/MacOS/listen',
+      workingDirectory: Directory('${parent.path}/elsewhere')..createSync(),
+    );
+
+    expect(service.isConfigured, isTrue);
+    expect((await service.verify()).artifactPath, built.artifactPath);
   });
 
   test('rejects an incompatible committed lock identity', () async {
@@ -436,7 +521,7 @@ void main() {
       'machine schema': (lock) =>
           (lock['machine_protocol'] as Map)['schema'] = 'other.event.v1',
       'machine version': (lock) =>
-          (lock['machine_protocol'] as Map)['version'] = 2,
+          (lock['machine_protocol'] as Map)['version'] = 1,
       'authority repository': (lock) =>
           ((lock['content_package_contract'] as Map)['authority']
                   as Map)['repository'] =
@@ -480,50 +565,68 @@ void main() {
     }
   });
 
-  test('rejects a manifest whose runtime identity drifts from the lock', () async {
-    final mutations = <String, void Function(Map<String, dynamic>)>{
-      'schema': (manifest) =>
-          (manifest['runtime_identity'] as Map)['schema'] =
-              'listen_gen.runtime-identity.v2',
-      'version': (manifest) =>
-          (manifest['runtime_identity'] as Map)['version'] = 2,
-      'runtime family': (manifest) =>
-          ((manifest['runtime_identity'] as Map)['runtime'] as Map)['family'] =
-              'cpython',
-      'runtime requires': (manifest) =>
-          ((manifest['runtime_identity'] as Map)['runtime'] as Map)['requires'] =
-              '>=3.10',
-      'toolchain schema': (manifest) =>
-          ((manifest['runtime_identity'] as Map)['toolchain'] as Map)['schema'] =
-              'listen_gen.toolchain-identity.v2',
-      'toolchain version': (manifest) =>
-          ((manifest['runtime_identity'] as Map)['toolchain'] as Map)['version'] =
-              2,
-      'toolchain extra tool': (manifest) =>
-          ((manifest['runtime_identity'] as Map)['toolchain'] as Map)['tools'] =
-              [
-                ...(((manifest['runtime_identity'] as Map)['toolchain']
-                        as Map)['tools'] as List),
-                {'id': 'extra-tool', 'roles': ['phone']},
-              ],
-      'toolchain dropped tool': (manifest) =>
-          (((manifest['runtime_identity'] as Map)['toolchain'] as Map)['tools']
-                  as List)
-              .removeLast(),
-      'toolchain re-roled tool': (manifest) =>
-          (((manifest['runtime_identity'] as Map)['toolchain'] as Map)['tools']
-                  as List)
-              .first['roles'] = ['phone'],
-    };
-    for (final entry in mutations.entries) {
-      final built = await _build(await _tempDir(), mutateManifest: entry.value);
-      await expectLater(
-        built.service.verify(),
-        _failsWith('generator_release_manifest_invalid'),
-        reason: 'manifest runtime identity: ${entry.key}',
-      );
-    }
-  });
+  test(
+    'rejects a manifest whose runtime identity drifts from the lock',
+    () async {
+      final mutations = <String, void Function(Map<String, dynamic>)>{
+        'schema': (manifest) =>
+            (manifest['runtime_identity'] as Map)['schema'] =
+                'listen_gen.runtime-identity.v2',
+        'version': (manifest) =>
+            (manifest['runtime_identity'] as Map)['version'] = 2,
+        'runtime family': (manifest) =>
+            ((manifest['runtime_identity'] as Map)['runtime']
+                    as Map)['family'] =
+                'cpython',
+        'runtime requires': (manifest) =>
+            ((manifest['runtime_identity'] as Map)['runtime']
+                    as Map)['requires'] =
+                '>=3.10',
+        'toolchain schema': (manifest) =>
+            ((manifest['runtime_identity'] as Map)['toolchain']
+                    as Map)['schema'] =
+                'listen_gen.toolchain-identity.v2',
+        'toolchain version': (manifest) =>
+            ((manifest['runtime_identity'] as Map)['toolchain']
+                    as Map)['version'] =
+                2,
+        'toolchain extra tool': (manifest) =>
+            ((manifest['runtime_identity'] as Map)['toolchain']
+                as Map)['tools'] = [
+              ...(((manifest['runtime_identity'] as Map)['toolchain']
+                      as Map)['tools']
+                  as List),
+              {
+                'id': 'extra-tool',
+                'roles': ['phone'],
+              },
+            ],
+        'toolchain dropped tool': (manifest) =>
+            (((manifest['runtime_identity'] as Map)['toolchain']
+                        as Map)['tools']
+                    as List)
+                .removeLast(),
+        'toolchain re-roled tool': (manifest) =>
+            (((manifest['runtime_identity'] as Map)['toolchain']
+                        as Map)['tools']
+                    as List)
+                .first['roles'] = [
+              'phone',
+            ],
+      };
+      for (final entry in mutations.entries) {
+        final built = await _build(
+          await _tempDir(),
+          mutateManifest: entry.value,
+        );
+        await expectLater(
+          built.service.verify(),
+          _failsWith('generator_release_manifest_invalid'),
+          reason: 'manifest runtime identity: ${entry.key}',
+        );
+      }
+    },
+  );
 
   test(
     'rejects manifest unknown fields at root, artifact, and runtime',

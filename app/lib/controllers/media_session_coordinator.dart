@@ -34,6 +34,7 @@ class MediaSessionCoordinator {
     required this.subtitleAnalysis,
     required this.managedStore,
     required this.materialRepository,
+    this.onLibraryChanged,
     this.importFiles = const LocalMediaImportFileService(),
   });
 
@@ -48,6 +49,12 @@ class MediaSessionCoordinator {
   final SubtitleAnalysisRepository subtitleAnalysis;
   final ManagedAssetStoreService managedStore;
   final MediaImportFileService importFiles;
+
+  /// Notified after membership or registration changes that affect the
+  /// library list (open, Keep, reference, unretain), so the library surface
+  /// can refresh itself instead of showing a stale snapshot. Best-effort:
+  /// a missing or failing refresh never fails the session flow.
+  final Future<void> Function()? onLibraryChanged;
 
   /// The learning material bound to the current media, when one was resolved
   /// from Core. Material retention is the session's membership authority:
@@ -119,6 +126,46 @@ class MediaSessionCoordinator {
     currentMaterial = null;
   }
 
+  /// Leaves the current registered-media session for a different kind of
+  /// material on the same workbench.
+  ///
+  /// A document is not a modal laid over the current video: it replaces the
+  /// active material. The old decoder, media identity, transcript, timeline
+  /// and analysis therefore all have to leave together. If the document later
+  /// gains TTS, the shell can open that derived rendition on the same adapter
+  /// without registering a second Material.
+  Future<void> deactivateForMaterialSwitch() async {
+    ++_sessionEpoch;
+    final previousMediaId = player.mediaId;
+    final previousPosition = player.position;
+    currentMaterial = null;
+
+    player.clearMedia();
+    player.setPosition(Duration.zero);
+    player.setDuration(Duration.zero);
+    player.setPlaying(false);
+    player.setStatus('');
+    player.setSourceLoop(null, null);
+    subtitle.setPrimaryTrack(null);
+    subtitle.setSecondaryTrack(null);
+    subtitle.setCurrentPrimaryCue(null);
+    subtitle.setCurrentSecondaryCue(null);
+    subtitle.setSubtitleResources(const []);
+    subtitle.setSubtitleResourceCapabilities(const {});
+    subtitle.clearSpeechEnhancements();
+
+    await adapter.close();
+    if (previousMediaId != null && repository.isAvailable) {
+      try {
+        await repository.saveProgress(previousMediaId, previousPosition);
+      } on Object {
+        // Progress persistence is best-effort during a material switch. The
+        // new document must remain openable even when Core cannot save the old
+        // playback position.
+      }
+    }
+  }
+
   // ── Media open ──
 
   Future<void> openMedia() async {
@@ -146,7 +193,7 @@ class MediaSessionCoordinator {
     currentMaterial = null;
     onMediaSwitched();
     player.clearMedia();
-    player.setMediaPath(path);
+    player.setMediaPath(path, kind: _mediaKindFromPath(path));
     player.setPosition(Duration.zero);
     player.setDuration(Duration.zero);
     subtitle.setPrimaryTrack(null);
@@ -171,6 +218,8 @@ class MediaSessionCoordinator {
     }
     if (_isStale(sessionEpoch)) return;
     Object? coreError;
+    Duration? saved;
+    final coreAvailable = repository.isAvailable;
     try {
       await previousProgressSave;
       if (_isStale(sessionEpoch)) return;
@@ -181,26 +230,48 @@ class MediaSessionCoordinator {
         final media = await repository.registerMedia(path, retain: false);
         if (_isStale(sessionEpoch)) return;
         final id = media.id;
-        final saved = await repository.readProgress(id);
+        saved = await repository.readProgress(id);
         if (_isStale(sessionEpoch)) return;
         player.setMedia(
           id: id,
           path: path,
           title: media.title,
           fingerprint: media.fingerprint,
+          kind: media.kind,
         );
         player.setMediaRetained(media.retainedAtMs != null);
-        if (saved != null && saved > Duration.zero) {
-          await adapter.seek(saved);
-          if (_isStale(sessionEpoch)) return;
-          player.setPosition(saved);
-        }
+      }
+    } catch (error) {
+      if (_isStale(sessionEpoch)) return;
+      coreError = error;
+    }
+    if (_isStale(sessionEpoch)) return;
+    try {
+      // Playback starts before the restore seek, and the restore seek runs
+      // before the subtitle auto-select. A paused seek is applied by the
+      // player but its position is not observable until playback renders, and
+      // the auto-select's disableNativeSubtitles() (setActiveTracks([]))
+      // resets a paused seek to zero — the same call during playback does
+      // not. (Real incident: progress restore always restarted at 0:00.)
+      await adapter.play();
+      if (_isStale(sessionEpoch)) return;
+      if (saved != null && saved > Duration.zero) {
+        await adapter.seek(saved);
+        if (_isStale(sessionEpoch)) return;
+        player.setPosition(saved);
+      }
+      if (coreAvailable && coreError == null) {
         // Registration creates (or resolves) the deterministic material graph,
         // so the media resolves to a material immediately. Material retention
         // is the session's membership authority from here on.
         await _refreshCurrentMaterial();
         if (_isStale(sessionEpoch)) return;
         await resourceActions.loadSubtitleResources(updateStatus: false);
+        if (_isStale(sessionEpoch)) return;
+        // A newly registered media changes the library; refresh it instead of
+        // leaving a stale snapshot behind. Never gating, never blocking the
+        // workbench.
+        unawaited(_notifyLibraryChanged());
         if (_isStale(sessionEpoch)) return;
         try {
           // The workbench owns "does this media have a learning transcript".
@@ -215,13 +286,6 @@ class MediaSessionCoordinator {
         }
         if (_isStale(sessionEpoch)) return;
       }
-    } catch (error) {
-      if (_isStale(sessionEpoch)) return;
-      coreError = error;
-    }
-    if (_isStale(sessionEpoch)) return;
-    try {
-      await adapter.play();
       if (isMounted() && !_isStale(sessionEpoch)) {
         // Only the healthy branch is playback chatter; the degraded one
         // reports on the core, so health indicators must keep showing it.
@@ -280,25 +344,53 @@ class MediaSessionCoordinator {
     }
   }
 
+  /// Best-effort library refresh after a membership or registration change.
+  /// A missing callback or a failing refresh never fails the caller.
+  Future<void> _notifyLibraryChanged() async {
+    final refresh = onLibraryChanged;
+    if (refresh == null) return;
+    try {
+      await refresh();
+    } on Object {
+      // Library refresh is a background concern; the session outcome is
+      // already reported.
+    }
+  }
+
   // ── Retention: Keep / reference in place / unretain ──
 
-  /// The default Keep: copy the current Temporary Material into the managed
-  /// store (the original is left untouched), verify the copy byte-for-byte,
-  /// then re-register the managed path with retain true. Only after the copy
-  /// is verified and Core accepted it does the session rebind to the managed
-  /// path — media identity is fingerprint-derived, so the id, learning state
-  /// and position all survive the rebind.
+  /// The default Keep: make sure the bytes live in the managed store, then
+  /// add the material to the Personal Library.
+  ///
+  /// Two steps, because they answer two different questions:
+  ///
+  /// * **the file** — media outside the store is copied in (the original is
+  ///   left untouched), verified byte-for-byte, and re-registered at the
+  ///   managed path. Media that is *already* inside the store skips all of
+  ///   that: there is nothing to move, and re-registering would re-hash the
+  ///   whole file to arrive at the id Core already has. Membership then goes
+  ///   through [MediaSessionRepository.retainMedia], which changes the flag
+  ///   and touches nothing else.
+  /// * **the membership** — the Personal Library lists retained *materials*,
+  ///   and Core keeps media membership and material membership independently.
+  ///   Keep used to stop after the registration and report success: the status
+  ///   said "kept", the library stayed empty, and [_refreshCurrentMaterial]
+  ///   then read the still-temporary material and flipped the button back to
+  ///   "Keep". The material retain is part of the Keep, not an afterthought.
+  ///
+  /// Media identity is fingerprint-derived, so the id, learning state and
+  /// position all survive the rebind to the managed path.
   ///
   /// A new copy is deleted only in two cases: Core registration fails after
   /// this operation created it (the media stays Temporary), or the session
   /// went stale before registration started (a newer open or online clear owns
   /// the player, and the never-registered copy is orphaned). Once registration
-  /// with retain true succeeds, the copy is real Personal Library membership:
-  /// no later material resolve, state write, or status failure deletes it, and
-  /// a late successful registration keeps that membership without rebinding
-  /// the newer session's player. A pre-existing deduplication target is shared
-  /// and is never deleted. Every failure branch is epoch-safe: a stale session
-  /// never writes its failure into the newer session's status.
+  /// succeeds the copy is real: no later material resolve, membership call,
+  /// state write, or status failure deletes it, and a late successful
+  /// registration keeps it without rebinding the newer session's player. A
+  /// pre-existing deduplication target is shared and is never deleted. Every
+  /// failure branch is epoch-safe: a stale session never writes its failure
+  /// into the newer session's status.
   Future<void> keepCurrentMedia() async {
     final path = player.mediaPath;
     final mediaId = player.mediaId;
@@ -309,69 +401,82 @@ class MediaSessionCoordinator {
     if (player.mediaRetained == true || player.retentionInFlight) return;
     final sessionEpoch = _sessionEpoch;
     player.setRetentionInFlight(true);
-    late String keptTitle;
     try {
-      final copy = await managedStore.copyIntoStore(sourcePath: path);
-      if (_isStale(sessionEpoch)) {
-        // The session moved on while the copy ran and registration never
-        // happened: the copy is orphaned. Remove only what this operation
-        // created; a pre-existing deduplication target is never touched.
-        if (copy.createdNew) {
-          await managedStore.deleteStoreCopy(copy.path);
-        }
-        return;
-      }
-      // The registration round-trip alone is the rollback boundary: only its
-      // failure may remove the new copy. A successful return makes the copy
-      // real membership, and nothing after it — a stale session, a failed
-      // material resolve, a failed state write — may delete it or rebind the
-      // player of a session that has since moved on.
-      MediaItem media;
-      try {
-        media = await repository.registerMedia(
-          copy.path,
-          retain: true,
-          title: player.mediaTitle,
-          kind: copy.mediaKind,
-        );
-      } catch (error) {
-        // Only a failed registration may remove the new copy. A pre-existing
-        // deduplication target is shared and is never deleted.
-        if (copy.createdNew) {
-          await managedStore.deleteStoreCopy(copy.path);
-        }
+      final MediaItem media;
+      final String keptPath;
+      // Core's stored title is the file's name, and a managed file's name is
+      // its SHA-256. Keeping must not rename an episode to a digest, so the
+      // session's title is what carries over — the copy path already sends it
+      // along with the registration, and the in-store path has nothing to send
+      // it with.
+      final keptTitle = player.mediaTitle;
+      if (managedStore.contains(path)) {
+        // Already where Keep would put it. Nothing to copy, nothing to
+        // re-fingerprint — only the membership flag has to move.
+        media = await repository.retainMedia(mediaId);
         if (_isStale(sessionEpoch)) return;
-        player.setStatus(
-          text('statusKeepFailed'),
-          error: true,
-          failure: repository.failureDetail(error),
-        );
-        return;
+        keptPath = path;
+      } else {
+        final copy = await managedStore.copyIntoStore(sourcePath: path);
+        if (_isStale(sessionEpoch)) {
+          // The session moved on while the copy ran and registration never
+          // happened: the copy is orphaned. Remove only what this operation
+          // created; a pre-existing deduplication target is never touched.
+          if (copy.createdNew) {
+            await managedStore.deleteStoreCopy(copy.path);
+          }
+          return;
+        }
+        // The registration round-trip alone is the rollback boundary: only its
+        // failure may remove the new copy. A successful return makes the copy
+        // real, and nothing after it — a stale session, a failed material
+        // resolve, a failed membership call, a failed state write — may delete
+        // it or rebind the player of a session that has since moved on.
+        try {
+          media = await repository.registerMedia(
+            copy.path,
+            retain: true,
+            title: player.mediaTitle,
+            kind: copy.mediaKind,
+          );
+        } catch (error) {
+          // Only a failed registration may remove the new copy. A pre-existing
+          // deduplication target is shared and is never deleted.
+          if (copy.createdNew) {
+            await managedStore.deleteStoreCopy(copy.path);
+          }
+          if (_isStale(sessionEpoch)) return;
+          player.setStatus(
+            text('statusKeepFailed'),
+            error: true,
+            failure: repository.failureDetail(error),
+          );
+          return;
+        }
+        keptPath = copy.path;
       }
       if (_isStale(sessionEpoch)) return;
-      keptTitle = media.title;
       player.setMedia(
         id: media.id,
-        path: copy.path,
-        title: media.title,
+        path: keptPath,
+        title: keptTitle ?? media.title,
         fingerprint: media.fingerprint,
+        kind: media.kind,
       );
-      player.setMediaRetained(media.retainedAtMs != null);
-      // The managed rebind keeps the same fingerprint-derived media id, so
-      // the bound material keeps its id and revision while membership
-      // evidence moves to the material. A resolution failure here is
-      // non-gating: the media-level membership evidence from the registration
-      // stays, the copy stays, and the Keep still reports success.
+      // The managed rebind keeps the same fingerprint-derived media id, so the
+      // bound material keeps its id and revision.
       await _refreshCurrentMaterial();
       if (_isStale(sessionEpoch)) return;
+      if (!await _retainCurrentMaterial(sessionEpoch)) return;
       settings.recordRecentMedia(
-        path: copy.path,
-        title: keptTitle,
+        path: keptPath,
+        title: keptTitle ?? media.title,
         positionMs: player.position.inMilliseconds,
         durationMs: player.duration.inMilliseconds,
         subtitleCount: subtitle.subtitleResources.length,
       );
       player.setStatus(text('statusMediaKept'), playback: true);
+      unawaited(_notifyLibraryChanged());
     } on ManagedStoreUnavailable {
       if (_isStale(sessionEpoch)) return;
       player.setStatus(text('statusManagedStoreUnavailable'), error: true);
@@ -393,6 +498,58 @@ class MediaSessionCoordinator {
       // into a session, so it is always reset.
       player.setRetentionInFlight(false);
     }
+  }
+
+  /// Adds the bound material to the Personal Library, returning whether the
+  /// Keep may go on to report success.
+  ///
+  /// False means the learner's intent — "put this in my library" — did not
+  /// land, so the caller must not say it did. What was already achieved stays
+  /// achieved: the managed copy is kept and the media stays registered, which
+  /// is exactly what makes a retry cheap (the copy deduplicates, registration
+  /// is idempotent by fingerprint, and this call is idempotent by material).
+  Future<bool> _retainCurrentMaterial(int sessionEpoch) async {
+    final material = currentMaterial;
+    if (material == null || !materialRepository.isAvailable) {
+      // Personal Library membership is material membership, and there is no
+      // material to give it to. Report the stable keep failure rather than
+      // inventing an id or claiming a membership nothing holds.
+      if (!_isStale(sessionEpoch)) {
+        player.setStatus(text('statusKeepFailed'), error: true);
+      }
+      return false;
+    }
+    if (material.isRetained) return true;
+    try {
+      final retained = await materialRepository.retainLearningMaterial(
+        material.material.id,
+      );
+      if (_isStale(sessionEpoch)) return false;
+      currentMaterial = retained;
+      player.setMediaRetained(retained.material.retainedAtMs != null);
+      return true;
+    } catch (error) {
+      if (_isStale(sessionEpoch)) return false;
+      player.setStatus(
+        text('statusKeepFailed'),
+        error: true,
+        failure: materialRepository.failureDetail(error),
+      );
+      return false;
+    }
+  }
+
+  static String? _mediaKindFromPath(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0) return null;
+    final extension = path.substring(dot + 1).toLowerCase();
+    if (const {'m4a', 'mp3', 'wav', 'flac', 'aac', 'ogg'}.contains(extension)) {
+      return 'audio';
+    }
+    if (const {'mp4', 'mkv', 'mov', 'webm', 'avi'}.contains(extension)) {
+      return 'video';
+    }
+    return null;
   }
 
   /// The secondary Keep: retain the current media without copying it. The
@@ -431,6 +588,7 @@ class MediaSessionCoordinator {
       currentMaterial = updated;
       player.setMediaRetained(updated.material.retainedAtMs != null);
       player.setStatus(text('statusMediaKeptInPlace'), playback: true);
+      unawaited(_notifyLibraryChanged());
     } catch (error) {
       if (_isStale(sessionEpoch)) return;
       player.setStatus(
@@ -473,6 +631,7 @@ class MediaSessionCoordinator {
       currentMaterial = updated;
       player.setMediaRetained(updated.material.retainedAtMs != null);
       player.setStatus(text('statusMediaUnkept'), playback: true);
+      unawaited(_notifyLibraryChanged());
     } catch (error) {
       if (_isStale(sessionEpoch)) return;
       player.setStatus(
@@ -672,6 +831,7 @@ class MediaSessionCoordinator {
       pronunciationBySentence: result.pronunciationBySentence,
       pronunciationProviders: result.pronunciationProviders,
       phoneticAnalysisBySentence: result.phoneticAnalysisBySentence,
+      phonesBySentence: result.phonesBySentence,
     );
     subtitle.updateCurrentWord(
       player.position,
@@ -680,9 +840,7 @@ class MediaSessionCoordinator {
     );
     subtitle.updateCurrentDetectedPhone(
       player.position,
-      enabled:
-          settings.settings.phonemeRibbonVisible ||
-          settings.settings.soundPatternRibbonVisible,
+      enabled: settings.settings.phonemeHighlightVisible,
     );
     if (result.errors.isNotEmpty && isMounted()) {
       // This one was invisible to the source gate: the exceptions reached the

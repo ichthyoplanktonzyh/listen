@@ -17,13 +17,11 @@ import '../listen_wordmark.dart';
 /// unreachable arm, and stops the rail from offering a selection state that
 /// could never be true.
 enum AppRoute {
-  /// The one opening question: what should I do now.
-  today,
+  /// Resume the current context or find the next material.
+  home,
 
-  /// Where material comes from and what is already here — discovery and the
-  /// media library are two segments of one page, because they end in the same
-  /// library.
-  listen,
+  /// Manage material already owned and bring new local material into the app.
+  library,
 
   /// The language the learner has collected, and the practice on it:
   /// vocabulary, expressions and review as segments of one page.
@@ -107,16 +105,16 @@ class AppSidebar extends StatelessWidget {
               ),
               children: [
                 _SidebarItem(
-                  icon: Icons.wb_sunny_outlined,
-                  label: l.text('sidebarToday'),
-                  isSelected: currentRoute == AppRoute.today,
-                  onTap: () => onRouteSelected(AppRoute.today),
+                  icon: Icons.explore_outlined,
+                  label: l.text('sidebarHome'),
+                  isSelected: currentRoute == AppRoute.home,
+                  onTap: () => onRouteSelected(AppRoute.home),
                 ),
                 _SidebarItem(
-                  icon: Icons.headphones_outlined,
-                  label: l.text('sidebarListen'),
-                  isSelected: currentRoute == AppRoute.listen,
-                  onTap: () => onRouteSelected(AppRoute.listen),
+                  icon: Icons.folder_outlined,
+                  label: l.text('sidebarLibrary'),
+                  isSelected: currentRoute == AppRoute.library,
+                  onTap: () => onRouteSelected(AppRoute.library),
                 ),
                 _SidebarItem(
                   icon: Icons.menu_book_outlined,

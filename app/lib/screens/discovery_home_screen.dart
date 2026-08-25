@@ -14,14 +14,18 @@ import '../widgets/discovery/content_card.dart';
 import '../widgets/discovery/detail_panel.dart';
 import '../widgets/discovery/source_display_name.dart';
 
-/// The media-aggregation landing page: a sticky channel switcher on top, media
-/// cards below, and the action details panel on the right.
+/// A material-first home surface.
+///
+/// Sources are discovery aids, not the primary object. The learner sees
+/// material first, can move between audio, video, and articles at the same
+/// level, and opens details only when a specific item is chosen.
 class DiscoveryHome extends StatelessWidget {
   const DiscoveryHome({
     super.key,
     required this.viewModel,
     required this.onOpenMedia,
     this.onPlayMedia,
+    this.onOpenDocument,
   });
 
   final DiscoveryViewModel viewModel;
@@ -32,40 +36,48 @@ class DiscoveryHome extends StatelessWidget {
 
   final ValueChanged<String>? onPlayMedia;
 
-  /// The single "start learning" intent: acquires local media when needed
-  /// (progress stays on this surface), then hands the path to the workbench
-  /// opener. Returns without opening on failure or cancel — the discovery
-  /// state carries the typed failure for a retry instead.
+  /// Opens an acquired article's Material in the document session. Required
+  /// for document items; without it a document item has nothing to open.
+  final ValueChanged<String>? onOpenDocument;
+
+  /// The single "start learning" intent: acquires local content when needed
+  /// (progress stays on this surface), then hands the openable target — a
+  /// media path or a document Material — to the matching opener. Returns
+  /// without opening on failure or cancel — the discovery state carries the
+  /// typed failure for a retry instead.
   Future<void> _startLearning(
     String entryId, {
     VoidCallback? beforeOpen,
   }) async {
     final play = onPlayMedia;
-    if (play == null) return;
-    final path = await viewModel.acquireForLearning(entryId);
-    if (path == null) return;
+    final openDocument = onOpenDocument;
+    if (play == null && openDocument == null) return;
+    final target = await viewModel.acquireForLearning(entryId);
+    if (target == null) return;
     beforeOpen?.call();
-    play(path);
+    final materialId = target.materialId;
+    if (materialId != null) {
+      openDocument?.call(materialId);
+      return;
+    }
+    play?.call(target.mediaPath!);
   }
 
   @override
   Widget build(BuildContext context) {
+    final canStart = onPlayMedia != null || onOpenDocument != null;
     return ListenableBuilder(
       listenable: viewModel,
       builder: (context, _) {
         final state = viewModel.state;
         return LayoutBuilder(
           builder: (context, constraints) {
-            final showDetail =
-                constraints.maxWidth >= ListenBreakpoints.discoveryDetail;
-            final shelf = _DiscoveryShelf(
+            return _DiscoveryShelf(
               state: state,
               durationMsFor: viewModel.durationMsFor,
               onSelectItem: (id) {
                 viewModel.selectItem(id);
-                if (!showDetail) {
-                  _showDetailBottomSheet(context);
-                }
+                _showDetailBottomSheet(context);
               },
               onDownload: viewModel.startDownload,
               onCancelDownload: viewModel.cancelDownload,
@@ -73,48 +85,11 @@ class DiscoveryHome extends StatelessWidget {
               onSelectSource: viewModel.selectChannel,
               onRetrySources: viewModel.load,
               onRetryEntries: viewModel.retryEntries,
+              onRefreshSource: viewModel.refreshSource,
               onOpenMedia: onOpenMedia,
               isGrid: constraints.maxWidth >= ListenBreakpoints.discoveryGrid,
-            );
-
-            final content = <Widget>[
-              Expanded(child: shelf),
-              if (showDetail && state.selectedEntry != null)
-                SizedBox(
-                  width: 372,
-                  child: DiscoveryDetailPanel(
-                    entry: state.selectedEntry!,
-                    source: state.selectedSource!,
-                    durationMs: viewModel.durationMsFor(
-                      state.selectedEntry!.id,
-                    ),
-                    downloadState: state.downloadStateOf(
-                      state.selectedEntry!.id,
-                    ),
-                    downloadProgress: state.downloadProgressOf(
-                      state.selectedEntry!.id,
-                    ),
-                    downloadFailure: state.downloadFailureOf(
-                      state.selectedEntry!.id,
-                    ),
-                    mediaAvailability: state.mediaAvailabilityOf(
-                      state.selectedEntry!.id,
-                    ),
-                    onStartLearning: onPlayMedia == null
-                        ? null
-                        : () => _startLearning(state.selectedEntry!.id),
-                    onCancelDownload: () =>
-                        viewModel.cancelDownload(state.selectedEntry!.id),
-                    onRecheckAvailability: () => viewModel.refreshMediaAvailability(
-                      state.selectedEntry!.id,
-                    ),
-                  ),
-                ),
-            ];
-
-            return ColoredBox(
-              color: Theme.of(context).colorScheme.surface,
-              child: Row(children: content),
+              canStart: canStart,
+              onStartLearning: _startLearning,
             );
           },
         );
@@ -123,10 +98,14 @@ class DiscoveryHome extends StatelessWidget {
   }
 
   void _showDetailBottomSheet(BuildContext context) {
+    final canStart = onPlayMedia != null || onOpenDocument != null;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(
+        maxWidth: ListenBreakpoints.cardColumnMax,
+      ),
       // The sheet closes itself only after acquisition succeeds: while media
       // is downloading or has failed, it stays open so the progress and the
       // retry have a surface to live on.
@@ -159,17 +138,22 @@ class DiscoveryHome extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 24.0),
                         child: DiscoveryDetailPanel(
-                          entry: currentEntry,
+                          item: currentEntry,
                           source: currentSource,
                           durationMs: viewModel.durationMsFor(currentEntry.id),
-                          downloadState: state.downloadStateOf(currentEntry.id),
+                          acquisitionState: state.acquisitionStateOf(
+                            currentEntry.id,
+                          ),
+                          acquisitionPhase: state.acquisitionPhaseOf(
+                            currentEntry.id,
+                          ),
                           downloadProgress: state.downloadProgressOf(
                             currentEntry.id,
                           ),
-                          mediaAvailability: state.mediaAvailabilityOf(
+                          acquisitionFailure: state.acquisitionFailureOf(
                             currentEntry.id,
                           ),
-                          onStartLearning: onPlayMedia == null
+                          onStartLearning: !canStart
                               ? null
                               : () => _startLearning(
                                   currentEntry.id,
@@ -178,8 +162,8 @@ class DiscoveryHome extends StatelessWidget {
                                 ),
                           onCancelDownload: () =>
                               viewModel.cancelDownload(currentEntry.id),
-                          onRecheckAvailability: () =>
-                              viewModel.refreshMediaAvailability(currentEntry.id),
+                          onRecheckAvailability: () => viewModel
+                              .refreshMediaAvailability(currentEntry.id),
                         ),
                       ),
                       Positioned(
@@ -209,7 +193,6 @@ class DiscoveryHome extends StatelessWidget {
       },
     );
   }
-
 }
 
 class _DiscoveryChannelChips extends StatelessWidget {
@@ -219,7 +202,7 @@ class _DiscoveryChannelChips extends StatelessWidget {
     required this.onSelectSource,
   });
 
-  final List<MediaSource> sources;
+  final List<ContentSource> sources;
   final String? selectedSourceId;
   final void Function(String) onSelectSource;
 
@@ -227,89 +210,78 @@ class _DiscoveryChannelChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: scheme.surfaceContainerLow,
-      child: SizedBox(
-        height: 52,
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(
-                left: 24,
-                right: ListenSpacing.gap12,
-              ),
-              child: Text(
-                l.text('discoverySources'),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final source in sources)
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          right: ListenSpacing.gap6,
-                        ),
-                        child: ChoiceChip(
-                          label: Text(sourceDisplayName(l, source)),
-                          selected: source.id == selectedSourceId,
-                          onSelected: (_) => onSelectSource(source.id),
-                          selectedColor: scheme.primaryContainer,
-                          labelStyle: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: sources.length,
+        separatorBuilder: (_, _) => const SizedBox(width: ListenSpacing.gap6),
+        itemBuilder: (context, index) {
+          final source = sources[index];
+          return ChoiceChip(
+            label: Text(sourceDisplayName(l, source)),
+            selected: source.id == selectedSourceId,
+            onSelected: (_) => onSelectSource(source.id),
+            selectedColor: scheme.primaryContainer,
+            labelStyle: Theme.of(context).textTheme.bodySmall,
+          );
+        },
       ),
     );
   }
 }
 
-/// Pins the source switcher to the top of the shelf so switching channels
-/// stays available while the media grid scrolls.
-class _SourceSwitcherHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _SourceSwitcherHeaderDelegate({
+class _ContentKindPicker extends StatelessWidget {
+  const _ContentKindPicker({
     required this.sources,
-    required this.selectedSourceId,
+    required this.selectedSource,
     required this.onSelectSource,
   });
 
-  final List<MediaSource> sources;
-  final String? selectedSourceId;
-  final void Function(String) onSelectSource;
+  final List<ContentSource> sources;
+  final ContentSource? selectedSource;
+  final ValueChanged<String> onSelectSource;
 
   @override
-  double get minExtent => 52;
-
-  @override
-  double get maxExtent => 52;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => _DiscoveryChannelChips(
-    sources: sources,
-    selectedSourceId: selectedSourceId,
-    onSelectSource: onSelectSource,
-  );
-
-  @override
-  bool shouldRebuild(_SourceSwitcherHeaderDelegate oldDelegate) =>
-      oldDelegate.sources != sources ||
-      oldDelegate.selectedSourceId != selectedSourceId ||
-      oldDelegate.onSelectSource != onSelectSource;
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final availableKinds = {
+      for (final source in sources)
+        if (source.id != DiscoveryViewModel.customSource.id) source.kind,
+    };
+    return Wrap(
+      spacing: ListenSpacing.gap8,
+      runSpacing: ListenSpacing.gap8,
+      children: [
+        for (final kind in ContentSourceKind.values)
+          if (availableKinds.contains(kind))
+            FilterChip(
+              avatar: Icon(_kindIcon(kind), size: ListenIconSize.control),
+              label: Text(_kindLabel(l, kind)),
+              selected: selectedSource?.kind == kind,
+              onSelected: (_) {
+                final target = sources.firstWhere(
+                  (source) => source.kind == kind,
+                );
+                onSelectSource(target.id);
+              },
+            ),
+      ],
+    );
+  }
 }
+
+String _kindLabel(AppLocalizations l, ContentSourceKind kind) => switch (kind) {
+  ContentSourceKind.youtube => l.text('homeContentVideo'),
+  ContentSourceKind.podcast => l.text('homeContentAudio'),
+  ContentSourceKind.document => l.text('homeContentArticles'),
+};
+
+IconData _kindIcon(ContentSourceKind kind) => switch (kind) {
+  ContentSourceKind.youtube => Icons.play_circle_outline,
+  ContentSourceKind.podcast => Icons.podcasts_outlined,
+  ContentSourceKind.document => Icons.article_outlined,
+};
 
 class _DiscoveryShelf extends StatelessWidget {
   const _DiscoveryShelf({
@@ -322,8 +294,11 @@ class _DiscoveryShelf extends StatelessWidget {
     required this.onSelectSource,
     required this.onRetrySources,
     required this.onRetryEntries,
+    required this.onRefreshSource,
     required this.onOpenMedia,
     required this.isGrid,
+    required this.canStart,
+    required this.onStartLearning,
   });
 
   final DiscoveryState state;
@@ -335,8 +310,11 @@ class _DiscoveryShelf extends StatelessWidget {
   final void Function(String) onSelectSource;
   final VoidCallback onRetrySources;
   final VoidCallback onRetryEntries;
+  final VoidCallback onRefreshSource;
   final VoidCallback onOpenMedia;
   final bool isGrid;
+  final bool canStart;
+  final Future<void> Function(String entryId) onStartLearning;
 
   @override
   Widget build(BuildContext context) {
@@ -346,15 +324,57 @@ class _DiscoveryShelf extends StatelessWidget {
     final isCustomSource = source?.id == DiscoveryViewModel.customSource.id;
 
     return ColoredBox(
-      color: scheme.surfaceContainerLow,
+      color: scheme.surface,
       child: CustomScrollView(
         slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _SourceSwitcherHeaderDelegate(
-              sources: state.sources,
-              selectedSourceId: state.selectedSourceId,
-              onSelectSource: onSelectSource,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                ListenSpacing.gap24,
+                ListenSpacing.gap24,
+                ListenSpacing.gap24,
+                ListenSpacing.gap16,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.text('homeExploreTitle'),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: ListenSpacing.gap4),
+                  Text(
+                    l.text('homeExploreSubtitle'),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (state.sources.isNotEmpty) ...[
+                    const SizedBox(height: ListenSpacing.gap16),
+                    _ContentKindPicker(
+                      sources: state.sources,
+                      selectedSource: source,
+                      onSelectSource: onSelectSource,
+                    ),
+                    const SizedBox(height: ListenSpacing.gap16),
+                    Text(
+                      l.text('homeBrowseSources'),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    _DiscoveryChannelChips(
+                      sources: state.sources,
+                      selectedSourceId: state.selectedSourceId,
+                      onSelectSource: onSelectSource,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           if (source != null)
@@ -369,11 +389,26 @@ class _DiscoveryShelf extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      sourceDisplayName(l, source),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l
+                                .text('homeLatestFrom')
+                                .replaceFirst(
+                                  '{source}',
+                                  sourceDisplayName(l, source),
+                                ),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l.text('refresh'),
+                          onPressed: onRefreshSource,
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: ListenSpacing.gap4),
                     Text(
@@ -389,7 +424,7 @@ class _DiscoveryShelf extends StatelessWidget {
                       const SizedBox(height: ListenSpacing.gap8),
                       Text(
                         l
-                            .text('discoveryVideoCount')
+                            .text('discoveryItemCount')
                             .replaceFirst('{count}', '${state.entries.length}'),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -496,18 +531,18 @@ class _DiscoveryShelf extends StatelessWidget {
                       delegate: SliverChildBuilderDelegate((context, index) {
                         final entry = state.entries[index];
                         return DiscoveryContentCard(
-                          entry: entry,
+                          item: entry,
                           source: state.sourceById(entry.sourceId) ?? source!,
                           durationMs: durationMsFor(entry.id),
-                          downloadState: state.downloadStateOf(entry.id),
+                          acquisitionState: state.acquisitionStateOf(entry.id),
                           downloadProgress: state.downloadProgressOf(entry.id),
-                          mediaAvailability: state.mediaAvailabilityOf(
-                            entry.id,
-                          ),
                           selected: entry.id == state.selectedEntryId,
                           onTap: () => onSelectItem(entry.id),
                           onDownload: () => onDownload(entry.id),
                           onCancel: () => onCancelDownload(entry.id),
+                          onStartLearning: canStart
+                              ? () => onStartLearning(entry.id)
+                              : null,
                           axis: Axis.vertical,
                         );
                       }, childCount: state.entries.length),
@@ -518,20 +553,22 @@ class _DiscoveryShelf extends StatelessWidget {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8.0),
                           child: DiscoveryContentCard(
-                            entry: entry,
+                            item: entry,
                             source: state.sourceById(entry.sourceId) ?? source!,
                             durationMs: durationMsFor(entry.id),
-                            downloadState: state.downloadStateOf(entry.id),
-                            downloadProgress: state.downloadProgressOf(
+                            acquisitionState: state.acquisitionStateOf(
                               entry.id,
                             ),
-                            mediaAvailability: state.mediaAvailabilityOf(
+                            downloadProgress: state.downloadProgressOf(
                               entry.id,
                             ),
                             selected: entry.id == state.selectedEntryId,
                             onTap: () => onSelectItem(entry.id),
                             onDownload: () => onDownload(entry.id),
                             onCancel: () => onCancelDownload(entry.id),
+                            onStartLearning: canStart
+                                ? () => onStartLearning(entry.id)
+                                : null,
                             axis: Axis.horizontal,
                           ),
                         );

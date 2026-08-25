@@ -3,13 +3,18 @@ import 'dart:io';
 
 import '../models/discovery.dart';
 
-/// The channels a person subscribed to, kept across restarts.
+/// The content sources a person subscribed to, kept across restarts.
 ///
 /// Both discovery repositories held their custom sources in a plain in-memory
-/// list, so pasting a feed address added a channel that existed until the app
+/// list, so pasting a feed address added a source that existed until the app
 /// closed. The built-in starters came back and everything the person had added
 /// did not — silent data loss, and the kind that looks like the subscription
 /// never worked.
+///
+/// This store replaced the pre-Phase-1 subscription store outright: the new
+/// format is `subscriptions-v2.json`, there is no v1 migration and no dual
+/// read, and a v1 file left behind is simply not read. A subscription that
+/// cannot be reconstructed exactly is not one to reconstruct approximately.
 ///
 /// Shaped after [AcquisitionLedger]: a file of its own rather than a corner of
 /// `AppSettings`, tolerant of every way it can be unreadable, and persisting
@@ -31,19 +36,19 @@ class SubscriptionStore {
   SubscriptionStore.inMemory() : _directory = null, _loaded = true;
 
   final Directory? _directory;
-  final List<MediaSource> _sources = [];
+  final List<ContentSource> _sources = [];
   bool _loaded = false;
 
   File? get _file => _directory == null
       ? null
-      : File('${_directory.path}/subscriptions-v1.json');
+      : File('${_directory.path}/subscriptions-v2.json');
 
   bool get isLoaded => _loaded;
 
   /// Subscriptions of one kind, in the order they were added.
-  List<MediaSource> of(MediaSourceType type) => List.unmodifiable([
+  List<ContentSource> of(ContentSourceKind kind) => List.unmodifiable([
     for (final source in _sources)
-      if (source.type == type) source,
+      if (source.kind == kind) source,
   ]);
 
   Future<void> load() async {
@@ -62,7 +67,7 @@ class SubscriptionStore {
           subscriptions
               .whereType<Map<dynamic, dynamic>>()
               .map(_sourceFrom)
-              .whereType<MediaSource>(),
+              .whereType<ContentSource>(),
         );
     } on FormatException {
       _sources.clear();
@@ -72,8 +77,8 @@ class SubscriptionStore {
   }
 
   /// Adds or replaces a subscription. Re-subscribing refreshes the stored
-  /// title and artwork rather than adding the channel twice.
-  Future<void> add(MediaSource source) async {
+  /// title and artwork rather than adding the source twice.
+  Future<void> add(ContentSource source) async {
     _sources
       ..removeWhere((existing) => existing.id == source.id)
       ..add(source);
@@ -86,27 +91,24 @@ class SubscriptionStore {
     await _persist();
   }
 
-  /// A row is dropped rather than guessed at when a field is missing or an
-  /// enum name is one this version does not know. A subscription that cannot
-  /// be reconstructed exactly is not one to reconstruct approximately.
-  static MediaSource? _sourceFrom(Map<dynamic, dynamic> json) {
+  static ContentSource? _sourceFrom(Map<dynamic, dynamic> json) {
     final id = json['id'];
     final name = json['name'];
     if (id is! String || id.isEmpty || name is! String) return null;
-    final type = MediaSourceType.values
-        .where((value) => value.name == json['type'])
+    final kind = ContentSourceKind.values
+        .where((value) => value.name == json['kind'])
         .firstOrNull;
     final cover = ChannelCoverTone.values
         .where((value) => value.name == json['cover'])
         .firstOrNull;
-    if (type == null || cover == null) return null;
-    return MediaSource(
+    if (kind == null || cover == null) return null;
+    return ContentSource(
       id: id,
       name: name,
       language: json['language'] as String? ?? '',
       description: json['description'] as String? ?? '',
       cover: cover,
-      type: type,
+      kind: kind,
       avatarUrl: json['avatar_url'] as String?,
     );
   }
@@ -119,7 +121,7 @@ class SubscriptionStore {
       if (!await directory.exists()) await directory.create(recursive: true);
       await file.writeAsString(
         const JsonEncoder.withIndent('  ').convert({
-          'version': 1,
+          'version': 2,
           'subscriptions': [
             for (final source in _sources)
               {
@@ -128,7 +130,7 @@ class SubscriptionStore {
                 'language': source.language,
                 'description': source.description,
                 'cover': source.cover.name,
-                'type': source.type.name,
+                'kind': source.kind.name,
                 if (source.avatarUrl != null) 'avatar_url': source.avatarUrl,
               },
           ],

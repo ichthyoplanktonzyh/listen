@@ -1,8 +1,8 @@
 import '../../services/core_transport_service.dart';
 import '../../services/api_service.dart' show LocalApi;
+import 'capability_repository.dart';
 import 'coach_dashboard_repository.dart';
 import 'cold_start_marking_repository.dart';
-import 'content_package_repository.dart';
 import 'external_vocabulary_repository.dart';
 import 'hunting_repository.dart';
 import 'learning_assets_repository.dart';
@@ -10,7 +10,6 @@ import 'learning_material_repository.dart';
 import 'learning_repository.dart';
 import 'lexical_repository.dart';
 import 'listening_repository.dart';
-import 'manual_review_repository.dart';
 import 'media_library_repository.dart';
 import 'media_session_repository.dart';
 import 'phonetic_analysis_repository.dart';
@@ -24,6 +23,7 @@ import 'resource_repository.dart';
 import 'review_repository.dart';
 import 'semantic_search_repository.dart';
 import 'settings_repository.dart';
+import 'source_identity_repository.dart';
 import 'speaking_session_repository.dart';
 import 'speaking_task_repository.dart';
 import 'speech_enhancement_repository.dart';
@@ -31,9 +31,6 @@ import 'speech_synthesis_repository.dart';
 import 'subtitle_analysis_repository.dart';
 import 'transcription_repository.dart';
 import 'writing_task_repository.dart';
-import '../../services/listen_gen_process_service.dart';
-import '../../services/listen_gen_release_service.dart';
-import '../../services/media_import_file_service.dart';
 
 /// Composition provider that keeps the raw LocalApi handle out of the UI.
 /// Long-lived repositories receive a deferred API lookup; route-scoped ones
@@ -53,13 +50,7 @@ final class LocalCoreRepositories {
       ),
       playback = LocalPlaybackRepository(() => _transport.currentApi),
       resource = LocalResourceRepository(() => _transport.currentApi),
-      contentPackage = LocalContentPackageRepository(
-        () => _transport.currentApi,
-        const LocalMediaImportFileService(),
-        LocalListenGenProcessService(
-          releaseService: LocalListenGenReleaseService(),
-        ),
-      ),
+      capability = LocalCapabilityRepository(() => _transport.currentApi),
       readingTask = LocalReadingTaskRepository(() => _transport.currentApi),
       readingSession = LocalReadingSessionRepository(
         () => _transport.currentApi,
@@ -73,7 +64,10 @@ final class LocalCoreRepositories {
       subtitleAnalysis = LocalSubtitleAnalysisRepository(
         () => _transport.currentApi,
       ),
-      writingTask = LocalWritingTaskRepository(() => _transport.currentApi);
+      writingTask = LocalWritingTaskRepository(() => _transport.currentApi),
+      sourceIdentity = LocalSourceIdentityRepository(
+        () => _transport.currentApi,
+      );
 
   final LocalCoreTransportService _transport;
 
@@ -88,10 +82,11 @@ final class LocalCoreRepositories {
   final LearningMaterialRepository learningMaterial;
   final PlaybackRepository playback;
   final ResourceRepository resource;
-  final ContentPackageRepository contentPackage;
+  final CapabilityRepository capability;
   final ReadingTaskRepository readingTask;
   final ReadingSessionRepository readingSession;
   final SpeakingSessionRepository speakingSession;
+  final SourceIdentityRepository sourceIdentity;
   final SpeechEnhancementRepository speechEnhancement;
   final SubtitleAnalysisRepository subtitleAnalysis;
   final WritingTaskRepository writingTask;
@@ -108,7 +103,6 @@ final class LocalCoreRepositories {
       LocalLearningAssetsRepository(_api);
   PersonalExpressionRepository get personalExpression =>
       LocalPersonalExpressionRepository(_api);
-  ManualReviewRepository get manualReview => LocalManualReviewRepository(_api);
   TranscriptionRepository get transcription =>
       LocalTranscriptionRepository(_api);
   PhoneticAnalysisRepository get phoneticAnalysis =>

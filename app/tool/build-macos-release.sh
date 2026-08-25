@@ -3,15 +3,10 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 flutter_bin="${FLUTTER:-$HOME/.local/share/flutter/bin/flutter}"
-runtime="$root/.backend/runtime"
-api_http="$runtime/bin/api-http"
 backend_lock="${BACKEND_LOCK:-$root/backend.lock.json}"
 
 python3 "$root/tool/backend_artifacts.py" --lock "$backend_lock" verify
-[[ -x "$api_http" ]] || {
-  echo "Installed listen-core runtime is missing api-http." >&2
-  exit 1
-}
+python3 "$root/tool/listen_gen_artifacts.py" verify
 
 cd "$root"
 "$flutter_bin" clean
@@ -19,12 +14,7 @@ cd "$root"
 "$flutter_bin" build macos --release
 
 app="$root/build/macos/Build/Products/Release/listen.app"
-cp "$api_http" "$app/Contents/MacOS/api-http"
-chmod +x "$app/Contents/MacOS/api-http"
-mkdir -p "$app/Contents/Resources/runtime"
-cp -R "$runtime/runtime/." "$app/Contents/Resources/runtime/"
-cp "$runtime/THIRD_PARTY_NOTICES.md" \
-  "$app/Contents/Resources/runtime/THIRD_PARTY_NOTICES.md"
+BACKEND_LOCK="$backend_lock" "$root/tool/stage-macos-runtime.sh" "$app"
 "$root/tool/sanitize-macos-player-framework.sh" "$app"
 
 xattr -cr "$app"

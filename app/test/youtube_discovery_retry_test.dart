@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/data/repositories/discovery_repository.dart';
+import 'package:llplayer_next/models/discovery.dart';
 
 /// A throttled channel feed is not a missing channel.
 ///
@@ -74,15 +75,53 @@ void main() {
     expect(requests, 3);
   });
 
-  test('a body that arrived is never re-requested', () async {
-    // An empty channel and a throttled one are different facts. Retrying
-    // because the feed parsed to nothing would hide the first.
+  test('a body that arrived is never re-requested until refreshed', () async {
     statuses = [200];
 
-    final entries = await repositoryFor(server).entriesFor('UC-channel');
-
+    final repo = repositoryFor(server);
+    final entries1 = await repo.entriesFor('UC-channel');
     expect(requests, 1);
-    expect(entries, hasLength(1));
+    expect(entries1, hasLength(1));
+
+    // Subsequent read returns cached without HTTP request
+    final entries2 = await repo.entriesFor('UC-channel');
+    expect(requests, 1);
+    expect(entries2, hasLength(1));
+
+    // Refresh drops cache so next read requests again
+    await repo.refreshSource('UC-channel');
+    final entries3 = await repo.entriesFor('UC-channel');
+    expect(requests, 2);
+    expect(entries3, hasLength(1));
+  });
+
+  test('fallback fetcher is used when feed request fails', () async {
+    statuses = [HttpStatus.notFound];
+
+    final repo = YoutubeDiscoveryRepository(
+      client: HttpOverrides.runWithHttpOverrides(
+        HttpClient.new,
+        _RealHttpOverrides(),
+      ),
+      feedBaseUrl:
+          'http://${server.address.host}:${server.port}/feeds/videos.xml',
+      retryBackoff: Duration.zero,
+      fallbackFetcher: (sourceId) async => [
+        const DiscoveryItem(
+          id: 'fallback123',
+          sourceId: 'UC-channel',
+          title: 'Fallback Video',
+          description: 'From yt-dlp fallback',
+          language: 'en',
+          publishedOn: '2026-08-20',
+        ),
+      ],
+    );
+
+    final entries = await repo.entriesFor('UC-channel');
+    expect(requests, 3);
+    expect(entries.single.id, 'fallback123');
+    expect(entries.single.title, 'Fallback Video');
   });
 
   test('every starter channel id is the shape YouTube answers to', () async {

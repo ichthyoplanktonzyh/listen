@@ -1,12 +1,12 @@
 {
-  "channels": [
+  "sources": [
     {
       "id": "c-bbc-learning",
       "name": "BBC Learning English",
       "language": "English",
       "description": "Short everyday English lessons and news vocabulary.",
       "cover": "blue",
-      "type": "youtube",
+      "kind": "youtube",
       "avatarUrl": null
     },
     {
@@ -15,7 +15,7 @@
       "language": "English",
       "description": "Animated lessons on ideas worth spreading.",
       "cover": "amber",
-      "type": "youtube",
+      "kind": "youtube",
       "avatarUrl": null
     },
     {
@@ -24,7 +24,7 @@
       "language": "English (US)",
       "description": "Clear explanations of the news and internet culture.",
       "cover": "slate",
-      "type": "youtube",
+      "kind": "youtube",
       "avatarUrl": null
     },
     {
@@ -33,7 +33,7 @@
       "language": "English",
       "description": "Science and big questions, beautifully animated.",
       "cover": "green",
-      "type": "youtube",
+      "kind": "youtube",
       "avatarUrl": null
     },
     {
@@ -42,7 +42,7 @@
       "language": "中文 · English",
       "description": "中英对照的发音、连读与听力讲解。",
       "cover": "rose",
-      "type": "youtube",
+      "kind": "youtube",
       "avatarUrl": null
     },
     {
@@ -51,7 +51,25 @@
       "language": "English (US)",
       "description": "Fast answers to curious science questions.",
       "cover": "green",
-      "type": "youtube",
+      "kind": "youtube",
+      "avatarUrl": null
+    },
+    {
+      "id": "c-bbc-global",
+      "name": "BBC Global News Podcast",
+      "language": "English",
+      "description": "The day's top stories from BBC World Service.",
+      "cover": "amber",
+      "kind": "podcast",
+      "avatarUrl": null
+    },
+    {
+      "id": "c-guardian-english",
+      "name": "The Guardian",
+      "language": "English (UK)",
+      "description": "News and feature articles worth reading slowly.",
+      "cover": "slate",
+      "kind": "document",
       "avatarUrl": null
     }
   ],
@@ -209,6 +227,37 @@
       "publishedOn": "2026-07-04",
       "thumbnailUrl": null,
       "viewCount": 95000
+    },
+    {
+      "id": "i-bbcg-1",
+      "channelId": "c-bbc-global",
+      "title": "Global News Podcast: the day's top stories",
+      "description": "A round-up of the stories shaping the world today.",
+      "durationMs": 1740000,
+      "language": "English",
+      "publishedOn": "2026-07-27",
+      "mediaUrl": "https://www.example.com/audio/global-news-podcast.mp3",
+      "mediaByteLength": 27840000
+    },
+    {
+      "id": "i-bbcg-2",
+      "channelId": "c-bbc-global",
+      "title": "Global News Podcast: morning briefing",
+      "description": "The morning's essential headlines, explained.",
+      "durationMs": 1620000,
+      "language": "English",
+      "publishedOn": "2026-07-26",
+      "mediaUrl": "https://www.example.com/audio/global-news-morning.mp3",
+      "mediaByteLength": 25920000
+    },
+    {
+      "id": "i-guard-1",
+      "channelId": "c-guardian-english",
+      "title": "The art of slow reading",
+      "description": "Why reading deliberately is a skill worth keeping.",
+      "language": "English (UK)",
+      "publishedOn": "2026-07-24",
+      "entryUrl": "https://www.example.com/articles/slow-reading"
     }
   ]
 }

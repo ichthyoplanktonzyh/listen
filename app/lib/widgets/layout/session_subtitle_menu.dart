@@ -8,7 +8,7 @@ import '../common/menu_rows.dart';
 /// Subtitle sourcing for the media on the workbench: import or search per
 /// track, plus whole-media generation for the primary track, the embedded-text
 /// import, and archiving. Secondary sourcing is manual import and search only:
-/// the pinned package journey's selection always activates the primary track,
+/// the adopted composition's selection always activates the primary track,
 /// so there is no secondary "generate" entry that could only pretend to honor
 /// a secondary destination.
 ///
@@ -27,7 +27,6 @@ class SessionSubtitleMenu extends StatelessWidget {
     required this.onImportSecondarySubtitle,
     required this.onSearchSecondarySubtitles,
     required this.onImportEmbeddedSubtitle,
-    required this.onOpenResources,
     required this.onArchiveMedia,
   });
 
@@ -38,11 +37,6 @@ class SessionSubtitleMenu extends StatelessWidget {
   final VoidCallback onSearchSecondarySubtitles;
   final VoidCallback onImportEmbeddedSubtitle;
 
-  /// Opens the subtitle and timeline resource manager. It used to be one of
-  /// the side panel's five tabs, where it could replace the transcript — a
-  /// technical inventory standing in for the text being studied. It belongs
-  /// with the other actions on this media instead.
-  final VoidCallback onOpenResources;
   final VoidCallback onArchiveMedia;
 
   @override
@@ -66,8 +60,6 @@ class SessionSubtitleMenu extends StatelessWidget {
             onSearchSecondarySubtitles();
           case 'import-embedded':
             onImportEmbeddedSubtitle();
-          case 'open-resources':
-            onOpenResources();
           case 'archive-media':
             onArchiveMedia();
         }
@@ -117,13 +109,6 @@ class SessionSubtitleMenu extends StatelessWidget {
           child: ListenMenuRow(
             icon: Icons.closed_caption_outlined,
             title: l.text('importEmbeddedText'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'open-resources',
-          child: ListenMenuRow(
-            icon: Icons.inventory_2_outlined,
-            title: l.text('subtitleResources'),
           ),
         ),
         PopupMenuItem(

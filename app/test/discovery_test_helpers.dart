@@ -9,6 +9,7 @@ import 'package:llplayer_next/data/repositories/media_library_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/saved_vocabulary_count.dart';
 import 'package:llplayer_next/models/embedded_subtitle.dart';
+import 'package:llplayer_next/services/media_file_service.dart';
 
 class TestMediaDownloadHandle implements MediaDownloadHandle {
   TestMediaDownloadHandle(String entryId, Completer<String?> completedCompleter)
@@ -109,10 +110,15 @@ class TestMediaImportRepository implements MediaImportRepository {
   ApiFailure failureDetail(Object error) =>
       ApiFailure(raw: error.toString(), message: error.toString());
 
+  /// Every folder-chooser prompt, so a test can prove an acquisition did not
+  /// stop to ask.
+  final pickerPrompts = <String>[];
+
   @override
   Future<String?> pickDownloadDirectory({
     required String confirmButtonText,
   }) async {
+    pickerPrompts.add(confirmButtonText);
     return '/mock/download/dir';
   }
 
@@ -155,6 +161,21 @@ class TestMediaImportRepository implements MediaImportRepository {
     if (downloadLaunchGate != null) await downloadLaunchGate!.future;
     if (holdDownload) return TestHeldDownloadHandle(completer);
     return TestMediaDownloadHandle(entryId, completer);
+  }
+
+  /// Every article URL handed to the document path, so a test can tell which
+  /// acquisition actually ran.
+  final articleRequests = <String>[];
+
+  @override
+  Future<String?> downloadArticle(String articleUrl, String directory) async {
+    articleRequests.add(articleUrl);
+    if (downloadFails) return null;
+    final entryId = articleUrl.contains('i-doc-1') ? 'i-doc-1' : 'i-doc-2';
+    final completer = Completer<String?>();
+    completer.complete('/path/to/downloaded/[$entryId].html');
+    completers[entryId] = completer;
+    return completer.future;
   }
 
   @override
@@ -205,6 +226,17 @@ class TestHeldDownloadHandle implements MediaDownloadHandle {
   void cancel() {}
 }
 
+/// A media library that behaves the way Core's contract says it does.
+///
+/// The distinction this fake exists to keep honest: Core registers media
+/// either as Personal Library membership (`retain: true`) or as Temporary
+/// Material (`retain: false` — an opened file, a scanned folder, an adopted
+/// download), and `GET /v1/media` projects **only the retained ones**. The
+/// earlier fake ignored `retain` and listed everything, which made a whole
+/// suite pass against a core that does not exist: a downloaded episode was
+/// unrecognisable on the next launch in the real app, and every test said it
+/// was fine. Core pins the rule itself in
+/// `temporary_registration_is_readable_but_absent_from_library`.
 class TestMediaLibraryRepository implements MediaLibraryRepository {
   TestMediaLibraryRepository({
     this.mediaDurationMs = 300000,
@@ -216,26 +248,34 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
     _entries.addAll(seed);
   }
 
-  /// Builds the library row a previous session's download would have left, so
-  /// a test can start from "this was already acquired".
-  static MediaLibraryEntry entry({required String id, required String path}) =>
-      MediaLibraryEntry(
-        media: MediaItem(
-          id: id,
-          path: path,
-          fingerprint: 'fp-$id',
-          title: 'Seeded $id',
-          kind: 'audio',
-          durationMs: 300000,
-          availability: 'local',
-          createdAtMs: 0,
-          updatedAtMs: 0,
-        ),
-        primaryTrackId: null,
-        fit: null,
-        triageIntent: null,
-        familiarMaterial: false,
-      );
+  /// Builds the row a previous session left behind for one media.
+  ///
+  /// [retained] defaults to false because that is what an acquisition
+  /// leaves: adoption registers a download as Temporary Material, and only an
+  /// explicit Keep adds Personal Library membership. Pass true for a media the
+  /// learner kept.
+  static MediaLibraryEntry entry({
+    required String id,
+    required String path,
+    bool retained = false,
+  }) => MediaLibraryEntry(
+    media: MediaItem(
+      id: id,
+      path: path,
+      fingerprint: 'fp-$id',
+      title: 'Seeded $id',
+      kind: 'audio',
+      durationMs: 300000,
+      availability: 'local',
+      retainedAtMs: retained ? 1 : null,
+      createdAtMs: 0,
+      updatedAtMs: 0,
+    ),
+    primaryTrackId: null,
+    fit: null,
+    triageIntent: null,
+    familiarMaterial: false,
+  );
 
   /// True makes registration throw the way a core rejection does.
   final bool failRegister;
@@ -248,15 +288,24 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   /// True makes the listing throw, the way a broken core connection does.
   final bool failListing;
 
+  /// Every registered media, retained or not — Core's whole media table, not
+  /// its Personal Library projection.
   final List<MediaLibraryEntry> _entries = [];
 
-  /// Grows the library after construction (e.g. a core reconnect seeding the
+  /// Grows the registry after construction (e.g. a core reconnect seeding the
   /// entry the first, disconnected check could not see).
   void addEntry(MediaLibraryEntry entry) => _entries.add(entry);
 
-  /// Drops every row (e.g. a folder emptied on disk), so a test can show a
+  /// Drops every row (e.g. a core database reset), so a test can show a
   /// definitive no-match where an earlier refresh answered local.
   void clearEntries() => _entries.clear();
+
+  /// Every registered media path, whatever its membership. The file-existence
+  /// fake seeds itself from this so a test does not have to restate the paths
+  /// it already seeded.
+  List<String> get registeredPaths => [
+    for (final entry in _entries) entry.media.path,
+  ];
 
   @override
   bool get isAvailable => available;
@@ -271,9 +320,26 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   }) async => const SavedVocabularyCount(total: 0, capped: false);
 
   @override
+  Future<MediaItem> readMedia(String mediaId) async =>
+      throw StateError('not used in discovery tests');
+
+  @override
+  Future<MediaItem?> findRegisteredMedia(String mediaId) async {
+    if (failListing) throw StateError('media read failed');
+    for (final entry in _entries) {
+      if (entry.media.id == mediaId) return entry.media;
+    }
+    return null;
+  }
+
+  /// The Personal Library projection: retained media only.
+  @override
   Future<List<MediaLibraryEntry>> listMediaLibrary() async {
     if (failListing) throw StateError('media library listing failed');
-    return _entries;
+    return [
+      for (final entry in _entries)
+        if (entry.media.isRetained) entry,
+    ];
   }
 
   @override
@@ -289,6 +355,13 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
     required bool retain,
   }) async {
     if (failRegister) throw StateError('register failed');
+    // A document must never be registered as media: the fake answers the way
+    // Core would refuse bytes it cannot probe as a media file. The article
+    // path never reaches here — a test that does reach it with an .html path
+    // has taken the wrong intake.
+    if (path.endsWith('.html') || path.endsWith('.htm')) {
+      throw StateError('refused: $path is a document, not media');
+    }
     final regExp = RegExp(r'\[([^\]]+)\]');
     final match = regExp.firstMatch(path);
     final entryId = match?.group(1) ?? 'i-bbc-1';
@@ -301,6 +374,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
       kind: 'video',
       durationMs: durationMs ?? mediaDurationMs,
       availability: 'local',
+      retainedAtMs: retain ? DateTime.now().millisecondsSinceEpoch : null,
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
@@ -320,17 +394,44 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   }
 }
 
-MediaSource testMediaSource(String id, {String? name}) => MediaSource(
+/// A file system that says yes to everything except what a test took away.
+///
+/// Recognition confirms the bytes are still on disk, so a view model under
+/// test needs an answer for paths that were never written. Default-present
+/// keeps the seeded fixtures meaningful; [remove] is how a test models the
+/// learner emptying a folder.
+class TestMediaFileService implements MediaFileService {
+  TestMediaFileService();
+
+  final Set<String> _missing = {};
+
+  /// Makes [path] report as gone, the way deleting the file would.
+  void remove(String path) => _missing.add(path);
+
+  @override
+  bool exists(String path) => !_missing.contains(path);
+
+  @override
+  String basename(String path) => path.split('/').last;
+
+  @override
+  Future<bool> delete(String path) async {
+    _missing.add(path);
+    return true;
+  }
+}
+
+ContentSource testContentSource(String id, {String? name}) => ContentSource(
   id: id,
   name: name ?? id,
   language: 'en',
   description: 'Source $id',
   cover: ChannelCoverTone.slate,
-  type: MediaSourceType.youtube,
+  kind: ContentSourceKind.youtube,
   avatarUrl: null,
 );
 
-MediaEntry testMediaEntry(String id, String sourceId) => MediaEntry(
+DiscoveryItem testDiscoveryItem(String id, String sourceId) => DiscoveryItem(
   id: id,
   sourceId: sourceId,
   title: 'Entry $id',
@@ -342,13 +443,14 @@ MediaEntry testMediaEntry(String id, String sourceId) => MediaEntry(
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
-  acquisition: MediaAcquisition.externalTool,
+  acquisition: AcquisitionMode.externalTool,
+  contentKind: ItemContentKind.video,
   mediaUrl: 'https://www.youtube.com/watch?v=$id',
 );
 
 /// A podcast episode: a duration the feed stated, an enclosure to fetch
 /// directly, and audio rather than video.
-MediaEntry testPodcastEntry(String id, String sourceId) => MediaEntry(
+DiscoveryItem testPodcastItem(String id, String sourceId) => DiscoveryItem(
   id: id,
   sourceId: sourceId,
   title: 'Episode $id',
@@ -358,14 +460,30 @@ MediaEntry testPodcastEntry(String id, String sourceId) => MediaEntry(
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
-  acquisition: MediaAcquisition.enclosure,
-  mediaKind: MediaKind.audio,
+  acquisition: AcquisitionMode.enclosure,
+  contentKind: ItemContentKind.audio,
   mediaUrl: 'https://cdn.example.com/$id.mp3',
   mediaByteLength: 8123456,
 );
 
+/// A document item: an article link the feed offered, fetched as a document.
+DiscoveryItem testArticleItem(String id, String sourceId) => DiscoveryItem(
+  id: id,
+  sourceId: sourceId,
+  title: 'Article $id',
+  description: '',
+  durationMs: null,
+  language: 'en',
+  publishedOn: '2026-08-01',
+  thumbnailUrl: null,
+  viewCount: 0,
+  acquisition: AcquisitionMode.article,
+  contentKind: ItemContentKind.article,
+  entryUrl: 'https://blog.example.com/$id',
+);
+
 /// A feed item with show notes but no enclosure: discoverable, not acquirable.
-MediaEntry testUnacquirableEntry(String id, String sourceId) => MediaEntry(
+DiscoveryItem testUnacquirableItem(String id, String sourceId) => DiscoveryItem(
   id: id,
   sourceId: sourceId,
   title: 'Notes for $id',
@@ -382,13 +500,13 @@ MediaEntry testUnacquirableEntry(String id, String sourceId) => MediaEntry(
 /// answer at all, so the in-flight window is observable.
 class TestDiscoveryRepository implements DiscoveryRepository {
   TestDiscoveryRepository({
-    List<MediaSource> sources = const [],
-    Map<String, List<MediaEntry>> entries = const {},
+    List<ContentSource> sources = const [],
+    Map<String, List<DiscoveryItem>> entries = const {},
   }) : _sources = List.of(sources),
        _entries = Map.of(entries);
 
-  final List<MediaSource> _sources;
-  final Map<String, List<MediaEntry>> _entries;
+  final List<ContentSource> _sources;
+  final Map<String, List<DiscoveryItem>> _entries;
 
   /// Set to make `sources()` throw instead of answering.
   bool failSources = false;
@@ -400,28 +518,36 @@ class TestDiscoveryRepository implements DiscoveryRepository {
   final gates = <String, Completer<void>>{};
 
   @override
-  Future<List<MediaSource>> sources() async {
+  Future<List<ContentSource>> sources() async {
     if (failSources) throw StateError('source list unavailable');
     return List.unmodifiable(_sources);
   }
 
   @override
-  Future<List<MediaEntry>> entriesFor(String sourceId) async {
+  Future<List<DiscoveryItem>> entriesFor(String sourceId) async {
     await gates[sourceId]?.future;
     if (failingSources.contains(sourceId)) {
       throw StateError('feed for $sourceId unavailable');
     }
-    return List.unmodifiable(_entries[sourceId] ?? const <MediaEntry>[]);
+    return List.unmodifiable(_entries[sourceId] ?? const <DiscoveryItem>[]);
   }
 
   @override
-  Future<MediaEntry> resolveCustomVideo(
+  Future<void> refreshSource(String sourceId) async {
+    await gates[sourceId]?.future;
+    if (failingSources.contains(sourceId)) {
+      throw StateError('feed for $sourceId unavailable');
+    }
+  }
+
+  @override
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
   ) => throw UnimplementedError();
 
   @override
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   ) => throw UnimplementedError();

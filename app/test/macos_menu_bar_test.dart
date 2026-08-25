@@ -32,11 +32,9 @@ void main() {
     onImportSecondarySubtitle: () {},
     onImportEmbeddedSubtitle: () {},
     onArchiveMedia: () {},
-    onOpenSubtitleResources: () {},
     onOpenVocabulary: () {},
     onOpenReview: () {},
     onOpenCoach: () {},
-    onOpenPhoneticAnalysisCenter: () {},
   );
 
   Iterable<PlatformMenuItem> flatten(List<PlatformMenuItem> items) sync* {
@@ -177,11 +175,9 @@ void main() {
       capabilities: const AppBarCapabilities(hasMedia: true, coreReady: false),
     );
     for (final label in [
-      l.text('subtitleResources'),
       l.text('vocabulary'),
       l.text('review'),
       l.text('coachDashboard'),
-      l.text('phoneticAnalysisCenter'),
     ]) {
       expect(
         byLabel(noCore, label).onSelected,

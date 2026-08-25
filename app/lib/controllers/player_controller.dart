@@ -15,6 +15,7 @@ class PlayerState {
     this.mediaPath,
     this.mediaTitle,
     this.mediaFingerprint,
+    this.mediaKind,
     this.mediaRetained,
     this.retentionInFlight = false,
     this.status = 'Starting local core...',
@@ -40,6 +41,10 @@ class PlayerState {
   final String? mediaPath;
   final String? mediaTitle;
   final String? mediaFingerprint;
+
+  /// The registered source kind (`audio` or `video`). This is presentation
+  /// truth: audio has playback but no visual pane in the workbench.
+  final String? mediaKind;
 
   /// Whether the current media is in the Personal Library. Null before the
   /// media has been registered with Core, or when Core is unreachable.
@@ -91,6 +96,7 @@ class PlayerState {
     Object? mediaPath = _unset,
     Object? mediaTitle = _unset,
     Object? mediaFingerprint = _unset,
+    Object? mediaKind = _unset,
     Object? mediaRetained = _unset,
     bool? retentionInFlight,
     String? status,
@@ -120,6 +126,9 @@ class PlayerState {
     mediaFingerprint: identical(mediaFingerprint, _unset)
         ? this.mediaFingerprint
         : mediaFingerprint as String?,
+    mediaKind: identical(mediaKind, _unset)
+        ? this.mediaKind
+        : mediaKind as String?,
     mediaRetained: identical(mediaRetained, _unset)
         ? this.mediaRetained
         : mediaRetained as bool?,
@@ -186,6 +195,7 @@ class PlayerController extends ChangeNotifier {
   String? get mediaPath => _store.state.mediaPath;
   String? get mediaTitle => _store.state.mediaTitle;
   String? get mediaFingerprint => _store.state.mediaFingerprint;
+  String? get mediaKind => _store.state.mediaKind;
   bool? get mediaRetained => _store.state.mediaRetained;
   bool get retentionInFlight => _store.state.retentionInFlight;
   String get status => _store.state.status;
@@ -230,6 +240,7 @@ class PlayerController extends ChangeNotifier {
     required String path,
     required String title,
     required String fingerprint,
+    String? kind,
   }) {
     _store.update(
       (s) => s.copyWith(
@@ -237,6 +248,32 @@ class PlayerController extends ChangeNotifier {
         mediaPath: path,
         mediaTitle: title,
         mediaFingerprint: fingerprint,
+        mediaKind: kind ?? s.mediaKind,
+      ),
+    );
+  }
+
+  /// Activates a playable rendition that belongs to the material already on
+  /// the workbench without pretending that rendition is a registered Media.
+  ///
+  /// Generated TTS is a rendition of a document's adopted composition. Giving
+  /// it a synthetic media id would split one material into a document session
+  /// and a second media session; leaving the previous id in place would be
+  /// worse, because retention and progress actions would target the wrong
+  /// material. The transport needs only the path/title/kind.
+  void setMaterialPlaybackSource({
+    required String path,
+    required String title,
+    required String kind,
+  }) {
+    _store.update(
+      (s) => s.copyWith(
+        mediaId: null,
+        mediaPath: path,
+        mediaTitle: title,
+        mediaFingerprint: null,
+        mediaKind: kind,
+        mediaRetained: null,
       ),
     );
   }
@@ -247,6 +284,7 @@ class PlayerController extends ChangeNotifier {
       mediaPath: null,
       mediaTitle: null,
       mediaFingerprint: null,
+      mediaKind: null,
       mediaRetained: null,
     ),
   );
@@ -326,8 +364,8 @@ class PlayerController extends ChangeNotifier {
         ),
       );
 
-  void setMediaPath(String path) =>
-      _store.update((s) => s.copyWith(mediaPath: path));
+  void setMediaPath(String path, {String? kind}) =>
+      _store.update((s) => s.copyWith(mediaPath: path, mediaKind: kind));
 
   @override
   void dispose() {

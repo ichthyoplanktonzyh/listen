@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/services/local_realtime_speech_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
 
@@ -226,6 +227,164 @@ void main() {
         RealtimeConversationActivity.listening,
       );
       await harness.controller.cancel();
+    });
+
+    test(
+      'audio drives the speaking stage before any transcript delta',
+      () async {
+        final harness = _Harness(transcripts: const []);
+        await harness.start();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.listening,
+        );
+
+        // A committed learner turn leaves the stage on "thinking".
+        harness.connection.emit(_event('speech_started', 'user-1'));
+        await _settle();
+        harness.connection.emit(_event('speech_stopped', 'user-1'));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.thinking,
+        );
+
+        // The first audio chunk is the voice itself: the stage must move
+        // with the sound, not wait for a transcript delta that can trail
+        // TTS output (notably on local cascade pipelines).
+        harness.connection.emit(Uint8List.fromList([0, 1, 2, 3]));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.assistantSpeaking,
+        );
+
+        // A learner who barges in still owns the stage.
+        harness.connection.emit(_event('speech_started', 'user-2'));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.learnerSpeaking,
+        );
+        await harness.controller.cancel();
+      },
+    );
+
+    test(
+      'thinking records its start and clears when the reply lands',
+      () async {
+        final harness = _Harness(transcripts: const []);
+        await harness.start();
+        expect(harness.controller.state.thinkingSinceMs, isNull);
+
+        harness.connection.emit(_event('speech_started', 'user-1'));
+        await _settle();
+        harness.connection.emit(_event('speech_stopped', 'user-1'));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.thinking,
+        );
+        expect(harness.controller.state.thinkingSinceMs, isNotNull);
+
+        harness.connection.emit(jsonEncode({'type': 'response_done'}));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.listening,
+        );
+        expect(harness.controller.state.thinkingSinceMs, isNull);
+        await harness.controller.cancel();
+      },
+    );
+
+    test(
+      'a cloud conversation closes itself after idle silence',
+      () async {
+        final harness = _Harness(
+          transcripts: const [],
+          idleTimeout: const Duration(milliseconds: 80),
+        );
+        await harness.start();
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.live,
+        );
+
+        // Far past the idle window: the conversation must have closed itself
+        // the same way leaving does — and told the learner why.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await _settle();
+        await _settle();
+
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.done,
+        );
+        expect(harness.controller.state.error?.kind, 'idle_closed');
+        expect(
+          harness.savedSessions.any(
+            (session) => session['status'] == 'completed',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('local conversations never auto-close on silence', () async {
+      final harness = _Harness(
+        transcripts: const [],
+        adapterKind: 'local_cascade_realtime',
+        idleTimeout: const Duration(milliseconds: 80),
+      );
+      await harness.start();
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await _settle();
+
+      expect(
+        harness.controller.state.phase,
+        RealtimeConversationPhase.live,
+      );
+      expect(harness.controller.state.error, isNull);
+      await harness.controller.cancel();
+    });
+
+    test('live activity resets the idle close window', () async {
+      final harness = _Harness(
+        transcripts: const [],
+        idleTimeout: const Duration(milliseconds: 200),
+      );
+      await harness.start();
+
+      // Activity pulses just past the halfway mark re-arm the timer.
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      harness.connection.emit(_event('speech_started', 'user-1'));
+      await _settle();
+      harness.connection.emit(_event('speech_stopped', 'user-1'));
+      await _settle();
+
+      // 150ms after the reset is still inside the fresh window.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(
+        harness.controller.state.phase,
+        RealtimeConversationPhase.live,
+      );
+
+      // Resolve the provider response so the eventual idle close drains
+      // promptly instead of waiting out the drain timeout.
+      harness.connection.emit(jsonEncode({'type': 'response_done'}));
+      await _settle();
+
+      // Past the fresh window it closes after all.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await _settle();
+      await _settle();
+      expect(
+        harness.controller.state.phase,
+        RealtimeConversationPhase.done,
+      );
+      expect(harness.controller.state.error?.kind, 'idle_closed');
     });
 
     test(
@@ -530,6 +689,53 @@ void main() {
         expect(harness.controller.state.error?.kind, 'provider_error');
       },
     );
+
+    test(
+      'local conversation ensures local speech service is started when not ready',
+      () async {
+        final localService = _FakeLocalRealtimeSpeechService(ready: false);
+        final harness = _Harness(
+          transcripts: const [],
+          adapterKind: 'local_cascade_realtime',
+          localSpeechService: localService,
+        );
+
+        await harness.start();
+
+        expect(localService.ensureStartedCalls, 1);
+        expect(localService.markActiveCalls, 1);
+        expect(harness.controller.state.phase, RealtimeConversationPhase.live);
+
+        await harness.controller.cancel();
+        expect(localService.markInactiveCalls, 1);
+      },
+    );
+
+    test(
+      'local conversation fails cleanly when local speech service is not installed',
+      () async {
+        final localService = _FakeLocalRealtimeSpeechService(
+          ready: false,
+          ensureStartedError: const LocalRealtimeSpeechNotInstalledException(),
+        );
+        final harness = _Harness(
+          transcripts: const [],
+          adapterKind: 'local_cascade_realtime',
+          localSpeechService: localService,
+        );
+
+        await harness.start(expectLive: false);
+
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.failed,
+        );
+        expect(
+          harness.controller.state.error?.kind,
+          'local_speech_not_installed',
+        );
+      },
+    );
   });
 }
 
@@ -541,7 +747,10 @@ class _Harness {
     this.audioStartFailures = 0,
     this.holdTranscription = false,
     this.providerDrainTimeout = const Duration(seconds: 15),
-  }) : _transcripts = List<String?>.from(transcripts) {
+    this.idleTimeout = const Duration(minutes: 5),
+    LocalRealtimeSpeechService? localSpeechService,
+  }) : _transcripts = List<String?>.from(transcripts),
+       localSpeechService = localSpeechService ?? _FakeLocalRealtimeSpeechService() {
     audio = _FakeAudio(
       onStart: () => lifecycle.add('audio_start'),
       startFailures: audioStartFailures,
@@ -549,6 +758,7 @@ class _Harness {
     controller = RealtimeConversationController(
       repository: LocalRealtimeConversationRepository(() => api),
       audio: audio,
+      localSpeechService: this.localSpeechService,
       connect: (_, _) async {
         lifecycle.add('provider_connect');
         if (connectFailures > 0) {
@@ -561,6 +771,7 @@ class _Harness {
           holdTranscription ? transcriptionGate.future : Future<void>.value(),
       nowMs: _clock,
       providerDrainTimeout: providerDrainTimeout,
+      idleTimeout: idleTimeout,
     );
     api = LocalApi.withTransport(
       baseUrl: 'http://127.0.0.1:4321',
@@ -574,10 +785,12 @@ class _Harness {
 
   final List<String?> _transcripts;
   final String adapterKind;
+  final LocalRealtimeSpeechService localSpeechService;
   int connectFailures;
   final int audioStartFailures;
   final bool holdTranscription;
   final Duration providerDrainTimeout;
+  final Duration idleTimeout;
   final Completer<void> transcriptionGate = Completer<void>();
   late final RealtimeConversationController controller;
   late final _FakeAudio audio;
@@ -593,13 +806,15 @@ class _Harness {
   String? get lastSessionStatus =>
       savedSessions.isEmpty ? null : savedSessions.last['status'] as String?;
 
-  Future<void> start() async {
+  Future<void> start({bool expectLive = true}) async {
     await controller.loadProfiles();
     await controller.start(
       RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
       acquireAudioFocus: () async => lifecycle.add('audio_focus'),
     );
-    expect(controller.state.phase, RealtimeConversationPhase.live);
+    if (expectLive) {
+      expect(controller.state.phase, RealtimeConversationPhase.live);
+    }
   }
 
   Future<void> learnerTurn(String itemId, String providerText) async {
@@ -869,4 +1084,59 @@ class _FakeAudio implements RealtimeAudioSession {
 
   @override
   Future<void> cancel() async {}
+}
+
+class _FakeLocalRealtimeSpeechService implements LocalRealtimeSpeechService {
+  _FakeLocalRealtimeSpeechService({
+    this.ready = true,
+    this.ensureStartedError,
+  });
+
+  bool installed = true;
+  bool ready;
+  Object? ensureStartedError;
+  int ensureStartedCalls = 0;
+  int markActiveCalls = 0;
+  int markInactiveCalls = 0;
+  int stopCalls = 0;
+  int disposeCalls = 0;
+
+  @override
+  Future<bool> isInstalled() async => installed;
+
+  @override
+  Future<bool> isReady() async => ready;
+
+  @override
+  Future<void> ensureStarted({
+    void Function(String status)? onProgress,
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    ensureStartedCalls++;
+    if (ensureStartedError != null) {
+      throw ensureStartedError!;
+    }
+    ready = true;
+  }
+
+  @override
+  void markConversationActive() {
+    markActiveCalls++;
+  }
+
+  @override
+  void markConversationInactive() {
+    markInactiveCalls++;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls++;
+    ready = false;
+  }
+
+  @override
+  void dispose() {
+    disposeCalls++;
+  }
 }

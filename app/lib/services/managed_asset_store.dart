@@ -57,7 +57,33 @@ final class ManagedAssetCopy {
 ///   bytes deduplicate instead of duplicating;
 /// * a staged copy is removed whether the copy or the rename fails.
 abstract interface class ManagedAssetStoreService {
-  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath});
+  Future<ManagedAssetCopy> copyIntoStore({
+    required String sourcePath,
+    String? mediaKind,
+  });
+
+  /// Copies in-memory bytes (e.g. a picked document) into the store with the
+  /// same verification and deduplication as [copyIntoStore]. The bytes are
+  /// staged through a temporary file so every verification path stays
+  /// streaming; [mediaKind] is explicit because there is no source path to
+  /// derive it from.
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  });
+
+  /// Whether [path] already lives inside the store.
+  ///
+  /// The store owns this answer because it owns the root. A caller that
+  /// reassembled the root from settings would be re-deriving a fact the
+  /// service already holds — and would need the file system to do it.
+  bool contains(String path);
+
+  /// Reads a store copy back for direct rendering, or null when the file is
+  /// missing, unreadable, or outside the managed root. Callers treat null as
+  /// an unavailable Source Asset fact, never a crash.
+  Future<List<int>?> readBytes(String path);
+
   Future<void> deleteStoreCopy(String path);
 }
 
@@ -102,7 +128,10 @@ final class LocalManagedAssetStoreService implements ManagedAssetStoreService {
   }
 
   @override
-  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath}) async {
+  Future<ManagedAssetCopy> copyIntoStore({
+    required String sourcePath,
+    String? mediaKind,
+  }) async {
     try {
       final root = _root;
       if (root == null) throw const ManagedStoreUnavailable();
@@ -123,13 +152,13 @@ final class LocalManagedAssetStoreService implements ManagedAssetStoreService {
       final source = File(sourcePath);
       if (!await source.exists()) throw const ManagedStoreCopyFailed();
       final digest = await _hashFile(source);
-      final mediaKind = _mediaKind(sourcePath);
+      final kind = mediaKind ?? _mediaKind(sourcePath);
       return _serializeCopy(
         digest,
         () => _copyVerified(
           source: source,
           digest: digest,
-          mediaKind: mediaKind,
+          mediaKind: kind,
           resolvedRoot: resolvedRoot,
         ),
       );
@@ -137,6 +166,48 @@ final class LocalManagedAssetStoreService implements ManagedAssetStoreService {
       // A configured root is unavailable; the caller must not render a raw
       // OS message or guess that membership changed.
       throw const ManagedStoreUnavailable();
+    }
+  }
+
+  @override
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  }) async {
+    final tempFile = File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}'
+      'listen-managed-${_randomSuffix()}',
+    );
+    try {
+      await tempFile.writeAsBytes(bytes, flush: true);
+      return await copyIntoStore(sourcePath: tempFile.path, mediaKind: mediaKind);
+    } finally {
+      if (await tempFile.exists()) {
+        try {
+          await tempFile.delete();
+        } on FileSystemException {
+          // Best effort: a stale system-temp file is harmless and never part
+          // of the managed store.
+        }
+      }
+    }
+  }
+
+  @override
+  Future<List<int>?> readBytes(String path) async {
+    final root = _root;
+    if (root == null) return null;
+    String resolvedRoot;
+    try {
+      resolvedRoot = await Directory(root).resolveSymbolicLinks();
+    } on FileSystemException {
+      return null;
+    }
+    try {
+      if (!await _isManagedCopyAt(path, resolvedRoot)) return null;
+      return await File(path).readAsBytes();
+    } on FileSystemException {
+      return null;
     }
   }
 
@@ -232,6 +303,19 @@ final class LocalManagedAssetStoreService implements ManagedAssetStoreService {
     } on FileSystemException {
       throw const ManagedStoreCopyFailed();
     }
+  }
+
+  /// A plain prefix test is exact here because the store is flat and
+  /// content-addressed: every managed file is `<root>/<sha256>`, so nothing
+  /// below the root can be anything but a store entry.
+  @override
+  bool contains(String path) {
+    final root = _root;
+    if (root == null) return false;
+    final prefix = root.endsWith(Platform.pathSeparator)
+        ? root
+        : '$root${Platform.pathSeparator}';
+    return path.startsWith(prefix);
   }
 
   @override

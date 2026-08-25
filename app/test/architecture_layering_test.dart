@@ -95,6 +95,10 @@ void main() {
       'lib/widgets/vocabulary/dictionary_inline_clip_player.dart': {
         "import 'package:video_player/video_player.dart';",
       },
+      'lib/widgets/composition/composition_audio_player.dart': {
+        "import 'dart:io';",
+        "import 'package:video_player/video_player.dart';",
+      },
     };
     final offenders = _presentationFiles()
         .expand((file) {
@@ -105,11 +109,13 @@ void main() {
             final isRenderingAdapter =
                 renderingAdapterImports[file.path]?.contains(line) ?? false;
             if (line.contains('/data/repositories/') ||
-                line == "import 'dart:io';" ||
                 line.contains('services/api_service.dart') ||
                 line.contains('package:file_selector/file_selector.dart') ||
                 (!isRenderingAdapter &&
-                    (line.contains('package:desktop_drop/desktop_drop.dart') ||
+                    (line == "import 'dart:io';" ||
+                        line.contains(
+                          'package:desktop_drop/desktop_drop.dart',
+                        ) ||
                         line.contains(
                           'package:video_player/video_player.dart',
                         )))) {
@@ -255,7 +261,6 @@ const _rawTransportMapBaseline = <String, int>{
   'lib/controllers/learning_controller.dart': 1,
   'lib/controllers/learning_flow_view_models.dart': 3,
   'lib/controllers/learning_workflow_controller.dart': 6,
-  'lib/controllers/manual_review_controller.dart': 1,
   'lib/controllers/media_session_coordinator.dart': 3,
   'lib/controllers/occurrence_media_resolver.dart': 2,
   'lib/controllers/playback_actions_coordinator.dart': 1,
@@ -272,7 +277,6 @@ const _rawTransportMapBaseline = <String, int>{
   'lib/data/repositories/learning_assets_repository.dart': 2,
   'lib/data/repositories/learning_repository.dart': 6,
   'lib/data/repositories/lexical_repository.dart': 2,
-  'lib/data/repositories/manual_review_repository.dart': 2,
   'lib/data/repositories/media_session_repository.dart': 2,
   'lib/data/repositories/playback_repository.dart': 3,
   'lib/data/repositories/reading_task_repository.dart': 2,

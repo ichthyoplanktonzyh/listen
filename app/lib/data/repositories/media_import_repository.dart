@@ -26,6 +26,14 @@ abstract interface class MediaImportRepository {
     int? expectedBytes,
   });
 
+  /// Fetches a document item's page, for the article acquisition path.
+  ///
+  /// A feed that offers an article link grants fetching the page; the bytes
+  /// land in [directory] and the returned path is taken in through the same
+  /// document intake a local file would travel. Null when the fetch was
+  /// cancelled.
+  Future<String?> downloadArticle(String articleUrl, String directory);
+
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl);
   Future<ResolvedChannelDetails> resolveChannelDetails(String channelUrl);
   Future<List<EmbeddedSubtitle>> probeSubtitles(String mediaPath);
@@ -75,6 +83,10 @@ final class LocalMediaImportRepository implements MediaImportRepository {
     int? expectedBytes,
   }) async =>
       _enclosures.start(mediaUrl, directory, expectedBytes: expectedBytes);
+
+  @override
+  Future<String?> downloadArticle(String articleUrl, String directory) =>
+      _enclosures.start(articleUrl, directory).completed;
 
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>

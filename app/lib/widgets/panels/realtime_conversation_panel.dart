@@ -436,6 +436,15 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                   icon: const Icon(Icons.mic),
                   label: Text(l.text('realtimeStartConversation')),
                 ),
+                if (state.selectedProfileId != null) ...[
+                  const SizedBox(height: ListenSpacing.gap12),
+                  _ProviderHint(
+                    profile: _profileById(
+                      state.profiles,
+                      state.selectedProfileId,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -550,6 +559,14 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
+          // Thinking can last tens of seconds on a local first turn; the
+          // elapsed time is liveness — the learner sees the system working,
+          // not a frozen stage. It never guesses when the reply arrives.
+          if (state.activity == RealtimeConversationActivity.thinking &&
+              state.thinkingSinceMs != null) ...[
+            const SizedBox(height: ListenSpacing.gap8),
+            _ThinkingElapsed(sinceMs: state.thinkingSinceMs!),
+          ],
           // D5: while the other voice is speaking, say out loud that cutting
           // in is allowed. The surface already shows your open channel; this
           // names it once, dimly, and disappears the moment it is your turn.
@@ -868,7 +885,7 @@ class _LobbyVoiceChoice extends StatelessWidget {
                   (profile) => DropdownMenuItem<String>(
                     value: profile.id,
                     child: Text(
-                      _describe(profile),
+                      _describe(profile, l),
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -880,8 +897,98 @@ class _LobbyVoiceChoice extends StatelessWidget {
     );
   }
 
-  String _describe(RealtimeProviderProfileView profile) =>
-      '${profile.displayName} · ${profile.voice}';
+  String _describe(RealtimeProviderProfileView profile, AppLocalizations l) =>
+      '${profile.displayName} · ${profile.voice} · '
+      '${profile.adapterKind == 'local_cascade_realtime' ? l.text('realtimeProviderLocalTag') : l.text('realtimeProviderCloudTag')}';
+}
+
+RealtimeProviderProfileView? _profileById(
+  List<RealtimeProviderProfileView> profiles,
+  String? id,
+) {
+  if (id == null) return null;
+  for (final profile in profiles) {
+    if (profile.id == id) return profile;
+  }
+  return null;
+}
+
+/// One dim line under the start button naming what the chosen voice actually
+/// is before the learner commits: local = stays on this machine, keyless,
+/// offline; cloud = provider-side processing billed by usage.
+///
+/// The distinction is the product's privacy posture; it is stated here, at the
+/// only moment the learner is about to hand the conversation to that voice.
+class _ProviderHint extends StatelessWidget {
+  const _ProviderHint({required this.profile});
+
+  final RealtimeProviderProfileView? profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = this.profile;
+    if (profile == null) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final isLocal = profile.adapterKind == 'local_cascade_realtime';
+    return Text(
+      key: const ValueKey('realtime-provider-hint'),
+      l.text(isLocal ? 'realtimeLocalPrivacyHint' : 'realtimeCloudBillingHint'),
+      textAlign: TextAlign.center,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+/// The Thinking elapsed timer: a one-second tick that repaints a sentence
+/// counting how long the provider has been working, from the instant the
+/// controller recorded (speech_stopped). Owns and cancels its own [Timer] so
+/// the stage never leaks a ticker into the frame after it leaves Thinking.
+class _ThinkingElapsed extends StatefulWidget {
+  const _ThinkingElapsed({required this.sinceMs});
+
+  final int sinceMs;
+
+  @override
+  State<_ThinkingElapsed> createState() => _ThinkingElapsedState();
+}
+
+class _ThinkingElapsedState extends State<_ThinkingElapsed> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final elapsedSeconds =
+        ((DateTime.now().millisecondsSinceEpoch - widget.sinceMs) ~/ 1000)
+            .clamp(0, 9999);
+    return Text(
+      key: const ValueKey('realtime-thinking-elapsed'),
+      l.text('realtimeActivityThinkingElapsed').replaceAll(
+        '{seconds}',
+        '$elapsedSeconds',
+      ),
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+      ),
+    );
+  }
 }
 
 /// What a turn with no text says in the body position.

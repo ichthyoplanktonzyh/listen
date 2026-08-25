@@ -24,20 +24,16 @@ import '../common/menu_rows.dart';
 class ShellToolsMenu extends StatelessWidget {
   const ShellToolsMenu({
     super.key,
-    required this.onOpenSubtitleResources,
     required this.onOpenLearningAssets,
     required this.onOpenLearningResources,
-    required this.onOpenPhoneticAnalysisCenter,
     required this.onExportLogs,
     required this.onExportVocabulary,
     required this.onImportVocabulary,
     required this.onImportWordList,
   });
 
-  final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenLearningAssets;
   final VoidCallback onOpenLearningResources;
-  final VoidCallback onOpenPhoneticAnalysisCenter;
   final VoidCallback onExportLogs;
   final VoidCallback onExportVocabulary;
   final VoidCallback onImportVocabulary;
@@ -53,14 +49,10 @@ class ShellToolsMenu extends StatelessWidget {
       position: PopupMenuPosition.over,
       onSelected: (value) {
         switch (value) {
-          case 'subtitle-resources':
-            onOpenSubtitleResources();
           case 'learning-assets':
             onOpenLearningAssets();
           case 'learning-resources':
             onOpenLearningResources();
-          case 'phonetic-analysis':
-            onOpenPhoneticAnalysisCenter();
           case 'logs':
             onExportLogs();
           case 'export-vocabulary':
@@ -74,14 +66,6 @@ class ShellToolsMenu extends StatelessWidget {
       itemBuilder: (_) => [
         ListenMenuHeader(label: l.text('shellToolsCenters')),
         PopupMenuItem(
-          value: 'subtitle-resources',
-          child: ListenMenuRow(
-            icon: Icons.inventory_2_outlined,
-            title: l.text('subtitleResources'),
-            subtitle: l.text('subtitleResourceSummary'),
-          ),
-        ),
-        PopupMenuItem(
           value: 'learning-assets',
           child: ListenMenuRow(
             icon: Icons.local_library_outlined,
@@ -93,13 +77,6 @@ class ShellToolsMenu extends StatelessWidget {
           child: ListenMenuRow(
             icon: Icons.storage_outlined,
             title: l.text('resources'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'phonetic-analysis',
-          child: ListenMenuRow(
-            icon: Icons.graphic_eq,
-            title: l.text('phoneticAnalysisCenter'),
           ),
         ),
         const PopupMenuDivider(),

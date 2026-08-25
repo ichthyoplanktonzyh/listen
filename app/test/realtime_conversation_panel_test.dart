@@ -187,21 +187,131 @@ void main() {
     expect(find.byType(DropdownButtonFormField<String>), findsNothing);
     final dropdown = find.byType(DropdownButton<String>);
     expect(dropdown, findsOneWidget);
-    expect(find.text('Realtime provider · Tina'), findsOneWidget);
+    expect(find.text('Realtime provider · Tina · cloud'), findsOneWidget);
     expect(find.byKey(const ValueKey('realtime-manage-voices')), findsNothing);
 
     // Selecting another voice takes effect immediately.
     await tester.tap(dropdown);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Alt provider · Aria').last);
+    await tester.tap(find.text('Alt provider · Aria · cloud').last);
     await tester.pumpAndSettle();
     expect(controller.state.selectedProfileId, 'profile-alt');
-    expect(find.text('Alt provider · Aria'), findsOneWidget);
+    expect(find.text('Alt provider · Aria · cloud'), findsOneWidget);
 
     // The endpoint/workspace/region/API-key form lives in settings (#87).
     expect(find.text('Add provider'), findsNothing);
     expect(find.widgetWithText(TextField, 'WebSocket endpoint'), findsNothing);
     expect(find.widgetWithText(TextField, 'Workspace ID'), findsNothing);
+
+    controller.dispose();
+  });
+
+  testWidgets('the lobby names local versus cloud before the voice is chosen', (
+    tester,
+  ) async {
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'token',
+      transport: (method, path, body) async {
+        if (method == 'GET' && path == '/v1/realtime/providers') {
+          return (
+            statusCode: 200,
+            body: jsonEncode([
+              {
+                'id': 'profile-cloud',
+                'display_name': 'Cloud voice',
+                'adapter_kind': 'qwen_omni_realtime',
+                'base_url': 'wss://example.com/api-ws/v1/realtime',
+                'model_id': qwenRealtimeBaselineModel,
+                'voice': 'marin',
+                'has_credential': true,
+                'timeout_ms': 30000,
+              },
+              {
+                'id': 'profile-local',
+                'display_name': 'Local voice',
+                'adapter_kind': 'local_cascade_realtime',
+                'base_url': 'ws://127.0.0.1:8765/v1/realtime',
+                'model_id': localRealtimeBaselineModel,
+                'voice': 'default',
+                'has_credential': false,
+                'timeout_ms': 30000,
+              },
+            ]),
+          );
+        }
+        if (method == 'GET' && path == '/v1/realtime/sessions') {
+          return (statusCode: 200, body: '[]');
+        }
+        throw StateError('Unexpected request: $method $path ${body ?? ''}');
+      },
+    );
+    final controller = RealtimeConversationController(
+      repository: LocalRealtimeConversationRepository(() => api),
+      audio: _FakeAudio(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RealtimeConversationPanel(
+          controller: controller,
+          launch: RealtimeConversationLaunch.free(
+            language: 'en',
+            modelId: 'asr-model',
+          ),
+          acquireAudioFocus: () async {},
+          onClose: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The panel auto-picks the first voice; its one-line hint names what the
+    // chosen voice is before anyone commits to speaking.
+    expect(find.byKey(const ValueKey('realtime-provider-hint')), findsOneWidget);
+    expect(
+      find.text('Cloud voices process audio on the provider side and bill by usage.'),
+      findsOneWidget,
+    );
+
+    // The picker itself tells the two kinds of voice apart. The auto-selected
+    // cloud voice appears twice while open (button + menu item); the local
+    // voice only in the menu.
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('Cloud voice · marin · cloud'), findsNWidgets(2));
+    expect(find.text('Local voice · default · local'), findsOneWidget);
+
+    // Choosing the local voice swaps the hint to its privacy guarantee.
+    await tester.tap(find.text('Local voice · default · local').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Local voice stays on this machine — no key, no cloud, fully offline.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Cloud voices process audio on the provider side and bill by usage.'),
+      findsNothing,
+    );
+
+    // Choosing the cloud voice states its billing reality instead.
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cloud voice · marin · cloud').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Cloud voices process audio on the provider side and bill by usage.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Local voice stays on this machine — no key, no cloud, fully offline.',
+      ),
+      findsNothing,
+    );
 
     controller.dispose();
   });
@@ -267,7 +377,7 @@ void main() {
     expect(find.text('对方说话的声音风格'), findsOneWidget);
     expect(find.text('余音字幕'), findsOneWidget);
     expect(find.text('对方说话时显示淡出字幕'), findsOneWidget);
-    expect(find.text('test · marin'), findsOneWidget);
+    expect(find.text('test · marin · 云端'), findsOneWidget);
     expect(find.text('开始对话'), findsOneWidget);
     // The English that used to sit on the same screen as the Chinese.
     for (final english in const [

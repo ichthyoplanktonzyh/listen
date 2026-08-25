@@ -13,6 +13,35 @@ void main() {
   _analysisGroup();
   _studyModeGroup();
 
+  testWidgets('a timed-text cue without tokens still renders its exact text', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    const cue = Cue(
+      id: 'timed-0',
+      index: 0,
+      start: Duration(milliseconds: 400),
+      end: Duration(milliseconds: 1200),
+      text: 'Exact segment text.',
+      tokens: [],
+    );
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: const SubtitleTrack(
+          id: 'composition:v2',
+          source: 'composition',
+          cues: [cue],
+        ),
+        currentCue: cue,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Exact segment text.'), findsOneWidget);
+  });
+
   testWidgets('transcript keeps the current cue visible with variable rows', (
     tester,
   ) async {
@@ -287,43 +316,44 @@ void _analysisGroup() {
     expect(anchor, isNull);
   });
 
-  testWidgets('with click-to-play, a double tap on a word opens the dictionary', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(620, 420));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+  testWidgets(
+    'with click-to-play, a double tap on a word opens the dictionary',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(620, 420));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final controller = ScrollController();
-    addTearDown(controller.dispose);
-    final cues = List.generate(4, _cue);
-    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      final cues = List.generate(4, _cue);
+      final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
 
-    Offset? anchor;
-    SubtitleToken? played;
-    await tester.pumpWidget(
-      _Harness(
-        controller: controller,
-        track: track,
-        currentCue: cues[0],
-        onWord: (_, _, position) async => anchor = position,
-        onSeekWord: (token, _) async => played = token,
-      ),
-    );
-    await tester.pumpAndSettle();
+      Offset? anchor;
+      SubtitleToken? played;
+      await tester.pumpWidget(
+        _Harness(
+          controller: controller,
+          track: track,
+          currentCue: cues[0],
+          onWord: (_, _, position) async => anchor = position,
+          onSeekWord: (token, _) async => played = token,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final row = tester.getRect(
-      find.byKey(const ValueKey('transcript-cue-cue-0')),
-    );
-    final target = Offset(row.left + 40, row.top + 22);
-    await tester.tapAt(target);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tapAt(target);
-    await tester.pumpAndSettle();
+      final row = tester.getRect(
+        find.byKey(const ValueKey('transcript-cue-cue-0')),
+      );
+      final target = Offset(row.left + 40, row.top + 22);
+      await tester.tapAt(target);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(target);
+      await tester.pumpAndSettle();
 
-    // The dictionary opens at the aimed pixel; no word-seek is fired.
-    expect(anchor, target);
-    expect(played, isNull);
-  });
+      // The dictionary opens at the aimed pixel; no word-seek is fired.
+      expect(anchor, target);
+      expect(played, isNull);
+    },
+  );
 }
 
 /// The reading states are displays of this same pane, not separate windows.

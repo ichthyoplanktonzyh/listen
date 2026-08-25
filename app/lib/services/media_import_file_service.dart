@@ -12,7 +12,7 @@ class TimelineFileDocument {
 abstract interface class MediaImportFileService {
   Future<String?> pickMedia();
   Future<String?> pickSubtitle();
-  Future<String?> pickContentPackage();
+  Future<String?> pickLearningPackage();
   Future<TimelineFileDocument?> pickTimeline();
   String basename(String path);
   Future<String?> pickDownloadDirectory({required String confirmButtonText});
@@ -36,10 +36,10 @@ class LocalMediaImportFileService implements MediaImportFileService {
   }
 
   @override
-  Future<String?> pickContentPackage() async {
+  Future<String?> pickLearningPackage() async {
     const group = XTypeGroup(
-      label: 'Listen learning package',
-      extensions: ['listenpkg'],
+      label: 'learningPackage',
+      extensions: ['listenpkg', 'zip'],
     );
     return (await openFile(acceptedTypeGroups: [group]))?.path;
   }

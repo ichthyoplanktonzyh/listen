@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/composition.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
 import '../state/store.dart';
@@ -33,6 +34,10 @@ class SubtitleState {
     Map<String, List<WordTiming>> timingsBySentence = const {},
     Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
     Map<String, List<SenseGroup>> senseGroupsBySentence = const {},
+    Map<String, List<CompositionWordAcoustics>> acousticsBySentence = const {},
+    Map<String, List<CompositionProsodyAnchor>> prosodyAnchorsBySentence =
+        const {},
+    Map<String, List<DetectedPhone>> phonesBySentence = const {},
     List<PronunciationProvider> pronunciationProviders = const [],
     List<SubtitleTrack> subtitleResources = const [],
     Map<String, SubtitleResourceCapabilities> subtitleResourceCapabilities =
@@ -52,6 +57,18 @@ class SubtitleState {
        _senseGroupsBySentence = Map.unmodifiable({
          for (final entry in senseGroupsBySentence.entries)
            entry.key: List<SenseGroup>.unmodifiable(entry.value),
+       }),
+       _acousticsBySentence = Map.unmodifiable({
+         for (final entry in acousticsBySentence.entries)
+           entry.key: List<CompositionWordAcoustics>.unmodifiable(entry.value),
+       }),
+       _prosodyAnchorsBySentence = Map.unmodifiable({
+         for (final entry in prosodyAnchorsBySentence.entries)
+           entry.key: List<CompositionProsodyAnchor>.unmodifiable(entry.value),
+       }),
+       _phonesBySentence = Map.unmodifiable({
+         for (final entry in phonesBySentence.entries)
+           entry.key: List<DetectedPhone>.unmodifiable(entry.value),
        }),
        _pronunciationProviders = List.unmodifiable(pronunciationProviders),
        _subtitleResources = List.unmodifiable(subtitleResources),
@@ -99,6 +116,23 @@ class SubtitleState {
     for (final entry in _senseGroupsBySentence.entries)
       entry.key: List<SenseGroup>.unmodifiable(entry.value),
   });
+  final Map<String, List<CompositionWordAcoustics>> _acousticsBySentence;
+  Map<String, List<CompositionWordAcoustics>> get acousticsBySentence =>
+      Map.unmodifiable({
+        for (final entry in _acousticsBySentence.entries)
+          entry.key: List<CompositionWordAcoustics>.unmodifiable(entry.value),
+      });
+  final Map<String, List<CompositionProsodyAnchor>> _prosodyAnchorsBySentence;
+  Map<String, List<CompositionProsodyAnchor>> get prosodyAnchorsBySentence =>
+      Map.unmodifiable({
+        for (final entry in _prosodyAnchorsBySentence.entries)
+          entry.key: List<CompositionProsodyAnchor>.unmodifiable(entry.value),
+      });
+  final Map<String, List<DetectedPhone>> _phonesBySentence;
+  Map<String, List<DetectedPhone>> get phonesBySentence => Map.unmodifiable({
+    for (final entry in _phonesBySentence.entries)
+      entry.key: List<DetectedPhone>.unmodifiable(entry.value),
+  });
   final List<PronunciationProvider> _pronunciationProviders;
   List<PronunciationProvider> get pronunciationProviders =>
       List.unmodifiable(_pronunciationProviders);
@@ -145,6 +179,9 @@ class SubtitleState {
     Map<String, List<WordTiming>>? timingsBySentence,
     Map<String, SentenceChunkPartition>? chunkPartitionsBySentence,
     Map<String, List<SenseGroup>>? senseGroupsBySentence,
+    Map<String, List<CompositionWordAcoustics>>? acousticsBySentence,
+    Map<String, List<CompositionProsodyAnchor>>? prosodyAnchorsBySentence,
+    Map<String, List<DetectedPhone>>? phonesBySentence,
     List<PronunciationProvider>? pronunciationProviders,
     List<SubtitleTrack>? subtitleResources,
     Map<String, SubtitleResourceCapabilities>? subtitleResourceCapabilities,
@@ -191,6 +228,10 @@ class SubtitleState {
     chunkPartitionsBySentence:
         chunkPartitionsBySentence ?? this.chunkPartitionsBySentence,
     senseGroupsBySentence: senseGroupsBySentence ?? this.senseGroupsBySentence,
+    acousticsBySentence: acousticsBySentence ?? this.acousticsBySentence,
+    prosodyAnchorsBySentence:
+        prosodyAnchorsBySentence ?? this.prosodyAnchorsBySentence,
+    phonesBySentence: phonesBySentence ?? this.phonesBySentence,
     pronunciationProviders:
         pronunciationProviders ?? this.pronunciationProviders,
     subtitleResources: subtitleResources ?? this.subtitleResources,
@@ -279,6 +320,12 @@ class SubtitleController extends ChangeNotifier {
       _store.state.chunkPartitionsBySentence;
   Map<String, List<SenseGroup>> get senseGroupsBySentence =>
       _store.state.senseGroupsBySentence;
+  Map<String, List<CompositionWordAcoustics>> get acousticsBySentence =>
+      _store.state.acousticsBySentence;
+  Map<String, List<CompositionProsodyAnchor>> get prosodyAnchorsBySentence =>
+      _store.state.prosodyAnchorsBySentence;
+  Map<String, List<DetectedPhone>> get phonesBySentence =>
+      _store.state.phonesBySentence;
   List<PronunciationProvider> get pronunciationProviders =>
       _store.state.pronunciationProviders;
   List<SubtitleTrack> get subtitleResources => _store.state.subtitleResources;
@@ -398,14 +445,57 @@ class SubtitleController extends ChangeNotifier {
     Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
     Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
     Map<String, List<SenseGroup>> senseGroupsBySentence = const {},
+    Map<String, List<CompositionWordAcoustics>> acousticsBySentence = const {},
+    Map<String, List<CompositionProsodyAnchor>> prosodyAnchorsBySentence =
+        const {},
+    Map<String, List<DetectedPhone>> phonesBySentence = const {},
   }) => _store.update(
     (s) => s.copyWith(
       pronunciationBySentence: pronunciationBySentence,
       timingsBySentence: timingsBySentence,
       chunkPartitionsBySentence: chunkPartitionsBySentence,
       senseGroupsBySentence: senseGroupsBySentence,
+      acousticsBySentence: acousticsBySentence,
+      prosodyAnchorsBySentence: prosodyAnchorsBySentence,
+      phonesBySentence: phonesBySentence,
       pronunciationProviders: pronunciationProviders,
       phoneticAnalysisBySentence: phoneticAnalysisBySentence,
+    ),
+  );
+
+  /// Adds the enhancements an adopted composition brought with it.
+  ///
+  /// Deliberately not [setSpeechEnhancements]: that call replaces the whole
+  /// enhancement set, including the pronunciation analysis and providers that
+  /// come from Core's speech-enhancement path. A composition carries none of
+  /// those, so using it here would silently delete them. Per-sentence entries
+  /// already present win — Core's own analysis of a sentence is not overwritten
+  /// by the package's.
+  void applyCompositionEnhancements({
+    Map<String, List<WordTiming>> timingsBySentence = const {},
+    Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
+    Map<String, List<SenseGroup>> senseGroupsBySentence = const {},
+    Map<String, List<CompositionWordAcoustics>> acousticsBySentence = const {},
+    Map<String, List<CompositionProsodyAnchor>> prosodyAnchorsBySentence =
+        const {},
+    Map<String, List<DetectedPhone>> phonesBySentence = const {},
+  }) => _store.update(
+    (s) => s.copyWith(
+      timingsBySentence: {...timingsBySentence, ...s.timingsBySentence},
+      chunkPartitionsBySentence: {
+        ...chunkPartitionsBySentence,
+        ...s.chunkPartitionsBySentence,
+      },
+      senseGroupsBySentence: {
+        ...senseGroupsBySentence,
+        ...s.senseGroupsBySentence,
+      },
+      acousticsBySentence: {...acousticsBySentence, ...s.acousticsBySentence},
+      prosodyAnchorsBySentence: {
+        ...prosodyAnchorsBySentence,
+        ...s.prosodyAnchorsBySentence,
+      },
+      phonesBySentence: {...phonesBySentence, ...s.phonesBySentence},
     ),
   );
 
@@ -440,6 +530,9 @@ class SubtitleController extends ChangeNotifier {
         timingsBySentence: const {},
         chunkPartitionsBySentence: const {},
         senseGroupsBySentence: const {},
+        acousticsBySentence: const {},
+        prosodyAnchorsBySentence: const {},
+        phonesBySentence: const {},
         pronunciationProviders: const [],
         wordTimelineSummaries: const [],
         phoneTimelineSummaries: const [],
@@ -517,8 +610,13 @@ class SubtitleController extends ChangeNotifier {
     final analysis = !enabled || cue == null
         ? null
         : s.phoneticAnalysisBySentence[cue.id];
+    final phones = analysis?.detectedPhones.isNotEmpty == true
+        ? analysis!.detectedPhones
+        : cue == null
+        ? const <DetectedPhone>[]
+        : s.phonesBySentence[cue.id] ?? const <DetectedPhone>[];
     final phone = currentDetectedPhoneAt(
-      analysis?.detectedPhones ?? const [],
+      phones,
       mediaPosition,
       offset: s.primarySubtitleOffset,
     );

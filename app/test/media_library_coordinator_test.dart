@@ -16,6 +16,8 @@ import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
+import 'support/learning_material_fixtures.dart';
+
 Map<String, dynamic> _libraryEntryJson({
   String id = 'media-1',
   String path = '/nonexistent/media.mp4',
@@ -43,15 +45,15 @@ MediaLibraryEntry _libraryEntry({
   String path = '/nonexistent/media.mp4',
 }) => MediaLibraryEntry.fromJson(_libraryEntryJson(id: id, path: path));
 
-/// A Core 3.2 `/v1/materials` row: one retained learning material with its
-/// current revision. Defaults to a mixed-shape material with no assets.
+/// A Core 4.0 `/v1/materials` row: one retained learning material with its
+/// current revision. Defaults to a mixed-shape material with no renditions.
 Map<String, dynamic> _materialDetailsJson({
   String materialId = 'material-1',
   String revisionId = 'revision-1',
   String title = 'Sample material',
   String shape = 'mixed',
   int updatedAtMs = 100,
-  List<Map<String, dynamic>> assets = const [],
+  List<Map<String, dynamic>> mediaRenditions = const [],
 }) => {
   'material': {
     'id': materialId,
@@ -64,7 +66,9 @@ Map<String, dynamic> _materialDetailsJson({
     'id': revisionId,
     'material_id': materialId,
     'title': title,
-    'assets': assets,
+    'source_assets': <Map<String, dynamic>>[],
+    'document_renditions': <Map<String, dynamic>>[],
+    'media_renditions': mediaRenditions,
     'created_at_ms': 0,
   },
   'shape': shape,
@@ -74,12 +78,15 @@ Map<String, dynamic> _mediaRenditionJson({
   required String id,
   required String mediaId,
 }) => {
-  'asset_type': 'media_rendition',
   'id': id,
-  'media_id': mediaId,
-  'media_kind': 'audio',
+  'origin': 'source',
+  'kind': 'audio',
+  'media_type': 'audio/mpeg',
   'fingerprint': 'fp',
   'availability': 'available',
+  'media_id': mediaId,
+  'media_sha256': null,
+  'media_byte_size': null,
 };
 
 /// Directly constructed [MaterialDetails] for seeding previous state without
@@ -87,7 +94,9 @@ Map<String, dynamic> _mediaRenditionJson({
 MaterialDetails _materialDetails({
   String materialId = 'material-1',
   String title = 'Sample material',
-  List<MaterialAsset> assets = const [],
+  List<SourceAsset> sourceAssets = const [],
+  List<DocumentRendition> documentRenditions = const [],
+  List<MediaRendition> mediaRenditions = const [],
 }) => MaterialDetails(
   material: LearningMaterial(
     id: materialId,
@@ -100,11 +109,30 @@ MaterialDetails _materialDetails({
     id: 'revision-1',
     materialId: materialId,
     title: title,
-    assets: assets,
+    sourceAssets: sourceAssets,
+    documentRenditions: documentRenditions,
+    mediaRenditions: mediaRenditions,
     createdAtMs: 0,
   ),
   shape: MaterialShape.mixed,
 );
+
+/// A [PersonalLibraryEntry] whose revision binds [mediaEntry] as an available
+/// audio rendition — the row shape the coordinator's own entry methods take.
+PersonalLibraryEntry _personalEntry(MediaLibraryEntry mediaEntry) =>
+    PersonalLibraryEntry(
+      details: _materialDetails(
+        mediaRenditions: [
+          mediaRendition(
+            id: 'asset-1',
+            mediaId: mediaEntry.media.id,
+            kind: MediaRenditionKind.audio,
+            fingerprint: 'fp',
+          ),
+        ],
+      ),
+      mediaEntries: [mediaEntry],
+    );
 
 LocalApi _fakeApi(
   ({int statusCode, String body}) Function(String, String, String?) handler,
@@ -216,6 +244,30 @@ _wire(
 
 void main() {
   test(
+    'a retained document is published even when the full library cannot load',
+    () async {
+      final api = _fakeApi(
+        (method, path, body) => (statusCode: 500, body: 'corrupt old row'),
+      );
+      final w = _wire(() => api);
+      final retainedDocument = _materialDetails(
+        materialId: 'saved-document',
+        title: 'Saved text material',
+        documentRenditions: [documentRenditionForText('Saved body')],
+      );
+
+      await w.coordinator.reconcileMembership(retainedDocument);
+
+      expect(w.coordinator.personalLibrary, hasLength(1));
+      expect(
+        w.coordinator.personalLibrary!.single.title,
+        'Saved text material',
+      );
+      expect(w.coordinator.personalLibrary!.single.canRead, isTrue);
+    },
+  );
+
+  test(
     'loadMediaLibrary publishes material rows joined to the media snapshot',
     () async {
       final api = _fakeApi((method, path, body) {
@@ -224,7 +276,7 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [
+                mediaRenditions: [
                   _mediaRenditionJson(id: 'asset-1', mediaId: 'media-1'),
                 ],
               ),
@@ -279,13 +331,12 @@ void main() {
       w.coordinator.personalLibrary = [
         PersonalLibraryEntry(
           details: _materialDetails(
-            assets: [
-              MediaRenditionMaterialAsset(
+            mediaRenditions: [
+              mediaRendition(
                 id: 'asset-1',
                 mediaId: 'media-1',
-                mediaKind: MediaRenditionKind.audio,
+                kind: MediaRenditionKind.audio,
                 fingerprint: 'fp',
-                availability: MediaRenditionAvailability.available,
               ),
             ],
           ),
@@ -301,7 +352,8 @@ void main() {
         w.coordinator.personalLibrary!.single.primaryMedia?.media.id,
         'media-1',
       );
-      expect(w.rebuilds, isEmpty);
+      expect(w.rebuilds, hasLength(1));
+      expect(w.coordinator.personalLibraryFailure, isNotNull);
     },
   );
 
@@ -312,6 +364,7 @@ void main() {
 
     expect(w.coordinator.mediaLibrary, isNull);
     expect(w.rebuilds, isEmpty);
+    expect(w.coordinator.personalLibraryFailure, isNull);
   });
 
   test('an unmounted coordinator publishes nothing', () async {
@@ -321,7 +374,9 @@ void main() {
           statusCode: 200,
           body: jsonEncode([
             _materialDetailsJson(
-              assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+              mediaRenditions: [
+                _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
+              ],
             ),
           ]),
         );
@@ -338,6 +393,7 @@ void main() {
     expect(w.coordinator.mediaLibrary, isNull);
     expect(w.coordinator.personalLibrary, isNull);
     expect(w.rebuilds, isEmpty);
+    expect(w.coordinator.personalLibraryFailure, isNull);
   });
 
   test(
@@ -349,7 +405,9 @@ void main() {
           materialId: 'material-new',
           revisionId: 'revision-new',
           title: 'New',
-          assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
+          mediaRenditions: [
+            _mediaRenditionJson(id: 'a1', mediaId: 'media-new'),
+          ],
         ),
       ]);
       final newMedia = jsonEncode([_libraryEntryJson(id: 'media-new')]);
@@ -380,7 +438,9 @@ void main() {
             materialId: 'material-old',
             revisionId: 'revision-old',
             title: 'Old',
-            assets: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
+            mediaRenditions: [
+              _mediaRenditionJson(id: 'a2', mediaId: 'media-old'),
+            ],
           ),
         ]),
       );
@@ -400,7 +460,7 @@ void main() {
         materialId: 'material-old',
         revisionId: 'revision-old',
         title: 'Old',
-        assets: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
+        mediaRenditions: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
       ),
     ]);
     final oldMediaBody = jsonEncode([_libraryEntryJson(id: 'media-old')]);
@@ -409,7 +469,7 @@ void main() {
         materialId: 'material-new',
         revisionId: 'revision-new',
         title: 'New',
-        assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
+        mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
       ),
     ]);
     final newMedia = jsonEncode([_libraryEntryJson(id: 'media-new')]);
@@ -482,7 +542,7 @@ void main() {
 
     expect(w.coordinator.mediaLibrary, [previousEntry]);
     expect(w.coordinator.personalLibrary, hasLength(1));
-    expect(w.rebuilds, isEmpty);
+    expect(w.rebuilds, hasLength(1));
 
     // The old request then succeeds, but it is no longer the newest load and
     // must not publish anything.
@@ -491,7 +551,7 @@ void main() {
 
     expect(w.coordinator.mediaLibrary, [previousEntry]);
     expect(w.coordinator.personalLibrary!.single.materialId, 'material-1');
-    expect(w.rebuilds, isEmpty);
+    expect(w.rebuilds, hasLength(1));
   });
 
   test('a newer load that exits on an unavailable repository still invalidates '
@@ -565,7 +625,9 @@ void main() {
           materialId: 'material-old',
           revisionId: 'revision-old',
           title: 'Old',
-          assets: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
+          mediaRenditions: [
+            _mediaRenditionJson(id: 'a2', mediaId: 'media-old'),
+          ],
         ),
       ]);
       final newMaterials = jsonEncode([
@@ -573,7 +635,9 @@ void main() {
           materialId: 'material-new',
           revisionId: 'revision-new',
           title: 'New',
-          assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
+          mediaRenditions: [
+            _mediaRenditionJson(id: 'a1', mediaId: 'media-new'),
+          ],
         ),
       ]);
       final newMediaBody = jsonEncode([_libraryEntryJson(id: 'media-new')]);
@@ -627,7 +691,9 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+                mediaRenditions: [
+                  _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
+                ],
               ),
             ]),
           );
@@ -666,7 +732,7 @@ void main() {
                 materialId: 'material-1',
                 revisionId: 'revision-1',
                 title: 'First',
-                assets: [
+                mediaRenditions: [
                   _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
                   _mediaRenditionJson(id: 'a2', mediaId: 'media-2'),
                 ],
@@ -675,7 +741,9 @@ void main() {
                 materialId: 'material-2',
                 revisionId: 'revision-2',
                 title: 'Second',
-                assets: [_mediaRenditionJson(id: 'a3', mediaId: 'media-3')],
+                mediaRenditions: [
+                  _mediaRenditionJson(id: 'a3', mediaId: 'media-3'),
+                ],
               ),
             ]),
           );
@@ -724,7 +792,9 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+                mediaRenditions: [
+                  _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
+                ],
               ),
               _materialDetailsJson(
                 materialId: 'material-text',
@@ -766,7 +836,9 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+                mediaRenditions: [
+                  _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
+                ],
               ),
             ]),
           );
@@ -792,6 +864,61 @@ void main() {
     },
   );
 
+  test('offlineLibrary keeps document rows offline without any media', () {
+    final w = _wire(() => null);
+    final textOnly = PersonalLibraryEntry(
+      details: _materialDetails(
+        documentRenditions: [documentRendition(id: 'text-1')],
+      ),
+      mediaEntries: const [],
+    );
+    w.coordinator.personalLibrary = [textOnly];
+
+    // A document rendition's bytes are resolvable (managed or referenced):
+    // no file exists to check, so the row is offline by itself.
+    expect(w.coordinator.offlineLibrary, hasLength(1));
+  });
+
+  test('offlineLibrary keeps media rows only when the local file exists', () {
+    final file = File(
+      '${Directory.systemTemp.createTempSync('mlc').path}/m.mp4',
+    )..writeAsStringSync('x');
+    addTearDown(() => file.parent.deleteSync(recursive: true));
+    final w = _wire(() => null);
+    final present = _personalEntry(_libraryEntry(path: file.path));
+    final missing = _personalEntry(_libraryEntry(id: 'media-2'));
+    w.coordinator.personalLibrary = [present, missing];
+
+    expect(w.coordinator.offlineLibrary, hasLength(1));
+    expect(
+      w.coordinator.offlineLibrary!.single.primaryMedia?.media.path,
+      file.path,
+    );
+  });
+
+  test('offlineLibrary keeps a mixed row with only its document rendition', () {
+    final w = _wire(() => null);
+    final mixed = PersonalLibraryEntry(
+      details: _materialDetails(
+        documentRenditions: [documentRendition(id: 'text-1')],
+        mediaRenditions: [
+          mediaRendition(
+            id: 'asset-1',
+            mediaId: 'media-gone',
+            kind: MediaRenditionKind.audio,
+            fingerprint: 'fp',
+          ),
+        ],
+      ),
+      mediaEntries: [_libraryEntry(id: 'media-gone')],
+    );
+    w.coordinator.personalLibrary = [mixed];
+
+    // The media file is gone but the document rendition's bytes are still
+    // resolvable: mixed rows need just one working capability to be offline.
+    expect(w.coordinator.offlineLibrary, hasLength(1));
+  });
+
   test('setLibraryTriageIntent keeps the authoritative list in sync', () async {
     final api = _fakeApi((method, path, body) {
       if (method == 'GET' && path == '/v1/materials') {
@@ -799,7 +926,9 @@ void main() {
           statusCode: 200,
           body: jsonEncode([
             _materialDetailsJson(
-              assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+              mediaRenditions: [
+                _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
+              ],
             ),
           ]),
         );
@@ -821,7 +950,7 @@ void main() {
     expect(w.coordinator.personalLibrary!.single.triageIntent, isNull);
 
     await w.coordinator.setLibraryTriageIntent(
-      w.coordinator.mediaLibrary!.first,
+      w.coordinator.personalLibrary!.single,
       'pin_intensive',
     );
 
@@ -833,9 +962,12 @@ void main() {
   test('openLibraryEntry guards a missing media file', () async {
     final w = _wire(() => null);
 
-    await w.coordinator.openLibraryEntry(_libraryEntry());
+    await w.coordinator.openLibraryEntry(_personalEntry(_libraryEntry()));
 
     expect(w.player.status, 'mediaFileMissing');
+    // The missing file is an error report, not an idle hint — it must render
+    // in the error style wherever the status line exists.
+    expect(w.player.statusIsError, isTrue);
     expect(w.openedPaths, isEmpty);
   });
 
@@ -846,17 +978,37 @@ void main() {
     addTearDown(() => file.parent.deleteSync(recursive: true));
     final w = _wire(() => null);
 
-    await w.coordinator.openLibraryEntry(_libraryEntry(path: file.path));
+    await w.coordinator.openLibraryEntry(
+      _personalEntry(_libraryEntry(path: file.path)),
+    );
 
     expect(w.openedPaths, [file.path]);
+  });
+
+  test('openLibraryEntry ignores a text-only row', () async {
+    final w = _wire(() => null);
+    final textOnly = PersonalLibraryEntry(
+      details: _materialDetails(
+        documentRenditions: [documentRenditionForText('Hello', id: 'text-1')],
+      ),
+      mediaEntries: const [],
+    );
+
+    await w.coordinator.openLibraryEntry(textOnly);
+
+    expect(w.openedPaths, isEmpty);
+    expect(w.player.status, isNot('mediaFileMissing'));
   });
 
   test('startIntensiveFromLibrary guards a missing media file', () async {
     final w = _wire(() => null);
 
-    await w.coordinator.startIntensiveFromLibrary(_libraryEntry());
+    await w.coordinator.startIntensiveFromLibrary(
+      _personalEntry(_libraryEntry()),
+    );
 
     expect(w.player.status, 'mediaFileMissing');
+    expect(w.player.statusIsError, isTrue);
     expect(w.openedPaths, isEmpty);
   });
 
@@ -874,7 +1026,7 @@ void main() {
     w.coordinator.mediaLibrary = [_libraryEntry()];
 
     await w.coordinator.setLibraryTriageIntent(
-      _libraryEntry(),
+      _personalEntry(_libraryEntry()),
       'pin_intensive',
     );
 
@@ -882,10 +1034,32 @@ void main() {
     expect(w.rebuilds, isNotEmpty);
   });
 
+  test('setLibraryTriageIntent ignores a text-only row', () async {
+    final w = _wire(() => null);
+    final textOnly = PersonalLibraryEntry(
+      details: _materialDetails(
+        documentRenditions: [documentRenditionForText('Hello', id: 'text-1')],
+      ),
+      mediaEntries: const [],
+    );
+
+    await w.coordinator.setLibraryTriageIntent(textOnly, 'defer');
+
+    // Text materials have no media to triage: the status line stays untouched
+    // (no core-unavailable complaint), no rebuild, and the media library stays
+    // as it was.
+    expect(w.player.status, 'Starting local core...');
+    expect(w.rebuilds, isEmpty);
+    expect(w.coordinator.mediaLibrary, isNull);
+  });
+
   test('setLibraryTriageIntent without a core reports it', () async {
     final w = _wire(() => null);
 
-    await w.coordinator.setLibraryTriageIntent(_libraryEntry(), 'defer');
+    await w.coordinator.setLibraryTriageIntent(
+      _personalEntry(_libraryEntry()),
+      'defer',
+    );
 
     expect(w.player.status, 'statusConnectLocalCoreFirst');
     expect(w.rebuilds, isEmpty);
@@ -897,7 +1071,10 @@ void main() {
     );
     final w = _wire(() => api);
 
-    await w.coordinator.setLibraryTriageIntent(_libraryEntry(), 'defer');
+    await w.coordinator.setLibraryTriageIntent(
+      _personalEntry(_libraryEntry()),
+      'defer',
+    );
 
     // The named state is the whole message (#62). What the backend answered
     // with lives on the typed detail instead of being appended to the line.

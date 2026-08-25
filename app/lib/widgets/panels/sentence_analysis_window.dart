@@ -6,14 +6,24 @@ import 'package:flutter/material.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
+import '../../controllers/slice_player_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
+import '../../models/capability_readiness.dart'
+    show canDisplayActualRhythmFrame;
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/transcript_translation.dart';
+import '../subtitle/connected_speech_reference_ribbon.dart';
+import '../subtitle/expected_pronunciation_reference.dart';
+import '../subtitle/phoneme_ribbon.dart';
+import '../subtitle/rhythm_frame_ribbon.dart';
+import '../subtitle/sound_pattern_mode_toggle.dart';
 import 'diagnosis_card.dart';
 
 /// Which layer of sentence analysis is on show.
@@ -41,7 +51,10 @@ class SentenceAnalysisWindow extends StatefulWidget {
     required this.learningController,
     required this.settingsController,
     required this.playbackActions,
+    required this.voiceClipPlayer,
     required this.onRequestDiagnosis,
+    required this.onPlayVoiceClip,
+    required this.onSetSoundPatternDisplayMode,
     required this.onClose,
     this.onOpenListeningDictionary,
     this.onOpenL1Specialty,
@@ -52,9 +65,20 @@ class SentenceAnalysisWindow extends StatefulWidget {
   final SettingsController settingsController;
   final PlaybackActionsCoordinator playbackActions;
 
+  /// The panel's own single-sentence player, independent of the main stage, so
+  /// the sound-reference ribbons can highlight against a playback the reader
+  /// drives here without moving the video.
+  final SlicePlayerController voiceClipPlayer;
+
   /// Fetches the diagnosis for the current sentence when the voice layer is
   /// opened on a sentence that has none loaded yet.
   final Future<void> Function() onRequestDiagnosis;
+
+  /// (Re)opens [voiceClipPlayer] on the current sentence and starts playback.
+  final Future<void> Function() onPlayVoiceClip;
+
+  /// Persists the sound-reference display mode (citation/connected/actual).
+  final Future<void> Function(String mode) onSetSoundPatternDisplayMode;
 
   /// Closes the window. Wired to clear [LearningController.diagnosisExpanded].
   final VoidCallback onClose;
@@ -71,12 +95,50 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
   /// only pins to an absolute spot once the reader has moved it.
   Offset? _offset;
   _AnalysisLayer _layer = _AnalysisLayer.text;
+  String? _prefetchedDiagnosisCueId;
 
   SubtitleController get subtitleController => widget.subtitleController;
   LearningController get learningController => widget.learningController;
   SettingsController get settingsController => widget.settingsController;
   PlaybackActionsCoordinator get playbackActions => widget.playbackActions;
+  SlicePlayerController get voiceClipPlayer => widget.voiceClipPlayer;
   AppLocalizations get l => AppLocalizations.of(context);
+
+  @override
+  void initState() {
+    super.initState();
+    _prefetchDiagnosis();
+  }
+
+  @override
+  void didUpdateWidget(SentenceAnalysisWindow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _prefetchDiagnosis();
+  }
+
+  /// Starts at most one automatic diagnosis request for the current cue.
+  /// Opening the window already prefetches it, so switching layers must not
+  /// launch the same sentence request again while the first result is still
+  /// pending. The explicit retry action in the pending card remains callable.
+  void _prefetchDiagnosis() {
+    final cueId = subtitleController.currentPrimaryCue?.id;
+    if (cueId == null ||
+        learningController.diagnosis != null ||
+        _prefetchedDiagnosisCueId == cueId) {
+      return;
+    }
+    _prefetchedDiagnosisCueId = cueId;
+    unawaited(widget.onRequestDiagnosis());
+  }
+
+  @override
+  void dispose() {
+    // Closing the panel (the X, or any path that clears diagnosisExpanded)
+    // removes this widget, so stop the panel's own playback here — otherwise
+    // its clip keeps sounding under the main player after the panel is gone.
+    unawaited(voiceClipPlayer.close());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +149,8 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
     final height = math.min(560.0, math.max(360.0, size.height - 32));
     final maxLeft = math.max(16.0, size.width - width - 16);
     final maxTop = math.max(16.0, size.height - height - 16);
-    final offset = _offset ?? Offset((size.width - width) / 2, (size.height - height) / 2);
+    final offset =
+        _offset ?? Offset((size.width - width) / 2, (size.height - height) / 2);
     final left = offset.dx.clamp(16.0, maxLeft);
     final top = offset.dy.clamp(16.0, maxTop);
     return Positioned(
@@ -114,25 +177,26 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
   Widget _titleBar(Size size, double width, double height, Offset offset) {
     final maxLeft = math.max(16.0, size.width - width - 16);
     final maxTop = math.max(16.0, size.height - height - 16);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) => setState(() {
-        final moved = offset + details.delta;
-        _offset = Offset(
-          moved.dx.clamp(16.0, maxLeft),
-          moved.dy.clamp(16.0, maxTop),
-        );
-      }),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          ListenSpacing.gap16,
-          ListenSpacing.gap12,
-          ListenSpacing.gap8,
-          ListenSpacing.gap8,
-        ),
-        child: Row(
-          children: [
-            Expanded(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        ListenSpacing.gap16,
+        ListenSpacing.gap12,
+        ListenSpacing.gap8,
+        ListenSpacing.gap8,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (details) => setState(() {
+                final current = _offset ?? offset;
+                final moved = current + details.delta;
+                _offset = Offset(
+                  moved.dx.clamp(16.0, maxLeft),
+                  moved.dy.clamp(16.0, maxTop),
+                );
+              }),
               child: Text(
                 l.text('aiAnalysis'),
                 style: Theme.of(
@@ -140,14 +204,14 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
-            IconButton(
-              key: const Key('analysis-window-close'),
-              tooltip: l.text('close'),
-              onPressed: widget.onClose,
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
+          ),
+          IconButton(
+            key: const Key('analysis-window-close'),
+            tooltip: l.text('close'),
+            onPressed: widget.onClose,
+            icon: const Icon(Icons.close),
+          ),
+        ],
       ),
     );
   }
@@ -178,7 +242,7 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
           setState(() => _layer = values.first);
           if (_layer == _AnalysisLayer.voice &&
               learningController.diagnosis == null) {
-            unawaited(widget.onRequestDiagnosis());
+            _prefetchDiagnosis();
           }
         },
       ),
@@ -247,6 +311,11 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
           _UnavailableNotice(
             title: l.text('analysisTextUnavailableTitle'),
             body: l.text('analysisTextUnavailableBody'),
+            actionLabel: l.text('analysisLayerVoice'),
+            onAction: () {
+              setState(() => _layer = _AnalysisLayer.voice);
+              _prefetchDiagnosis();
+            },
           ),
         ],
       ),
@@ -254,7 +323,8 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
   }
 
   Widget _voiceLayer() {
-    if (learningController.diagnosis == null) {
+    final cue = subtitleController.currentPrimaryCue;
+    if (cue == null) {
       return SingleChildScrollView(
         child: _AnalysisPending(
           message: l.text('openSentenceDiagnosisHint'),
@@ -263,7 +333,283 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
         ),
       );
     }
-    return SingleChildScrollView(child: _diagnosisCard());
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _soundReferenceSection(cue),
+          const SizedBox(height: ListenSpacing.gap16),
+          if (learningController.diagnosis == null)
+            _AnalysisPending(
+              message: l.text('openSentenceDiagnosisHint'),
+              actionLabel: l.text('openDiagnosis'),
+              onAction: () => unawaited(widget.onRequestDiagnosis()),
+            )
+          else
+            _diagnosisCard(),
+        ],
+      ),
+    );
+  }
+
+  /// The migrated per-sentence sound reference (citation/connected/actual),
+  /// driven by [voiceClipPlayer]'s own position so the reader can play and
+  /// scrub this sentence here without moving the main stage.
+  ///
+  /// The `actual` (C) evidence is this audio's own phone timeline, and both
+  /// halves of it come from Core's one timeline export: the rhythm frame and
+  /// the phones. Prefer the richer sound analysis when a media session has
+  /// one — it adds syllables, prosodic phrases and findings — and otherwise
+  /// read [SubtitleController.phonesBySentence], which both session kinds
+  /// fill from Core's export. That map is the only phone source an adopted
+  /// package ever has: its resources all land as candidates, so the track
+  /// carries no active phone timeline for the sound analysis to come from.
+  Widget _soundReferenceSection(Cue cue) => ListenableBuilder(
+    listenable: Listenable.merge([settingsController, voiceClipPlayer]),
+    builder: (context, _) {
+      final cueId = cue.id;
+      final analysis = subtitleController.phoneticAnalysisBySentence[cueId];
+      final pronunciation = subtitleController.pronunciationBySentence[cueId];
+      final soundAnalysis = analysis?.soundAnalysis;
+      final rhythmFrame =
+          subtitleController.llTimelineDocument?.rhythmFrameForSentence(
+            cueId,
+          ) ??
+          soundAnalysis?.rhythmFrame;
+      final phones = soundAnalysis != null
+          ? buildSoundPatternPhones(soundAnalysis)
+          : (subtitleController.phonesBySentence[cueId] ??
+                const <DetectedPhone>[]);
+      final findings = soundAnalysis == null
+          ? const <PhonemeRibbonFinding>[]
+          : buildPhonemeRibbonFindings(
+              rawFindings:
+                  analysis?.findings
+                      .map((value) => value.toJson())
+                      .toList(growable: false) ??
+                  const [],
+              phones: phones,
+              soundAnalysis: soundAnalysis,
+            );
+      final hasPhoneEvidence = phones.isNotEmpty;
+      final mode = settingsController.settings.soundPatternDisplayMode;
+
+      final state = voiceClipPlayer.state;
+      final openForThis = state.open && state.sentenceId == cueId;
+      final position = openForThis
+          ? state.position
+          : subtitleController.primaryCursor.mediaStart(cue);
+      // citation/connected highlight by word cursor, not by raw position — so
+      // while the panel drives its own playback, derive the cursor from the
+      // clip position too (the main stage isn't moving to update it for us).
+      final tokenIndex = openForThis
+          ? currentWordTokenIndex(
+              subtitleController.timingsBySentence[cueId] ?? const [],
+              position,
+              offset: subtitleController.primarySubtitleOffset,
+              displayGapTolerance: const Duration(milliseconds: 220),
+            )
+          : subtitleController.currentWordToken;
+
+      const base = 22.0;
+      final Widget ribbon;
+      if (mode == 'citation') {
+        ribbon = pronunciation == null
+            ? SoundPatternUnavailableRibbon(
+                message: l.text('citationPronunciationUnavailable'),
+                fontSize: base * 0.5,
+                height: base * 0.9,
+              )
+            : ExpectedPronunciationReference(
+                analysis: pronunciation,
+                title: l.text('rhythmReferenceCitation'),
+                currentTokenIndex: tokenIndex,
+                fontSize: base * 0.5,
+                height: base * 0.9,
+                tooltip: l.text('expectedPronunciationTooltip'),
+                expandTooltip: l.text('showFullSoundStructure'),
+                collapseTooltip: l.text('collapseSoundStructure'),
+              );
+      } else if (mode == 'connected') {
+        final connectedReferences =
+            rhythmFrame?.connectedSpeechRefs
+                .where(
+                  (reference) => reference.signalSources.contains('text_prior'),
+                )
+                .toList(growable: false) ??
+            const <RhythmConnectedSpeechRef>[];
+        ribbon = connectedReferences.isEmpty
+            ? SoundPatternUnavailableRibbon(
+                message: l.text('connectedSpeechUnavailable'),
+                fontSize: base * 0.5,
+                height: base * 0.9,
+              )
+            : ConnectedSpeechReferenceRibbon(
+                references: connectedReferences,
+                tokens: cue.tokens,
+                title: l.text('connectedSpeechReference'),
+                currentTokenIndex: tokenIndex,
+                fontSize: base * 0.6,
+                height: base * 1.1,
+                tooltip: l.text('connectedSpeechReferenceTooltip'),
+                expandTooltip: l.text('showFullSoundStructure'),
+                collapseTooltip: l.text('collapseSoundStructure'),
+              );
+      } else if (!canDisplayActualRhythmFrame(
+        rhythmFrame,
+        hasPhoneEvidence: hasPhoneEvidence,
+      )) {
+        // C ("this audio") is phone-observed only; the on-demand model call
+        // has been retired, so a missing timeline simply reads unavailable.
+        ribbon = SoundPatternUnavailableRibbon(
+          message: l.text('rhythmFrameUnavailable'),
+          tooltip: l.text('soundPatternUnavailableTooltip'),
+          fontSize: base * 0.5,
+          height: base * 0.9,
+        );
+      } else {
+        final actualView = RhythmFrameRibbon(
+          frame: rhythmFrame!,
+          pronunciation: pronunciation,
+          position: position,
+          title: l.text('rhythmReferenceActual'),
+          anchorLabel: l.text('stressAnchors'),
+          weakGroupLabel: l.text('weakGroups'),
+          compressionLabel: l.text('compressedSpans'),
+          hotspotLabel: l.text('listeningHotspots'),
+          fontSize: base * 0.6,
+          height: base * 1.2,
+          tooltip: l.text('rhythmRibbonHint'),
+          predicted: false,
+          predictedLabel: l.text('listeningPredictedBadge'),
+          expandTooltip: l.text('showFullSoundStructure'),
+          collapseTooltip: l.text('collapseSoundStructure'),
+          onLoopCue: (start, end, label) => unawaited(
+            playbackActions.loopRange(
+              start.inMilliseconds,
+              end.inMilliseconds,
+              'Looping listening rhythm: $label',
+              labelKey: 'loopRhythm',
+            ),
+          ),
+        );
+        // Syllables, prosodic phrases and findings ride on the sound
+        // analysis, which a package never carries — its phones alone still
+        // earn the lane, unannotated.
+        ribbon = hasPhoneEvidence
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  actualView,
+                  const SizedBox(height: ListenSpacing.gap4),
+                  PhonemeRibbon(
+                    phones: phones,
+                    position: position,
+                    fontSize: base * 0.55,
+                    height: base,
+                    style: settingsController.settings.phonemeRibbonStyle,
+                    syllables: soundAnalysis?.syllables ?? const [],
+                    prosodicPhrases:
+                        soundAnalysis?.prosodicPhrases ?? const [],
+                    findings: findings,
+                    lane: PhonemeRibbonLane.sound,
+                    tooltip: l.text('soundPatternRibbonHint'),
+                    onLoopFinding: (finding) =>
+                        unawaited(_loopSoundFinding(finding, phones)),
+                  ),
+                ],
+              )
+            : actualView;
+      }
+
+      // The ribbons carry a brightness-independent dark overlay vocabulary
+      // (they normally float over video), so give them the dark backing they
+      // expect instead of leaking white-on-light text onto the panel surface.
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: ListenColors.overlaySurface,
+          borderRadius: ListenRadii.controlBorder,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(ListenSpacing.gap12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  RhythmReferenceToggle(
+                    mode: mode,
+                    citationTooltip: l.text('rhythmReferenceCitationTooltip'),
+                    connectedTooltip: l.text('rhythmReferenceConnectedTooltip'),
+                    actualTooltip: l.text('rhythmReferenceActualTooltip'),
+                    semanticsLabel: l.text('soundPatternDisplayMode'),
+                    size: 30,
+                    onChanged: (value) =>
+                        unawaited(widget.onSetSoundPatternDisplayMode(value)),
+                  ),
+                  const Spacer(),
+                  _playControl(cue),
+                ],
+              ),
+              const SizedBox(height: ListenSpacing.gap8),
+              ribbon,
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  Widget _playControl(Cue cue) {
+    final state = voiceClipPlayer.state;
+    final openForThis = state.open && state.sentenceId == cue.id;
+    final playing = openForThis && state.playing;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          color: ListenColors.overlayText,
+          tooltip: playing ? l.text('pause') : l.text('play'),
+          icon: Icon(
+            playing ? Icons.pause_circle_outline : Icons.play_circle_outline,
+          ),
+          onPressed: () {
+            if (playing) {
+              unawaited(voiceClipPlayer.pause());
+            } else if (openForThis) {
+              unawaited(voiceClipPlayer.togglePlayback());
+            } else {
+              unawaited(widget.onPlayVoiceClip());
+            }
+          },
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          color: ListenColors.overlayText,
+          tooltip: l.text('replay'),
+          icon: const Icon(Icons.replay),
+          onPressed: () => unawaited(widget.onPlayVoiceClip()),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _loopSoundFinding(
+    PhonemeRibbonFinding finding,
+    List<DetectedPhone> phones,
+  ) async {
+    if (phones.isEmpty) return;
+    final startIndex = finding.phoneStart.clamp(0, phones.length - 1).toInt();
+    final endIndex = finding.phoneEnd
+        .clamp(startIndex, phones.length - 1)
+        .toInt();
+    await playbackActions.loopRange(
+      phones[startIndex].start.inMilliseconds,
+      phones[endIndex].end.inMilliseconds,
+      'Looping sound-line evidence',
+      labelKey: 'loopEvidence',
+    );
   }
 
   String? _translationFor(Cue cue) {
@@ -277,18 +623,6 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
     );
   }
 
-  RhythmFrame? get _currentRhythmFrame {
-    final cue = subtitleController.currentPrimaryCue;
-    if (cue == null) return null;
-    return subtitleController.llTimelineDocument?.rhythmFrameForSentence(
-          cue.id,
-        ) ??
-        subtitleController
-            .phoneticAnalysisBySentence[cue.id]
-            ?.soundAnalysis
-            ?.rhythmFrame;
-  }
-
   String? _timingQuality(String sentenceId) {
     final timings = subtitleController.timingsBySentence[sentenceId];
     if (timings == null || timings.isEmpty) return null;
@@ -296,43 +630,19 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
     return '${first.source.replaceAll('_', ' ')} · ${first.provider}';
   }
 
-  Widget _diagnosisCard() => ValueListenableBuilder<DetectedPhone?>(
-    valueListenable: subtitleController.currentDetectedPhoneListenable,
-    builder: (context, currentDetectedPhone, _) => DiagnosisCard(
+  Widget _diagnosisCard() {
+    final cueId = subtitleController.currentPrimaryCue?.id;
+    return DiagnosisCard(
       diagnosis: learningController.diagnosis!,
-      pronunciation: subtitleController.currentPrimaryCue == null
+      pronunciation: cueId == null
           ? null
-          : subtitleController.pronunciationBySentence[subtitleController
-                .currentPrimaryCue!
-                .id],
+          : subtitleController.pronunciationBySentence[cueId],
       ruleHintsLevel: settingsController.ruleHintsLevel,
       pronunciationProviders: subtitleController.pronunciationProviders,
-      timingQuality: subtitleController.currentPrimaryCue == null
+      timingQuality: cueId == null ? null : _timingQuality(cueId),
+      phoneticAnalysis: cueId == null
           ? null
-          : _timingQuality(subtitleController.currentPrimaryCue!.id),
-      rhythmFrame: _currentRhythmFrame,
-      phoneticAnalysis: subtitleController.currentPrimaryCue == null
-          ? null
-          : subtitleController.phoneticAnalysisBySentence[subtitleController
-                .currentPrimaryCue!
-                .id],
-      currentDetectedPhone: currentDetectedPhone,
-      onLoopDetectedPhone: (phone) => unawaited(
-        playbackActions.loopRange(
-          phone.start.inMilliseconds,
-          phone.end.inMilliseconds,
-          'Looping detected phone ${phone.displayIpa}',
-          labelKey: 'loopPhone',
-        ),
-      ),
-      onLoopHotspot: (hotspot) => unawaited(
-        playbackActions.loopRange(
-          hotspot.start.inMilliseconds,
-          hotspot.end.inMilliseconds,
-          'Looping listening hotspot ${hotspot.label}',
-          labelKey: 'loopHotspot',
-        ),
-      ),
+          : subtitleController.phoneticAnalysisBySentence[cueId],
       onLoopFinding: (finding) => unawaited(
         playbackActions.loopRange(
           finding.audioStartMs,
@@ -356,16 +666,23 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
       onOpenL1Specialty: widget.onOpenL1Specialty == null
           ? null
           : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
-    ),
-  );
+    );
+  }
 }
 
 /// The honest "this layer isn't ready" card for the text analysis layer.
 class _UnavailableNotice extends StatelessWidget {
-  const _UnavailableNotice({required this.title, required this.body});
+  const _UnavailableNotice({
+    required this.title,
+    required this.body,
+    this.actionLabel,
+    this.onAction,
+  });
 
   final String title;
   final String body;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -391,6 +708,17 @@ class _UnavailableNotice extends StatelessWidget {
               body,
               style: theme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
             ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: ListenSpacing.gap12),
+              OutlinedButton.icon(
+                icon: const Icon(
+                  Icons.record_voice_over_outlined,
+                  size: ListenIconSize.inline,
+                ),
+                label: Text(actionLabel!),
+                onPressed: onAction,
+              ),
+            ],
           ],
         ),
       ),

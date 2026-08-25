@@ -44,10 +44,8 @@ void main() {
       );
 
   Widget toolsMenu() => ShellToolsMenu(
-    onOpenSubtitleResources: () => fired.add('subtitle-resources'),
     onOpenLearningAssets: () => fired.add('learning-assets'),
     onOpenLearningResources: () => fired.add('learning-resources'),
-    onOpenPhoneticAnalysisCenter: () => fired.add('phonetic-analysis'),
     onExportLogs: () => fired.add('logs'),
     onExportVocabulary: () => fired.add('export-vocabulary'),
     onImportVocabulary: () => fired.add('import-vocabulary'),
@@ -61,7 +59,6 @@ void main() {
     onImportSecondarySubtitle: () => fired.add('import-secondary'),
     onSearchSecondarySubtitles: () => fired.add('search-secondary'),
     onImportEmbeddedSubtitle: () => fired.add('import-embedded'),
-    onOpenResources: () => fired.add('open-resources'),
     onArchiveMedia: () => fired.add('archive-media'),
   );
 
@@ -92,10 +89,8 @@ void main() {
       await tester.pumpWidget(wrap(toolsMenu()));
 
       expect(await openMenu(tester, 'Tools'), [
-        'subtitle-resources',
         'learning-assets',
         'learning-resources',
-        'phonetic-analysis',
         'export-vocabulary',
         'import-vocabulary',
         'import-word-list',
@@ -136,10 +131,8 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       for (final value in const [
-        'subtitle-resources',
         'learning-assets',
         'learning-resources',
-        'phonetic-analysis',
         'export-vocabulary',
         'import-vocabulary',
         'import-word-list',
@@ -169,7 +162,6 @@ void main() {
         'import-secondary',
         'search-secondary',
         'import-embedded',
-        'open-resources',
         'archive-media',
       ]);
     });
@@ -221,7 +213,6 @@ void main() {
         'import-secondary',
         'search-secondary',
         'import-embedded',
-        'open-resources',
         'archive-media',
       ]) {
         fired = [];

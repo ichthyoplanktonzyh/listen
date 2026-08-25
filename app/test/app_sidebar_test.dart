@@ -62,7 +62,7 @@ void main() {
     await tester.pumpWidget(
       _harness(
         AppSidebar(
-          currentRoute: AppRoute.today,
+          currentRoute: AppRoute.home,
           onRouteSelected: selectedRoutes.add,
           onOpenConversation: () => launches++,
         ),
@@ -114,5 +114,24 @@ void main() {
         expect(find.text(heading), findsNothing);
       }
     }
+  });
+
+  testWidgets('the primary destinations describe learner objects clearly', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _harness(
+        AppSidebar(
+          currentRoute: AppRoute.home,
+          onRouteSelected: (_) {},
+          onOpenConversation: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Today'), findsNothing);
+    expect(find.text('Listen'), findsNothing);
   });
 }

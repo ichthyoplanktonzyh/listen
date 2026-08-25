@@ -6,7 +6,7 @@ import 'package:llplayer_next/controllers/discovery_view_model.dart';
 import 'package:llplayer_next/data/repositories/composite_discovery_repository.dart';
 import 'package:llplayer_next/data/repositories/discovery_repository.dart';
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
-import 'package:llplayer_next/data/repositories/podcast_discovery_repository.dart';
+import 'package:llplayer_next/data/repositories/feed_discovery_repository.dart';
 import 'package:llplayer_next/models/discovery.dart';
 
 import 'discovery_test_helpers.dart';
@@ -21,20 +21,22 @@ import 'discovery_test_helpers.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const podcastSource = MediaSource(
+  const podcastSource = ContentSource(
     id: 'https://feeds.example.com/show.xml',
     name: 'Daily Listening',
     language: 'en',
     description: '',
     cover: ChannelCoverTone.amber,
-    type: MediaSourceType.podcast,
+    kind: ContentSourceKind.podcast,
     avatarUrl: null,
   );
 
   (DiscoveryViewModel, TestMediaImportRepository) podcastViewModel({
-    List<MediaEntry>? entries,
+    List<DiscoveryItem>? entries,
     TestMediaLibraryRepository? library,
     AcquisitionLedger? ledger,
+    TestMediaFileService? fileService,
+    Future<String?> Function()? downloadsDirectory,
   }) {
     final imports = TestMediaImportRepository();
     final vm = DiscoveryViewModel(
@@ -42,12 +44,14 @@ void main() {
         sources: const [podcastSource],
         entries: {
           podcastSource.id:
-              entries ?? [testPodcastEntry('i-bbc-1', podcastSource.id)],
+              entries ?? [testPodcastItem('i-bbc-1', podcastSource.id)],
         },
       ),
-      imports,
-      library ?? TestMediaLibraryRepository(),
-      ledger,
+      importRepository: imports,
+      mediaLibraryRepository: library ?? TestMediaLibraryRepository(),
+      ledger: ledger,
+      fileService: fileService ?? TestMediaFileService(),
+      downloadsDirectory: downloadsDirectory,
     );
     addTearDown(vm.dispose);
     return (vm, imports);
@@ -91,7 +95,7 @@ void main() {
       tester,
     ) async {
       final (vm, imports) = podcastViewModel(
-        entries: [testUnacquirableEntry('i-notes', podcastSource.id)],
+        entries: [testUnacquirableItem('i-notes', podcastSource.id)],
       );
       await vm.load();
 
@@ -100,7 +104,12 @@ void main() {
 
       expect(imports.enclosureRequests, isEmpty);
       expect(imports.downloadedUrls, isEmpty);
-      expect(vm.state.downloadStateOf('i-notes'), DownloadState.none);
+      expect(
+        vm.state.acquisitionStateOf('i-notes'),
+        DiscoveryItemState.discoverable,
+        reason: 'an item with nothing to acquire is discoverable, not '
+            'acquirable',
+      );
     });
 
     testWidgets('does not run duration workers against enclosure URLs', (
@@ -129,12 +138,12 @@ void main() {
           () => vm.acquireForLearning('i-bbc-1'),
         );
 
-        expect(path, '/path/to/downloaded/[i-bbc-1].mp4');
+        expect(path?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
         expect(imports.enclosureRequests, hasLength(1));
         expect(imports.downloadedUrls, isEmpty);
         expect(
-          vm.state.mediaAvailabilityOf('i-bbc-1'),
-          DiscoveryMediaAvailability.local,
+          vm.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
         );
       },
     );
@@ -166,13 +175,13 @@ void main() {
   group('CompositeDiscoveryRepository', () {
     test('lists podcast sources before YouTube ones', () async {
       final composite = CompositeDiscoveryRepository(
-        PodcastDiscoveryRepository(),
-        TestDiscoveryRepository(sources: [testMediaSource('c-yt')]),
+        FeedDiscoveryRepository(),
+        TestDiscoveryRepository(sources: [testContentSource('c-yt')]),
       );
 
       final sources = await composite.sources();
 
-      expect(sources.first.type, MediaSourceType.podcast);
+      expect(sources.first.kind, ContentSourceKind.podcast);
       expect(sources.last.id, 'c-yt');
     });
 
@@ -180,13 +189,13 @@ void main() {
       'routes a feed URL to the podcast side and a channel id to YouTube',
       () async {
         final youtube = TestDiscoveryRepository(
-          sources: [testMediaSource('c-yt')],
+          sources: [testContentSource('c-yt')],
           entries: {
-            'c-yt': [testMediaEntry('v-1', 'c-yt')],
+            'c-yt': [testDiscoveryItem('v-1', 'c-yt')],
           },
         );
         final composite = CompositeDiscoveryRepository(
-          PodcastDiscoveryRepository(),
+          FeedDiscoveryRepository(),
           youtube,
         );
 
@@ -203,7 +212,7 @@ void main() {
     test('sends a pasted YouTube link to the channel resolver', () async {
       final youtube = _RecordingDiscoveryRepository();
       final composite = CompositeDiscoveryRepository(
-        PodcastDiscoveryRepository(),
+        FeedDiscoveryRepository(),
         youtube,
       );
 
@@ -213,6 +222,56 @@ void main() {
       );
 
       expect(youtube.resolvedChannels, ['https://www.youtube.com/@example']);
+    });
+  });
+
+  group('where an acquisition writes', () {
+    testWidgets('every download uses the remembered folder, never the chooser',
+        (tester) async {
+      // The folder chooser used to open on the first download of every launch,
+      // and the answer was cached on the view model rather than persisted.
+      final asked = <int>[];
+      final (vm, imports) = podcastViewModel(
+        entries: [
+          testPodcastItem('i-bbc-1', podcastSource.id),
+          testPodcastItem('i-bbc-2', podcastSource.id),
+        ],
+        downloadsDirectory: () async {
+          asked.add(asked.length);
+          return '/remembered/downloads';
+        },
+      );
+      await tester.runAsync(() async {
+        await vm.load();
+        await vm.startDownload('i-bbc-1');
+        await vm.startDownload('i-bbc-2');
+      });
+
+      expect(imports.pickerPrompts, isEmpty);
+      expect(asked, hasLength(2), reason: 'read per download, so a settings '
+          'change takes effect without a restart');
+      expect(
+        imports.enclosureRequests, hasLength(2),
+      );
+      vm.cancelDownload('i-bbc-1');
+      vm.cancelDownload('i-bbc-2');
+    });
+
+    testWidgets('no folder means no acquisition, not a guess', (tester) async {
+      final (vm, imports) = podcastViewModel(
+        downloadsDirectory: () async => null,
+      );
+      await tester.runAsync(() async {
+        await vm.load();
+        await vm.startDownload('i-bbc-1');
+      });
+
+      expect(imports.enclosureRequests, isEmpty);
+      expect(imports.pickerPrompts, isEmpty);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquirable,
+      );
     });
   });
 
@@ -228,7 +287,7 @@ void main() {
       final first = AcquisitionLedger(directory: directory);
       await first.load();
       await first.record(
-        'i-bbc-1',
+        '${podcastSource.id}\u0000i-bbc-1',
         mediaId: 'm-1',
         path: '/library/p0p1qc9j.mp3',
       );
@@ -249,8 +308,165 @@ void main() {
       vm.selectItem('i-bbc-1');
       await pumpEventQueue();
 
-      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.done);
+      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.available);
       expect(vm.localPathFor('i-bbc-1'), '/library/p0p1qc9j.mp3');
+    });
+
+    testWidgets(
+      'a download is still recognised after a restart, though the Personal '
+      'Library never lists it',
+      (tester) async {
+        // The real shape of the bug, end to end. Adoption registers a
+        // download as Temporary Material (`retain: false` — acquisition is
+        // not retention, CONTEXT.md Retention Decision), and Core's Personal
+        // Library projection lists retained media only. Recognition used to
+        // confirm its ledger row against that projection, never found the
+        // episode there, deleted the row as stale, and offered the very
+        // download that had already happened — writing `episode (2).mp3` when
+        // it was taken.
+        final directory = Directory.systemTemp.createTempSync('journey-restart-');
+        addTearDown(() => directory.deleteSync(recursive: true));
+        final library = TestMediaLibraryRepository();
+        final files = TestMediaFileService();
+
+        final (vm, imports) = podcastViewModel(
+          library: library,
+          ledger: AcquisitionLedger(directory: directory),
+          fileService: files,
+        );
+        await tester.runAsync(() async {
+          await vm.load();
+          await vm.startDownload('i-bbc-1');
+          await Future<void>.delayed(const Duration(milliseconds: 700));
+        });
+
+        expect(imports.enclosureRequests, hasLength(1));
+        expect(
+          vm.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
+        );
+        expect(
+          await library.listMediaLibrary(),
+          isEmpty,
+          reason: 'an adopted download is Temporary Material: registered and '
+              'readable, but not Personal Library membership',
+        );
+
+        // Relaunch: fresh view model, fresh ledger instance reading the same
+        // file, the same Core.
+        final (restarted, restartedImports) = podcastViewModel(
+          library: library,
+          ledger: AcquisitionLedger(directory: directory),
+          fileService: files,
+        );
+        await tester.runAsync(() async {
+          await restarted.load();
+          await pumpEventQueue();
+        });
+
+        expect(
+          restarted.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
+          reason: 'the episode is on this machine; the row must not offer to '
+              'download it a second time',
+        );
+        expect(
+          restarted.localPathFor('i-bbc-1'),
+          '/path/to/downloaded/[i-bbc-1].mp4',
+        );
+
+        // And the intent opens what is there rather than fetching again.
+        final target = await tester.runAsync(
+          () => restarted.acquireForLearning('i-bbc-1'),
+        );
+        expect(target?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
+        expect(restartedImports.enclosureRequests, isEmpty);
+      },
+    );
+
+    test('a record whose file was deleted from disk is dropped', () async {
+      // Core records a path, never the file's continued existence. A row that
+      // still claimed "on this device" after the folder was emptied would be
+      // the same confident lie in the other direction.
+      final ledger = AcquisitionLedger.inMemory();
+      await ledger.load();
+      await ledger.record(
+        '${podcastSource.id}\u0000i-bbc-1',
+        mediaId: 'm-1',
+        path: '/library/p0p1qc9j.mp3',
+      );
+      final files = TestMediaFileService()..remove('/library/p0p1qc9j.mp3');
+
+      final (vm, _) = podcastViewModel(
+        library: TestMediaLibraryRepository(
+          seed: [
+            TestMediaLibraryRepository.entry(
+              id: 'm-1',
+              path: '/library/p0p1qc9j.mp3',
+              // Retained on purpose: Core knows this media by every route
+              // there is, so the only fact that can refute the row is the
+              // file itself being gone.
+              retained: true,
+            ),
+          ],
+        ),
+        ledger: ledger,
+        fileService: files,
+      );
+      await vm.load();
+      vm.selectItem('i-bbc-1');
+      await pumpEventQueue();
+
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquirable,
+      );
+      expect(ledger['${podcastSource.id}\u0000i-bbc-1'], isNull);
+    });
+
+    test('every row of the shelf reports its own local state', () async {
+      // Only the selected entry used to be reconciled, so a shelf of episodes
+      // the learner had already downloaded rendered a download button on every
+      // row but one — the answer was in the ledger the whole time.
+      final ledger = AcquisitionLedger.inMemory();
+      await ledger.load();
+      await ledger.record(
+        '${podcastSource.id}\u0000i-bbc-3',
+        mediaId: 'm-3',
+        path: '/library/three.mp3',
+      );
+
+      final (vm, _) = podcastViewModel(
+        entries: [
+          testPodcastItem('i-bbc-1', podcastSource.id),
+          testPodcastItem('i-bbc-2', podcastSource.id),
+          testPodcastItem('i-bbc-3', podcastSource.id),
+        ],
+        library: TestMediaLibraryRepository(
+          seed: [
+            TestMediaLibraryRepository.entry(
+              id: 'm-3',
+              path: '/library/three.mp3',
+            ),
+          ],
+        ),
+        ledger: ledger,
+      );
+      await vm.load();
+      await pumpEventQueue();
+
+      expect(vm.state.selectedEntryId, 'i-bbc-1');
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-3'),
+        DiscoveryItemState.available,
+        reason: 'a downloaded episode reads as downloaded without being '
+            'selected first',
+      );
+      expect(vm.localPathFor('i-bbc-3'), '/library/three.mp3');
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-2'),
+        DiscoveryItemState.acquirable,
+      );
     });
 
     test('a record whose file Core no longer knows is dropped', () async {
@@ -262,7 +478,11 @@ void main() {
 
       final ledger = AcquisitionLedger(directory: directory);
       await ledger.load();
-      await ledger.record('i-bbc-1', mediaId: 'm-gone', path: '/gone.mp3');
+      await ledger.record(
+        '${podcastSource.id}\u0000i-bbc-1',
+        mediaId: 'm-gone',
+        path: '/gone.mp3',
+      );
 
       final (vm, _) = podcastViewModel(
         library: TestMediaLibraryRepository(),
@@ -273,7 +493,7 @@ void main() {
       vm.selectItem('i-bbc-1');
       await pumpEventQueue();
 
-      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.none);
+      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
       expect(ledger['i-bbc-1'], isNull);
     });
   });
@@ -283,23 +503,26 @@ class _RecordingDiscoveryRepository implements DiscoveryRepository {
   final resolvedChannels = <String>[];
 
   @override
-  Future<List<MediaSource>> sources() async => const [];
+  Future<List<ContentSource>> sources() async => const [];
 
   @override
-  Future<List<MediaEntry>> entriesFor(String sourceId) async => const [];
+  Future<List<DiscoveryItem>> entriesFor(String sourceId) async => const [];
 
   @override
-  Future<MediaEntry> resolveCustomVideo(
+  Future<void> refreshSource(String sourceId) async {}
+
+  @override
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
   ) => throw UnimplementedError();
 
   @override
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   ) async {
     resolvedChannels.add(url);
-    return testMediaSource('c-resolved');
+    return testContentSource('c-resolved');
   }
 }

@@ -6,6 +6,7 @@ import 'utils/transcript_translation.dart';
 const _appSupportDirectoryName = 'listen';
 const _legacyAppSupportDirectoryName = 'LLPlayerNext';
 const _defaultManagedStoreDirectoryName = 'managed-assets';
+const _defaultDownloadsDirectoryName = 'downloads';
 
 /// How the persisted managed asset store location relates to the disk right
 /// now.
@@ -17,13 +18,24 @@ const _defaultManagedStoreDirectoryName = 'managed-assets';
 /// unmounted, a folder gets renamed. Folding that back into `appManaged`
 /// would tell the user they never chose a location, which is a different — and
 /// false — story than "the folder you chose is not there".
-enum ManagedStoreState { appManaged, ready, missing }
+enum StorageLocationState { appManaged, ready, missing }
 
 /// The managed asset store location as the UI needs it: the path and the
 /// verdict about it always travel together, so no surface can pair a fresh
 /// path with a stale verdict. In the `appManaged` state the path is the
 /// resolved app-managed store, so every state carries something real to show.
-typedef ManagedStoreLocation = ({String path, ManagedStoreState state});
+typedef ManagedStoreLocation = ({String path, StorageLocationState state});
+
+/// Where acquired media lands before any Keep, with the same three-state
+/// verdict as [ManagedStoreLocation].
+///
+/// Deliberately *not* the managed asset store. That store is content-addressed
+/// — every entry is a verified copy named by its SHA-256, with no extension —
+/// and it holds what the learner kept. A download is neither: its digest is
+/// unknown until the bytes finish arriving, and acquisition is not retention
+/// (CONTEXT.md Retention Decision). Two locations keep the filesystem saying
+/// the same thing the app says.
+typedef DownloadsLocation = ({String path, StorageLocationState state});
 
 class AppSettings {
   const AppSettings({
@@ -55,6 +67,7 @@ class AppSettings {
     this.lastMediaDurationMs = 0,
     this.lastMediaSubtitleCount = 0,
     this.mediaLibraryPath = '',
+    this.downloadsPath = '',
     this.ffmpegPath = '',
     this.ffprobePath = '',
     this.ytDlpPath = '',
@@ -76,8 +89,6 @@ class AppSettings {
     this.phoneticAnalysisPreference = 'on_demand',
     this.showExperimentalPhoneticResults = false,
     this.phonemeHighlightVisible = true,
-    this.phonemeRibbonVisible = false,
-    this.soundPatternRibbonVisible = false,
     this.soundPatternDisplayMode = 'actual',
     this.phonemeRibbonStyle = 'window',
     this.phoneticCachePolicy = 'keep_completed',
@@ -160,6 +171,7 @@ class AppSettings {
       lastMediaDurationMs: json['last_media_duration_ms'] as int? ?? 0,
       lastMediaSubtitleCount: json['last_media_subtitle_count'] as int? ?? 0,
       mediaLibraryPath: json['media_library_path'] as String? ?? '',
+      downloadsPath: json['downloads_path'] as String? ?? '',
       ffmpegPath: json['ffmpeg_path'] as String? ?? '',
       ffprobePath: json['ffprobe_path'] as String? ?? '',
       ytDlpPath: json['yt_dlp_path'] as String? ?? '',
@@ -200,9 +212,6 @@ class AppSettings {
           json['show_experimental_phonetic_results'] as bool? ?? false,
       phonemeHighlightVisible:
           json['phoneme_highlight_visible'] as bool? ?? true,
-      phonemeRibbonVisible: json['phoneme_ribbon_visible'] as bool? ?? false,
-      soundPatternRibbonVisible:
-          json['sound_pattern_ribbon_visible'] as bool? ?? false,
       soundPatternDisplayMode: _soundPatternDisplayMode(
         json['sound_pattern_display_mode'],
       ),
@@ -254,6 +263,12 @@ class AppSettings {
   /// [defaultManagedStorePath]). The app runs unsandboxed, so a plain path
   /// survives a restart — no security-scoped bookmark is involved.
   final String mediaLibraryPath;
+
+  /// Custom downloads location, or empty for the app-managed default
+  /// ([defaultDownloadsPath]). Persisted because a folder chooser that reopens
+  /// on every launch is not a setting — it is a question the app forgot the
+  /// answer to.
+  final String downloadsPath;
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
@@ -293,14 +308,12 @@ class AppSettings {
   final String phoneticAnalysisPreference;
   final bool showExperimentalPhoneticResults;
   final bool phonemeHighlightVisible;
-  final bool phonemeRibbonVisible;
-  final bool soundPatternRibbonVisible;
   final String soundPatternDisplayMode;
   final String phonemeRibbonStyle;
   final String phoneticCachePolicy;
   final String learningLanguage;
 
-  /// Whether familiar-material marks (3.2) feed the extensive-listening
+  /// Whether familiar-material marks feed the extensive-listening
   /// queue suggestion on the home media library (restrained, off-switchable).
   final bool familiarMaterialSuggestions;
 
@@ -322,6 +335,10 @@ class AppSettings {
   static Directory get _supportDirectory =>
       Directory('$_home/Library/Application Support/$_appSupportDirectoryName');
 
+  /// The macOS Application Support directory this app owns. App-side side
+  /// tables (settings, document references) live here.
+  String get supportDirectory => _supportDirectory.path;
+
   static Directory get _legacySupportDirectory => Directory(
     '$_home/Library/Application Support/$_legacyAppSupportDirectoryName',
   );
@@ -331,6 +348,11 @@ class AppSettings {
   /// user chose a custom managed-store location.
   static String get defaultManagedStorePath =>
       '${_supportDirectory.path}/$_defaultManagedStoreDirectoryName';
+
+  /// The app-managed default downloads folder, beside the managed store but
+  /// separate from it: readable filenames, whatever the publisher called them.
+  static String get defaultDownloadsPath =>
+      '${_supportDirectory.path}/$_defaultDownloadsDirectoryName';
 
   static File get file => File('${_supportDirectory.path}/settings-v8.json');
 
@@ -361,11 +383,36 @@ class AppSettings {
   /// No custom path means the app-managed default store, which is a real
   /// location even before it exists on disk — the `appManaged` state always
   /// carries the resolved path.
-  Future<ManagedStoreState> resolveManagedStoreState() async {
-    if (mediaLibraryPath.isEmpty) return ManagedStoreState.appManaged;
+  Future<StorageLocationState> resolveManagedStoreState() async {
+    if (mediaLibraryPath.isEmpty) return StorageLocationState.appManaged;
     return await Directory(mediaLibraryPath).exists()
-        ? ManagedStoreState.ready
-        : ManagedStoreState.missing;
+        ? StorageLocationState.ready
+        : StorageLocationState.missing;
+  }
+
+  /// The same verdict for the downloads folder. See
+  /// [resolveManagedStoreState]; the app-managed default is a real location
+  /// even before it exists on disk.
+  Future<StorageLocationState> resolveDownloadsState() async {
+    if (downloadsPath.isEmpty) return StorageLocationState.appManaged;
+    return await Directory(downloadsPath).exists()
+        ? StorageLocationState.ready
+        : StorageLocationState.missing;
+  }
+
+  /// Creates the app-managed downloads folder if it is not there yet, and
+  /// answers with the path acquisitions should write into.
+  ///
+  /// Only the app-managed default is created: a custom location the learner
+  /// chose is theirs, and silently recreating a folder that went off disk
+  /// would hide an unmounted drive instead of reporting it.
+  Future<String?> ensureDownloadsDirectory() async {
+    if (downloadsPath.isNotEmpty) {
+      return await Directory(downloadsPath).exists() ? downloadsPath : null;
+    }
+    final directory = Directory(defaultDownloadsPath);
+    if (!await directory.exists()) await directory.create(recursive: true);
+    return directory.path;
   }
 
   Future<void> save() async {
@@ -404,6 +451,7 @@ class AppSettings {
     'last_media_duration_ms': lastMediaDurationMs,
     'last_media_subtitle_count': lastMediaSubtitleCount,
     'media_library_path': mediaLibraryPath,
+    'downloads_path': downloadsPath,
     'ffmpeg_path': ffmpegPath,
     'ffprobe_path': ffprobePath,
     'yt_dlp_path': ytDlpPath,
@@ -425,8 +473,6 @@ class AppSettings {
     'phonetic_analysis_preference': phoneticAnalysisPreference,
     'show_experimental_phonetic_results': showExperimentalPhoneticResults,
     'phoneme_highlight_visible': phonemeHighlightVisible,
-    'phoneme_ribbon_visible': phonemeRibbonVisible,
-    'sound_pattern_ribbon_visible': soundPatternRibbonVisible,
     'sound_pattern_display_mode': soundPatternDisplayMode,
     'phoneme_ribbon_style': phonemeRibbonStyle,
     'phonetic_cache_policy': phoneticCachePolicy,
@@ -464,6 +510,7 @@ class AppSettings {
     int? lastMediaDurationMs,
     int? lastMediaSubtitleCount,
     String? mediaLibraryPath,
+    String? downloadsPath,
     String? ffmpegPath,
     String? ffprobePath,
     String? ytDlpPath,
@@ -485,8 +532,6 @@ class AppSettings {
     String? phoneticAnalysisPreference,
     bool? showExperimentalPhoneticResults,
     bool? phonemeHighlightVisible,
-    bool? phonemeRibbonVisible,
-    bool? soundPatternRibbonVisible,
     String? soundPatternDisplayMode,
     String? phonemeRibbonStyle,
     String? phoneticCachePolicy,
@@ -529,6 +574,7 @@ class AppSettings {
     lastMediaSubtitleCount:
         lastMediaSubtitleCount ?? this.lastMediaSubtitleCount,
     mediaLibraryPath: mediaLibraryPath ?? this.mediaLibraryPath,
+    downloadsPath: downloadsPath ?? this.downloadsPath,
     ffmpegPath: ffmpegPath ?? this.ffmpegPath,
     ffprobePath: ffprobePath ?? this.ffprobePath,
     ytDlpPath: ytDlpPath ?? this.ytDlpPath,
@@ -555,9 +601,6 @@ class AppSettings {
         showExperimentalPhoneticResults ?? this.showExperimentalPhoneticResults,
     phonemeHighlightVisible:
         phonemeHighlightVisible ?? this.phonemeHighlightVisible,
-    phonemeRibbonVisible: phonemeRibbonVisible ?? this.phonemeRibbonVisible,
-    soundPatternRibbonVisible:
-        soundPatternRibbonVisible ?? this.soundPatternRibbonVisible,
     soundPatternDisplayMode:
         soundPatternDisplayMode ?? this.soundPatternDisplayMode,
     phonemeRibbonStyle: phonemeRibbonStyle ?? this.phonemeRibbonStyle,

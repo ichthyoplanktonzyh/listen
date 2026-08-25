@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../models/discovery.dart';
 import '../models/embedded_subtitle.dart';
 import '../models/media_download.dart';
 import '../models/media_resolution.dart';
 
+export '../models/discovery.dart' show DiscoveryItem;
 export '../models/embedded_subtitle.dart';
 export '../models/media_resolution.dart';
 
@@ -159,11 +161,17 @@ class ExternalTools {
     return output;
   }
 
+  static const _youtubeExtractorArgs = [
+    '--extractor-args',
+    'youtube:player_client=android,web',
+  ];
+
   Future<String> resolveOnlineMedia(String pageUrl) async {
     final executable = await _resolve(ytDlpPath, 'yt-dlp');
     final result = await _run(executable, [
       '--no-playlist',
       '--no-warnings',
+      ..._youtubeExtractorArgs,
       '--get-url',
       '--format',
       'best',
@@ -184,6 +192,7 @@ class ExternalTools {
     final result = await _run(executable, [
       '--no-playlist',
       '--no-warnings',
+      ..._youtubeExtractorArgs,
       '-J',
       pageUrl,
     ], timeout: const Duration(seconds: 30));
@@ -208,6 +217,8 @@ class ExternalTools {
     final result = await _run(executable, [
       '--playlist-end',
       '1',
+      '--no-warnings',
+      ..._youtubeExtractorArgs,
       '--print',
       'channel_id',
       '--print',
@@ -224,6 +235,79 @@ class ExternalTools {
     return ResolvedChannelDetails(id: lines[0].trim(), name: lines[1].trim());
   }
 
+  Future<List<DiscoveryItem>> resolveChannelVideos(
+    String channelId, {
+    int maxResults = 15,
+  }) async {
+    final executable = await _resolve(ytDlpPath, 'yt-dlp');
+    final channelUrl = channelId.startsWith('UC')
+        ? 'https://www.youtube.com/channel/$channelId/videos'
+        : channelId;
+    final result = await _run(executable, [
+      '--flat-playlist',
+      '--playlist-end',
+      '$maxResults',
+      '--no-warnings',
+      ..._youtubeExtractorArgs,
+      '-J',
+      channelUrl,
+    ], timeout: const Duration(seconds: 30));
+    final data = jsonDecode(result) as Map<String, dynamic>;
+    final entries = data['entries'] as List<dynamic>? ?? const [];
+    return [
+      for (final raw in entries)
+        if (raw is Map<String, dynamic> && raw['id'] != null)
+          _discoveryItemFromYtDlpEntry(raw, channelId),
+    ];
+  }
+
+  static DiscoveryItem _discoveryItemFromYtDlpEntry(
+    Map<String, dynamic> raw,
+    String channelId,
+  ) {
+    final videoId = raw['id'] as String;
+    final title = raw['title'] as String? ?? '';
+    final description = raw['description'] as String? ?? '';
+    final durationSeconds = (raw['duration'] as num?)?.toDouble();
+    final durationMs = durationSeconds == null
+        ? null
+        : (durationSeconds * 1000).round();
+    final thumbnails = raw['thumbnails'] as List<dynamic>?;
+    final thumbnailUrl = (thumbnails != null && thumbnails.isNotEmpty)
+        ? (thumbnails.last as Map<String, dynamic>)['url'] as String?
+        : null;
+    final viewCount = (raw['view_count'] as num?)?.toInt() ?? 0;
+    final uploadDate = raw['upload_date'] as String? ?? '';
+    final publishedOn = _formatUploadDate(uploadDate);
+
+    return DiscoveryItem(
+      id: videoId,
+      sourceId: channelId,
+      title: title,
+      description: description,
+      durationMs: durationMs,
+      language: 'en',
+      publishedOn: publishedOn,
+      thumbnailUrl: thumbnailUrl,
+      viewCount: viewCount,
+      acquisition: AcquisitionMode.externalTool,
+      contentKind: ItemContentKind.video,
+      mediaUrl: 'https://www.youtube.com/watch?v=$videoId',
+      entryUrl: raw['url'] as String? ??
+          'https://www.youtube.com/watch?v=$videoId',
+    );
+  }
+
+  static String _formatUploadDate(String raw) {
+    if (raw.length == 8) {
+      final y = raw.substring(0, 4);
+      final m = raw.substring(4, 6);
+      final d = raw.substring(6, 8);
+      return '$y-$m-$d';
+    }
+    return raw.isEmpty ? 'Recently' : raw;
+  }
+
   Future<OnlineMediaDownload> downloadOnlineMedia(
     String pageUrl,
     String directory,
@@ -234,6 +318,7 @@ class ExternalTools {
       '--no-playlist',
       '--newline',
       '--no-warnings',
+      ..._youtubeExtractorArgs,
       '--progress',
       '--progress-template',
       'download:__LLPLAYER_PROGRESS__:%(progress._percent_str)s',

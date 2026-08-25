@@ -162,11 +162,16 @@ Future<void> _pumpSettingsDialog(
         transcriptWidth: 360,
         primaryColor: Colors.white,
         secondaryColor: Colors.grey,
-        managedStoreLocation: (path: '', state: ManagedStoreState.appManaged),
+        managedStoreLocation: (path: '', state: StorageLocationState.appManaged),
         onChooseManagedStoreLocation: () async =>
-            (path: '', state: ManagedStoreState.appManaged),
+            (path: '', state: StorageLocationState.appManaged),
         onClearManagedStoreLocation: () async =>
-            (path: '', state: ManagedStoreState.appManaged),
+            (path: '', state: StorageLocationState.appManaged),
+        downloadsLocation: (path: '', state: StorageLocationState.appManaged),
+        onChooseDownloadsLocation: () async =>
+            (path: '', state: StorageLocationState.appManaged),
+        onClearDownloadsLocation: () async =>
+            (path: '', state: StorageLocationState.appManaged),
         ffmpegPath: '',
         ffprobePath: '',
         ytDlpPath: '',
@@ -180,8 +185,6 @@ Future<void> _pumpSettingsDialog(
         wordHighlightStyle: 'background',
         wordAnimationIntensity: 0.5,
         ruleHintsLevel: 'likely',
-        phonemeRibbonVisible: false,
-        soundPatternRibbonVisible: false,
         soundPatternDisplayMode: 'citation',
         phonemeRibbonStyle: 'window',
         phoneticAnalysisPreference: 'on_demand',
@@ -212,8 +215,6 @@ Future<void> _pumpSettingsDialog(
         onWordHighlightStyleChanged: (_) {},
         onWordAnimationIntensityChanged: (_) {},
         onRuleHintsLevelChanged: (_) {},
-        onPhonemeRibbonVisibleChanged: (_) {},
-        onSoundPatternRibbonVisibleChanged: (_) {},
         onSoundPatternDisplayModeChanged: (_) {},
         onPhonemeRibbonStyleChanged: (_) {},
         onPhoneticAnalysisPreferenceChanged: (_) {},

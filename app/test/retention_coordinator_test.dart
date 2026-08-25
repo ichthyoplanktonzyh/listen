@@ -16,6 +16,7 @@ import 'package:llplayer_next/data/repositories/learning_material_repository.dar
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
+import 'package:llplayer_next/services/core_timeline_export.dart';
 import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/api_failure.dart';
@@ -28,6 +29,8 @@ import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/managed_asset_store.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
+
+import 'support/learning_material_fixtures.dart';
 
 /// Retention end to end through the session coordinator: opening local media
 /// is Temporary Material (retain false) and keeps playing when Core fails;
@@ -81,16 +84,46 @@ void main() {
     expect(harness.player.status, isNot(contains('core refused')));
   });
 
+  test('progress restore seeks only after playback starts', () async {
+    final adapter = _FakeAdapter();
+    final repository = _FakeSessionRepository()
+      ..savedProgress = const Duration(seconds: 14);
+    final harness = _harness(adapter: adapter, repository: repository);
+
+    await harness.session.openMediaPath('/media/original.mp3');
+
+    // Real incident: the restore seek ran while paused, then the subtitle
+    // auto-select's disableNativeSubtitles() (setActiveTracks([])) reset the
+    // paused seek to zero and playback restarted at 0:00. The coordinator
+    // must therefore play first and seek second, and only report the saved
+    // position after the seek.
+    expect(adapter.calls, contains('play'));
+    expect(adapter.calls, contains('seek'));
+    expect(
+      adapter.calls.indexOf('play'),
+      lessThan(adapter.calls.indexOf('seek')),
+    );
+    expect(harness.player.position, const Duration(seconds: 14));
+  });
+
   test('an already-retained media reopens without losing membership', () async {
     final adapter = _FakeAdapter();
     final repository = _FakeSessionRepository()
       ..alreadyRetained.add('/media/kept.mp3');
-    final harness = _harness(adapter: adapter, repository: repository);
+    final materials = _FakeMaterialRepository()
+      ..resolved = _materialDetails(retained: true);
+    final harness = _harness(
+      adapter: adapter,
+      repository: repository,
+      materials: materials,
+    );
 
     await harness.session.openMediaPath('/media/kept.mp3');
 
     // Core 3.1 fingerprint identity: re-registering a kept path keeps its
-    // membership even though the open itself passes retain false.
+    // membership even though the open itself passes retain false. What the
+    // session reports as membership is the *material*'s — the two flags are
+    // independent in Core, and the Personal Library lists materials.
     expect(repository.registered.single.retain, isFalse);
     expect(harness.player.mediaRetained, isTrue);
   });
@@ -550,10 +583,14 @@ void main() {
     final adapter = _FakeAdapter();
     final repository = _FakeSessionRepository();
     final store = _FakeManagedStore();
+    var libraryRefreshes = 0;
     final harness = _harness(
       adapter: adapter,
       repository: repository,
       store: store,
+      onLibraryChanged: () async {
+        libraryRefreshes += 1;
+      },
     );
     harness.player.setMedia(
       id: 'media-1',
@@ -580,9 +617,114 @@ void main() {
     expect(harness.player.mediaRetained, isTrue);
     expect(harness.player.status, _en('statusMediaKept'));
     expect(harness.player.statusIsError, isFalse);
+    // The library list refreshes after membership changes instead of staying
+    // a stale snapshot.
+    expect(libraryRefreshes, 1);
     // The recent-media path follows the session to the managed copy.
     expect(harness.settings.lastRecordedPath, store.copyPath);
     expect(harness.player.retentionInFlight, isFalse);
+  });
+
+  test('Keep adds the material to the Personal Library, not just the media',
+      () async {
+    // The Personal Library lists retained *materials*; media membership is a
+    // separate flag Core keeps independently. Keep used to stop after
+    // `registerMedia(retain: true)`, so the status said "kept", the library
+    // stayed empty, and the follow-up material read flipped the button back to
+    // "Keep" on the next frame.
+    final adapter = _FakeAdapter();
+    final repository = _FakeSessionRepository();
+    final store = _FakeManagedStore();
+    final materials = _FakeMaterialRepository()
+      ..resolved = _materialDetails(materialId: 'material-1', retained: false);
+    final harness = _harness(
+      adapter: adapter,
+      repository: repository,
+      store: store,
+      materials: materials,
+    );
+
+    await harness.session.openMediaPath('/media/original.mp3');
+    expect(harness.session.currentMaterial?.isRetained, isFalse);
+
+    await harness.session.keepCurrentMedia();
+
+    expect(materials.retained, ['material-1']);
+    expect(harness.session.currentMaterial?.isRetained, isTrue);
+    expect(harness.player.mediaRetained, isTrue);
+    expect(harness.player.status, _en('statusMediaKept'));
+    expect(harness.player.statusIsError, isFalse);
+  });
+
+  test('a media already inside the managed store is kept without a second copy',
+      () async {
+    // Scanned material already lives in the store, and so does anything kept
+    // before and later unretained. Copying it back into the store would
+    // re-hash the whole file to arrive at the id Core already has; the only
+    // thing that has to move is the membership.
+    final adapter = _FakeAdapter();
+    final repository = _FakeSessionRepository();
+    final store = _FakeManagedStore();
+    final materials = _FakeMaterialRepository()
+      ..resolved = _materialDetails(materialId: 'material-1', retained: false);
+    final harness = _harness(
+      adapter: adapter,
+      repository: repository,
+      store: store,
+      materials: materials,
+    );
+    final managedPath = '${store.root}/abc123digest';
+    repository.storedTitle = 'abc123digest';
+
+    await harness.session.openMediaPath(managedPath);
+    final titleBeforeKeep = harness.player.mediaTitle;
+    repository.registered.clear();
+
+    await harness.session.keepCurrentMedia();
+
+    expect(store.copies, isEmpty, reason: 'nothing to move: it is already there');
+    expect(
+      repository.registered,
+      isEmpty,
+      reason: 're-registering would re-fingerprint the whole file for an id '
+          'Core already has',
+    );
+    expect(repository.retained, ['media-1']);
+    expect(materials.retained, ['material-1']);
+    expect(harness.player.mediaPath, managedPath);
+    // A managed file's name is its SHA-256, and Core's title is the file name.
+    // Keeping must not rename the episode to a digest.
+    expect(harness.player.mediaTitle, titleBeforeKeep);
+    expect(harness.player.mediaTitle, isNot('abc123digest'));
+    expect(harness.player.mediaRetained, isTrue);
+    expect(harness.player.status, _en('statusMediaKept'));
+  });
+
+  test('a failed material retain names the failure and keeps the copy',
+      () async {
+    final adapter = _FakeAdapter();
+    final repository = _FakeSessionRepository();
+    final store = _FakeManagedStore()..createdNew = true;
+    final materials = _FakeMaterialRepository()
+      ..resolved = _materialDetails(materialId: 'material-1', retained: false)
+      ..retainFails = true;
+    final harness = _harness(
+      adapter: adapter,
+      repository: repository,
+      store: store,
+      materials: materials,
+    );
+
+    await harness.session.openMediaPath('/media/original.mp3');
+    await harness.session.keepCurrentMedia();
+
+    expect(harness.player.status, _en('statusKeepFailed'));
+    expect(harness.player.statusIsError, isTrue);
+    // The copy is real and the media is registered: only the membership did
+    // not land, and a retry deduplicates onto the same copy.
+    expect(store.deleted, isEmpty);
+    expect(harness.player.mediaPath, store.copyPath);
+    expect(harness.player.mediaRetained, isFalse);
   });
 
   test('Keep preserves material identity across the managed rebind and updates '
@@ -618,8 +760,8 @@ void main() {
   });
 
   test(
-    'a material resolve failure after a successful Keep registration reports '
-    'Keep success and deletes nothing',
+    'a material resolve failure after a successful Keep registration names '
+    'the failure and deletes nothing',
     () async {
       final adapter = _FakeAdapter();
       final repository = _FakeSessionRepository();
@@ -641,17 +783,18 @@ void main() {
       materials.resolveFails = true;
       await harness.session.keepCurrentMedia();
 
-      // Keep reports success: membership is the media-level evidence from the
-      // registration, the copy survives, and nothing is deleted.
+      // Without a resolved material there is nothing to give Personal Library
+      // membership to, so the Keep cannot claim it landed. Everything already
+      // achieved stays achieved — the copy is not deleted and the media stays
+      // registered and retained — which is what makes a retry cheap.
       expect(store.deleted, isEmpty);
       expect(repository.registered.last.retain, isTrue);
       expect(repository.registered.last.path, store.copyPath);
       expect(harness.player.mediaPath, store.copyPath);
-      expect(harness.player.mediaRetained, isTrue);
       expect(harness.session.currentMaterial, isNull);
-      expect(harness.player.status, _en('statusMediaKept'));
-      expect(harness.player.statusIsError, isFalse);
-      expect(harness.player.statusFailure, isNull);
+      expect(harness.player.status, _en('statusKeepFailed'));
+      expect(harness.player.statusIsError, isTrue);
+      // The named state never carries the boundary's own text.
       expect(harness.player.status, isNot(contains('boom')));
     },
   );
@@ -1043,30 +1186,10 @@ String _en(String key) => const AppLocalizations(Locale('en')).text(key);
 MaterialDetails _materialDetails({
   String materialId = 'material-1',
   bool retained = true,
-}) => MaterialDetails(
-  material: LearningMaterial(
-    id: materialId,
-    currentRevisionId: 'revision-1',
-    retainedAtMs: retained ? 42 : null,
-    createdAtMs: 1,
-    updatedAtMs: 2,
-  ),
-  currentRevision: MaterialRevision(
-    id: 'revision-1',
-    materialId: materialId,
-    title: 'T',
-    assets: const [
-      DocumentTextMaterialAsset(
-        id: 'asset-1',
-        text: 'Hello',
-        sha256Digest:
-            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        byteSize: 5,
-        language: null,
-      ),
-    ],
-    createdAtMs: 1,
-  ),
+}) => materialDetails(
+  materialId: materialId,
+  retainedAtMs: retained ? 42 : null,
+  documentRenditions: [documentRenditionForText('Hello')],
   shape: MaterialShape.audio,
 );
 
@@ -1084,6 +1207,7 @@ _harness({
   _FakeManagedStore? store,
   LearningMaterialRepository? materials,
   void Function()? onMediaSwitched,
+  Future<void> Function()? onLibraryChanged,
 }) {
   final player = PlayerController();
   final subtitle = SubtitleController();
@@ -1116,6 +1240,7 @@ _harness({
         subtitleAnalysis: _FakeSubtitleAnalysisRepository(),
         managedStore: store ?? _FakeManagedStore(),
         materialRepository: materialRepository,
+        onLibraryChanged: onLibraryChanged,
         importFiles: _FixedImportFiles(),
       )..bind(
         isMounted: () => true,
@@ -1146,6 +1271,9 @@ class _FakeAdapter extends DesktopPlayerAdapter {
   final opened = <String>[];
   bool played = false;
 
+  /// Playback call order, for restore-ordering assertions.
+  final calls = <String>[];
+
   @override
   Future<void> open(String path, {bool play = true}) async {
     opened.add(path);
@@ -1154,10 +1282,13 @@ class _FakeAdapter extends DesktopPlayerAdapter {
   @override
   Future<void> play() async {
     played = true;
+    calls.add('play');
   }
 
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(Duration position) async {
+    calls.add('seek');
+  }
 }
 
 class _FakeSessionRepository implements MediaSessionRepository {
@@ -1210,6 +1341,11 @@ class _FakeSessionRepository implements MediaSessionRepository {
     );
   }
 
+  /// What Core has stored as this media's title. For a file in the managed
+  /// store that is its SHA-256 filename, which is exactly why a Keep must not
+  /// adopt it.
+  String storedTitle = 'T';
+
   @override
   Future<MediaItem> retainMedia(String mediaId) async {
     retained.add(mediaId);
@@ -1217,7 +1353,7 @@ class _FakeSessionRepository implements MediaSessionRepository {
       id: mediaId,
       path: '/media/original.mp3',
       fingerprint: 'fp',
-      title: 'T',
+      title: storedTitle,
       kind: 'audio',
       durationMs: 1000,
       availability: 'available',
@@ -1247,8 +1383,12 @@ class _FakeSessionRepository implements MediaSessionRepository {
   @override
   Future<void> saveProgress(String mediaId, Duration position) async {}
 
+  /// When set, [readProgress] returns it — the seam for restore-ordering
+  /// tests.
+  Duration? savedProgress;
+
   @override
-  Future<Duration?> readProgress(String mediaId) async => null;
+  Future<Duration?> readProgress(String mediaId) async => savedProgress;
 
   @override
   Future<SubtitleTrack> importSubtitle(String mediaId, String path) async =>
@@ -1265,6 +1405,7 @@ class _FakeSessionRepository implements MediaSessionRepository {
 class _FakeMaterialRepository implements LearningMaterialRepository {
   bool resolveFails = false;
   bool unretainFails = false;
+  bool retainFails = false;
 
   /// When true, [isAvailable] is false — modeling an unreachable
   /// learning-material boundary.
@@ -1275,7 +1416,13 @@ class _FakeMaterialRepository implements LearningMaterialRepository {
 
   /// What [resolveMaterialForMedia] returns. Null models a media with no
   /// bound material (a typed not-found on the wire).
-  MaterialDetails? resolved;
+  ///
+  /// The default is a bound *temporary* material, because that is what Core
+  /// does: registering a media creates and binds its material, and a
+  /// `retain: false` registration leaves both the media and that material
+  /// out of the Personal Library. A fake that answered "no material" by
+  /// default would let a Keep look complete while nothing joined the library.
+  MaterialDetails? resolved = _materialDetails(retained: false);
 
   @override
   bool get isAvailable => !unavailable;
@@ -1311,8 +1458,14 @@ class _FakeMaterialRepository implements LearningMaterialRepository {
 
   @override
   Future<MaterialDetails> retainLearningMaterial(String materialId) async {
+    if (retainFails) throw StateError('refused by fake materials');
     retained.add(materialId);
-    return _materialDetails(materialId: materialId, retained: true);
+    final details = _materialDetails(materialId: materialId, retained: true);
+    // Membership is durable: a later resolve of the same media must see the
+    // material it was just given, or a test could not tell a real retain from
+    // a call that went nowhere.
+    resolved = details;
+    return details;
   }
 
   @override
@@ -1332,6 +1485,18 @@ class _FakeMaterialRepository implements LearningMaterialRepository {
     }
     return value;
   }
+
+  @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => throw UnimplementedError();
+
+  @override
+  Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
+    String materialId,
+  ) async => throw UnimplementedError();
 }
 
 /// Resolve is gated by a Completer so a test can complete an in-flight
@@ -1386,6 +1551,18 @@ class _GatedMaterialRepository implements LearningMaterialRepository {
     gates.add(gate);
     return gate.future;
   }
+
+  @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => throw UnimplementedError();
+
+  @override
+  Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
+    String materialId,
+  ) async => throw UnimplementedError();
 }
 
 /// Resolves any page URL to itself so the online-import flow can be driven
@@ -1417,6 +1594,10 @@ class _FakeImportRepository implements MediaImportRepository {
   }) => throw UnimplementedError();
 
   @override
+  Future<String?> downloadArticle(String articleUrl, String directory) =>
+      throw UnimplementedError();
+
+  @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
       throw UnimplementedError();
 
@@ -1445,6 +1626,9 @@ Future<void> _settle() async {
 }
 
 class _FakeManagedStore implements ManagedAssetStoreService {
+  /// The store root this fake owns, so [contains] answers the way the real
+  /// service does — by the path, not by a flag a test remembered to set.
+  String root = '/store';
   String copyPath = '/store/copy-0.mp3';
   bool createdNew = true;
   bool unavailable = false;
@@ -1457,7 +1641,10 @@ class _FakeManagedStore implements ManagedAssetStoreService {
   final deleted = <String>[];
 
   @override
-  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath}) async {
+  Future<ManagedAssetCopy> copyIntoStore({
+    required String sourcePath,
+    String? mediaKind,
+  }) async {
     final gate = copyGate;
     if (gate != null) await gate.future;
     if (unavailable) throw const ManagedStoreUnavailable();
@@ -1466,9 +1653,21 @@ class _FakeManagedStore implements ManagedAssetStoreService {
     return ManagedAssetCopy(
       path: copyPath,
       createdNew: createdNew,
-      mediaKind: 'audio',
+      mediaKind: mediaKind ?? 'audio',
     );
   }
+
+  @override
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  }) async => throw UnimplementedError();
+
+  @override
+  bool contains(String path) => path.startsWith('$root/');
+
+  @override
+  Future<List<int>?> readBytes(String path) async => null;
 
   @override
   Future<void> deleteStoreCopy(String path) async {
@@ -1521,6 +1720,9 @@ class _FakeResourceRepository implements ResourceRepository {
   Future<LLTimelineDocument> exportTimeline(String trackId) async =>
       throw UnimplementedError();
   @override
+  Future<CoreTimelineExport> exportTimelineJson(String trackId) async =>
+      throw UnimplementedError();
+  @override
   Future<void> updateTrackLanguage(String trackId, String language) async {}
   @override
   Future<void> activateWordTimeline(String timelineId) async {}
@@ -1557,7 +1759,7 @@ class _FixedImportFiles implements MediaImportFileService {
   @override
   Future<String?> pickSubtitle() async => null;
   @override
-  Future<String?> pickContentPackage() async => null;
+  Future<String?> pickLearningPackage() async => null;
   @override
   Future<TimelineFileDocument?> pickTimeline() async => null;
   @override

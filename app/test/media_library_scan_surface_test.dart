@@ -4,10 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/media_library_scan_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/api_failure.dart';
+import 'package:llplayer_next/models/learning_material.dart';
+import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
-import 'package:llplayer_next/widgets/home/media_library_section.dart';
+import 'package:llplayer_next/widgets/home/personal_library_section.dart';
+
+import 'support/learning_material_fixtures.dart';
 
 MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
   media: MediaItem(
@@ -27,6 +31,36 @@ MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
   familiarMaterial: false,
 );
 
+/// A media-only library row bound to [entry] — the shape [ListeningHome] and
+/// the Personal Library section render now.
+PersonalLibraryEntry _row(MediaLibraryEntry entry) => PersonalLibraryEntry(
+  details: materialDetails(
+    materialId: 'material-${entry.media.id}',
+    title: 'Talk',
+    documentRenditions: const [],
+    mediaRenditions: [
+      mediaRendition(
+        id: 'asset-1',
+        mediaId: entry.media.id,
+        kind: MediaRenditionKind.video,
+        fingerprint: 'fp',
+      ),
+    ],
+    shape: MaterialShape.video,
+  ),
+  mediaEntries: [entry],
+);
+
+PersonalLibraryEntry _documentRow() => PersonalLibraryEntry(
+  details: materialDetails(
+    materialId: 'material-document-1',
+    title: 'Saved text material',
+    documentRenditions: [documentRenditionForText('Saved body')],
+    shape: MaterialShape.text,
+  ),
+  mediaEntries: const [],
+);
+
 Widget _wrap(Widget child) => MaterialApp(
   theme: ListenTheme.light(),
   locale: const Locale('zh'),
@@ -42,13 +76,15 @@ Widget _wrap(Widget child) => MaterialApp(
 
 Widget _home({
   required MediaLibraryScanState scan,
-  List<MediaLibraryEntry>? library,
+  List<PersonalLibraryEntry>? library,
+  ApiFailure? libraryFailure,
   VoidCallback? onChooseFolder,
 }) => _wrap(
   ListeningHome(
     onOpenMedia: () {},
     onOpenOnline: () {},
-    mediaLibrary: library,
+    personalLibrary: library,
+    personalLibraryFailure: libraryFailure,
     offlineEntries: library,
     scan: scan,
     onScanRefresh: () {},
@@ -86,6 +122,54 @@ void main() {
     expect(find.text('打开过的媒体会出现在这里。'), findsNothing);
   });
 
+  testWidgets('a failed library load is explicit and precedes scan details', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _home(
+        scan: MediaLibraryScanState(
+          status: MediaLibraryScanStatus.completed,
+          folderPath: '/media',
+        ),
+        libraryFailure: const ApiFailure(
+          raw: 'failed',
+          correlationId: 'api-141',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('资料库加载失败，但材料没有被删除。'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('资料库加载失败，但材料没有被删除。')).dy,
+      lessThan(tester.getTopLeft(find.text('存储位置与文件夹扫描')).dy),
+    );
+  });
+
+  testWidgets('a retained text material is visible on the library first view', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _home(
+        scan: MediaLibraryScanState(
+          status: MediaLibraryScanStatus.completed,
+          folderPath: '/media',
+        ),
+        library: [_documentRow()],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saved text material'), findsOneWidget);
+    expect(find.text('Saved text material').hitTestable(), findsOneWidget);
+  });
+
   testWidgets(
     'a finished scan of an empty folder may say the library is empty',
     (tester) async {
@@ -98,13 +182,13 @@ void main() {
             status: MediaLibraryScanStatus.completed,
             folderPath: '/media',
           ),
-          library: const <MediaLibraryEntry>[],
+          library: const <PersonalLibraryEntry>[],
         ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('素材库扫描完成。'), findsOneWidget);
-      expect(find.text('打开过的媒体会出现在这里。'), findsOneWidget);
+      expect(find.text('保留的学习材料会出现在这里。'), findsOneWidget);
     },
   );
 
@@ -152,7 +236,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('正在扫描受管素材库…'), findsOneWidget);
-    expect(find.text('新增 3 · 未变化 12 · 跳过 1'), findsOneWidget);
+    expect(find.text('已登记 3 · 未变化 12 · 跳过 1'), findsOneWidget);
+    // "新增 3" read as "3 things joined my library", and then the library
+    // showed none of them: a scan registers with `retain: false`, which is
+    // exactly not Personal Library membership.
+    expect(find.textContaining('不会把任何东西加进资料库'), findsOneWidget);
     await tester.tap(find.text('停止'));
     expect(cancels, 1);
   });
@@ -184,7 +272,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('有 1 个文件没能加入媒体库。'), findsOneWidget);
+    expect(find.text('有 1 个文件没能登记。'), findsOneWidget);
     expect(find.text('bad.mp4'), findsOneWidget);
     await tester.tap(find.text('重试这些文件'));
     expect(retries, 1);
@@ -203,7 +291,10 @@ void main() {
           folderPath: '/media',
           sidecarSubtitlePaths: const {'/media/talk.mp4'},
         ),
-        library: [_entry('/media/talk.mp4'), _entry('/media/other.mp4')],
+        library: [
+          _row(_entry('/media/talk.mp4')),
+          _row(_entry('/media/other.mp4')),
+        ],
       ),
     );
     await tester.pumpAndSettle();

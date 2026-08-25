@@ -2,6 +2,7 @@ import '../../models/api_failure.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
+import '../../services/core_timeline_export.dart';
 
 abstract interface class ResourceRepository {
   bool get isAvailable;
@@ -9,6 +10,7 @@ abstract interface class ResourceRepository {
   Future<ContentDifficultyProfile> contentFit(String trackId);
   Future<List<SubtitleTrack>> mediaSubtitles(String mediaId);
   Future<List<WordTiming>> wordTimings(String trackId);
+  Future<CoreTimelineExport> exportTimelineJson(String trackId);
   Future<List<PhoneTimelineSummary>> phoneTimelineSummaries(String trackId);
   Future<void> archiveSubtitle(String trackId);
   Future<void> restoreSubtitle(String trackId);
@@ -40,6 +42,9 @@ class LocalResourceRepository implements ResourceRepository {
   @override
   Future<List<WordTiming>> wordTimings(String trackId) =>
       _api.trackWordTimings(trackId);
+  @override
+  Future<CoreTimelineExport> exportTimelineJson(String trackId) async =>
+      CoreTimelineExport(await _api.exportTrackLLTimelineJson(trackId));
   @override
   Future<List<PhoneTimelineSummary>> phoneTimelineSummaries(String trackId) =>
       _api.trackPhoneTimelineSummaries(trackId);

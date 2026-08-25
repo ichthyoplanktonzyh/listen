@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/downloads_controller.dart';
+import '../../controllers/material_capability_coordinator.dart';
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
-import '../../models/types.dart';
+import '../../models/api_failure.dart';
+import '../../models/learning_material.dart';
+import '../../models/personal_library.dart';
 import '../../theme/breakpoints.dart';
-import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
-import 'media_library_section.dart';
+import '../common/api_failure_disclosure.dart';
+import 'downloads_section.dart';
+import 'personal_library_section.dart';
 
-/// How the media library is ordered.
-///
-/// [recent] is what the history destination used to be: the same rows, sorted
-/// by `updatedAtMs`. [queue] is the triage grouping the library section does
-/// on its own.
-enum LibrarySort { queue, recent }
+/// The learner-facing state views of one material library.
+enum LibraryView { all, recent, offline }
 
-/// The media library: what is already here, and how to add more. One segment
-/// of the "listen" destination — discovery is the other, and both end in this
-/// same library.
+/// Material kinds are filters on one library, never separate destinations.
+enum LibraryTypeFilter { all, article, audio, video }
+
+/// The learner's retained materials, regardless of whether their usable form
+/// is text, audio, video, or a mixture of them.
 ///
 /// It no longer answers "what should I do now". The continue card and the
 /// status strip that used to sit on top moved to the today pane, because a
@@ -28,7 +31,10 @@ class ListeningHome extends StatefulWidget {
     super.key,
     required this.onOpenMedia,
     required this.onOpenOnline,
-    this.mediaLibrary,
+    this.onOpenDocument,
+    this.personalLibrary,
+    this.personalLibraryFailure,
+    this.onRetryLibrary,
     this.offlineEntries,
     this.familiarSupplyEnabled = true,
     this.scan,
@@ -41,49 +47,103 @@ class ListeningHome extends StatefulWidget {
     this.onStartIntensiveEntry,
     this.onSetLibraryIntent,
     this.onToggleFamiliarSupply,
+    this.capabilityCoordinator,
+    this.onRequestCapability,
+    this.onCancelCapability,
+    this.downloads,
+    this.downloadsFailure,
+    this.onOpenDownload,
+    this.onDeleteDownload,
   });
 
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
-  final List<MediaLibraryEntry>? mediaLibrary;
 
-  /// The offline subset of [mediaLibrary] (rows whose local file still
-  /// exists). Offline used to be its own sidebar destination; it is a filter
-  /// on the library now.
-  final List<MediaLibraryEntry>? offlineEntries;
+  /// Acquired media that is on this machine but not in the Personal Library.
+  /// Null while unknown; the section stays away rather than claiming an empty
+  /// shelf it has not looked at.
+  final List<DownloadedMedia>? downloads;
+  final ApiFailure? downloadsFailure;
+  final void Function(DownloadedMedia entry)? onOpenDownload;
+  final void Function(DownloadedMedia entry)? onDeleteDownload;
+
+  /// The primary "Open document" action, opening the direct document session.
+  final VoidCallback? onOpenDocument;
+
+  /// The authoritative library: retained materials projected with their media
+  /// rows. Membership, order, and titles come from here; the raw media
+  /// snapshot is not a library authority for the UI.
+  final List<PersonalLibraryEntry>? personalLibrary;
+  final ApiFailure? personalLibraryFailure;
+  final VoidCallback? onRetryLibrary;
+
+  /// The offline subset of [personalLibrary] (rows whose document rendition
+  /// bytes or local media file is available). Offline used to be its own
+  /// sidebar destination; it is a filter on the library now.
+  final List<PersonalLibraryEntry>? offlineEntries;
   final bool familiarSupplyEnabled;
 
   /// Folder-scan state, or null on a surface that has no scan wired. The scan
   /// is the only thing that can tell an empty library apart from a library
-  /// nobody could read, so it renders even when [mediaLibrary] is unknown.
+  /// nobody could read, so it renders even when [personalLibrary] is unknown.
   final MediaLibraryScanState? scan;
   final VoidCallback? onScanRefresh;
   final VoidCallback? onScanCancel;
   final VoidCallback? onRetryScanRegistrations;
   final VoidCallback? onChooseManagedStoreLocation;
-  final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
-  final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
-  final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
-  final void Function(MediaLibraryEntry entry, String? intent)?
+
+  /// Activates a library row's workbench session — the single primary
+  /// action every row now offers.
+  final void Function(PersonalLibraryEntry entry)? onOpenLibraryEntry;
+  final void Function(PersonalLibraryEntry entry)? onStartExtensiveEntry;
+  final void Function(PersonalLibraryEntry entry)? onStartIntensiveEntry;
+  final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
   final void Function(bool enabled)? onToggleFamiliarSupply;
+
+  /// Capability completion wiring for library rows (optional: without it rows
+  /// render today's actions only).
+  final MaterialCapabilityCoordinator? capabilityCoordinator;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )?
+  onRequestCapability;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )?
+  onCancelCapability;
 
   @override
   State<ListeningHome> createState() => _ListeningHomeState();
 }
 
 class _ListeningHomeState extends State<ListeningHome> {
-  var _offlineOnly = false;
-  var _sort = LibrarySort.queue;
+  var _view = LibraryView.all;
+  var _type = LibraryTypeFilter.all;
 
   /// History used to be its own sidebar destination whose entire body was
   /// this list sorted by `updatedAtMs` — one data source, two rooms, one
   /// `sort` apart. It is an ordering on the library now, next to the offline
-  /// filter that was demoted for the same reason.
-  List<MediaLibraryEntry>? _ordered(List<MediaLibraryEntry>? entries) {
-    if (entries == null || _sort == LibrarySort.queue) return entries;
-    return [...entries]
-      ..sort((a, b) => b.media.updatedAtMs.compareTo(a.media.updatedAtMs));
+  /// filter that was demoted for the same reason. The timestamp is the
+  /// retained material's: membership, ordering, and titles all come from the
+  /// Personal Library projection.
+  List<PersonalLibraryEntry>? _visibleEntries() {
+    final source = _view == LibraryView.offline
+        ? widget.offlineEntries
+        : widget.personalLibrary;
+    if (source == null) return null;
+    final filtered = switch (_type) {
+      LibraryTypeFilter.all => source,
+      LibraryTypeFilter.article => source.where((entry) => entry.canRead),
+      LibraryTypeFilter.audio => source.where((entry) => entry.canListen),
+      LibraryTypeFilter.video => source.where((entry) => entry.canWatch),
+    }.toList(growable: false);
+    if (_view == LibraryView.recent) {
+      filtered.sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
+    }
+    return filtered;
   }
 
   @override
@@ -96,13 +156,14 @@ class _ListeningHomeState extends State<ListeningHome> {
           compact: compact,
           onOpenMedia: widget.onOpenMedia,
           onOpenOnline: widget.onOpenOnline,
-          offlineOnly: _offlineOnly,
-          onOfflineOnlyChanged: (value) => setState(() => _offlineOnly = value),
-          sort: _sort,
-          onSortChanged: (value) => setState(() => _sort = value),
-          mediaLibrary: _ordered(
-            _offlineOnly ? widget.offlineEntries : widget.mediaLibrary,
-          ),
+          onOpenDocument: widget.onOpenDocument,
+          view: _view,
+          onViewChanged: (value) => setState(() => _view = value),
+          type: _type,
+          onTypeChanged: (value) => setState(() => _type = value),
+          personalLibrary: _visibleEntries(),
+          personalLibraryFailure: widget.personalLibraryFailure,
+          onRetryLibrary: widget.onRetryLibrary,
           familiarSupplyEnabled: widget.familiarSupplyEnabled,
           scan: widget.scan,
           onScanRefresh: widget.onScanRefresh,
@@ -114,6 +175,13 @@ class _ListeningHomeState extends State<ListeningHome> {
           onStartIntensiveEntry: widget.onStartIntensiveEntry,
           onSetLibraryIntent: widget.onSetLibraryIntent,
           onToggleFamiliarSupply: widget.onToggleFamiliarSupply,
+          capabilityCoordinator: widget.capabilityCoordinator,
+          onRequestCapability: widget.onRequestCapability,
+          onCancelCapability: widget.onCancelCapability,
+          downloads: widget.downloads,
+          downloadsFailure: widget.downloadsFailure,
+          onOpenDownload: widget.onOpenDownload,
+          onDeleteDownload: widget.onDeleteDownload,
         ),
       );
     },
@@ -125,11 +193,14 @@ class _HomeContent extends StatelessWidget {
     required this.compact,
     required this.onOpenMedia,
     required this.onOpenOnline,
-    required this.offlineOnly,
-    required this.onOfflineOnlyChanged,
-    required this.sort,
-    required this.onSortChanged,
-    required this.mediaLibrary,
+    required this.onOpenDocument,
+    required this.view,
+    required this.onViewChanged,
+    required this.type,
+    required this.onTypeChanged,
+    required this.personalLibrary,
+    required this.personalLibraryFailure,
+    required this.onRetryLibrary,
     required this.familiarSupplyEnabled,
     required this.scan,
     required this.onScanRefresh,
@@ -141,36 +212,58 @@ class _HomeContent extends StatelessWidget {
     required this.onStartIntensiveEntry,
     required this.onSetLibraryIntent,
     required this.onToggleFamiliarSupply,
+    this.capabilityCoordinator,
+    this.onRequestCapability,
+    this.onCancelCapability,
+    this.downloads,
+    this.downloadsFailure,
+    this.onOpenDownload,
+    this.onDeleteDownload,
   });
 
   final bool compact;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+  final VoidCallback? onOpenDocument;
 
   /// The library's offline filter: offline used to be a sidebar destination
   /// sharing one data source with this section, so it reads as a view on the
   /// library now.
-  final bool offlineOnly;
-  final ValueChanged<bool> onOfflineOnlyChanged;
+  final LibraryView view;
+  final ValueChanged<LibraryView> onViewChanged;
+  final LibraryTypeFilter type;
+  final ValueChanged<LibraryTypeFilter> onTypeChanged;
 
-  /// The library's ordering. History was demoted from a destination to this,
-  /// for the same reason offline was.
-  final LibrarySort sort;
-  final ValueChanged<LibrarySort> onSortChanged;
-
-  final List<MediaLibraryEntry>? mediaLibrary;
+  final List<PersonalLibraryEntry>? personalLibrary;
+  final ApiFailure? personalLibraryFailure;
+  final VoidCallback? onRetryLibrary;
   final bool familiarSupplyEnabled;
   final MediaLibraryScanState? scan;
   final VoidCallback? onScanRefresh;
   final VoidCallback? onScanCancel;
   final VoidCallback? onRetryScanRegistrations;
   final VoidCallback? onChooseManagedStoreLocation;
-  final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
-  final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
-  final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
-  final void Function(MediaLibraryEntry entry, String? intent)?
+  final void Function(PersonalLibraryEntry entry)? onOpenLibraryEntry;
+  final void Function(PersonalLibraryEntry entry)? onStartExtensiveEntry;
+  final void Function(PersonalLibraryEntry entry)? onStartIntensiveEntry;
+  final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
   final void Function(bool enabled)? onToggleFamiliarSupply;
+  final MaterialCapabilityCoordinator? capabilityCoordinator;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )?
+  onRequestCapability;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )?
+  onCancelCapability;
+  final List<DownloadedMedia>? downloads;
+  final ApiFailure? downloadsFailure;
+  final void Function(DownloadedMedia entry)? onOpenDownload;
+  final void Function(DownloadedMedia entry)? onDeleteDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -194,91 +287,115 @@ class _HomeContent extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // No page title: this surface is a segment of the "listen"
-              // destination now, and the segment row above it already says
-              // which one. "Continue learning" and the status strip moved to
-              // the today pane — the library answering "what should I do now"
-              // was half of why two destinations asked the same question.
-              Text(
-                l.text('addContentSource'),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: ListenSpacing.gap12),
-              _ResponsiveActionGrid(
-                compact: compact,
+              Row(
                 children: [
-                  _SourceAction(
-                    icon: Icons.folder_open_outlined,
-                    label: l.text('openVideoAudio'),
-                    sourceLabel: l.text('localSource'),
-                    onTap: onOpenMedia,
-                    primary: true,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l.text('sidebarLibrary'),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: ListenSpacing.gap4),
+                        Text(
+                          l.text('librarySubtitle'),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
-                  _SourceAction(
-                    icon: Icons.link_outlined,
-                    label: l.text('openUrl'),
-                    sourceLabel: l.text('onlineSource'),
-                    onTap: onOpenOnline,
+                  const SizedBox(width: ListenSpacing.gap16),
+                  _UnifiedImportAction(
+                    onOpenDocument: onOpenDocument,
+                    onOpenMedia: onOpenMedia,
+                    onOpenOnline: onOpenOnline,
                   ),
                 ],
               ),
-              if (scan != null &&
-                  onScanRefresh != null &&
-                  onScanCancel != null &&
-                  onRetryScanRegistrations != null &&
-                  onChooseManagedStoreLocation != null) ...[
-                const SizedBox(height: ListenSpacing.gap32),
-                MediaLibraryScanCard(
-                  state: scan!,
-                  onRefresh: onScanRefresh!,
-                  onCancel: onScanCancel!,
-                  onRetryFailures: onRetryScanRegistrations!,
-                  onChooseFolder: onChooseManagedStoreLocation!,
-                ),
-              ],
-              if (mediaLibrary != null &&
+              if (personalLibrary != null &&
                   onOpenLibraryEntry != null &&
                   onStartExtensiveEntry != null &&
                   onStartIntensiveEntry != null &&
                   onSetLibraryIntent != null &&
                   onToggleFamiliarSupply != null) ...[
-                SizedBox(
-                  height: scan == null
-                      ? ListenSpacing.gap32
-                      : ListenSpacing.gap12,
+                const SizedBox(height: ListenSpacing.gap24),
+                Text(
+                  l.text('libraryStatusFilter'),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
+                const SizedBox(height: ListenSpacing.gap8),
                 Wrap(
                   spacing: ListenSpacing.gap8,
                   runSpacing: ListenSpacing.gap8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    FilterChip(
-                      // Offline used to occupy its own sidebar slot with the
-                      // same data source; as a filter it stays one view on
-                      // the library.
-                      label: Text(l.text('sidebarOfflineDownloads')),
-                      selected: offlineOnly,
-                      onSelected: onOfflineOnlyChanged,
-                    ),
-                    // And so did history, whose whole body was this list in
-                    // `updatedAtMs` order.
                     ChoiceChip(
-                      label: Text(l.text('librarySortQueue')),
-                      selected: sort == LibrarySort.queue,
-                      onSelected: (_) => onSortChanged(LibrarySort.queue),
+                      label: Text(l.text('libraryFilterAll')),
+                      selected: view == LibraryView.all,
+                      onSelected: (_) => onViewChanged(LibraryView.all),
                     ),
                     ChoiceChip(
                       label: Text(l.text('sidebarHistory')),
-                      selected: sort == LibrarySort.recent,
-                      onSelected: (_) => onSortChanged(LibrarySort.recent),
+                      selected: view == LibraryView.recent,
+                      onSelected: (_) => onViewChanged(LibraryView.recent),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('sidebarOfflineDownloads')),
+                      selected: view == LibraryView.offline,
+                      onSelected: (_) => onViewChanged(LibraryView.offline),
                     ),
                   ],
                 ),
                 const SizedBox(height: ListenSpacing.gap12),
-                MediaLibrarySection(
-                  entries: mediaLibrary,
+                Text(
+                  l.text('libraryTypeFilter'),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: ListenSpacing.gap8),
+                Wrap(
+                  spacing: ListenSpacing.gap8,
+                  runSpacing: ListenSpacing.gap8,
+                  children: [
+                    ChoiceChip(
+                      label: Text(l.text('libraryTypeAll')),
+                      selected: type == LibraryTypeFilter.all,
+                      onSelected: (_) => onTypeChanged(LibraryTypeFilter.all),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('libraryTypeArticle')),
+                      selected: type == LibraryTypeFilter.article,
+                      onSelected: (_) =>
+                          onTypeChanged(LibraryTypeFilter.article),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('libraryTypeAudio')),
+                      selected: type == LibraryTypeFilter.audio,
+                      onSelected: (_) => onTypeChanged(LibraryTypeFilter.audio),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('libraryTypeVideo')),
+                      selected: type == LibraryTypeFilter.video,
+                      onSelected: (_) => onTypeChanged(LibraryTypeFilter.video),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: ListenSpacing.gap12),
+                PersonalLibrarySection(
+                  entries: personalLibrary,
+                  showHeader: false,
+                  groupByQueue: false,
+                  simplifiedRows: true,
                   familiarSupplyEnabled: familiarSupplyEnabled,
                   sidecarSubtitlePaths:
                       scan?.sidecarSubtitlePaths ?? const <String>{},
@@ -287,6 +404,61 @@ class _HomeContent extends StatelessWidget {
                   onStartIntensive: onStartIntensiveEntry!,
                   onSetIntent: onSetLibraryIntent!,
                   onToggleFamiliarSupply: onToggleFamiliarSupply!,
+                  capabilityCoordinator: capabilityCoordinator,
+                  onRequestCapability: onRequestCapability,
+                  onCancelCapability: onCancelCapability,
+                ),
+              ] else if (personalLibraryFailure != null) ...[
+                const SizedBox(height: ListenSpacing.gap24),
+                ApiFailureNotice(
+                  message: l.text('personalLibraryLoadFailed'),
+                  failure: personalLibraryFailure,
+                ),
+                if (onRetryLibrary != null) ...[
+                  const SizedBox(height: ListenSpacing.gap8),
+                  OutlinedButton.icon(
+                    onPressed: onRetryLibrary,
+                    icon: const Icon(Icons.refresh),
+                    label: Text(l.text('retry')),
+                  ),
+                ],
+              ] else ...[
+                const SizedBox(height: ListenSpacing.gap24),
+                Text(
+                  l.text('personalLibraryLoading'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (onOpenDownload != null && onDeleteDownload != null) ...[
+                const SizedBox(height: ListenSpacing.gap24),
+                DownloadsSection(
+                  entries: downloads,
+                  failure: downloadsFailure,
+                  onOpen: onOpenDownload!,
+                  onDelete: onDeleteDownload!,
+                ),
+              ],
+              if (scan != null &&
+                  onScanRefresh != null &&
+                  onScanCancel != null &&
+                  onRetryScanRegistrations != null &&
+                  onChooseManagedStoreLocation != null) ...[
+                const SizedBox(height: ListenSpacing.gap24),
+                Text(
+                  l.text('libraryStorageAndScan'),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: ListenSpacing.gap8),
+                MediaLibraryScanCard(
+                  state: scan!,
+                  onRefresh: onScanRefresh!,
+                  onCancel: onScanCancel!,
+                  onRetryFailures: onRetryScanRegistrations!,
+                  onChooseFolder: onChooseManagedStoreLocation!,
                 ),
               ],
             ],
@@ -297,144 +469,46 @@ class _HomeContent extends StatelessWidget {
   }
 }
 
-class _ResponsiveActionGrid extends StatelessWidget {
-  const _ResponsiveActionGrid({required this.compact, required this.children});
-
-  final bool compact;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    if (compact) {
-      return Column(
-        children: [
-          for (var index = 0; index < children.length; index++) ...[
-            children[index],
-            if (index != children.length - 1)
-              const SizedBox(height: ListenSpacing.gap8),
-          ],
-        ],
-      );
-    }
-    final perRow = children.length;
-    final rows = <List<Widget?>>[];
-    for (var start = 0; start < children.length; start += perRow) {
-      final row = <Widget?>[
-        ...children.sublist(
-          start,
-          (start + perRow) > children.length ? children.length : start + perRow,
-        ),
-      ];
-      while (row.length < perRow) {
-        row.add(null);
-      }
-      rows.add(row);
-    }
-    return Column(
-      children: [
-        for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var index = 0; index < rows[rowIndex].length; index++) ...[
-                Expanded(child: rows[rowIndex][index] ?? const SizedBox()),
-                if (index != rows[rowIndex].length - 1)
-                  const SizedBox(width: ListenSpacing.gap12),
-              ],
-            ],
-          ),
-          if (rowIndex != rows.length - 1)
-            const SizedBox(height: ListenSpacing.gap12),
-        ],
-      ],
-    );
-  }
-}
-
-class _SourceAction extends StatelessWidget {
-  const _SourceAction({
-    required this.icon,
-    required this.label,
-    required this.sourceLabel,
-    required this.onTap,
-    this.primary = false,
+class _UnifiedImportAction extends StatelessWidget {
+  const _UnifiedImportAction({
+    required this.onOpenDocument,
+    required this.onOpenMedia,
+    required this.onOpenOnline,
   });
 
-  final IconData icon;
-  final String label;
-  final String sourceLabel;
-  final VoidCallback onTap;
-  final bool primary;
+  final VoidCallback? onOpenDocument;
+  final VoidCallback onOpenMedia;
+  final VoidCallback onOpenOnline;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: primary
-          ? colors.primaryContainer.withValues(alpha: 0.42)
-          : colors.surfaceContainerLowest,
-      shape: RoundedRectangleBorder(
-        borderRadius: ListenRadii.controlBorder,
-        side: BorderSide(
-          color: primary
-              ? colors.primary.withValues(alpha: 0.42)
-              : colors.outlineVariant,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: 112,
-          child: Padding(
-            padding: ListenPadding.card,
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: primary ? colors.primary : colors.secondaryContainer,
-                    borderRadius: ListenRadii.controlBorder,
-                  ),
-                  child: Icon(
-                    icon,
-                    color: primary
-                        ? colors.onPrimary
-                        : colors.onSecondaryContainer,
-                  ),
-                ),
-                const SizedBox(width: ListenSpacing.gap16),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: ListenSpacing.gap4),
-                      Text(
-                        sourceLabel,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: ListenSpacing.gap8),
-                Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
-              ],
-            ),
+    final l = AppLocalizations.of(context);
+    return MenuAnchor(
+      menuChildren: [
+        if (onOpenDocument != null)
+          MenuItemButton(
+            onPressed: onOpenDocument,
+            leadingIcon: const Icon(Icons.description_outlined),
+            child: Text(l.text('openDocument')),
           ),
+        MenuItemButton(
+          onPressed: onOpenMedia,
+          leadingIcon: const Icon(Icons.video_file_outlined),
+          child: Text(l.text('openVideoAudio')),
+        ),
+        MenuItemButton(
+          onPressed: onOpenOnline,
+          leadingIcon: const Icon(Icons.link_outlined),
+          child: Text(l.text('openUrl')),
+        ),
+      ],
+      builder: (context, controller, child) => Tooltip(
+        message: l.text('libraryImportMaterial'),
+        child: FilledButton.icon(
+          onPressed: () =>
+              controller.isOpen ? controller.close() : controller.open(),
+          icon: const Icon(Icons.add),
+          label: Text(l.text('libraryImportMaterial')),
         ),
       ),
     );
