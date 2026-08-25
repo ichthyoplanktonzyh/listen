@@ -24,10 +24,16 @@ from listen_gen.rich import (
     RichWord,
     SenseGroupRequest,
 )
+from listen_gen.rich import (
+    AcousticTrackRequest,
+    SpeechActivityRequest,
+)
 from listen_gen.rich_baselines import (
+    AcousticTrackBaseline,
     ParselmouthAcousticsBaseline,
     AcousticProsodyBaseline,
     PunctuationSenseGroupBaseline,
+    SpeechActivityBaseline,
     WavWordAcousticsBaseline,
 )
 
@@ -495,3 +501,103 @@ class ParselmouthAcousticsBaselineTests(unittest.TestCase):
             self.assertIn("rms_dbfs", result.measurements[0].energy)
             self.assertIn("median_f0_hz", result.measurements[0].pitch)
             self.assertIsNotNone(result.config_sha256)
+
+
+class AcousticTrackBaselineTests(unittest.TestCase):
+    def test_frames_are_fixed_hop_and_absolute_time(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = write_tone_wav(Path(directory) / "tone.wav")
+            result = AcousticTrackBaseline().measure(
+                AcousticTrackRequest(audio_path=wav_path)
+            )
+            self.assertEqual(result.sample_rate_hz, 16000)
+            self.assertEqual(result.frame_step_ms, 10)
+            self.assertTrue(result.frames)
+            # Absolute media time on a fixed 10 ms hop, strictly increasing.
+            self.assertEqual(result.frames[0].time_ms, 0)
+            for previous, frame in zip(result.frames, result.frames[1:]):
+                self.assertEqual(frame.time_ms - previous.time_ms, 10)
+            # ~2200 ms of audio -> ~220 whole 10 ms frames.
+            self.assertGreaterEqual(len(result.frames), 210)
+            self.assertIsNotNone(result.config_sha256)
+
+    def test_energy_is_relative_to_recording_and_decoupled_from_words(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = write_tone_wav(Path(directory) / "tone.wav")
+            result = AcousticTrackBaseline().measure(
+                AcousticTrackRequest(audio_path=wav_path)
+            )
+            self.assertEqual(result.energy_baseline, "recording_median_dbfs")
+            self.assertEqual(result.pitch_baseline, "recording_median_f0_hz")
+            # The loudest window (110-490 ms, amplitude 0.6) must sit above the
+            # recording median; a silent tail frame must sit below it.
+            loud = next(f for f in result.frames if f.time_ms == 200)
+            silent = next(f for f in result.frames if f.time_ms == 2100)
+            self.assertGreater(loud.energy_rel_db, 0.0)
+            self.assertLess(silent.energy_rel_db, loud.energy_rel_db)
+
+    def test_pitch_fields_never_fabricated_without_a_tracker(self) -> None:
+        # Whether or not parselmouth is installed, an unvoiced frame carries no
+        # F0 and no relative-semitone value: the two pitch fields are null
+        # together and voiced is a boolean-or-null, never an invented number.
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = write_tone_wav(Path(directory) / "tone.wav")
+            result = AcousticTrackBaseline().measure(
+                AcousticTrackRequest(audio_path=wav_path)
+            )
+            for frame in result.frames:
+                if frame.f0_hz is None:
+                    self.assertIsNone(frame.f0_rel_st)
+                else:
+                    self.assertGreater(frame.f0_hz, 0.0)
+                self.assertIn(frame.voiced, (True, False, None))
+
+    def test_unreadable_audio_abstains(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bad = Path(directory) / "bad.wav"
+            bad.write_bytes(b"not a wav")
+            with self.assertRaises(RichStageFailure) as caught:
+                AcousticTrackBaseline().measure(AcousticTrackRequest(audio_path=bad))
+            self.assertEqual(caught.exception.code, "acoustic_track_failed")
+
+
+class SpeechActivityBaselineTests(unittest.TestCase):
+    def test_spans_are_ordered_non_overlapping_and_cover_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = write_tone_wav(Path(directory) / "tone.wav")
+            result = SpeechActivityBaseline().measure(
+                SpeechActivityRequest(audio_path=wav_path)
+            )
+            spans = result.spans
+            self.assertTrue(spans)
+            self.assertEqual(spans[0].start_ms, 0)
+            previous_end = 0
+            for span in spans:
+                self.assertIn(span.activity, ("speech", "silence"))
+                self.assertLess(span.start_ms, span.end_ms)
+                self.assertGreaterEqual(span.start_ms, previous_end)
+                previous_end = span.end_ms
+            # The recording is ~2200 ms; the spans reach the audio end.
+            self.assertGreaterEqual(spans[-1].end_ms, 2100)
+
+    def test_speech_and_silence_are_both_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = write_tone_wav(Path(directory) / "tone.wav")
+            result = SpeechActivityBaseline().measure(
+                SpeechActivityRequest(audio_path=wav_path)
+            )
+            labels = {span.activity for span in result.spans}
+            # The tone WAV has loud word windows and a silent tail, so both
+            # speech and silence must be measured.
+            self.assertIn("speech", labels)
+            self.assertIn("silence", labels)
+
+    def test_unreadable_audio_abstains(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bad = Path(directory) / "bad.wav"
+            bad.write_bytes(b"still not a wav")
+            with self.assertRaises(RichStageFailure) as caught:
+                SpeechActivityBaseline().measure(
+                    SpeechActivityRequest(audio_path=bad)
+                )
+            self.assertEqual(caught.exception.code, "speech_activity_failed")

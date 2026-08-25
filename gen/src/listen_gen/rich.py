@@ -60,9 +60,20 @@ from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
 SENSE_GROUP_RESULT_SCHEMA = "listen_gen.sense-group-result.v1"
 ACOUSTICS_RESULT_SCHEMA = "listen_gen.acoustics-result.v1"
 PROSODY_RESULT_SCHEMA = "listen_gen.prosody-result.v1"
+ACOUSTIC_TRACK_RESULT_SCHEMA = "listen_gen.acoustic-track-result.v1"
+SPEECH_ACTIVITY_RESULT_SCHEMA = "listen_gen.speech-activity-result.v1"
 SENSE_GROUP_SCHEMA = "listen.payload.sense-group-analysis.v1"
 ACOUSTICS_SCHEMA = "listen.payload.word-acoustics.v1"
 PROSODY_SCHEMA = "listen.payload.prosody-analysis.v1"
+# Frame-level acoustic evidence and speech/non-speech evidence are audio-only
+# measurement resources. Core has no payload family for them yet, so they enter
+# the package as opaque optional resources (never depended on by a required
+# resource); their schema ids stay in the ``listen.payload.*`` namespace so a
+# future Core payload family can adopt them without a rename.
+ACOUSTIC_TRACK_SCHEMA = "listen.payload.acoustic-track.v1"
+SPEECH_ACTIVITY_SCHEMA = "listen.payload.speech-activity.v1"
+ACOUSTIC_TRACK_RESOURCE_KIND = "acoustic_track"
+SPEECH_ACTIVITY_RESOURCE_KIND = "speech_activity"
 ACOUSTICS_PIPELINE_CONFIG_SCHEMA = "listen_gen.acoustics-pipeline-config.v1"
 RICH_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 NORMALIZED_SAMPLE_RATE_HZ = 16000
@@ -76,6 +87,8 @@ RICH_STAGE_TITLES: dict[str, str] = {
     "acoustics": "Acoustics",
     "prosody": "Prosody",
     "phone": "Phone",
+    "acoustic_track": "Acoustic-track",
+    "speech_activity": "Speech-activity",
 }
 RICH_WARNING_TAILS: dict[str, str] = {
     "start_failed": "provider could not be started",
@@ -376,6 +389,82 @@ class AcousticsResult:
 
 
 @dataclass(frozen=True)
+class AcousticTrackRequest:
+    """The normalized audio window, addressed on its own timeline.
+
+    Frame-level acoustic evidence is a fact about the audio rendition, not
+    about any word. The request therefore carries only the normalized audio
+    path — no words, no sentences, no sense groups — so the measurement stays
+    decoupled from text segmentation and language-independent.
+    """
+
+    audio_path: Path
+
+
+@dataclass(frozen=True)
+class AcousticFrame:
+    """One fixed-hop acoustic measurement at ``time_ms`` (absolute media time).
+
+    Every field is a raw measurement, never an interpretation: ``energy_rel_db``
+    and ``f0_rel_st`` are relative to the recording's own median so different
+    recordings are comparable, but Gen never labels a frame prominent, an
+    anchor, weak, or a boundary. ``f0_hz``/``f0_rel_st`` are ``None`` on an
+    unvoiced frame; ``voiced`` is ``None`` when voicing was not measured (for
+    example when no pitch tracker is available and only energy was extracted).
+    """
+
+    time_ms: int
+    energy_dbfs: float
+    energy_rel_db: float
+    f0_hz: float | None
+    f0_rel_st: float | None
+    voiced: bool | None
+
+
+@dataclass(frozen=True)
+class AcousticTrackResult:
+    sample_rate_hz: int
+    frame_step_ms: int
+    energy_baseline: str
+    pitch_baseline: str
+    frames: tuple[AcousticFrame, ...]
+    provider_id: str
+    provider_version: str
+    model_id: str | None = None
+    model_version: str | None = None
+    config_sha256: str | None = None
+
+
+@dataclass(frozen=True)
+class SpeechActivityRequest:
+    """The normalized audio window for speech/non-speech measurement.
+
+    Like the acoustic track, this is an audio-only fact: it carries no words
+    or sentences and never interprets a silence as a sentence, prosodic, or
+    audible boundary. That interpretation is left to Core.
+    """
+
+    audio_path: Path
+
+
+@dataclass(frozen=True)
+class SpeechSpan:
+    start_ms: int
+    end_ms: int
+    activity: str  # "speech" | "silence"
+
+
+@dataclass(frozen=True)
+class SpeechActivityResult:
+    spans: tuple[SpeechSpan, ...]
+    provider_id: str
+    provider_version: str
+    model_id: str | None = None
+    model_version: str | None = None
+    config_sha256: str | None = None
+
+
+@dataclass(frozen=True)
 class ProsodyRequest:
     """Exact Word Timeline, exact Word Acoustics, and optional Sense Groups.
 
@@ -435,6 +524,18 @@ class AcousticsExtractor(Protocol):
     """Provider-neutral seam for expensive word-acoustic measurement."""
 
     def measure(self, request: AcousticsRequest) -> AcousticsResult: ...
+
+
+class AcousticTrackExtractor(Protocol):
+    """Provider-neutral seam for frame-level acoustic measurement."""
+
+    def measure(self, request: AcousticTrackRequest) -> AcousticTrackResult: ...
+
+
+class SpeechActivityDetector(Protocol):
+    """Provider-neutral seam for speech/non-speech measurement."""
+
+    def measure(self, request: SpeechActivityRequest) -> SpeechActivityResult: ...
 
 
 class ProsodyAnalyzer(Protocol):
@@ -700,6 +801,120 @@ def _parse_prosody_result(raw: Any, stage: str) -> ProsodyResult:
         raise _parse_failure(stage, error) from error
 
 
+def _parse_acoustic_track_result(raw: Any, stage: str) -> AcousticTrackResult:
+    try:
+        document = _object(raw, "/")
+        if document.get("schema") != ACOUSTIC_TRACK_RESULT_SCHEMA:
+            raise _failure(stage, "output_invalid")
+        provider = _provider(document, stage)
+        sample_rate_hz = _positive_integer(
+            document.get("sample_rate_hz"), "/sample_rate_hz"
+        )
+        frame_step_ms = _positive_integer(
+            document.get("frame_step_ms"), "/frame_step_ms"
+        )
+        energy_baseline = document.get("energy_baseline")
+        pitch_baseline = document.get("pitch_baseline")
+        if not isinstance(energy_baseline, str) or not energy_baseline.strip():
+            raise ValueError("/energy_baseline must be a non-empty string")
+        if not isinstance(pitch_baseline, str) or not pitch_baseline.strip():
+            raise ValueError("/pitch_baseline must be a non-empty string")
+        raw_frames = document.get("frames")
+        if not isinstance(raw_frames, list) or not raw_frames:
+            raise _failure(stage, "output_invalid")
+        frames: list[AcousticFrame] = []
+        previous_time: int | None = None
+        for index, raw_frame in enumerate(raw_frames):
+            location = f"/frames/{index}"
+            frame = _object(raw_frame, location)
+            time_ms = _integer(frame.get("time_ms"), f"{location}/time_ms")
+            if previous_time is not None and time_ms <= previous_time:
+                raise ValueError(f"{location}/time_ms must strictly increase")
+            previous_time = time_ms
+            energy_dbfs = _number(frame.get("energy_dbfs"), f"{location}/energy_dbfs")
+            energy_rel_db = _number(
+                frame.get("energy_rel_db"), f"{location}/energy_rel_db"
+            )
+            f0_hz = _nullable_number(
+                frame.get("f0_hz"), f"{location}/f0_hz", minimum=0.0
+            )
+            if f0_hz == 0.0:
+                raise ValueError(f"{location}/f0_hz must be positive when present")
+            f0_rel_st = _nullable_number(frame.get("f0_rel_st"), f"{location}/f0_rel_st")
+            # An unvoiced frame carries no pitch: never fabricate a relative
+            # semitone value where no F0 was measured.
+            if f0_hz is None and f0_rel_st is not None:
+                raise ValueError(
+                    f"{location}/f0_rel_st must be null when f0_hz is null"
+                )
+            voiced = frame.get("voiced")
+            if voiced is not None and not isinstance(voiced, bool):
+                raise ValueError(f"{location}/voiced must be a boolean or null")
+            frames.append(
+                AcousticFrame(
+                    time_ms=time_ms,
+                    energy_dbfs=energy_dbfs,
+                    energy_rel_db=energy_rel_db,
+                    f0_hz=f0_hz,
+                    f0_rel_st=f0_rel_st,
+                    voiced=voiced,
+                )
+            )
+        return AcousticTrackResult(
+            sample_rate_hz=sample_rate_hz,
+            frame_step_ms=frame_step_ms,
+            energy_baseline=energy_baseline,
+            pitch_baseline=pitch_baseline,
+            frames=tuple(frames),
+            provider_id=provider[0],
+            provider_version=provider[1],
+            model_id=provider[2],
+            model_version=provider[3],
+            config_sha256=provider[4],
+        )
+    except ValueError as error:
+        raise _parse_failure(stage, error) from error
+
+
+def _parse_speech_activity_result(raw: Any, stage: str) -> SpeechActivityResult:
+    try:
+        document = _object(raw, "/")
+        if document.get("schema") != SPEECH_ACTIVITY_RESULT_SCHEMA:
+            raise _failure(stage, "output_invalid")
+        provider = _provider(document, stage)
+        raw_spans = document.get("spans")
+        if not isinstance(raw_spans, list) or not raw_spans:
+            raise _failure(stage, "output_invalid")
+        spans: list[SpeechSpan] = []
+        previous_end: int | None = None
+        for index, raw_span in enumerate(raw_spans):
+            location = f"/spans/{index}"
+            span = _object(raw_span, location)
+            start_ms = _integer(span.get("start_ms"), f"{location}/start_ms")
+            end_ms = _positive_integer(span.get("end_ms"), f"{location}/end_ms")
+            if end_ms <= start_ms:
+                raise ValueError(f"{location} must be a non-empty half-open span")
+            if previous_end is not None and start_ms < previous_end:
+                raise ValueError(f"{location} spans must not overlap")
+            previous_end = end_ms
+            activity = _enum(
+                span.get("activity"),
+                frozenset({"speech", "silence"}),
+                f"{location}/activity",
+            )
+            spans.append(SpeechSpan(start_ms=start_ms, end_ms=end_ms, activity=activity))
+        return SpeechActivityResult(
+            spans=tuple(spans),
+            provider_id=provider[0],
+            provider_version=provider[1],
+            model_id=provider[2],
+            model_version=provider[3],
+            config_sha256=provider[4],
+        )
+    except ValueError as error:
+        raise _parse_failure(stage, error) from error
+
+
 # ---------------------------------------------------------------------------
 # Adapters
 # ---------------------------------------------------------------------------
@@ -757,6 +972,42 @@ class FixtureProsodyAdapter:
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise _failure("prosody", "output_invalid") from error
         return _parse_prosody_result(raw, "prosody")
+
+
+class FixtureAcousticTrackAdapter:
+    """Offline acoustic-track adapter that replays a committed result fixture."""
+
+    def __init__(self, fixture_path: Path):
+        if not isinstance(fixture_path, Path) or not fixture_path.is_file():
+            raise ConversionError("acoustic track fixture must be a regular file")
+        self.fixture_path = fixture_path
+
+    def measure(self, request: AcousticTrackRequest) -> AcousticTrackResult:
+        try:
+            raw = json.loads(self.fixture_path.read_text(encoding="utf-8"))
+        except OSError as error:
+            raise _failure("acoustic_track", "failed") from error
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise _failure("acoustic_track", "output_invalid") from error
+        return _parse_acoustic_track_result(raw, "acoustic_track")
+
+
+class FixtureSpeechActivityAdapter:
+    """Offline speech-activity adapter that replays a committed result fixture."""
+
+    def __init__(self, fixture_path: Path):
+        if not isinstance(fixture_path, Path) or not fixture_path.is_file():
+            raise ConversionError("speech activity fixture must be a regular file")
+        self.fixture_path = fixture_path
+
+    def measure(self, request: SpeechActivityRequest) -> SpeechActivityResult:
+        try:
+            raw = json.loads(self.fixture_path.read_text(encoding="utf-8"))
+        except OSError as error:
+            raise _failure("speech_activity", "failed") from error
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise _failure("speech_activity", "output_invalid") from error
+        return _parse_speech_activity_result(raw, "speech_activity")
 
 
 def _subtitle_input_document(request: SenseGroupRequest) -> bytes:
@@ -1276,6 +1527,74 @@ def _qualify_acoustics(
     return tuple(resolved)
 
 
+def _qualify_acoustic_track(
+    result: AcousticTrackResult,
+) -> tuple[dict[str, Any], ...]:
+    """Resolve frame-level measurements onto the emitted payload shape.
+
+    Frame times must be absolute media milliseconds that strictly increase and
+    fall on the declared fixed hop. No word or sentence coordinate is involved:
+    the acoustic track is a fact about the audio rendition alone.
+    """
+    if not result.frames:
+        raise _failure("acoustic_track", "qualification_failed")
+    resolved: list[dict[str, Any]] = []
+    previous_time: int | None = None
+    for frame in result.frames:
+        if frame.time_ms < 0:
+            raise _failure("acoustic_track", "qualification_failed")
+        if previous_time is not None:
+            if frame.time_ms <= previous_time:
+                raise _failure("acoustic_track", "qualification_failed")
+            if frame.time_ms - previous_time != result.frame_step_ms:
+                raise _failure("acoustic_track", "qualification_failed")
+        previous_time = frame.time_ms
+        if frame.f0_hz is None and frame.f0_rel_st is not None:
+            raise _failure("acoustic_track", "qualification_failed")
+        resolved.append(
+            {
+                "time_ms": frame.time_ms,
+                "energy_dbfs": frame.energy_dbfs,
+                "energy_rel_db": frame.energy_rel_db,
+                "f0_hz": frame.f0_hz,
+                "f0_rel_st": frame.f0_rel_st,
+                "voiced": frame.voiced,
+            }
+        )
+    return tuple(resolved)
+
+
+def _qualify_speech_activity(
+    result: SpeechActivityResult,
+) -> tuple[dict[str, Any], ...]:
+    """Resolve speech/non-speech spans onto the emitted payload shape.
+
+    Spans are absolute-media-time half-open windows that are ordered and never
+    overlap. Gen states only measured speech/silence: it never relabels a
+    silence as any kind of boundary.
+    """
+    if not result.spans:
+        raise _failure("speech_activity", "qualification_failed")
+    resolved: list[dict[str, Any]] = []
+    previous_end: int | None = None
+    for span in result.spans:
+        if span.start_ms < 0 or span.end_ms <= span.start_ms:
+            raise _failure("speech_activity", "qualification_failed")
+        if previous_end is not None and span.start_ms < previous_end:
+            raise _failure("speech_activity", "qualification_failed")
+        if span.activity not in ("speech", "silence"):
+            raise _failure("speech_activity", "qualification_failed")
+        previous_end = span.end_ms
+        resolved.append(
+            {
+                "start_ms": span.start_ms,
+                "end_ms": span.end_ms,
+                "activity": span.activity,
+            }
+        )
+    return tuple(resolved)
+
+
 def _qualify_prosody(
     result: ProsodyResult,
     words: tuple[RichWord, ...],
@@ -1379,13 +1698,15 @@ def _qualify_prosody(
     return tuple(resolved_anchors), tuple(resolved_chunks)
 
 
-def _compose_acoustics_config_sha256(
-    provider_config_sha256: str | None, audio_stream_index: int
+def _compose_audio_pipeline_config_sha256(
+    provider_config_sha256: str | None,
+    audio_stream_index: int,
+    adapter_protocol: str,
 ) -> str:
-    """Bind the acoustics config identity to the normalization choices."""
+    """Bind an audio-stage config identity to the normalization choices."""
     pipeline_config = {
         "schema": ACOUSTICS_PIPELINE_CONFIG_SCHEMA,
-        "adapter_protocol": ACOUSTICS_RESULT_SCHEMA,
+        "adapter_protocol": adapter_protocol,
         "audio_preprocessing": {
             "audio_stream_index": audio_stream_index,
             "channels": 1,
@@ -1404,6 +1725,15 @@ def _compose_acoustics_config_sha256(
     return f"sha256:{hashlib.sha256(config_bytes).hexdigest()}"
 
 
+def _compose_acoustics_config_sha256(
+    provider_config_sha256: str | None, audio_stream_index: int
+) -> str:
+    """Bind the acoustics config identity to the normalization choices."""
+    return _compose_audio_pipeline_config_sha256(
+        provider_config_sha256, audio_stream_index, ACOUSTICS_RESULT_SCHEMA
+    )
+
+
 def _rich_resource(
     *,
     kind: str,
@@ -1416,8 +1746,14 @@ def _rich_resource(
     model_id: str | None,
     model_version: str | None,
     config_sha256: str | None,
+    subject: dict[str, object] | None = None,
 ) -> tuple[PackageResource, bytes]:
-    """Build one v3 rich resource: canonical payload, declared provenance."""
+    """Build one v3 rich resource: canonical payload, declared provenance.
+
+    ``subject`` defaults to the shared reading-anchored context subject; an
+    audio-only resource passes a rendition-only subject so it does not claim to
+    be *about* the reading it never depended on.
+    """
     provider = {"id": provider_id, "version": provider_version}
     model = None
     if model_id is not None:
@@ -1431,7 +1767,7 @@ def _rich_resource(
         payload_blob=blob_declaration(
             sha256_of_bytes(payload_bytes), len(payload_bytes), True
         ),
-        subject=context.subject,
+        subject=context.subject if subject is None else subject,
         dependencies=dependencies,
         provenance=provenance(
             context.created_at_ms,
@@ -1514,6 +1850,68 @@ def _prosody_resource(
         model_id=result.model_id,
         model_version=result.model_version,
         config_sha256=result.config_sha256,
+    )
+
+
+def _audio_only_subject(context: RichContext) -> dict[str, object]:
+    """A subject that names only the audio rendition, not the reading anchor.
+
+    Frame-level and speech-activity evidence are facts about the audio alone,
+    so they are ``about`` the rendition and nothing text-derived.
+    """
+    return {"rendition_ids": [context.rendition_id], "anchor_resource_ids": []}
+
+
+def _acoustic_track_resource(
+    *,
+    context: RichContext,
+    result: AcousticTrackResult,
+    frames: tuple[dict[str, Any], ...],
+    config_sha256: str | None,
+) -> tuple[PackageResource, bytes]:
+    # Audio-only evidence: no word timeline or subtitle dependency. The rendition
+    # is named through provenance ``input_rendition_ids`` (via ``_rich_resource``);
+    # the empty resource dependency keeps the track decoupled from text.
+    return _rich_resource(
+        kind=ACOUSTIC_TRACK_RESOURCE_KIND,
+        schema=ACOUSTIC_TRACK_SCHEMA,
+        context=context,
+        dependencies=(),
+        subject=_audio_only_subject(context),
+        payload={
+            "sample_rate_hz": result.sample_rate_hz,
+            "frame_step_ms": result.frame_step_ms,
+            "energy_baseline": result.energy_baseline,
+            "pitch_baseline": result.pitch_baseline,
+            "frames": list(frames),
+        },
+        provider_id=result.provider_id,
+        provider_version=result.provider_version,
+        model_id=result.model_id,
+        model_version=result.model_version,
+        config_sha256=config_sha256,
+    )
+
+
+def _speech_activity_resource(
+    *,
+    context: RichContext,
+    result: SpeechActivityResult,
+    spans: tuple[dict[str, Any], ...],
+    config_sha256: str | None,
+) -> tuple[PackageResource, bytes]:
+    return _rich_resource(
+        kind=SPEECH_ACTIVITY_RESOURCE_KIND,
+        schema=SPEECH_ACTIVITY_SCHEMA,
+        context=context,
+        dependencies=(),
+        subject=_audio_only_subject(context),
+        payload={"spans": list(spans)},
+        provider_id=result.provider_id,
+        provider_version=result.provider_version,
+        model_id=result.model_id,
+        model_version=result.model_version,
+        config_sha256=config_sha256,
     )
 
 
@@ -1622,6 +2020,103 @@ def run_acoustics(
     except (ConversionError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         code, message = rich_warning(error, "acoustics")
         return "degraded", None, None, [{"code": code, "message": message}], ()
+
+
+def run_acoustic_track(
+    *,
+    extractor: AcousticTrackExtractor,
+    preprocessor: AudioPreprocessor | None,
+    media_path: Path,
+    audio_stream_index: int | None,
+    context: RichContext,
+    progress: Callable[[str], None] | None = None,
+) -> tuple[str, PackageResource | None, bytes | None, list[dict[str, str]]]:
+    """Run the optional frame-level acoustic-track stage.
+
+    The extractor receives the normalized 16 kHz mono PCM WAV when a media
+    preprocessor is configured (the fixture adapter ignores it and replays a
+    committed track). The track is audio-only: it never receives the word
+    timeline or the sentences, so the measurement stays decoupled from text.
+    Returns ``(status, resource, payload_bytes, typed_warnings)``.
+    """
+    if progress is not None:
+        progress("measuring_acoustic_track")
+    try:
+        if preprocessor is not None:
+            with preprocessor.prepare(
+                media_path, audio_stream_index=audio_stream_index
+            ) as prepared:
+                result = extractor.measure(AcousticTrackRequest(audio_path=prepared.path))
+            stream_index = prepared.stream_index
+        else:
+            result = extractor.measure(AcousticTrackRequest(audio_path=media_path))
+            stream_index = None
+        frames = _qualify_acoustic_track(result)
+        config_sha256 = result.config_sha256
+        if stream_index is not None:
+            config_sha256 = _compose_audio_pipeline_config_sha256(
+                result.config_sha256, stream_index, ACOUSTIC_TRACK_RESULT_SCHEMA
+            )
+        resource, payload_bytes = _acoustic_track_resource(
+            context=context,
+            result=result,
+            frames=frames,
+            config_sha256=config_sha256,
+        )
+        return "produced", resource, payload_bytes, []
+    except RichStageFailure as error:
+        return "degraded", None, None, [{"code": error.code, "message": str(error)}]
+    except (ConversionError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        code, message = rich_warning(error, "acoustic_track")
+        return "degraded", None, None, [{"code": code, "message": message}]
+
+
+def run_speech_activity(
+    *,
+    detector: SpeechActivityDetector,
+    preprocessor: AudioPreprocessor | None,
+    media_path: Path,
+    audio_stream_index: int | None,
+    context: RichContext,
+    progress: Callable[[str], None] | None = None,
+) -> tuple[str, PackageResource | None, bytes | None, list[dict[str, str]]]:
+    """Run the optional speech/non-speech stage.
+
+    Like the acoustic track, this is audio-only measurement evidence: it
+    reports where speech and silence are in the recording and never interprets
+    a silence as a boundary. Returns
+    ``(status, resource, payload_bytes, typed_warnings)``.
+    """
+    if progress is not None:
+        progress("measuring_speech_activity")
+    try:
+        if preprocessor is not None:
+            with preprocessor.prepare(
+                media_path, audio_stream_index=audio_stream_index
+            ) as prepared:
+                result = detector.measure(SpeechActivityRequest(audio_path=prepared.path))
+            stream_index = prepared.stream_index
+        else:
+            result = detector.measure(SpeechActivityRequest(audio_path=media_path))
+            stream_index = None
+        spans = _qualify_speech_activity(result)
+        config_sha256 = result.config_sha256
+        if stream_index is not None:
+            config_sha256 = _compose_audio_pipeline_config_sha256(
+                result.config_sha256, stream_index, SPEECH_ACTIVITY_RESULT_SCHEMA
+            )
+        resource, payload_bytes = _speech_activity_resource(
+            context=context,
+            result=result,
+            spans=spans,
+            config_sha256=config_sha256,
+        )
+        return "produced", resource, payload_bytes, []
+    except RichStageFailure as error:
+        return "degraded", None, None, [{"code": error.code, "message": str(error)}]
+    except (ConversionError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        code, message = rich_warning(error, "speech_activity")
+        return "degraded", None, None, [{"code": code, "message": message}]
 
 
 def run_prosody(

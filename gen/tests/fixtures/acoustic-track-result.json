@@ -1,0 +1,16 @@
+{
+  "schema": "listen_gen.acoustic-track-result.v1",
+  "provider": {"id": "fixture-acoustic-track", "version": "1"},
+  "model": {"id": "fixture-frames", "version": "2026-08"},
+  "config_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "sample_rate_hz": 16000,
+  "frame_step_ms": 10,
+  "energy_baseline": "recording_median_dbfs",
+  "pitch_baseline": "recording_median_f0_hz",
+  "frames": [
+    {"time_ms": 0, "energy_dbfs": -55.0, "energy_rel_db": -8.0, "f0_hz": null, "f0_rel_st": null, "voiced": false},
+    {"time_ms": 10, "energy_dbfs": -22.0, "energy_rel_db": 6.0, "f0_hz": 182.0, "f0_rel_st": 1.2, "voiced": true},
+    {"time_ms": 20, "energy_dbfs": -24.0, "energy_rel_db": 4.0, "f0_hz": 176.0, "f0_rel_st": 0.7, "voiced": true},
+    {"time_ms": 30, "energy_dbfs": -47.0, "energy_rel_db": -3.0, "f0_hz": null, "f0_rel_st": null, "voiced": false}
+  ]
+}
