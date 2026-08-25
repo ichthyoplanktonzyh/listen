@@ -67,6 +67,16 @@ MAX_CONCURRENT_RUNS = max(1, int(os.environ.get("LISTEN_GEN_MAX_CONCURRENT_RUNS"
 
 SUPPORTED_CAPABILITIES = ("read", "listen", "watch", "synchronized_read_listen")
 
+# The ASR sidecars ship in the repo's ``tools/`` directory (one level above the
+# installed package).  This resolves their path for the GUI defaults; an
+# installed wheel without ``tools/`` simply leaves the field blank.
+_TOOLS_DIR = Path(__file__).resolve().parents[2] / "tools"
+
+
+def _bundled_sidecar(name: str) -> str:
+    candidate = _TOOLS_DIR / name
+    return str(candidate) if candidate.is_file() else ""
+
 
 def detect_media_type(filename_or_path: str) -> str:
     """Detects MIME type for supported document, media, and subtitle files."""
@@ -151,12 +161,30 @@ def get_default_config() -> dict[str, Any]:
         },
         "asr": {
             "provider": "whisper-cpp",
-            "whisper_cli": "whisper-cli",
-            "whisper_model": "",
-            "whisper_model_id": "ggml-base.en.bin",
-            "whisper_language": "auto",
-            "whisper_translate_to_english": False,
             "timeout_seconds": 3600.0,
+            "qwen3": {
+                "python": sys.executable,
+                "sidecar": _bundled_sidecar("qwen3_asr_wrapper.py"),
+                "model_id": "Qwen/Qwen3-ASR-0.6B",
+                "forced_aligner_model_id": "Qwen/Qwen3-ForcedAligner-0.6B",
+                "language": "auto",
+                "device": "auto",
+                "dtype": "auto",
+            },
+            "sensevoice": {
+                "python": sys.executable,
+                "sidecar": _bundled_sidecar("sensevoice_asr_wrapper.py"),
+                "model_id": "iic/SenseVoiceSmall",
+                "language": "auto",
+                "device": "auto",
+            },
+            "whisper_cpp": {
+                "cli": "whisper-cli",
+                "model": "",
+                "model_id": "ggml-large-v3-turbo.bin",
+                "language": "auto",
+                "translate_to_english": False,
+            },
         },
         "phones": {
             "provider": "baseline",
@@ -169,9 +197,10 @@ def get_default_config() -> dict[str, Any]:
         },
         "aligner": {
             "provider": "none",
-            "aligner_python": sys.executable,
-            "aligner_script": "",
-            "timeout_seconds": 600.0,
+            "model_id": "Qwen/Qwen3-ForcedAligner-0.6B",
+            "model_revision": "main",
+            "device": "mps" if sys.platform == "darwin" else "auto",
+            "padding_ms": 400,
         },
         "tts": {
             "provider": "kokoro" if sys.platform == "darwin" else "none",
@@ -261,14 +290,16 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     if ocr_provider not in ("surya", "rapidocr", "fixture", "none"):
         problems.append(f"ocr.provider must be one of surya/rapidocr/fixture/none, got {ocr_provider!r}")
     asr_provider = config.get("asr", {}).get("provider")
-    if asr_provider not in ("whisper-cpp", "none"):
-        problems.append(f"asr.provider must be whisper-cpp or none, got {asr_provider!r}")
+    if asr_provider not in ("qwen3", "sensevoice", "whisper-cpp", "none"):
+        problems.append(
+            f"asr.provider must be qwen3/sensevoice/whisper-cpp/none, got {asr_provider!r}"
+        )
     phones_provider = config.get("phones", {}).get("provider")
     if phones_provider not in ("baseline", "wav2vec2", "none"):
         problems.append(f"phones.provider must be baseline/wav2vec2/none, got {phones_provider!r}")
     aligner_provider = config.get("aligner", {}).get("provider")
-    if aligner_provider not in ("none", "torchaudio"):
-        problems.append(f"aligner.provider must be none or torchaudio, got {aligner_provider!r}")
+    if aligner_provider not in ("none", "qwen"):
+        problems.append(f"aligner.provider must be none or qwen, got {aligner_provider!r}")
     return problems
 
 
@@ -765,10 +796,16 @@ def check_toolchain() -> dict[str, Any]:
         tools["g2p_en"] = {"available": False}
 
     try:
-        import faster_whisper
-        tools["faster_whisper"] = {"available": True}
+        import qwen_asr  # noqa: F401
+        tools["qwen_asr"] = {"available": True}
     except ImportError:
-        tools["faster_whisper"] = {"available": False}
+        tools["qwen_asr"] = {"available": False}
+
+    try:
+        import funasr  # noqa: F401
+        tools["funasr"] = {"available": True}
+    except ImportError:
+        tools["funasr"] = {"available": False}
 
     return tools
 
@@ -1659,51 +1696,82 @@ def _run_produce_worker(
             from .document import DoclingOcrProvider
             ocr_adapter = DoclingOcrProvider()
 
-        # 2. ASR Adapter (for media or audio derivations)
+        # 2. ASR Adapter (for media or audio derivations). Each provider runs
+        # behind the shared ffmpeg normalization; the underlying adapter no-ops
+        # gracefully when its sidecar / model path is not configured.
         asr_adapter = None
         asr_preprocessor = None
         asr_cfg = config_dict.get("asr", {})
         asr_provider = asr_cfg.get("provider", "whisper-cpp")
-        if asr_provider == "faster-whisper":
-            from .media import FfmpegAudioPreprocessor
-            from .asr import PreprocessingAsrAdapter, FasterWhisperAsrAdapter
-            fw_adapter = FasterWhisperAsrAdapter(
-                model_size_or_path=asr_cfg.get("model", "base"),
-                device=asr_cfg.get("device", "auto"),
-                compute_type=asr_cfg.get("compute_type", "default"),
-                language=asr_cfg.get("language", "auto"),
-            )
-            asr_preprocessor = FfmpegAudioPreprocessor(
-                timeout_seconds=300.0,
-                progress=progress,
-            )
-            asr_adapter = PreprocessingAsrAdapter(
-                fw_adapter,
-                asr_preprocessor,
-                progress=progress,
-            )
-        elif asr_provider == "whisper-cpp" and asr_cfg.get("whisper_model"):
+        asr_timeout = float(asr_cfg.get("timeout_seconds", 3600.0))
+
+        def _wrap_asr(inner):
             from .media import FfmpegAudioPreprocessor
             from .asr import PreprocessingAsrAdapter
-            from .whisper_cpp import WhisperCppAsrAdapter
 
-            whisper_adapter = WhisperCppAsrAdapter(
-                asr_cfg.get("whisper_cli", "whisper-cli"),
-                Path(asr_cfg["whisper_model"]),
-                asr_cfg.get("whisper_model_id", "ggml-model"),
-                asr_cfg.get("whisper_language", "auto"),
-                asr_cfg.get("whisper_translate_to_english", False),
-                float(asr_cfg.get("timeout_seconds", 3600.0)),
+            preproc = FfmpegAudioPreprocessor(timeout_seconds=300.0, progress=progress)
+            return (
+                PreprocessingAsrAdapter(
+                    inner, preproc, audio_stream_index=None, progress=progress
+                ),
+                preproc,
             )
-            asr_preprocessor = FfmpegAudioPreprocessor(
-                timeout_seconds=300.0,
-                progress=progress,
-            )
-            asr_adapter = PreprocessingAsrAdapter(
-                whisper_adapter,
-                asr_preprocessor,
-                progress=progress,
-            )
+
+        if asr_provider == "qwen3":
+            q = asr_cfg.get("qwen3", {})
+            sidecar = q.get("sidecar")
+            if sidecar and Path(sidecar).is_file():
+                from .asr import Qwen3AsrAdapter
+
+                asr_adapter, asr_preprocessor = _wrap_asr(
+                    Qwen3AsrAdapter(
+                        Path(q.get("python", sys.executable)),
+                        Path(sidecar),
+                        model_id=q.get("model_id", "Qwen/Qwen3-ASR-0.6B"),
+                        forced_aligner_model_id=q.get(
+                            "forced_aligner_model_id", "Qwen/Qwen3-ForcedAligner-0.6B"
+                        ),
+                        language=q.get("language", "auto"),
+                        device=q.get("device", "auto"),
+                        dtype=q.get("dtype", "auto"),
+                        timeout_seconds=asr_timeout,
+                        progress=progress,
+                    )
+                )
+        elif asr_provider == "sensevoice":
+            s = asr_cfg.get("sensevoice", {})
+            sidecar = s.get("sidecar")
+            if sidecar and Path(sidecar).is_file():
+                from .asr import SenseVoiceAsrAdapter
+
+                asr_adapter, asr_preprocessor = _wrap_asr(
+                    SenseVoiceAsrAdapter(
+                        Path(s.get("python", sys.executable)),
+                        Path(sidecar),
+                        model_id=s.get("model_id", "iic/SenseVoiceSmall"),
+                        language=s.get("language", "auto"),
+                        device=s.get("device", "auto"),
+                        vad_model=s.get("vad_model", "fsmn-vad"),
+                        timeout_seconds=asr_timeout,
+                        progress=progress,
+                    )
+                )
+        elif asr_provider == "whisper-cpp":
+            w = asr_cfg.get("whisper_cpp", {})
+            model = w.get("model")
+            if model and Path(model).is_file():
+                from .whisper_cpp import WhisperCppAsrAdapter
+
+                asr_adapter, asr_preprocessor = _wrap_asr(
+                    WhisperCppAsrAdapter(
+                        w.get("cli", "whisper-cli"),
+                        Path(model),
+                        w.get("model_id", "ggml-large-v3-turbo.bin"),
+                        w.get("language", "auto"),
+                        bool(w.get("translate_to_english", False)),
+                        asr_timeout,
+                    )
+                )
 
         # 3. Rich stages (Sense groups, Phones, Aligner)
         sense_groups_adapter = None
@@ -1747,12 +1815,13 @@ def _run_produce_worker(
 
         aligner_adapter = None
         aligner_cfg = config_dict.get("aligner", {})
-        if aligner_cfg.get("provider") == "torchaudio" and aligner_cfg.get("aligner_script"):
-            from .align import TorchaudioAlignAdapter
-            aligner_adapter = TorchaudioAlignAdapter(
-                Path(aligner_cfg.get("aligner_python", sys.executable)),
-                Path(aligner_cfg["aligner_script"]),
-                float(aligner_cfg.get("timeout_seconds", 600.0)),
+        if aligner_cfg.get("provider") == "qwen":
+            from .align import Qwen3ForcedAlignAdapter
+            aligner_adapter = Qwen3ForcedAlignAdapter(
+                model_id=aligner_cfg.get("model_id", "Qwen/Qwen3-ForcedAligner-0.6B"),
+                model_revision=aligner_cfg.get("model_revision", "main"),
+                device=aligner_cfg.get("device", "auto"),
+                padding_ms=int(aligner_cfg.get("padding_ms", 400)),
             )
 
         acoustics_adapter = None
