@@ -9,6 +9,7 @@ import subprocess
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 
 TOOLS = Path(__file__).resolve().parent
@@ -312,6 +313,78 @@ Load command 3
             )
             self.assertIn(hashlib.sha256(asset.read_bytes()).hexdigest(), checksums)
             self.assertIn(hashlib.sha256(manifest_path.read_bytes()).hexdigest(), checksums)
+
+
+class ReleasePipelineTests(unittest.TestCase):
+    def test_each_app_release_script_passes_an_individual_bash_syntax_check(self):
+        app = ROOT / "app"
+        for name in ("build-macos-release.sh", "verify-macos-release.sh"):
+            with self.subTest(script=name):
+                result = subprocess.run(
+                    ["bash", "-n", str(app / "tool" / name)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_verifier_preflight_rejects_deferred_shell_parse_errors_before_trap(self):
+        source = (ROOT / "app" / "tool" / "verify-macos-release.sh").read_text(
+            encoding="utf-8"
+        )
+        malformed_suffix = """\nif [[ -n x ]]; then
+  python3 - <<'PY' ||
+    false
+print('unreachable')
+PY
+fi
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            script_path = Path(temporary) / "app" / "tool" / "verify-macos-release.sh"
+            script_path.parent.mkdir(parents=True)
+            script_path.write_text(source + malformed_suffix, encoding="utf-8")
+            script_path.chmod(0o755)
+            result = subprocess.run(
+                [str(script_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("syntax error near unexpected token", result.stderr)
+        self.assertIn("Refusing to run the macOS release verifier", result.stderr)
+
+    def test_failed_packaged_verifier_prevents_distribution_assembly(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app = root / "app"
+            tool = app / "tool"
+            tool.mkdir(parents=True)
+            build = tool / "build-macos-release.sh"
+            verify = tool / "verify-macos-release.sh"
+            build.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+            verify.write_text(
+                "#!/bin/bash\necho 'simulated packaged smoke failure' >&2\nexit 2\n",
+                encoding="utf-8",
+            )
+            build.chmod(0o755)
+            verify.chmod(0o755)
+            output = root / "release-output"
+            output.mkdir()
+
+            with mock.patch.object(dev, "_assemble_preview_distribution") as assemble:
+                with self.assertRaisesRegex(dev.DevError, "exit status 2"):
+                    dev._build_verify_and_assemble_preview(
+                        app,
+                        {},
+                        output,
+                        "a" * 40,
+                        {},
+                    )
+
+            assemble.assert_not_called()
+            self.assertFalse((output / "distribution").exists())
 
 
 class GeneratedLockTests(unittest.TestCase):

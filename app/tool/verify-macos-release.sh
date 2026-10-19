@@ -2,6 +2,10 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+if ! bash -n "$0"; then
+  echo "Refusing to run the macOS release verifier with invalid shell syntax." >&2
+  exit 2
+fi
 fixture_source="$root/test/fixtures/smoke"
 tmp="$(mktemp -d)"
 fixtures="$tmp/fixtures"
@@ -22,12 +26,23 @@ minimal_path="/usr/bin:/bin:/usr/sbin:/sbin"
 pid=""
 
 cleanup() {
+  local status=$?
+  local cleanup_status=0
+  trap - EXIT
   if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
     pkill -P "$pid" 2>/dev/null || true
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
   fi
-  rm -rf "$tmp"
+  if rm -rf "$tmp"; then
+    :
+  else
+    cleanup_status=$?
+  fi
+  if [[ "$status" -eq 0 && "$cleanup_status" -ne 0 ]]; then
+    status="$cleanup_status"
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 mkdir -p "$isolated_home" "$isolated_support"
@@ -105,10 +120,9 @@ cd "$tmp/package"
 if [[ -n "$release_version$release_channel$source_commit$minimum_macos$release_build_number" ]]; then
   [[ -n "$release_version" && -n "$release_channel" && -n "$source_commit" && -n "$minimum_macos" && -n "$release_build_number" ]] ||
     fail "release metadata environment is incomplete"
-  python3 - "$app/Contents/Info.plist" "$backend_lock" "$gen_lock" \
+  if ! python3 - "$app/Contents/Info.plist" "$backend_lock" "$gen_lock" \
     "$release_version" "$release_channel" "$source_commit" "$minimum_macos" \
-    "$release_build_number" <<'PY' ||
-    fail "release bundle version, minimum OS, or source metadata is inconsistent"
+    "$release_build_number" <<'PY'
 import json
 import plistlib
 import sys
@@ -140,6 +154,9 @@ print(
     minimum_macos,
 )
 PY
+  then
+    fail "release bundle version, minimum OS, or source metadata is inconsistent"
+  fi
 fi
 
 # Exercise the exact Dart define embedded into the release. A deliberately

@@ -1336,6 +1336,7 @@ def _release_from_export(
 ) -> None:
     core = source_root / "core"
     app = source_root / "app"
+    _check_app_release_script_syntax(app)
     _run(
         [str(core / "scripts" / "verify-asr-runtime.sh"), str(runtime)],
         core,
@@ -1438,6 +1439,23 @@ def _release_from_export(
         metadata=metadata,
         source_commit=source_sha,
     )
+    _build_verify_and_assemble_preview(app, release_env, output, source_sha, metadata)
+    _assert_clean_head(source_root, export_git_sha, "after release verification")
+
+
+def _check_app_release_script_syntax(app: Path) -> None:
+    for name in ("build-macos-release.sh", "verify-macos-release.sh"):
+        script = app / "tool" / name
+        _run(["bash", "-n", str(script)], app)
+
+
+def _build_verify_and_assemble_preview(
+    app: Path,
+    release_env: Dict[str, str],
+    output: Path,
+    source_sha: str,
+    metadata: Dict[str, str],
+) -> None:
     build_script = app / "tool" / "build-macos-release.sh"
     verify_script = app / "tool" / "verify-macos-release.sh"
     _run([str(build_script)], app, release_env)
@@ -1453,7 +1471,6 @@ def _release_from_export(
         metadata,
         bundle_facts,
     )
-    _assert_clean_head(source_root, export_git_sha, "after release verification")
 
 
 def command_status(args: argparse.Namespace) -> None:
