@@ -1,8 +1,10 @@
 # Phase 1 Product Validation and Information Architecture Review
 
-> Status: active Supervisor validation brief, 2026-08-14.
+> Status: historical as of 2026-08-24. Its learner-research evidence may be
+> reused, but its partial-material journey assumptions are superseded by
+> [MODEL.md](../MODEL.md).
 >
-> Scope: evaluate the current unreleased App from the learner's side of the
+> Former scope: evaluate the current unreleased App from the learner's side of the
 > screen, then use observed problems to decide the minimum Information
 > Architecture changes needed before Phase 1 can be accepted.
 >

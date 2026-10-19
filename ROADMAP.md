@@ -1,188 +1,191 @@
 # Listen Roadmap
 
-> Status: accepted by the owner, revised 2026-08-11.
+> Status: owner-approved model-aligned roadmap, revised 2026-09-08.
 
-This is the only cross-repository roadmap. It describes product outcomes,
-dependencies, and exit conditions. Repository tasks and temporary sequencing
-belong in issues or Supervisor plans.
+This is the cross-repository outcome roadmap. It follows the project model in
+[MODEL.md](MODEL.md) and does not preserve implementation sequencing from the
+superseded partial-material model. Repository tasks and temporary execution
+plans belong in issues or replacement Supervisor plans.
 
-The roadmap is deliberately outcome-based. A phase is complete when its exit
-conditions hold across the relevant repositories, not when a predetermined
-feature list or date is exhausted.
+A phase is complete when its exit conditions hold across the relevant
+repositories. Dates and feature counts do not advance a phase.
 
-## Completed stage: Foundation Convergence
+## Completed stage: Project Model Convergence
 
-The project is no longer an exploratory prototype: its product semantics,
-bounded contexts, repository ownership, learner journeys, development model,
-and principal contracts are established. It is not yet a product Beta because
-the material-centered single-user loop has not been integrated end to end.
+Listen's theoretical center has converged around:
 
-Content Package v2 completed the final foundation slice through Core #125,
-Gen #8, and App #107. It proved the material-centered contract, bounded Core
-inspection and pure Installation Plan, deterministic Gen production, embedded
-and referenced-media delivery, unchanged v1 behavior, and the agreed
-documentation authority.
+- a language world and a learner-relative learning world;
+- Raw Source -> Learning Material Compiler -> Complete Learning Material;
+- audio-independent Structured Reading and Sense Groups, with Structured Timed
+  Text for audio-backed interaction;
+- text learning without TTS and full sound processing whenever audio is present;
+- Speech Learning Representation as Signal Facts -> Speech Structure ->
+  Perceptual Guidance;
+- Language Slice -> Meaningful Learning Episode -> Personal Corpus;
+- Personal Corpus facts distinct from Personal L2 World projections;
+- independent reading, listening, speaking, and writing capabilities;
+- review as reactivation, re-perception, and transfer;
+- scheduling separated from Acquisition Experience selection.
 
-Exit conditions:
+The model is now the authority for product choices. Current code and earlier
+execution plans may lag it and require deliberate replacement rather than
+compatibility-driven preservation.
 
-- Content Package v2 passes the Core and Gen contract and interoperability
-  gates for embedded and referenced delivery;
-- the three code repositories point to this repository for project-level
-  meaning, journeys, development policy, state, and roadmap;
-- existing learning activities and learner-owned state remain independent of
-  package lifecycle;
-- the Supervisor / replaceable Worker delivery process is operational.
+## Phase 1: Complete Learning Material Alpha — active realignment
 
-These exit conditions are met. The project has entered **Product Alpha**.
-
-## Phase 1: Single-user Core Loop Alpha — active
-
-Deliver one reliable, simple, single-device journey across every material entry
-path: import or discover a material, use it immediately, enrich it when useful,
-adopt a Learning Edition explicitly, learn through existing activities, retain
-it, and reopen it later.
-
-Internal Package Installation and Learning Edition Adoption remain separate
-intents even when App composes them behind a simple learner action. Package
-files, Resource DAGs, candidates, and generation internals do not leak into the
-ordinary learner journey.
+Prove one reliable end-to-end language-world path from representative Raw
+Sources to a validated Complete Learning Material that the learning world can
+consume without provider knowledge.
 
 Exit conditions:
 
-- direct import and RSS/Atom discovery converge on the same material lifecycle;
-- supported Document or Media Renditions remain immediately viewable or
-  playable without a package, and document intake is not limited to typed or
-  pasted text;
-- direct document viewing, structured reading, extraction or OCR, and
-  Assistance Resources expose independent availability and failure states; a
-  directly viewable Document Rendition is never presented as unreadable while
-  Structured Reading is missing;
-- semantic production (TTS, translation, explanation) consumes Structured
-  Reading rather than raw PDF/EPUB bytes, and Gen reads raw Document Rendition
-  bytes only when no compatible Structured Reading exists;
-- Material Capability presentation distinguishes available, derivable,
-  generating, unavailable, and an explicit failed attempt without treating a
-  valid single-modality Material as broken;
-- an existing package can be resolved, or Gen production can run in the
-  background with explicit progress, cancellation, retry, and failure states;
-- the same Capability Completion path proves a document-only Material can gain
-  a TTS-derived audio Rendition plus text-to-time alignment, and a media-only
-  Material can gain structured reading, without changing Material identity;
-- generated Renditions and Resources retain exact provenance and compatibility,
-  and never overwrite Source Renditions merely because they are newer;
-- installed Renditions and Resources remain candidates until an explicit
-  adoption intent;
-- adopted editions, learner records, and current activity state survive restart;
-- the active App, Core, and Gen stack contains no compatibility path maintained
-  solely for a displaced pre-Phase-1 contract; published historical artifacts
-  remain immutable, and the accepted Phase 1 release establishes the first
-  maintained compatibility baseline;
-- existing learning activities consume the adopted Material composition
-  without package lifecycle owning or erasing their learner state.
+- local document/text, audio, and video inputs plus at least one discovered
+  remote Source enter one explicit Raw Source lifecycle;
+- Source preview, acquisition, compilation, failure, retry, and formal learning
+  remain distinct states and journeys;
+- text Sources support formal text-based learning without TTS, including
+  audio-independent Sense Group interaction;
+- requested TTS produces faithful Canonical Audio and enters the same full
+  sound-processing scope as source audio; Sources with audio produce qualified text;
+- Structured Timed Text supplies stable utterance/sentence/token text spans and
+  exact mappings to Canonical Audio;
+- sentence-level translation exists for a declared Support Language;
+- for audio-backed materials, the full scope in [MODEL.md](MODEL.md) includes
+  provenance-bearing Signal Facts and
+  Speech Structure, distinguishes observed/estimated/predicted evidence, and
+  keeps Sense Groups distinct from Prosodic Chunks;
+- the current Prosody Analysis and Word Timeline path, rather than retired
+  Chunk Timeline semantics, represents Prosodic Chunks;
+- Core validates the modality-aware Complete Learning Material contract and exposes
+  one adopted coherent composition to App;
+- Gen provider details and derivation graphs do not cross the Learning
+  Boundary;
+- incomplete or failed production is never presented as a complete Learning
+  Material;
+- absent phenomena, inapplicable analysis, insufficient evidence, unsupported
+  analysis, and failed processing remain distinguishable; predictions never
+  substitute for missing observation, and no reduced speech tier is introduced;
+- existing durable learner facts survive the contract realignment.
 
 ## Phase 2: Personal Corpus Alpha/Beta
 
-Make the learner's retained materials a coherent personal corpus rather than a
-collection of import sessions. The corpus must preserve durable learning facts
-while media, packages, generated resources, and projections remain replaceable.
+Make the Learner's authentic experience history the product's compounding
+center rather than treating retained materials or search indexes as the Corpus.
 
 Exit conditions:
 
-- learners can organize, retain, remove, and rediscover materials and editions;
-- material, segment, expression, and contextual occurrence search is available
-  across the local corpus;
-- content identity and revision handling avoid accidental duplicate ownership;
-- detached media can be reported and reattached without losing learning facts;
-- export, backup, and recovery have explicit integrity and failure semantics.
+- a Language Slice points to one exact Material Revision, Canonical Text span,
+  Canonical Audio rendition/range when available, and compatible resources;
+- text-only Slices and their history remain valid when audio is added later;
+- a Slice remains re-enterable from local and restored state without copying a
+  detached material by default;
+- Meaningful Learning Episodes preserve Activity, conditions, assistance,
+  attempt/judgment, outcome, context, and provenance;
+- Exposure and clickstream cannot silently update acquisition or capability;
+- Personal Corpus Entries combine Slice, Learner Relation, and meaningful
+  history;
+- occurrences and search indexes remain rebuildable projections rather than
+  Corpus authority;
+- Personal Corpus can serve as memory, Evidence Base, and Experience Reservoir;
+- the Learner can freely browse entries and their context/history, select them
+  for learning or review, and enter an Activity without automated scheduling
+  or recommendation being a prerequisite;
+- detached or replaced source/media resources are reported and recoverable
+  without deleting learner facts;
+- export, backup, recovery, and removal have explicit integrity and privacy
+  semantics.
 
-## Phase 3: Learning Experience Review & Optimization
+## Phase 3: Acquisition Experience Alpha/Beta
 
-Review and improve the learning activities that already exist, including My
-Expressions, the four-state vocabulary model, and their composition with
-reading, listening, speaking, and writing. This phase improves clarity,
-continuity, feedback, and extensibility; it does not force every learner into a
-fixed sequence or discard previously accepted activity semantics.
+Turn Personal Corpus experiences into deliberate capability development while
+keeping durable state simple and evidence rich.
 
 Exit conditions:
 
-- every existing activity has an explicit learner intent, entry condition,
-  observable outcome, durable state, and resume behavior;
-- overlapping concepts, actions, and state transitions are identified and
-  either unified or deliberately kept distinct;
-- navigation between material context and activities preserves learner context
-  and avoids duplicate work;
-- My Expressions and the four-state vocabulary model retain their accepted
-  semantics while unclear transitions and feedback are made testable;
-- loading, empty, error, cancellation, retry, and offline behavior are defined
-  for each activity journey;
-- language-general activity behavior is separated from language-specific
-  capabilities such as stress timing or syllable timing;
-- new activities can be added through stable seams without expanding a central
-  workflow or changing unrelated activity state;
-- representative end-to-end usability and regression evidence confirms that
-  optimization did not narrow the learner's available learning paths.
+- each existing Learning Activity names a cognitive intent, bounded input,
+  assistance conditions, factual outcome, and resume behavior;
+- reading, listening, speaking, and writing have independent evidence and
+  effective capability reads;
+- Personal Corpus facts, evidence qualification, Learner Inference, explicit
+  Learner authority, and effective state remain separate layers;
+- listening review starts audio-first from an original Slice and applies the
+  Minimum Sufficient Scaffold progressively;
+- material-side speech evidence can produce learner-relative Perceptual
+  Guidance without becoming a fixed Gen-authored answer;
+- support leads back to another act of listening and records which support was
+  needed;
+- transfer experiences vary sentence, speaker, rate, prosody, realization, or
+  context rather than equating same-item repetition with mastery;
+- Review Schedule answers when while Acquisition Experience answers what;
+- representative reading, speaking, and writing paths prove that the four-
+  dimension model is extensible without one mandatory workflow;
+- product evidence determines whether more adaptive policies or finer durable
+  subskills are warranted.
 
 ## Phase 4: Multi-device Sync Beta
 
-Protect the learner's private corpus and learning history across devices. Public
-content distribution and private synchronization remain separate data planes,
-even if a future Community And Sync context shares infrastructure.
+Protect Complete Learning Materials, Personal Corpus, and private learner facts
+across devices while keeping public material distribution separate.
 
 Exit conditions:
 
 - the future hosted context and repository/service boundary are chosen
   explicitly before implementation;
-- identity, privacy, authentication, ownership, conflict, deletion, and offline
-  semantics are documented and tested;
-- durable learner records and corpus metadata synchronize without treating
-  replaceable package or media blobs as the same kind of state;
+- identity, privacy, authentication, ownership, conflict, deletion, offline,
+  and recovery semantics are documented and tested;
+- Language Slices and Episodes remain meaningful when large source assets are
+  temporarily unavailable;
+- durable learner facts synchronize without treating replaceable packages,
+  indexes, analyses, or inference projections as the same kind of state;
 - interrupted synchronization is resumable and cannot silently lose accepted
   learner changes;
-- a learner can recover their supported private state on another device.
+- another device can recover supported private state and re-enter available
+  experiences.
 
-## Phase 5: Community Content Ecosystem
+## Phase 5: Community Learning Material Ecosystem
 
-Enable a package produced once to be discovered and reused by other learners.
-Gen may be released and packages may circulate as files before this hosted
-phase; the community phase adds authoritative Listings and distribution rather
-than making the package format depend on a server.
+Allow a qualified Complete Learning Material to be produced once, discovered,
+and reused by other Learners when rights permit.
 
 Exit conditions:
 
 - immutable Package Releases and mutable Listings have separate identities and
   lifecycle rules;
-- publishers can submit releases and learners can discover, verify, acquire,
-  and use embedded or detached packages;
-- fingerprint matching prevents avoidable duplicate production while allowing
-  multiple editions and releases for the same material revision;
-- publisher, review, license, provenance, moderation, and security facts remain
-  distinct and are represented honestly;
-- Gen has a documented contributor and release path that does not depend on
-  one fixed model or provider.
+- publishers can submit qualified Learning Editions and Learners can discover,
+  verify, acquire, install, and adopt them;
+- packages declare Target/Support Languages, modalities, and the exact contract
+  resources they satisfy;
+- fingerprint and compatibility matching avoids duplicate production while
+  allowing multiple editions for the same Material Revision;
+- publisher, review, license, provenance, speech-evidence class, moderation,
+  and security facts remain distinct;
+- public artifacts contain no private Personal Corpus Entries or learner facts;
+- Gen has a contributor and release path independent of one provider or model.
 
-## Phase 6: Intelligence & Expansion
+## Phase 6: Intelligence and Expansion
 
-Add optional capabilities only after the core product and ecosystem semantics
-are stable. Candidates include learning suggestions, external contextual search
-such as YouGlish integration, advanced synthetic-speech variants, additional
-activities, and deeper language-specific capabilities.
+Add optional capabilities after the material, corpus, and acquisition loops are
+validated. Candidates include richer language-specific speech representation,
+additional acquisition experiences, external authentic-context search,
+explainable experience selection, advanced transfer generation, community
+feedback, and carefully validated Sensa interoperability.
 
-These are opportunity directions rather than committed features. Suggestions
-remain candidates rather than commands, and every addition must preserve the
-learner's freedom to choose how to use their corpus.
+These are opportunity directions, not committed features. Suggestions remain
+candidates rather than commands. Shared identity or Corpus integration with
+Sensa requires its own evidence and durable cross-product decision.
 
 ## Sequencing rules
 
 - Exit conditions, not dates, advance a phase.
-- A phase may contain repository-local slices, contract evolution, and
-  cross-repository vertical slices; use the smallest independently deliverable
-  mode for each outcome.
-- Code repositories may develop independently behind stable contracts, but a
-  cross-repository outcome is not complete until consumer and producer evidence
-  agrees on exact versions.
-- Before the Phase 1 release, coordinated breaking replacement follows
-  [DEVELOPMENT.md](DEVELOPMENT.md#pre-phase-1-evolution-and-compatibility);
-  compatibility scaffolding is not itself a roadmap outcome.
-- New learning activities, hosted community infrastructure, recommendations,
-  advanced provider breadth, and external context providers do not block the
-  earlier product phases unless the owner changes this roadmap explicitly.
+- Complete Learning Material contract work precedes formal learning-experience
+  work that depends on it.
+- Durable factual richness is preferred before irreversible inference
+  complexity; simple state may be reprojected from rich history.
+- Contract replacement may be coordinated across repositories while the
+  project remains pre-stable, but learner facts and published immutable
+  artifacts are never silently rewritten.
+- Speech resource implementation may evolve independently behind the durable
+  Signal Facts / Speech Structure / Perceptual Guidance boundary.
+- New activities, hosted infrastructure, adaptive policy breadth, Sensa
+  integration, and optional enrichments do not block earlier phases unless the
+  owner changes this roadmap explicitly.

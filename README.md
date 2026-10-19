@@ -1,38 +1,38 @@
 # Listen
 
 This repository is the project-level documentation authority for Listen. It
-contains product semantics, shared language, cross-repository boundaries,
-learner journeys, development policy, and the outcome roadmap. It contains no
-application runtime, producer implementation, generated contract, or learner
-data.
+contains the project model, product semantics, shared language,
+cross-repository boundaries, learner journeys, and the outcome roadmap. It
+contains no application runtime, producer implementation, generated contract,
+or learner data.
 
-Listen is a multilingual, material-centered language-learning ecosystem. Its
-primary interaction is listening, while reading is a complete entry path and
-speaking, writing, pronunciation, and future learning activities can reuse the
-same materials and resources.
+Listen is an authentic-material language-capability acquisition system. It
+compiles arbitrary sources into complete, interactive language experiences and
+helps a Learner turn meaningful Language Slices into a Personal Corpus that
+supports independent reading, listening, speaking, and writing growth.
 
 The concise learner promise is:
 
-> Turn language content you care about into a personal corpus you can search,
-> revisit, and keep learning from.
+> Turn authentic language into experiences you can re-enter, learn from, and
+> make part of your own L2 world.
 
 ## Canonical documents
 
 | Document | Authority |
 |---|---|
+| [MODEL.md](MODEL.md) | Project-level theoretical model and durable invariants |
 | [PRODUCT.md](PRODUCT.md) | Product purpose, principles, and non-goals |
 | [DOMAIN.md](DOMAIN.md) | Shared ubiquitous language |
 | [DOMAIN.zh-CN.md](DOMAIN.zh-CN.md) | Maintained Chinese rendering of the same ubiquitous language |
 | [CONTEXT-MAP.md](CONTEXT-MAP.md) | Context and repository ownership |
 | [JOURNEYS.md](JOURNEYS.md) | Simple learner journeys and experience invariants |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Owner, Supervisor, Worker, validation, and delivery policy |
 | [ROADMAP.md](ROADMAP.md) | Cross-repository outcome stages and exit conditions |
 | [STATE.md](STATE.md) | Current project position and next decision |
 | [decisions/](decisions/) | Durable cross-repository decisions |
-| [plans/phase-1-completion.md](plans/phase-1-completion.md) | Active Supervisor execution plan for the remaining Phase 1 work |
 
-Each fact has one authority. Other repositories link here rather than copying
-these documents.
+Each fact has one authority. `MODEL.md` is primary for the theoretical model;
+the other canonical documents specialize it without redefining it. Other
+repositories link here rather than copying these documents.
 
 `DOMAIN.md` and `DOMAIN.zh-CN.md` form one bilingual glossary and change
 together. English domain names are the stable identifiers used in code and

@@ -1,58 +1,97 @@
 # Project State
 
-> Updated: 2026-08-11 CST.
+> Updated: 2026-09-08 CST.
 
 ## Current position
 
-The project has an agreed semantic and architectural foundation across three
-independently versioned repositories. Content Package v2 is complete through
-[Core #125](https://github.com/ichthyoplanktonzyh/listen-core/pull/125),
-[Gen #8](https://github.com/ichthyoplanktonzyh/listen-gen/pull/8), and
-[App #107](https://github.com/ichthyoplanktonzyh/listen-app/pull/107). Durable
-Material, Package Installation, and Learning Edition Adoption semantics are
-complete in Core, and [App #108](https://github.com/ichthyoplanktonzyh/listen-app/pull/108)
-establishes the Managed Asset Store and first Personal Library Material
-projection.
+Listen's project-level theoretical model has converged. The authority is now
+[MODEL.md](MODEL.md): a language world compiles Raw Sources into Complete
+Learning Materials; a separate learning world turns Learner–Material relations
+into Activities, Language Slices, Meaningful Learning Episodes, Personal
+Corpus, learner-state projections, and new Acquisition Experiences.
 
-The official product-development stage is now **Product Alpha — Phase 1:
-Single-user Core Loop Alpha**. Foundation Convergence is complete.
+The implementation remains in **Product Alpha**, but its previous Phase 1
+documentation was based on the superseded partial-material/capability-completion
+model. App, Core, and Gen must now be audited and realigned against the Complete
+Learning Material contract, revised by
+[decision 0004](decisions/0004-text-learning-and-full-sound-processing.md).
+Earlier code and plans are evidence about current
+implementation, not authority over the new model.
+
+Speech Learning Representation is intentionally defined above individual
+artifacts. Current local Core/Gen evolution already supersedes parts of older
+GitHub wording: Signal Facts and Speech Structure may span Word/Phone timing,
+Word Acoustics, connected-speech analysis, and Prosody Analysis; semantic Sense
+Groups remain distinct from Prosodic Chunks; the retired legacy Chunk Timeline
+must not be restored as the project model. Learner-relative Perceptual Guidance
+remains a Learning Experience concern rather than fixed Gen output.
 
 ## Confirmed project decisions
 
-- multilingual, material-centered, listening-first product semantics;
-- simple learner journeys over deep internal architecture;
-- explicit three-repository responsibilities and stable seams;
-- learner-owned learning activities and state outlive package lifecycle;
-- Owner / Supervisor / replaceable Worker operating model;
-- repository-local, contract-evolution, and cross-repository work modes;
-- no internal backward-compatibility requirement before the accepted Phase 1
-  stack release: coordinated replacement is preferred, published artifacts stay
-  immutable, and that release becomes the first maintained baseline;
-- this repository as the single project-level documentation authority;
-- the ordered outcome roadmap in `ROADMAP.md`;
-- Document Renditions as first-class Material representations, with source
-  inputs preserved instead of flattened and typed or pasted text only one
-  plain-text intake adapter;
-- Structured Reading Resources as separate, versioned Base Resources whose
-  Reading Anchors support durable reading and learning-resource alignment;
-- a valid Material may offer any supported subset of modalities; an absent
-  modality is a Capability Gap only when the Learner requests it;
-- TTS audio as a provenance-bearing Derived Media Rendition, with synchronized
-  reading supplied by a separate text-to-time alignment Base Resource;
-- Learning Materials as the active learner-facing composition, Learning
-  Editions as coherent reusable multimodal compositions, and Gen as a
-  Capability Completion producer rather than a mandatory normalization gate;
-- a dedicated Learning Experience Review & Optimization phase after Personal
-  Corpus and before Multi-device Sync, without redefining accepted learning
-  activity semantics or forcing a fixed learning sequence.
+- Listen is an authentic-material language-capability acquisition system;
+- the project is divided into a language world and a learner-relative learning
+  world;
+- Raw Source, material production, and Complete Learning Material are distinct
+  lifecycle stages;
+- formal learning begins from a validated Complete Learning Material;
+- text-only materials support formal learning without TTS;
+- Sense Groups are text-side and support learning without audio;
+- present source audio and requested TTS receive the same full sound-processing
+  scope, not minimum processing plus optional speech enhancements;
+- present Canonical Audio and Canonical Text form one aligned Material Revision;
+- Structured Reading provides text coordinates; Structured Timed Text adds
+  exact audio mappings when audio exists;
+- Sentence Translation for a declared Support Language belongs to the
+  material contract;
+- Speech Learning Representation follows Signal Facts -> Speech Structure ->
+  Perceptual Guidance and is not one provider-specific artifact;
+- Gen compiles Language Experience; Core/App compile Learner-relative Learning
+  Experience;
+- Learning Activity describes a cognitive relation, not a page or feature;
+- Language Slice is the re-enterable atomic experience pointer of the Personal
+  Corpus;
+- Personal Corpus Entries combine Slice, Learner Relation, and Meaningful
+  Learning History;
+- text-only Slices are valid; later TTS never rewrites earlier learning history;
+- early Corpus use is freely browsable, with explicit selection into learning
+  or review; automated next-experience selection is not a prerequisite;
+- Exposure, Attention, Learning, and Acquisition remain distinct;
+- Personal Corpus facts remain separate from Personal L2 World and Learner
+  State projections;
+- reading, listening, speaking, and writing are independent capability
+  dimensions;
+- durable state remains simple while episode evidence remains rich;
+- review combines reactivation, re-perception, and transfer;
+- Review Schedule answers when; Acquisition Experience answers what;
+- advanced policy and Sensa integration remain evidence-gated future work.
+
+## Superseded baseline
+
+Neither arbitrary Raw Source import nor mandatory audio for every text material
+defines formal learning. A text-only material can satisfy its text-learning
+contract without TTS; present audio requires the full sound-processing scope.
+The former universal audio/TTS requirement in decision 0003 is superseded, but
+its Source/learning boundary and honest evidence principles remain.
+
+The exact rendition/resource identity work remains useful where it supports
+source fidelity, stable anchors, provenance, and compatibility. It no longer
+defines the formal learning boundary.
 
 ## Next transition
 
-Complete the remaining Phase 1 slices in the dependency order recorded in the
-active [Phase 1 completion plan](plans/phase-1-completion.md): finish the current
-App document work, establish the breaking canonical Rendition and Resource
-contract, complete document reading and multimodal Capability Completion,
-converge RSS/Atom acquisition on Source Identity, remove displaced compatibility
-paths, then perform one stack release and final desktop acceptance. The plan is
-an execution document; `ROADMAP.md` remains the authority for Phase 1 exit
-conditions.
+Create a replacement cross-repository execution plan for **Phase 1: Complete
+Learning Material Alpha**. Before implementation, audit:
+
+1. App Source/preview versus formal-learning journeys;
+2. Core material identity and modality-aware contract validation;
+3. Gen text-side production, including Sense Groups, and full audio processing
+   for source audio or requested TTS;
+4. current local speech resources and evidence classes versus older published
+   contracts;
+5. migration and preservation of existing learner facts;
+6. text-only and audio-backed Source -> material -> Activity proofs, followed
+   by learner-selected Personal Corpus re-entry.
+
+The pre-convergence Phase 1 completion and validation plans are historical
+inputs. They must not be executed as the active project plan without being
+replaced or explicitly reconciled with [MODEL.md](MODEL.md).

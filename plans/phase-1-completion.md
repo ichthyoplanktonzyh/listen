@@ -1,10 +1,14 @@
 # Phase 1 Completion Plan
 
-> Status: active Supervisor plan, 2026-08-11.
+> Status: historical as of 2026-08-24. This plan was written for the
+> superseded partial-material/capability-completion model. Do not execute it as
+> the active project plan without replacing or explicitly reconciling it with
+> [MODEL.md](../MODEL.md) and Roadmap Phase 1: Complete Learning Material Alpha.
 >
-> Scope: all work remaining before the first accepted Phase 1 stack release.
-> `ROADMAP.md` owns the outcome and exit conditions; this file owns the current
-> execution order and may be archived when Phase 1 closes.
+> Former scope: all work remaining before the first accepted Phase 1 stack
+> release.
+> `ROADMAP.md` owned the outcome and exit conditions at the time; this file
+> records the former execution order and may inform its replacement.
 
 > Validation update, 2026-08-14: Slices 0–7 have produced an unreleased
 > integration candidate, but Phase 1 is not accepted. Do not begin with another

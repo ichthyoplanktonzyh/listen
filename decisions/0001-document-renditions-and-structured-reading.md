@@ -1,7 +1,10 @@
 # Separate Document Renditions from Structured Reading Resources
 
-> Status: accepted and revised, 2026-08-11; revised again 2026-08-13 with the
-> Phase 1 Slice 1 canonical contract.
+> Status: partially superseded by
+> [0003](0003-complete-learning-material-boundary.md), 2026-08-24. Source
+> fidelity, exact rendition/resource separation, stable anchors, provenance,
+> and compatibility remain accepted. Direct viewing before extraction is now a
+> Source preview concern rather than the formal learning boundary.
 
 Documents such as plain text, Markdown, HTML, EPUB, text-layer PDF, and scanned
 PDF combine source bytes, authored layout, and logical reading content in

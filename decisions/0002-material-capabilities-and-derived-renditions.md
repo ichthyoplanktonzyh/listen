@@ -1,7 +1,8 @@
 # Compose multimodal capabilities from independent artifacts
 
-> Status: accepted, 2026-08-11; revised 2026-08-13 with the Phase 1 Slice 1
-> capability projection rules.
+> Status: superseded by
+> [0003](0003-complete-learning-material-boundary.md), 2026-08-24. This record
+> remains as history of the former partial-material/capability-completion model.
 
 A Material Revision is valid with any supported set of modalities. Text-only,
 audio-only, video-only, and mixed Materials are not different ownership objects
