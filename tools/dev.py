@@ -992,6 +992,31 @@ def command_release(args: argparse.Namespace) -> None:
     print(f"Release bundle and manifests verified in {output}.")
 
 
+def _app_release_environment(
+    base_environment: Dict[str, str],
+    *,
+    flutter: str,
+    backend_lock: Path,
+    gen_lock: Path,
+    gen_manifest: Path,
+    output: Path,
+) -> Dict[str, str]:
+    environment = dict(base_environment)
+    # The release verifier scopes this flag to its own probe process. Do not
+    # let the later desktop smoke launches inherit verification-only mode.
+    environment.pop("LLPLAYERNEXT_VERIFY_GEN_BUNDLE", None)
+    environment.update(
+        {
+            "FLUTTER": flutter,
+            "BACKEND_LOCK": str(backend_lock),
+            "LISTEN_GEN_LOCK_PATH": str(gen_lock),
+            "LISTEN_GEN_RELEASE_MANIFEST": str(gen_manifest),
+            "LISTEN_RELEASE_OUTPUT_DIR": str(output),
+        }
+    )
+    return environment
+
+
 def _release_from_export(
     source_root: Path,
     export_git_sha: str,
@@ -1094,16 +1119,13 @@ def _release_from_export(
         app,
     )
     _assert_clean_head(source_root, export_git_sha, "before app packaging")
-    release_env = dict(os.environ)
-    release_env.update(
-        {
-            "FLUTTER": _flutter_executable(),
-            "BACKEND_LOCK": str(backend_lock),
-            "LISTEN_GEN_LOCK_PATH": str(gen_lock),
-            "LISTEN_GEN_RELEASE_MANIFEST": str(gen_manifest),
-            "LISTEN_RELEASE_OUTPUT_DIR": str(output / "app"),
-            "LLPLAYERNEXT_VERIFY_GEN_BUNDLE": "1",
-        }
+    release_env = _app_release_environment(
+        os.environ,
+        flutter=_flutter_executable(),
+        backend_lock=backend_lock,
+        gen_lock=gen_lock,
+        gen_manifest=gen_manifest,
+        output=output / "app",
     )
     build_script = app / "tool" / "build-macos-release.sh"
     verify_script = app / "tool" / "verify-macos-release.sh"

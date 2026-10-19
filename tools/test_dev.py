@@ -284,6 +284,23 @@ class GeneratedLockTests(unittest.TestCase):
         )
         self.assertEqual(bundle.artifact_path, self.artifact)
 
+    def test_release_environment_does_not_leak_verification_only_mode(self):
+        environment = dev._app_release_environment(
+            {"LLPLAYERNEXT_VERIFY_GEN_BUNDLE": "1", "PATH": "/bin"},
+            flutter="/tools/flutter",
+            backend_lock=Path("/release/backend.lock.json"),
+            gen_lock=Path("/release/listen_gen.lock.json"),
+            gen_manifest=Path("/release/listen-gen.release.json"),
+            output=Path("/release/app"),
+        )
+
+        self.assertNotIn("LLPLAYERNEXT_VERIFY_GEN_BUNDLE", environment)
+        self.assertEqual(
+            environment["LISTEN_GEN_RELEASE_MANIFEST"],
+            "/release/listen-gen.release.json",
+        )
+        self.assertEqual(environment["PATH"], "/bin")
+
 
 if __name__ == "__main__":
     unittest.main()

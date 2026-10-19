@@ -177,6 +177,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             os.chmod(runtime_tool, 0o755)
             runtime_manifest = root / "runtime-manifest.json"
             runtime_manifest.write_text('{"version": 1}\n', encoding="utf-8")
+            (runtime_dir / "manifest.json").write_bytes(runtime_manifest.read_bytes())
             notices = root / "notices.md"
             notices.write_text("notices\n", encoding="utf-8")
             args = argparse.Namespace(
@@ -198,7 +199,31 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual(manifest["runtime_version"], "0.7.0")
             self.assertEqual(manifest["contract_version"], "1.0.0")
             self.assertIn("bin/api-http", manifest["files"])
+            self.assertIn("runtime/manifest.json", manifest["files"])
             self.assertIn("runtime/whisper-cli", manifest["files"])
+
+    def test_runtime_archive_rejects_conflicting_runtime_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            api_http = root / "api-http"
+            api_http.write_bytes(b"api")
+            runtime_dir = root / "runtime-input"
+            runtime_dir.mkdir()
+            (runtime_dir / "manifest.json").write_text(
+                '{"version": 2}\n', encoding="utf-8"
+            )
+            runtime_manifest = root / "runtime-manifest.json"
+            runtime_manifest.write_text('{"version": 1}\n', encoding="utf-8")
+            notices = root / "notices.md"
+            notices.write_text("notices\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                SystemExit,
+                "runtime directory manifest.json differs from selected runtime manifest",
+            ):
+                artifacts.runtime_source_entries(
+                    api_http, runtime_dir, runtime_manifest, notices
+                )
 
     def test_verifier_rejects_tampered_member(self):
         entries = [

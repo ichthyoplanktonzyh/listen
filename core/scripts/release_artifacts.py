@@ -218,14 +218,21 @@ def runtime_source_entries(
     runtime_manifest: Path,
     notices: Path,
 ) -> list[ArtifactEntry]:
+    manifest_bytes = runtime_manifest.read_bytes()
     entries = [
         ArtifactEntry("bin/api-http", api_http.read_bytes(), executable_mode(api_http)),
-        ArtifactEntry("runtime/manifest.json", runtime_manifest.read_bytes()),
+        ArtifactEntry("runtime/manifest.json", manifest_bytes),
         ArtifactEntry("THIRD_PARTY_NOTICES.md", notices.read_bytes()),
     ]
     for path in sorted(runtime_dir.rglob("*")):
         if path.is_file():
             relative = path.relative_to(runtime_dir).as_posix()
+            if relative == "manifest.json":
+                if path.read_bytes() != manifest_bytes:
+                    raise SystemExit(
+                        "runtime directory manifest.json differs from selected runtime manifest"
+                    )
+                continue
             entries.append(
                 ArtifactEntry(
                     f"runtime/{relative}",
