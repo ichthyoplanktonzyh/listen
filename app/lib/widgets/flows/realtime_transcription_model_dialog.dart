@@ -59,6 +59,9 @@ class _RealtimeTranscriptionModelDialogState
       final outcome = await widget.controller.installOfferedModel();
       if (!mounted) return;
       if (outcome case final RealtimeTranscriptionModelSelected selected) {
+        // Keep the dialog one-shot through its reverse transition; a cached
+        // button callback must not start another flow while it is still mounted.
+        _closing = true;
         Navigator.of(context).pop(selected);
       } else if (outcome is RealtimeTranscriptionModelUnavailable) {
         setState(() => _unavailable = true);

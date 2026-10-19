@@ -201,6 +201,92 @@ void main() {
     expect(repository.installCalls, 1);
   });
 
+  testWidgets('cached Download callback after pop cannot pop next route', (
+    tester,
+  ) async {
+    final repository = _Repository(
+      onInstall: (_) async => [model(state: 'installed')],
+    );
+    final controller = RealtimeTranscriptionModelController(
+      repository,
+      pollInterval: Duration.zero,
+      maxPollAttempts: 3,
+    );
+    addTearDown(controller.dispose);
+    final offered = await controller.selectForLanguage('zh-CN');
+    final candidate =
+        (offered as RealtimeTranscriptionModelNeedsDownload).model;
+    final observer = _CountingNavigatorObserver();
+    RealtimeTranscriptionModelSelected? selected;
+
+    await tester.pumpWidget(
+      _App(
+        observer: observer,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (context) => Scaffold(
+                    body: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('next route sentinel'),
+                          TextButton(
+                            onPressed: () async {
+                              selected =
+                                  await showRealtimeTranscriptionModelDialog(
+                                    context: context,
+                                    controller: controller,
+                                    model: candidate,
+                                  );
+                            },
+                            child: const Text('Open dialog'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              child: const Text('Push next route'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Push next route'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open dialog'));
+    await tester.pumpAndSettle();
+
+    final cachedDownload = tester
+        .widget<FilledButton>(
+          find.ancestor(
+            of: find.text('Download'),
+            matching: find.byType(FilledButton),
+          ),
+        )
+        .onPressed!;
+    cachedDownload();
+    for (var attempt = 0; attempt < 12 && observer.popCount == 0; attempt++) {
+      await tester.pump(Duration.zero);
+    }
+    expect(observer.popCount, 1);
+    expect(selected?.modelId, _baseId);
+    expect(find.byType(RealtimeTranscriptionModelDialog), findsOneWidget);
+
+    cachedDownload();
+    await tester.pump(Duration.zero);
+    expect(observer.popCount, 1);
+    expect(find.text('next route sentinel'), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    expect(observer.popCount, 1);
+    expect(find.text('next route sentinel'), findsOneWidget);
+  });
+
   testWidgets(
     'catalog Installing to Downloadable transition still requires consent',
     (tester) async {
