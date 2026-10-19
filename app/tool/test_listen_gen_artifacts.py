@@ -26,7 +26,7 @@ class ListenGenArtifactTests(unittest.TestCase):
         artifacts.DEFAULT_INSTALL = self.original_install
 
     def write_bundle(self) -> tuple[Path, Path, Path]:
-        release = self.parent / "listen-gen/dist/listen-gen-0.5.0"
+        release = self.parent / "gen/dist/listen-gen-0.5.0"
         release.mkdir(parents=True)
         artifact_path = release / "listen-gen-0.5.0.pyz"
         artifact_path.write_bytes(b"#!/usr/bin/env python3\nPK\x03\x04bundle")

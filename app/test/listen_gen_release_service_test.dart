@@ -51,14 +51,14 @@ Map<String, dynamic> _manifestTemplate() => {
   'schema': 'listen_gen.release-bundle.v1',
   'source': {
     'commit': _genCommit,
-    'repository': 'https://github.com/ichthyoplanktonzyh/listen-gen',
+    'repository': 'https://github.com/ichthyoplanktonzyh/listen',
   },
   'tool': {'id': 'listen-gen', 'version': '0.5.0'},
   'machine_protocol': {'schema': 'listen_gen.machine-event.v2', 'version': 2},
   'content_package_contract': {
     'authority': {
-      'repository': 'ichthyoplanktonzyh/listen-core',
-      'path': 'contracts/content-package/v3',
+      'repository': 'ichthyoplanktonzyh/listen',
+      'path': 'core/contracts/content-package/v3',
     },
     'canonical_sha256': _contractSha,
     'package_schema': 'listen.content-package.release.v3',
@@ -86,7 +86,7 @@ Map<String, dynamic> _manifestTemplate() => {
 
 Map<String, dynamic> _lockTemplate() => {
   'manifest_version': 1,
-  'repository': 'ichthyoplanktonzyh/listen-gen',
+  'repository': 'ichthyoplanktonzyh/listen',
   'source_git_sha': _genCommit,
   'release_manifest': {
     'schema': 'listen_gen.release-bundle.v1',
@@ -97,8 +97,8 @@ Map<String, dynamic> _lockTemplate() => {
   'machine_protocol': {'schema': 'listen_gen.machine-event.v2', 'version': 2},
   'content_package_contract': {
     'authority': {
-      'repository': 'ichthyoplanktonzyh/listen-core',
-      'path': 'contracts/content-package/v3',
+      'repository': 'ichthyoplanktonzyh/listen',
+      'path': 'core/contracts/content-package/v3',
     },
     'package_schema': 'listen.content-package.release.v3',
     'release_schema_id': 'listen.content-package.release.v3',
@@ -216,6 +216,25 @@ Matcher _failsWith(String code) => throwsA(
 );
 
 void main() {
+  test(
+    'verifies the generated development lock and manifest from the environment',
+    () async {
+      final service = LocalListenGenReleaseService(
+        environment: Platform.environment,
+        debugMode: true,
+      );
+      final verified = await service.verify();
+      expect(verified.toolVersion, isNotEmpty);
+      expect(verified.artifactPath, isNotEmpty);
+    },
+    skip:
+        Platform.environment['LISTEN_GEN_LOCK_PATH']?.isNotEmpty == true &&
+            Platform.environment['LISTEN_GEN_RELEASE_MANIFEST']?.isNotEmpty ==
+                true
+        ? false
+        : 'Set generated Gen lock and manifest paths to exercise integration',
+  );
+
   test('verifies a matching lock, manifest, and artifact', () async {
     final built = await _build(await _tempDir());
     final verified = await built.service.verify();
@@ -225,6 +244,26 @@ void main() {
     expect(verified.artifactPath, built.artifactPath);
     expect(verified.artifactSha256, _sha(_validArtifact));
     expect(built.service.isConfigured, isTrue);
+  });
+
+  test('continues to verify a legacy separately released bundle', () async {
+    final built = await _build(
+      await _tempDir(),
+      mutateManifest: (manifest) {
+        (manifest['source'] as Map)['repository'] =
+            'https://github.com/ichthyoplanktonzyh/listen-gen';
+        ((manifest['content_package_contract'] as Map)['authority'] as Map)
+          ..['repository'] = 'ichthyoplanktonzyh/listen-core'
+          ..['path'] = 'contracts/content-package/v3';
+      },
+      mutateLock: (lock) {
+        lock['repository'] = 'ichthyoplanktonzyh/listen-gen';
+        ((lock['content_package_contract'] as Map)['authority'] as Map)
+          ..['repository'] = 'ichthyoplanktonzyh/listen-core'
+          ..['path'] = 'contracts/content-package/v3';
+      },
+    );
+    expect((await built.service.verify()).toolVersion, '0.5.0');
   });
 
   test('rejects a lock missing a required field', () async {
@@ -453,13 +492,22 @@ void main() {
     );
   });
 
-  test('discovers the hash-pinned sibling development release', () async {
+  test('discovers the hash-pinned monorepo Gen release', () async {
     final parent = await Directory.systemTemp.createTemp(
       'listen-gen-discovery-',
     );
     addTearDown(() => parent.delete(recursive: true));
-    final app = Directory('${parent.path}/listen-app')..createSync();
-    final release = Directory('${parent.path}/listen-gen/dist/listen-gen-0.5.0')
+    final root = Directory(parent.path);
+    Directory('${root.path}/.git').createSync();
+    final app = Directory('${root.path}/app')..createSync();
+    File('${app.path}/pubspec.yaml').writeAsStringSync('name: app');
+    File('${root.path}/core/Cargo.toml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('[workspace]');
+    File('${root.path}/gen/pyproject.toml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('[project]');
+    final release = Directory('${root.path}/gen/dist/listen-gen-0.5.0')
       ..createSync(recursive: true);
     final built = await _build(release);
     final manifestBytes = await File(built.manifestPath).readAsBytes();
@@ -510,6 +558,50 @@ void main() {
 
     expect(service.isConfigured, isTrue);
     expect((await service.verify()).artifactPath, built.artifactPath);
+  });
+
+  test('debug lock path overrides the committed lock asset', () async {
+    final parent = await Directory.systemTemp.createTemp('listen-gen-debug-lock-');
+    addTearDown(() => parent.delete(recursive: true));
+    final built = await _build(
+      Directory('${parent.path}/bundle')..createSync(),
+    );
+    final manifestBytes = await File(built.manifestPath).readAsBytes();
+    final lock = _lockTemplate();
+    (lock['release_manifest'] as Map)['sha256'] = _sha(manifestBytes);
+    (lock['artifact'] as Map)
+      ..['sha256'] = _sha(_validArtifact)
+      ..['size_bytes'] = _validArtifact.length;
+    final lockFile = File('${parent.path}/generated.lock.json')
+      ..writeAsStringSync(jsonEncode(lock));
+    final service = LocalListenGenReleaseService(
+      manifestPath: built.manifestPath,
+      environment: {'LISTEN_GEN_LOCK_PATH': lockFile.path},
+      debugMode: true,
+      discoverDefaultLocations: false,
+    );
+
+    expect((await service.verify()).artifactPath, built.artifactPath);
+
+    final productionMode = LocalListenGenReleaseService(
+      manifestPath: built.manifestPath,
+      environment: {'LISTEN_GEN_LOCK_PATH': lockFile.path},
+      debugMode: false,
+      discoverDefaultLocations: false,
+    );
+    await expectLater(
+      productionMode.verify(),
+      throwsA(
+        isA<ListenGenProcessFailure>().having(
+          (failure) => failure.code,
+          'code',
+          anyOf(
+            'generator_release_lock_invalid',
+            'generator_release_manifest_invalid',
+          ),
+        ),
+      ),
+    );
   });
 
   test('rejects an incompatible committed lock identity', () async {

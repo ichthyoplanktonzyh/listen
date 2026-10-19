@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'listen_gen_process_service.dart' show ListenGenProcessFailure;
@@ -54,6 +55,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     Map<String, String>? environment,
     String? resolvedExecutablePath,
     Directory? workingDirectory,
+    bool? debugMode,
     bool discoverDefaultLocations = true,
   }) : _manifestPath = _resolveManifestPath(
          manifestPath: manifestPath,
@@ -61,15 +63,30 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
          resolvedExecutablePath:
              resolvedExecutablePath ?? Platform.resolvedExecutable,
          workingDirectory: workingDirectory ?? Directory.current.absolute,
+         debugMode: debugMode ?? kDebugMode,
          discoverDefaultLocations: discoverDefaultLocations,
        ),
-       _loadLockBytes = loadLockBytes ?? _loadLockFromBundle;
+       _loadLockBytes =
+           loadLockBytes ??
+           _runtimeLockLoader(
+             environment: environment ?? Platform.environment,
+             debugMode: debugMode ?? kDebugMode,
+           );
 
   static const _manifestEnvironmentKey = 'LISTEN_GEN_RELEASE_MANIFEST';
+  static const _lockEnvironmentKey = 'LISTEN_GEN_LOCK_PATH';
   static const _lockAssetKey = 'listen_gen.lock.json';
+  static const _embeddedLockJson = String.fromEnvironment(
+    'LISTEN_GEN_LOCK_JSON',
+  );
 
-  /// The one repository this app's bundle is allowed to originate from.
-  static const _generatorRepository =
+  /// Current releases are built from Gen in the Listen monorepo. The legacy
+  /// pair remains accepted so older pinned bundles can still be verified.
+  static const _generatorRepository = 'ichthyoplanktonzyh/listen';
+  static const _generatorRepositoryUrl =
+      'https://github.com/ichthyoplanktonzyh/listen';
+  static const _legacyGeneratorRepository = 'ichthyoplanktonzyh/listen-gen';
+  static const _legacyGeneratorRepositoryUrl =
       'https://github.com/ichthyoplanktonzyh/listen-gen';
 
   /// Runtime/toolchain identity the committed lock must declare (R5). The
@@ -87,13 +104,16 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
   /// protocol, or contract authority is not a newer pin but an incompatible
   /// one. Version pins (tool.version, source_git_sha, artifact hash/size) stay
   /// owned by the committed lock and are deliberately not hardcoded here.
-  static const _lockRepository = 'ichthyoplanktonzyh/listen-gen';
+  static const _lockRepository = _generatorRepository;
+  static const _legacyLockRepository = _legacyGeneratorRepository;
   static const _releaseBundleSchema = 'listen_gen.release-bundle.v1';
   static const _toolId = 'listen-gen';
   static const _machineSchema = 'listen_gen.machine-event.v2';
   static const _machineVersion = 2;
-  static const _authorityRepository = 'ichthyoplanktonzyh/listen-core';
-  static const _authorityPath = 'contracts/content-package/v3';
+  static const _authorityRepository = 'ichthyoplanktonzyh/listen';
+  static const _authorityPath = 'core/contracts/content-package/v3';
+  static const _legacyAuthorityRepository = 'ichthyoplanktonzyh/listen-core';
+  static const _legacyAuthorityPath = 'contracts/content-package/v3';
   static const _packageSchema = 'listen.content-package.release.v3';
   static const _contractSchemaVersion = 3;
   static const _pythonRequires = '>=3.11';
@@ -115,18 +135,20 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
 
   /// Finds the pinned release without requiring a terminal-only environment
   /// variable. Release and Finder launches read the bundle staged beside the
-  /// app; local development reads either the ignored `.listen-gen` install or
-  /// the exact hash-pinned bundle produced by the sibling `listen-gen` repo.
+  /// app; local development reads the exact hash-pinned bundle produced under
+  /// this monorepo's `gen/` source tree.
   ///
-  /// Discovery never makes a bundle trusted. [verify] still re-reads the
-  /// committed Flutter asset and hashes both discovered files before every
-  /// launch. An explicit environment override remains first so integration
-  /// tests can point at a run-owned bundle.
+  /// Discovery never makes a bundle trusted. [verify] still re-reads the lock
+  /// bytes and hashes both discovered files before every launch. An explicit
+  /// manifest override remains first so integration tests can point at a
+  /// run-owned bundle. The development lock override is honored only in debug
+  /// mode.
   static String? _resolveManifestPath({
     required String? manifestPath,
     required Map<String, String> environment,
     required String resolvedExecutablePath,
     required Directory workingDirectory,
+    required bool debugMode,
     required bool discoverDefaultLocations,
   }) {
     if (manifestPath != null) return manifestPath;
@@ -144,20 +166,51 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     );
     if (bundled != null) return bundled;
 
-    final developmentLock = _readDevelopmentLock(workingDirectory);
-    if (developmentLock == null) return null;
-    final installed = _matchingManifest(
-      Directory('${workingDirectory.path}${Platform.pathSeparator}.listen-gen'),
-      developmentLock,
-    );
-    if (installed != null) return installed;
+    if (!debugMode) return null;
 
-    final siblingRelease = Directory(
-      '${workingDirectory.parent.path}${Platform.pathSeparator}listen-gen'
+    final developmentLock = _readDevelopmentLock(
+      workingDirectory,
+      environment,
+    );
+    if (developmentLock == null) return null;
+    final monorepoRoot = _findMonorepoRoot(workingDirectory);
+    if (monorepoRoot == null) return null;
+    final localRelease = Directory(
+      '${monorepoRoot.path}${Platform.pathSeparator}gen'
       '${Platform.pathSeparator}dist${Platform.pathSeparator}listen-gen-'
       '${developmentLock.toolVersion}',
     );
-    return _matchingManifest(siblingRelease, developmentLock);
+    return _matchingManifest(localRelease, developmentLock);
+  }
+
+  static Directory? _findMonorepoRoot(Directory workingDirectory) {
+    var candidate = workingDirectory.absolute;
+    while (true) {
+      final gitMarker = File('${candidate.path}${Platform.pathSeparator}.git');
+      final isGitRoot =
+          gitMarker.existsSync() ||
+          Directory('${candidate.path}${Platform.pathSeparator}.git')
+              .existsSync();
+      final hasApp =
+          File(
+            '${candidate.path}${Platform.pathSeparator}app'
+            '${Platform.pathSeparator}pubspec.yaml',
+          ).existsSync();
+      final hasCore =
+          File(
+            '${candidate.path}${Platform.pathSeparator}core'
+            '${Platform.pathSeparator}Cargo.toml',
+          ).existsSync();
+      final hasGen =
+          File(
+            '${candidate.path}${Platform.pathSeparator}gen'
+            '${Platform.pathSeparator}pyproject.toml',
+          ).existsSync();
+      if (isGitRoot && hasApp && hasCore && hasGen) return candidate;
+      final parent = candidate.parent;
+      if (parent.path == candidate.path) return null;
+      candidate = parent;
+    }
   }
 
   static String? _singleReleaseManifest(Directory directory) {
@@ -175,10 +228,16 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     return matches.length == 1 ? matches.single.path : null;
   }
 
-  static _DevelopmentLock? _readDevelopmentLock(Directory workingDirectory) {
-    final file = File(
-      '${workingDirectory.path}${Platform.pathSeparator}listen_gen.lock.json',
-    );
+  static _DevelopmentLock? _readDevelopmentLock(
+    Directory workingDirectory,
+    Map<String, String> environment,
+  ) {
+    final configured = environment[_lockEnvironmentKey];
+    final file = configured == null || configured.isEmpty
+        ? File(
+            '${workingDirectory.path}${Platform.pathSeparator}listen_gen.lock.json',
+          )
+        : File(configured);
     if (FileSystemEntity.typeSync(file.path, followLinks: false) !=
         FileSystemEntityType.file) {
       return null;
@@ -230,9 +289,22 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     }
   }
 
-  static Future<List<int>> _loadLockFromBundle() async {
-    final data = await rootBundle.load(_lockAssetKey);
-    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+  static ListenGenLockBytesLoader _runtimeLockLoader({
+    required Map<String, String> environment,
+    required bool debugMode,
+  }) {
+    return () async {
+      if (debugMode) {
+        final configured = environment[_lockEnvironmentKey];
+        if (configured != null && configured.isNotEmpty) {
+          return File(configured).readAsBytes();
+        }
+      } else if (_embeddedLockJson.isNotEmpty) {
+        return utf8.encode(_embeddedLockJson);
+      }
+      final data = await rootBundle.load(_lockAssetKey);
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    };
   }
 
   @override
@@ -274,7 +346,11 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'artifact',
     });
     read.expect(read.integer(root, 'manifest_version') == 1);
-    read.expect(read.string(root, 'repository') == _lockRepository);
+    final sourceRepository = read.string(root, 'repository');
+    read.expect(
+      sourceRepository == _lockRepository ||
+          sourceRepository == _legacyLockRepository,
+    );
     final sourceGitSha = read.commit(root, 'source_git_sha');
 
     final releaseManifest = read.object(root['release_manifest']);
@@ -310,9 +386,14 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     final authority = read.object(contract['authority']);
     read.exactKeys(authority, const {'repository', 'path'});
     final authorityRepository = read.string(authority, 'repository');
-    read.expect(authorityRepository == _authorityRepository);
     final authorityPath = read.string(authority, 'path');
-    read.expect(authorityPath == _authorityPath);
+    if (sourceRepository == _lockRepository) {
+      read.expect(authorityRepository == _authorityRepository);
+      read.expect(authorityPath == _authorityPath);
+    } else {
+      read.expect(authorityRepository == _legacyAuthorityRepository);
+      read.expect(authorityPath == _legacyAuthorityPath);
+    }
     final packageSchema = read.string(contract, 'package_schema');
     read.expect(packageSchema == _packageSchema);
     final contractSchemaVersion = read.integer(contract, 'schema_version');
@@ -381,6 +462,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     final artifactSha256 = read.sha256(artifact, 'sha256');
 
     return _ListenGenLock(
+      sourceRepository: sourceRepository,
       sourceGitSha: sourceGitSha,
       manifestSchema: manifestSchema,
       manifestFilename: manifestFilename,
@@ -495,7 +577,10 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
 
     final source = read.object(root['source']);
     read.exactKeys(source, const {'repository', 'commit'});
-    read.expect(read.string(source, 'repository') == _generatorRepository);
+    final expectedRepositoryUrl = lock.sourceRepository == _lockRepository
+        ? _generatorRepositoryUrl
+        : _legacyGeneratorRepositoryUrl;
+    read.expect(read.string(source, 'repository') == expectedRepositoryUrl);
     read.expect(read.string(source, 'commit') == lock.sourceGitSha);
 
     final tool = read.object(root['tool']);
@@ -775,6 +860,7 @@ final class _ContractIdentity {
 
 final class _ListenGenLock {
   const _ListenGenLock({
+    required this.sourceRepository,
     required this.sourceGitSha,
     required this.manifestSchema,
     required this.manifestFilename,
@@ -799,6 +885,7 @@ final class _ListenGenLock {
     required this.artifactSha256,
   });
 
+  final String sourceRepository;
   final String sourceGitSha;
   final String manifestSchema;
   final String manifestFilename;

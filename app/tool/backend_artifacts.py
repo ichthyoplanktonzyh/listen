@@ -197,8 +197,14 @@ def command_install(args: argparse.Namespace) -> None:
             raise SystemExit("runtime and contract artifacts are incompatible")
         extract_atomic(contract_archive, backend_root / "contracts")
         extract_atomic(runtime_archive, backend_root / "runtime")
-        sync_fixtures(backend_root / "contracts", str(expected_sha))
-    command_verify(argparse.Namespace(lock=args.lock))
+        if not getattr(args, "skip_fixture_sync", False):
+            sync_fixtures(backend_root / "contracts", str(expected_sha))
+    command_verify(
+        argparse.Namespace(
+            lock=args.lock,
+            skip_fixture_check=getattr(args, "skip_fixture_sync", False),
+        )
+    )
 
 
 def command_verify(args: argparse.Namespace) -> None:
@@ -215,15 +221,16 @@ def command_verify(args: argparse.Namespace) -> None:
         raise SystemExit("installed contract commit does not match backend.lock")
     if runtime_manifest.get("core_git_sha") != expected_sha:
         raise SystemExit("installed runtime commit does not match backend.lock")
-    fixture_manifest = json.loads(
-        (ROOT / "test/fixtures/manifest.json").read_text(encoding="utf-8")
-    )
-    if fixture_manifest.get("core_git_sha") != expected_sha:
-        raise SystemExit("frontend fixture commit does not match backend.lock")
-    for name, expected in fixture_manifest["files"].items():
-        path = ROOT / name
-        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
-            raise SystemExit(f"frontend fixture hash mismatch: {name}")
+    if not getattr(args, "skip_fixture_check", False):
+        fixture_manifest = json.loads(
+            (ROOT / "test/fixtures/manifest.json").read_text(encoding="utf-8")
+        )
+        if fixture_manifest.get("core_git_sha") != expected_sha:
+            raise SystemExit("frontend fixture commit does not match backend.lock")
+        for name, expected in fixture_manifest["files"].items():
+            path = ROOT / name
+            if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise SystemExit(f"frontend fixture hash mismatch: {name}")
     api_http = backend_root / "runtime/bin/api-http"
     if not api_http.is_file() or not os.access(api_http, os.X_OK):
         raise SystemExit("installed runtime has no executable api-http")
@@ -241,9 +248,19 @@ def parser() -> argparse.ArgumentParser:
     install = commands.add_parser("install")
     install.add_argument("--contract-archive")
     install.add_argument("--runtime-archive")
+    install.add_argument(
+        "--skip-fixture-sync",
+        action="store_true",
+        help="install artifacts without rewriting tracked App test fixtures",
+    )
     install.set_defaults(handler=command_install)
     verify = commands.add_parser("verify")
     verify.set_defaults(handler=command_verify)
+    verify.add_argument(
+        "--skip-fixture-check",
+        action="store_true",
+        help="verify installed Core artifacts without checking App-owned fixtures",
+    )
     return result
 
 

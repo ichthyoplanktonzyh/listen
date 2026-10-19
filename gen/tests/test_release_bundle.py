@@ -32,13 +32,15 @@ FAKE_CORE_SCHEMA_DIGEST = "ab" * 32
 FAKE_CORE_CONTRACT_VERSION = "4.0.0"
 
 
-def write_core_contract_manifest(directory: Path) -> Path:
-    """Write a fake listen-core contract artifact manifest (real format)."""
+def write_core_contract_manifest(
+    directory: Path, *, core_git_sha: str = FAKE_COMMIT
+) -> Path:
+    """Write a fake Core contract artifact manifest (real format)."""
     manifest = {
         "api_version": 1,
         "artifact_kind": "listen-contracts",
         "contract_version": FAKE_CORE_CONTRACT_VERSION,
-        "core_git_sha": "0" * 40,
+        "core_git_sha": core_git_sha,
         "event_schema_version": 1,
         "manifest_version": 1,
         "files": {
@@ -151,7 +153,10 @@ def copy_repo_root(prefix: str) -> Path:
     root = Path(tempfile.mkdtemp(prefix=prefix))
     shutil.copytree(ROOT / "src" / "listen_gen", root / "src" / "listen_gen")
     shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
-    shutil.copyfile(ROOT / "contracts.lock.json", root / "contracts.lock.json")
+    shutil.copyfile(
+        ROOT / rb.CONTRACT_DESCRIPTOR_NAME,
+        root / rb.CONTRACT_DESCRIPTOR_NAME,
+    )
     return root
 
 
@@ -196,7 +201,10 @@ class DeterministicBuildTests(ReleaseBundleTestBase):
             self.addCleanup(shutil.rmtree, root, ignore_errors=True)
             shutil.copytree(ROOT / "src" / "listen_gen", root / "src" / "listen_gen")
             shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
-            shutil.copyfile(ROOT / "contracts.lock.json", root / "contracts.lock.json")
+            shutil.copyfile(
+                ROOT / rb.CONTRACT_DESCRIPTOR_NAME,
+                root / rb.CONTRACT_DESCRIPTOR_NAME,
+            )
             return root
 
         root_a = make_repo_root("repo-a-")
@@ -274,6 +282,10 @@ class ManifestContentTests(ReleaseBundleTestBase):
             {"filename", "format", "entrypoint", "size_bytes", "sha256"},
         )
         self.assertEqual(manifest["schema"], "listen_gen.release-bundle.v1")
+        self.assertEqual(
+            manifest["source"]["repository"],
+            "https://github.com/ichthyoplanktonzyh/listen",
+        )
         self.assertEqual(manifest["source"]["commit"], FAKE_COMMIT)
         self.assertEqual(manifest["tool"], {
             "id": protocol.TOOL_ID,
@@ -325,17 +337,19 @@ class ManifestContentTests(ReleaseBundleTestBase):
                 tool["roles"], list(rb.TOOLCHAIN_ROLES[tool["id"]])
             )
             self.assertEqual(len(tool["roles"]), len(set(tool["roles"])))
-        lock = json.loads((ROOT / "contracts.lock.json").read_text("utf-8"))
+        descriptor = json.loads(
+            (ROOT / rb.CONTRACT_DESCRIPTOR_NAME).read_text("utf-8")
+        )
         contract = manifest["content_package_contract"]
         self.assertEqual(contract["authority"], {
-            "repository": lock["authority"]["repository"],
-            "path": lock["authority"]["path"],
+            "repository": descriptor["authority"]["repository"],
+            "path": descriptor["authority"]["path"],
         })
         self.assertEqual(
-            contract["release_schema_id"], lock["release_schema_id"]
+            contract["release_schema_id"], descriptor["release_schema_id"]
         )
-        self.assertEqual(contract["package_schema"], lock["package_schema"])
-        self.assertEqual(contract["schema_version"], lock["schema_version"])
+        self.assertEqual(contract["package_schema"], descriptor["package_schema"])
+        self.assertEqual(contract["schema_version"], descriptor["schema_version"])
         self.assertEqual(contract["contract_version"], FAKE_CORE_CONTRACT_VERSION)
         self.assertEqual(
             contract["canonical_sha256"], "sha256:" + FAKE_CORE_SCHEMA_DIGEST
@@ -344,7 +358,7 @@ class ManifestContentTests(ReleaseBundleTestBase):
         # from this repository's own lock.
         self.assertNotEqual(
             contract["canonical_sha256"],
-            "sha256:" + hashlib.sha256(canonical_json_bytes(lock)).hexdigest(),
+            "sha256:" + hashlib.sha256(canonical_json_bytes(descriptor)).hexdigest(),
         )
         artifact_bytes = self.artifact.read_bytes()
         self.assertEqual(manifest["artifact"], {
@@ -384,18 +398,20 @@ class ZipStructureTests(ReleaseBundleTestBase):
             self.assertEqual(names, sorted(names))
             self.assertEqual(len(names), len(set(names)))
             expected_sources = sorted(
-                "listen_gen/" + path.relative_to(
-                    ROOT / "src" / "listen_gen"
-                ).as_posix()
-                for path in (ROOT / "src" / "listen_gen").rglob("*.py")
-                if not path.is_symlink() and path.is_file()
+                "listen_gen/" + path.relative_to(ROOT / "src" / "listen_gen").as_posix()
+                for path in (ROOT / "src" / "listen_gen").rglob("*")
+                if (
+                    not path.is_symlink()
+                    and path.is_file()
+                    and path.suffix != ".pyc"
+                    and "__pycache__" not in path.parts
+                )
             )
             self.assertEqual(names, sorted(["__main__.py"] + expected_sources))
             for name in names:
                 self.assertNotIn("\\", name)
                 self.assertFalse(name.startswith("/"))
                 self.assertNotIn("..", name.split("/"))
-                self.assertTrue(name.endswith(".py"))
                 self.assertNotIn("__pycache__", name)
                 self.assertFalse(name.startswith(("tests/", "docs/", "tools/")))
             for info in archive.infolist():
@@ -410,19 +426,67 @@ class ZipStructureTests(ReleaseBundleTestBase):
             self.assertIn("raise SystemExit(main())", main)
             for name in expected_sources:
                 source = (ROOT / "src" / name).read_bytes()
-                normalized = source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-                self.assertEqual(archive.read(name), normalized)
+                if name.endswith(".py"):
+                    source = source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+                self.assertEqual(archive.read(name), source)
+            self.assertIn("listen_gen/web_assets/index.html", names)
 
     def test_archive_excludes_repository_metadata(self) -> None:
         with zipfile.ZipFile(io.BytesIO(self.artifact.read_bytes())) as archive:
             names = archive.namelist()
         for name in names:
             self.assertNotIn("pyproject.toml", name)
+            self.assertNotIn("content-package-contract.json", name)
             self.assertNotIn("contracts.lock.json", name)
             self.assertFalse(name.endswith(".pyc"))
 
 
+class SourceCollectionSafetyTests(unittest.TestCase):
+    def test_only_python_modules_and_allowlisted_gui_assets_are_collected(self) -> None:
+        root = copy_repo_root("source-safety-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        package_root = root / "src" / "listen_gen"
+        assets_root = package_root / "web_assets"
+        (package_root / ".env").write_text("secret marker\n", encoding="utf-8")
+        (package_root / "local.sqlite").write_bytes(b"private database")
+        (package_root / "locale.json").write_text("{}\n", encoding="utf-8")
+        (assets_root / "notes.txt").write_text("developer notes\n", encoding="utf-8")
+        (assets_root / ".env").write_text("secret marker\n", encoding="utf-8")
+        hidden_assets = assets_root / ".private"
+        hidden_assets.mkdir()
+        (hidden_assets / "page.html").write_text("private page\n", encoding="utf-8")
+
+        names = {name for name, _ in rb._collect_source_entries(root)}
+
+        self.assertIn("listen_gen/web_assets/index.html", names)
+        self.assertNotIn("listen_gen/.env", names)
+        self.assertNotIn("listen_gen/local.sqlite", names)
+        self.assertNotIn("listen_gen/locale.json", names)
+        self.assertNotIn("listen_gen/web_assets/notes.txt", names)
+        self.assertNotIn("listen_gen/web_assets/.env", names)
+        self.assertNotIn("listen_gen/web_assets/.private/page.html", names)
+
+
 class ZipappRuntimeTests(ReleaseBundleTestBase):
+    def test_zipapp_gui_asset_is_readable_as_package_resource(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(self.artifact)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from importlib.resources import files; "
+                "asset = files('listen_gen').joinpath('web_assets', 'index.html'); "
+                "assert asset.is_file(); print(asset.read_text(encoding='utf-8'))",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("listen-gen", completed.stdout)
+
     def test_zipapp_package_bytes_match_source_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source_output = Path(tmp) / "source.listenpkg"
@@ -665,7 +729,7 @@ class BuildErrorTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         shutil.copytree(ROOT / "src" / "listen_gen", root / "src" / "listen_gen")
         shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
-        (root / "contracts.lock.json").write_text("{not valid json\n")
+        (root / rb.CONTRACT_DESCRIPTOR_NAME).write_text("{not valid json\n")
         with tempfile.TemporaryDirectory() as tmp:
             output_parent = Path(tmp)
             unrelated = output_parent / "keep.txt"
@@ -676,7 +740,7 @@ class BuildErrorTests(unittest.TestCase):
                 core_contract_manifest=self.core_manifest,
             )
             self.assertEqual(
-                str(caught.exception), "content package contract lock is invalid"
+                str(caught.exception), "content package contract descriptor is invalid"
             )
             self.assertFalse((output_parent / f"listen-gen-{VERSION}").exists())
             leftovers = [
@@ -690,7 +754,10 @@ class BuildErrorTests(unittest.TestCase):
         root = Path(tempfile.mkdtemp(prefix="no-src-"))
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
-        shutil.copyfile(ROOT / "contracts.lock.json", root / "contracts.lock.json")
+        shutil.copyfile(
+            ROOT / rb.CONTRACT_DESCRIPTOR_NAME,
+            root / rb.CONTRACT_DESCRIPTOR_NAME,
+        )
         with tempfile.TemporaryDirectory() as tmp:
             output_parent = Path(tmp)
             with self.assertRaises(rb.ReleaseBundleError):
@@ -762,6 +829,38 @@ class StrictVerifierTests(ReleaseBundleTestBase):
                     core_contract_manifest=Path(tmp) / "missing.json",
                 )
             self.assertEqual(str(caught.exception), "core contract manifest is not valid JSON")
+
+    def test_core_and_gen_release_must_identify_the_same_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            core_manifest = write_core_contract_manifest(
+                Path(tmp), core_git_sha="0" * 40
+            )
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.build_release_bundle(
+                    ROOT,
+                    Path(tmp) / "dist",
+                    FAKE_COMMIT,
+                    core_contract_manifest=core_manifest,
+                )
+            self.assertEqual(
+                str(caught.exception),
+                "core contract manifest source does not match release source",
+            )
+
+    def test_verifier_rejects_core_manifest_from_another_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            core_manifest = write_core_contract_manifest(
+                Path(tmp), core_git_sha="0" * 40
+            )
+            _, manifest = self.copy_bundle(Path(tmp))
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(
+                    ROOT, manifest, core_contract_manifest=core_manifest
+                )
+            self.assertEqual(
+                str(caught.exception),
+                "core contract manifest source does not match release source",
+            )
 
     def test_forged_contract_version_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -131,7 +131,7 @@ Future<LocalListenGenReleaseService> _releaseForProbeManifest() async {
   final runtime = manifest['runtime'] as Map<String, dynamic>;
   final lock = <String, dynamic>{
     'manifest_version': 1,
-    'repository': 'ichthyoplanktonzyh/listen-gen',
+    'repository': 'ichthyoplanktonzyh/listen',
     'source_git_sha': source['commit'],
     'release_manifest': {
       'schema': manifest['schema'],

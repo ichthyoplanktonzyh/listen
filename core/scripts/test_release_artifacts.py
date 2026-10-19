@@ -1,5 +1,6 @@
 import argparse
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -24,6 +25,44 @@ V3_INVENTORY = (
 
 
 class ReleaseArtifactTests(unittest.TestCase):
+    def test_dirty_snapshot_cannot_fall_back_to_head(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            source = root / "source.txt"
+            source.write_text("committed snapshot\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "source.txt"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(root),
+                    "-c", "user.name=Test",
+                    "-c", "user.email=test@example.invalid",
+                    "commit", "-qm", "fixture",
+                ],
+                check=True,
+            )
+            source.write_text("modified snapshot\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as caught:
+                artifacts.repository_git_sha(root, allow_dirty=True)
+            self.assertEqual(
+                str(caught.exception),
+                "refusing to identify a dirty snapshot as HEAD; "
+                "pass --git-sha with the exact source snapshot commit",
+            )
+
+    def test_explicit_snapshot_sha_is_validated(self):
+        self.assertEqual(
+            artifacts.release_git_sha(Path("."), "a" * 40, allow_dirty=False),
+            "a" * 40,
+        )
+        with self.assertRaises(SystemExit) as caught:
+            artifacts.release_git_sha(Path("."), "not-a-sha", allow_dirty=True)
+        self.assertEqual(
+            str(caught.exception),
+            "source snapshot SHA must be a lowercase 40-character Git SHA",
+        )
+
     def test_contract_archive_is_deterministic_and_self_verifying(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

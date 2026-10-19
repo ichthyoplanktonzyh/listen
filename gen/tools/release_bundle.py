@@ -24,7 +24,7 @@ import zipfile
 from pathlib import Path
 
 RELEASE_BUNDLE_SCHEMA = "listen_gen.release-bundle.v1"
-SOURCE_REPOSITORY = "https://github.com/ichthyoplanktonzyh/listen-gen"
+SOURCE_REPOSITORY = "https://github.com/ichthyoplanktonzyh/listen"
 TOOL_NAME = "listen-gen"
 REQUIRED_PYTHON = ">=3.11"
 MACHINE_EVENT_SCHEMA = "listen_gen.machine-event.v2"
@@ -35,18 +35,19 @@ PROVIDER_REQUIREMENTS = {
     "command": ["ffprobe", "ffmpeg", "asr-wrapper"],
     "whisper-cpp": ["ffprobe", "ffmpeg", "whisper-cli", "whisper-model"],
 }
-EXPECTED_LOCK = {
+CONTRACT_DESCRIPTOR_NAME = "content-package-contract.json"
+EXPECTED_CONTRACT_DESCRIPTOR = {
     "authority": {
-        "path": "contracts/content-package/v3",
-        "repository": "ichthyoplanktonzyh/listen-core",
+        "path": "core/contracts/content-package/v3",
+        "repository": "ichthyoplanktonzyh/listen",
     },
     "package_schema": "listen.content-package.release.v3",
     "release_schema_id": "listen.content-package.release.v3",
     "schema_version": 3,
     "v3": {
         "authority": {
-            "path": "contracts/content-package/v3",
-            "repository": "ichthyoplanktonzyh/listen-core",
+            "path": "core/contracts/content-package/v3",
+            "repository": "ichthyoplanktonzyh/listen",
         },
         "package_schema": "listen.content-package.release.v3",
         "release_schema_id": "listen.content-package.release.v3",
@@ -63,11 +64,12 @@ EXPECTED_LOCK = {
 # verifier recomputes the canonical identity from these constants and from the
 # union of ``PROVIDER_REQUIREMENTS``.
 #
-# The content-package contract identity comes only from a real listen-core
+# The content-package contract identity comes only from a real Core
 # contract artifact manifest: the manifest's ``contract_version`` and the
-# SHA-256 of its ``contracts/content-package/v3/release.schema.json`` file are
+# SHA-256 of its
+# ``core/contracts/content-package/v3/release.schema.json`` file are
 # copied verbatim. Gen never invents a Core release identity; a build without
-# the Core manifest abstains with a hard error.
+# a freshly built monorepo Core manifest abstains with a hard error.
 RUNTIME_IDENTITY_SCHEMA = "listen_gen.runtime-identity.v1"
 RUNTIME_IDENTITY_VERSION = 1
 RUNTIME_FAMILY = "python"
@@ -131,6 +133,9 @@ SHEBANG = b"#!/usr/bin/env python3\n"
 FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 ENTRY_MODE = 0o100644
 ARCHIVE_MODE = 0o755
+WEB_ASSET_SUFFIXES = frozenset(
+    {".html", ".css", ".js", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2"}
+)
 
 ROOT_MAIN_SOURCE = """\
 from __future__ import annotations
@@ -268,26 +273,26 @@ def _read_project_metadata(repo_root: Path) -> tuple[str, str]:
     return version, requires_python
 
 
-def _read_contract_lock(repo_root: Path) -> dict[str, object]:
-    path = repo_root / "contracts.lock.json"
+def _read_contract_descriptor(repo_root: Path) -> dict[str, object]:
+    path = repo_root / CONTRACT_DESCRIPTOR_NAME
     if not path.is_file():
-        raise ReleaseBundleError("content package contract lock is invalid")
+        raise ReleaseBundleError("content package contract descriptor is invalid")
     try:
         parsed = json.loads(path.read_text("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        raise ReleaseBundleError("content package contract lock is invalid")
-    if parsed != EXPECTED_LOCK:
-        raise ReleaseBundleError("content package contract lock is invalid")
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if parsed != EXPECTED_CONTRACT_DESCRIPTOR:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
     return parsed
 
 
 def _read_core_contract_manifest(manifest_path: Path) -> dict[str, object]:
-    """Read the contract identity from a real listen-core contract artifact.
+    """Read contract identity from the freshly built monorepo Core artifact.
 
     The manifest must carry ``contract_version`` and a SHA-256 for the v3
     ``release.schema.json`` file; both are copied verbatim into the Gen
     release manifest so the contract identity never comes from this
-    repository's own lock.
+    repository's local contract descriptor.
     """
     try:
         raw = manifest_path.read_bytes()
@@ -303,6 +308,11 @@ def _read_core_contract_manifest(manifest_path: Path) -> dict[str, object]:
         ) from error
     if not isinstance(parsed, dict):
         raise ReleaseBundleError("core contract manifest is invalid")
+    source_commit = parsed.get("core_git_sha")
+    if not isinstance(source_commit, str) or not SOURCE_COMMIT_RE.fullmatch(
+        source_commit
+    ):
+        raise ReleaseBundleError("core contract manifest is invalid")
     contract_version = parsed.get("contract_version")
     if not isinstance(contract_version, str) or not contract_version:
         raise ReleaseBundleError("core contract manifest is invalid")
@@ -313,6 +323,7 @@ def _read_core_contract_manifest(manifest_path: Path) -> dict[str, object]:
     if not isinstance(digest, str) or not SHA256_RE.fullmatch(f"sha256:{digest}"):
         raise ReleaseBundleError("core contract manifest is invalid")
     return {
+        "source_commit": source_commit,
         "contract_version": contract_version,
         "release_schema_sha256": f"sha256:{digest}",
     }
@@ -323,17 +334,33 @@ def _collect_source_entries(repo_root: Path) -> list[tuple[str, bytes]]:
     if not package_root.is_dir():
         raise ReleaseBundleError("release archive content does not match source")
     entries: list[tuple[str, bytes]] = []
-    for path in sorted(package_root.rglob("*.py")):
+    for path in sorted(package_root.rglob("*")):
         if path.is_symlink() or not path.is_file():
+            continue
+        relative_parts = path.relative_to(package_root).parts
+        if any(part.startswith(".") or part == "__pycache__" for part in relative_parts):
+            continue
+        if relative_parts[0] == "web_assets":
+            if path.suffix.lower() not in WEB_ASSET_SUFFIXES:
+                continue
+        elif path.suffix != ".py":
             continue
         archive_path = "listen_gen/" + path.relative_to(package_root).as_posix()
         try:
             raw = path.read_bytes()
-            text = raw.decode("utf-8")
-        except (OSError, UnicodeDecodeError):
+        except OSError:
             raise ReleaseBundleError("release archive content does not match source")
-        normalized = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
-        entries.append((archive_path, normalized))
+        if path.suffix == ".py":
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ReleaseBundleError("release archive content does not match source")
+            raw = (
+                text.replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .encode("utf-8")
+            )
+        entries.append((archive_path, raw))
     entries.append(("__main__.py", ROOT_MAIN_SOURCE.encode("utf-8")))
     entries.sort(key=lambda item: item[0])
     return entries
@@ -372,11 +399,11 @@ def _build_manifest(
     version: str,
     source_commit: str,
     constants: dict[str, object],
-    lock: dict[str, object],
+    contract_descriptor: dict[str, object],
     core_contract: dict[str, object],
     pyz_bytes: bytes,
 ) -> dict[str, object]:
-    authority = lock["authority"]
+    authority = contract_descriptor["authority"]
     assert isinstance(authority, dict)
     return {
         "schema": RELEASE_BUNDLE_SCHEMA,
@@ -397,9 +424,9 @@ def _build_manifest(
                 "repository": authority["repository"],
                 "path": authority["path"],
             },
-            "release_schema_id": lock["release_schema_id"],
-            "package_schema": lock["package_schema"],
-            "schema_version": lock["schema_version"],
+            "release_schema_id": contract_descriptor["release_schema_id"],
+            "package_schema": contract_descriptor["package_schema"],
+            "schema_version": contract_descriptor["schema_version"],
             "contract_version": core_contract["contract_version"],
             "canonical_sha256": core_contract["release_schema_sha256"],
         },
@@ -441,10 +468,14 @@ def build_release_bundle(
         raise ReleaseBundleError("release manifest is invalid")
     if constants["machine_protocol_version"] != MACHINE_PROTOCOL_VERSION:
         raise ReleaseBundleError("release manifest is invalid")
-    lock = _read_contract_lock(repo_root)
+    contract_descriptor = _read_contract_descriptor(repo_root)
     core_contract = _read_core_contract_manifest(
         Path(core_contract_manifest)
     )
+    if core_contract["source_commit"] != source_commit:
+        raise ReleaseBundleError(
+            "core contract manifest source does not match release source"
+        )
 
     bundle_dir = output_parent / f"listen-gen-{version}"
     if bundle_dir.exists():
@@ -461,7 +492,12 @@ def build_release_bundle(
         entries = _collect_source_entries(repo_root)
         pyz_bytes = _build_pyz_bytes(entries)
         manifest = _build_manifest(
-            version, source_commit, constants, lock, core_contract, pyz_bytes
+            version,
+            source_commit,
+            constants,
+            contract_descriptor,
+            core_contract,
+            pyz_bytes,
         )
         pyz_name = f"listen-gen-{version}.pyz"
         manifest_name = f"listen-gen-{version}.release.json"
@@ -528,16 +564,19 @@ def _parse_manifest(manifest_path: Path) -> dict[str, object]:
     _check_keys(contract, MANIFEST_CONTRACT_FIELDS)
     authority = contract["authority"]
     _check_keys(authority, MANIFEST_AUTHORITY_FIELDS)
-    if authority != EXPECTED_LOCK["authority"]:
+    if authority != EXPECTED_CONTRACT_DESCRIPTOR["authority"]:
         raise ReleaseBundleError("release manifest is invalid")
-    if contract["release_schema_id"] != EXPECTED_LOCK["release_schema_id"]:
+    if (
+        contract["release_schema_id"]
+        != EXPECTED_CONTRACT_DESCRIPTOR["release_schema_id"]
+    ):
         raise ReleaseBundleError("release manifest is invalid")
-    if contract["package_schema"] != EXPECTED_LOCK["package_schema"]:
+    if contract["package_schema"] != EXPECTED_CONTRACT_DESCRIPTOR["package_schema"]:
         raise ReleaseBundleError("release manifest is invalid")
     schema_version = contract["schema_version"]
     if type(schema_version) is not int:
         raise ReleaseBundleError("release manifest is invalid")
-    if schema_version != EXPECTED_LOCK["schema_version"]:
+    if schema_version != EXPECTED_CONTRACT_DESCRIPTOR["schema_version"]:
         raise ReleaseBundleError("release manifest is invalid")
     contract_version = contract["contract_version"]
     if not isinstance(contract_version, str) or not contract_version:
@@ -699,23 +738,23 @@ def verify_release_bundle(
         for name, expected_bytes in expected_entries:
             if archive.read(name) != expected_bytes:
                 raise ReleaseBundleError("release archive content does not match source")
-    lock = _read_contract_lock(repo_root)
+    contract_descriptor = _read_contract_descriptor(repo_root)
     core_contract = _read_core_contract_manifest(Path(core_contract_manifest))
+    if core_contract["source_commit"] != manifest["source"]["commit"]:
+        raise ReleaseBundleError(
+            "core contract manifest source does not match release source"
+        )
     contract = manifest["content_package_contract"]
     authority = contract["authority"]
     assert isinstance(authority, dict)
-    lock_authority = lock["authority"]
-    assert isinstance(lock_authority, dict)
-    if authority["repository"] != lock_authority["repository"]:
-        raise ReleaseBundleError("content package contract lock is invalid")
-    if authority["path"] != lock_authority["path"]:
-        raise ReleaseBundleError("content package contract lock is invalid")
-    if contract["release_schema_id"] != lock["release_schema_id"]:
-        raise ReleaseBundleError("content package contract lock is invalid")
-    if contract["package_schema"] != lock["package_schema"]:
-        raise ReleaseBundleError("content package contract lock is invalid")
-    if contract["schema_version"] != lock["schema_version"]:
-        raise ReleaseBundleError("content package contract lock is invalid")
+    if authority != contract_descriptor["authority"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if contract["release_schema_id"] != contract_descriptor["release_schema_id"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if contract["package_schema"] != contract_descriptor["package_schema"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if contract["schema_version"] != contract_descriptor["schema_version"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
     if contract["contract_version"] != core_contract["contract_version"]:
         raise ReleaseBundleError("core contract manifest is invalid")
     if contract["canonical_sha256"] != core_contract["release_schema_sha256"]:
@@ -787,7 +826,7 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument(
         "--core-contract-manifest",
         required=True,
-        help="listen-core contract artifact manifest (real published identity)",
+        help="fresh Core contract artifact manifest built from this monorepo snapshot",
     )
     build_parser.add_argument(
         "--output-parent", required=True, help="directory that receives the bundle"
@@ -798,7 +837,7 @@ def main(argv: list[str] | None = None) -> int:
     verify_parser.add_argument(
         "--core-contract-manifest",
         required=True,
-        help="listen-core contract artifact manifest (real published identity)",
+        help="fresh Core contract artifact manifest built from this monorepo snapshot",
     )
     verify_parser.set_defaults(func=_cmd_verify)
     args = parser.parse_args(argv)

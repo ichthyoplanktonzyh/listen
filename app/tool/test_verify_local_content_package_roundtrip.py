@@ -1,69 +1,54 @@
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("verify_local_content_package_roundtrip.sh")
-NAME = "local Gen bundle to local Core round trips through capability production, installation, and adoption"
-DOCUMENT_NAME = "a document material produces listen through the fake TTS provider and its derived audio resolves from the adopted composition through Core"
-MATRIX_NAME = "the Gen/Core/App matrix keeps one adopted package shape across document and media families"
-RICH_NAME = "a video subtitle with fragmented cues lands as one complete sentence with every rich timeline"
-RENDER_NAME = "Core-adopted compositions render honest audio and text surfaces for document, audio, and video"
-REPO_ROOT = Path(__file__).resolve().parent.parent
-E2E_PATH = REPO_ROOT / "test/integration/content_package_e2e_test.dart"
+NAMES = [
+    "local Gen bundle to local Core round trips through capability production, installation, and adoption",
+    "a document material produces listen through the fake TTS provider and its derived audio resolves from the adopted composition through Core",
+    "the Gen/Core/App matrix keeps one adopted package shape across document and media families",
+    "a video subtitle with fragmented cues lands as one complete sentence with every rich timeline",
+    "Core-adopted compositions render honest audio and text surfaces for document, audio, and video",
+]
 
 
-def make_repo(path: Path) -> str:
-    subprocess.run(["git", "init", "-q", "-b", "main", str(path)], check=True)
-    subprocess.run(["git", "-C", str(path), "config", "user.email", "t@example.com"], check=True)
-    subprocess.run(["git", "-C", str(path), "config", "user.name", "t"], check=True)
-    (path / "fixture").write_text("fixture\n")
-    subprocess.run(["git", "-C", str(path), "add", "fixture"], check=True)
-    subprocess.run(["git", "-C", str(path), "commit", "-q", "-m", "fixture"], check=True)
-    return subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+def git(root: Path, *args: str, capture: bool = False) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=True,
+        capture_output=capture,
+        text=True,
+    )
+    return result.stdout.strip() if capture else ""
 
 
 class ScriptSemanticsTests(unittest.TestCase):
-    def run_gate(
-        self,
-        fail_stage="",
-        dirty=False,
-        include_state=False,
-        capture_gen_python=False,
-    ):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        core, gen = root / "core", root / "gen"
-        core_pin, gen_pin = make_repo(core), make_repo(gen)
-        if dirty:
-            for repo in (core, gen):
-                (repo / "tracked.txt").write_text("edited\n")
-                (repo / "uncommitted.txt").write_text("dirty\n")
-        initial_state = {
-            str(repo): (
-                subprocess.run(
-                    ["git", "-C", str(repo), "rev-parse", "HEAD"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                ).stdout.strip(),
-                subprocess.run(
-                    ["git", "-C", str(repo), "status", "--porcelain"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                ).stdout,
-            )
-            for repo in (core, gen)
-        }
-        cache = root / "pub-cache"
-        cache.mkdir()
-        runner = root / "runner.py"
-        gen_python_capture = root / "gen-python.txt"
-        runner.write_text(
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = (Path(self.temporary.name) / "listen").resolve()
+        for tree in ("app", "core", "gen"):
+            (self.root / tree).mkdir(parents=True)
+        (self.root / "app/pubspec.yaml").write_text("name: fixture_app\n")
+        report_tool = self.root / "app/tool/verify_flutter_test_report.py"
+        report_tool.parent.mkdir(parents=True)
+        shutil.copyfile(SCRIPT.with_name("verify_flutter_test_report.py"), report_tool)
+        (self.root / "core/Cargo.toml").write_text("[workspace]\n")
+        (self.root / "gen/pyproject.toml").write_text("[project]\nname='fixture'\n")
+        git(self.root, "init", "-q", "-b", "main")
+        git(self.root, "config", "user.email", "t@example.com")
+        git(self.root, "config", "user.name", "t")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "fixture")
+
+        self.cache = self.root.parent / "pub-cache"
+        self.cache.mkdir()
+        self.runner = self.root.parent / "runner.py"
+        self.runner.write_text(
             "#!/usr/bin/env python3\n"
             "import json, os, sys\n"
             "stage = sys.argv[1]\n"
@@ -73,8 +58,7 @@ class ScriptSemanticsTests(unittest.TestCase):
             "if stage == 'core-contract':\n"
             " out = sys.argv[sys.argv.index('--output-dir') + 1]\n"
             " os.makedirs(out, exist_ok=True)\n"
-            " m = {'contract_version': '4.0.0',\n"
-            "      'files': {'release.schema.json': 'a' * 64}}\n"
+            " m = {'contract_version': '4.0.0', 'files': {'release.schema.json': 'a' * 64}}\n"
             " open(os.path.join(out, 'listen-contracts-4.0.0.manifest.json'), 'w').write(json.dumps(m))\n"
             "if stage == 'gen-build':\n"
             " out = sys.argv[sys.argv.index('--output-parent') + 1]\n"
@@ -86,39 +70,56 @@ class ScriptSemanticsTests(unittest.TestCase):
             "if stage == 'flutter-test':\n"
             " p = os.environ['VERIFY_ROUNDTRIP_REPORT_PATH']\n"
             " if 'GEN_PYTHON_CAPTURE' in os.environ:\n"
-            "  runtime = next((arg.split('=', 1)[1] for arg in sys.argv if arg.startswith('LISTEN_E2E_GEN_PYTHON=')), os.environ.get('LISTEN_E2E_GEN_PYTHON', ''))\n"
+            "  runtime = next((arg.split('=', 1)[1] for arg in sys.argv if arg.startswith('LISTEN_E2E_GEN_PYTHON=')), '')\n"
             "  open(os.environ['GEN_PYTHON_CAPTURE'], 'w').write(runtime)\n"
-            f" n = {NAME!r}\n"
-            f" d = {DOCUMENT_NAME!r}\n"
-            f" m = {MATRIX_NAME!r}\n"
-            f" r = {RICH_NAME!r}\n"
-            f" w = {RENDER_NAME!r}\n"
-            " names = [n, d, m, r, w]\n"
-            " e = []\n"
-            " for test_id, test_name in enumerate(names, 1):\n"
-            "  e.extend([{'type':'testStart','test':{'id':test_id,'name':test_name}}, {'type':'testDone','testID':test_id,'result':'success','skipped':False}])\n"
-            " e.append({'type':'done','success':True})\n"
-            " open(p, 'w').write(''.join(json.dumps(x) + '\\n' for x in e))\n"
+            f" names = {NAMES!r}\n"
+            " events = []\n"
+            " for test_id, name in enumerate(names, 1):\n"
+            "  events.extend([{'type':'testStart','test':{'id':test_id,'name':name}}, {'type':'testDone','testID':test_id,'result':'success','skipped':False}])\n"
+            " events.append({'type':'done','success':True})\n"
+            " open(p, 'w').write(''.join(json.dumps(event) + '\\n' for event in events))\n"
         )
-        runner.chmod(0o755)
-        cwd_file = root / "runner-cwd.txt"
+        self.runner.chmod(0o755)
+        self.cwd_file = self.root.parent / "runner-cwd.txt"
+
+    def run_gate(self, fail_stage="", dirty=False, capture_gen_python=False):
+        if dirty:
+            (self.root / "app/pubspec.yaml").write_text("name: edited_app\n")
+            (self.root / "core/uncommitted.rs").write_text("// source edit\n")
+            (self.root / "gen/untracked.py").write_text("# source edit\n")
+        initial = (
+            git(self.root, "rev-parse", "HEAD", capture=True),
+            git(self.root, "status", "--porcelain", capture=True),
+        )
+        capture_path = self.root.parent / "gen-python.txt"
         env = {
             **os.environ,
-            "LISTEN_CORE_REPO": str(core),
-            "LISTEN_GEN_REPO": str(gen),
-            "VERIFY_ROUNDTRIP_STAGE_RUNNER": str(runner),
-            "PUB_CACHE": str(cache),
+            "VERIFY_ROUNDTRIP_STAGE_RUNNER": str(self.runner),
+            "PUB_CACHE": str(self.cache),
+            "LISTEN_GEN_PYTHON": str(self.root / "gen/.venv/bin/python"),
             "FAIL_STAGE": fail_stage,
-            "RUNNER_CWD_FILE": str(cwd_file),
+            "RUNNER_CWD_FILE": str(self.cwd_file),
         }
         if capture_gen_python:
-            env["GEN_PYTHON_CAPTURE"] = str(gen_python_capture)
-        result = subprocess.run([str(SCRIPT)], capture_output=True, text=True, env=env)
-        if include_state:
-            return result, cwd_file, core, gen, initial_state
-        if capture_gen_python:
-            return result, cwd_file, gen_python_capture, gen / ".venv/bin/python"
-        return result, cwd_file
+            env["GEN_PYTHON_CAPTURE"] = str(capture_path)
+        result = subprocess.run(
+            [str(SCRIPT), "--source-root", str(self.root)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        final = (
+            git(self.root, "rev-parse", "HEAD", capture=True),
+            git(self.root, "status", "--porcelain", capture=True),
+        )
+        self.assertEqual(final, initial)
+        return result, capture_path
+
+    def stages(self):
+        return {
+            line.split("|", 2)[0]: tuple(line.split("|", 2)[1:])
+            for line in self.cwd_file.read_text().splitlines()
+        }
 
     def test_success_prints_ok_only_after_structured_evidence(self):
         result, _ = self.run_gate()
@@ -126,84 +127,53 @@ class ScriptSemanticsTests(unittest.TestCase):
         self.assertIn("structured report confirms", result.stdout)
         self.assertIn("verify-roundtrip: OK", result.stdout)
 
-    def test_dependency_failure_is_nonzero_and_never_prints_ok(self):
-        result, _ = self.run_gate("dependency-setup")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("verify-roundtrip: OK", result.stdout + result.stderr)
-
-    def test_each_build_or_verify_failure_is_nonzero_and_never_prints_ok(self):
-        for stage in ("gen-build", "gen-verify", "fixture-build", "core-build", "core-contract"):
+    def test_dependency_and_build_failures_are_nonzero_without_ok(self):
+        for stage in ("dependency-setup", "gen-build", "gen-verify", "fixture-build", "core-build", "core-contract"):
             with self.subTest(stage=stage):
                 result, _ = self.run_gate(stage)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn(
-                    "verify-roundtrip: OK", result.stdout + result.stderr
-                )
+                self.assertNotIn("verify-roundtrip: OK", result.stdout + result.stderr)
 
-    def test_flutter_runner_failure_is_nonzero_and_never_prints_ok(self):
+    def test_flutter_failure_is_nonzero_without_ok(self):
         result, _ = self.run_gate("flutter-test")
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("verify-roundtrip: OK", result.stdout + result.stderr)
 
-    def test_flutter_receives_the_checked_gen_python_runtime(self):
-        result, _, captured, expected = self.run_gate(capture_gen_python=True)
+    def test_every_component_builds_from_one_preserved_root_snapshot(self):
+        result, _ = self.run_gate(dirty=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(Path(captured.read_text()), expected)
-        self.assertIn("LISTEN_E2E_GEN_PYTHON", E2E_PATH.read_text())
-
-    def test_script_builds_the_local_head_without_production_locks(self):
-        # The probe gate must run the sibling checkouts at their local HEAD
-        # and must never pin production lock identities into its own defaults.
-        text = SCRIPT.read_text()
-        for lock_name in ("backend.lock.json", "listen_gen.lock.json"):
-            self.assertNotIn(lock_name, text)
-        self.assertNotIn("5a65b2735325aac18f1eacb736b8d9676adf59a9", text)
-        self.assertNotIn("80edcbd7057d4b2e1a7edb8ed9966cd4ecd82e5d", text)
-        self.assertIn('--source-commit "$GEN_HEAD"', text)
-
-    def test_dirty_workspaces_build_from_isolated_snapshots(self):
-        result, cwd_file = self.run_gate(dirty=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("isolated snapshot", result.stderr)
-        self.assertIn("verify-roundtrip: OK", result.stdout)
-        stages = {}
-        for line in cwd_file.read_text().splitlines():
-            stage, cwd, args = line.split("|", 2)
-            stages[stage] = (cwd, args)
-        for stage in ("gen-build", "gen-verify"):
+        self.assertIn("one snapshot", result.stdout)
+        stages = self.stages()
+        for stage, subdir in (("core-contract", "core"), ("gen-build", "gen"), ("gen-verify", "gen"), ("dependency-setup", "app"), ("flutter-test", "app")):
             cwd, _ = stages[stage]
-            self.assertIn("snapshots", cwd, stage)
-        core_contract_cwd, core_contract_args = stages["core-contract"]
-        self.assertIn("snapshots", core_contract_cwd, "core-contract")
-        self.assertIn("--output-dir", core_contract_args)
-        core_cwd, core_args = stages["core-build"]
-        self.assertNotIn("snapshots", core_cwd)
-        self.assertIn("snapshots", core_args)
-        for stage in ("gen-build", "gen-verify"):
-            _, args = stages[stage]
-            self.assertIn("--core-contract-manifest", args, stage)
+            self.assertIn(f"/source/{subdir}", cwd, stage)
+        core_cwd, _ = stages["core-contract"]
+        gen_cwd, gen_args = stages["gen-build"]
+        self.assertEqual(Path(core_cwd).parents[1], Path(gen_cwd).parents[1])
+        self.assertIn("--source-commit", gen_args)
+        self.assertIn("--manifest-path", stages["core-build"][1])
 
-    def test_external_workspaces_keep_their_original_head_and_porcelain(self):
-        result, _, core, gen, initial_state = self.run_gate(
-            dirty=True,
-            include_state=True,
-        )
+    def test_flutter_receives_the_selected_gen_python_runtime(self):
+        result, captured = self.run_gate(capture_gen_python=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        for repo in (core, gen):
-            key = str(repo)
-            head = subprocess.run(
-                ["git", "-C", str(repo), "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            status = subprocess.run(
-                ["git", "-C", str(repo), "status", "--porcelain"],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout
-            self.assertEqual((head, status), initial_state[key], str(repo))
+        expected = self.root / "gen/.venv/bin/python"
+        self.assertEqual(Path(captured.read_text()), expected)
+
+    def test_clean_source_root_keeps_its_commit_identity(self):
+        expected_commit = git(self.root, "rev-parse", "HEAD", capture=True)
+        result, _ = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        stages = self.stages()
+        self.assertEqual(stages["core-contract"][0], str(self.root / "core"))
+        self.assertEqual(stages["gen-build"][0], str(self.root / "gen"))
+        self.assertIn(expected_commit, stages["gen-build"][1])
+
+    def test_no_legacy_cross_repository_inputs_remain(self):
+        text = SCRIPT.read_text()
+        for obsolete in ("LISTEN_CORE_REPO", "LISTEN_GEN_REPO", "listen-core working tree", "listen-gen working tree"):
+            self.assertNotIn(obsolete, text)
+        self.assertIn("--source-root", text)
+        self.assertIn('git -C "$source_root" archive HEAD', text)
 
 
 if __name__ == "__main__":

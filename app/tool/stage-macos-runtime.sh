@@ -32,10 +32,14 @@ else
   echo "Skipping listen-core staging: installed runtime is incomplete."
 fi
 
+gen_lock="${LISTEN_GEN_LOCK_PATH:-$root/listen_gen.lock.json}"
 gen_args=(
-  python3 "$root/tool/listen_gen_artifacts.py" stage
+  python3 "$root/tool/listen_gen_artifacts.py" --lock "$gen_lock" stage
   --destination "$runtime_destination/listen-gen"
 )
+if [[ -n "${LISTEN_GEN_RELEASE_MANIFEST:-}" ]]; then
+  gen_args+=(--manifest "$LISTEN_GEN_RELEASE_MANIFEST")
+fi
 if [[ "$optional" == true ]]; then
   gen_args+=(--optional)
 fi

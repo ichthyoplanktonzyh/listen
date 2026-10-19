@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -159,6 +160,10 @@ import 'widgets/settings/settings_flow.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.environment['LLPLAYERNEXT_VERIFY_GEN_BUNDLE'] == '1') {
+    await _verifyPackagedGenBundle();
+    return;
+  }
   const FvpDesktopPlaybackBootstrap().initialize();
   // Cover art survives the launch it was fetched in only from here: every
   // other construction site defaults to keeping nothing, so no test writes
@@ -172,6 +177,27 @@ Future<void> main() async {
           const EnvironmentSmokeLaunchConfigurationService(),
     ),
   );
+}
+
+Future<void> _verifyPackagedGenBundle() async {
+  try {
+    final verified = await LocalListenGenReleaseService().verify();
+    stdout.writeln(
+      jsonEncode({
+        'status': 'verified',
+        'tool_id': 'listen-gen',
+        'tool_version': verified.toolVersion,
+        'source_commit': verified.sourceCommit,
+        'artifact_sha256': verified.artifactSha256,
+      }),
+    );
+    exit(0);
+  } on Object {
+    stderr.writeln(
+      jsonEncode({'status': 'failed', 'tool_id': 'listen-gen'}),
+    );
+    exit(1);
+  }
 }
 
 /// Folds the live playback/subtitle state into [current] for persistence.

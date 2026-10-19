@@ -7,6 +7,7 @@ and Server-Sent Events (SSE) for streaming machine events to the GUI.
 from __future__ import annotations
 
 import base64
+import importlib.resources
 import json
 import mimetypes
 import os
@@ -76,6 +77,24 @@ _TOOLS_DIR = Path(__file__).resolve().parents[2] / "tools"
 def _bundled_sidecar(name: str) -> str:
     candidate = _TOOLS_DIR / name
     return str(candidate) if candidate.is_file() else ""
+
+
+def _read_static_asset(path: str) -> tuple[str, bytes] | None:
+    """Read a bundled GUI asset from either a directory or a zipapp."""
+    asset_path = urllib.parse.unquote(path).lstrip("/")
+    parts = tuple(asset_path.split("/")) if asset_path else ("index.html",)
+    if any(part in {"", ".", ".."} for part in parts):
+        parts = ("index.html",)
+
+    assets = importlib.resources.files("listen_gen").joinpath("web_assets")
+    target = assets.joinpath(*parts)
+    if not target.is_file():
+        target = assets.joinpath("index.html")
+    if not target.is_file():
+        return None
+
+    content_type = mimetypes.guess_type(target.name)[0]
+    return content_type or "text/html; charset=utf-8", target.read_bytes()
 
 
 def detect_media_type(filename_or_path: str) -> str:
@@ -1577,22 +1596,12 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
         })
 
     def _serve_static(self, path: str) -> None:
-        """Serves embedded or disk-based web assets."""
-        if path in ("", "/"):
-            path = "/index.html"
-
-        assets_dir = Path(__file__).parent / "web_assets"
-        target = assets_dir / path.lstrip("/")
-
-        if not target.is_file():
-            target = assets_dir / "index.html"
-
-        if not target.is_file():
+        """Serve GUI assets from the installed package or a zipapp."""
+        asset = _read_static_asset(path)
+        if asset is None:
             self._send_json({"error": "Web assets not found."}, 404)
             return
-
-        content_type, _ = mimetypes.guess_type(str(target))
-        content = target.read_bytes()
+        content_type, content = asset
 
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type or "text/html; charset=utf-8")

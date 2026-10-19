@@ -19,6 +19,7 @@ from typing import Iterable
 
 
 ROOT = Path(__file__).resolve().parent.parent
+GIT_SHA_RE = re.compile(r"[0-9a-f]{40}")
 CONTRACT_FILES = (
     "contracts/openapi/v1.yaml",
     "contracts/events/v1.schema.json",
@@ -79,19 +80,23 @@ def canonical_json(value: object) -> bytes:
 
 
 def repository_git_sha(root: Path, allow_dirty: bool) -> str:
-    if not allow_dirty:
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-        if status.strip():
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    if status.strip():
+        if not allow_dirty:
             raise SystemExit(
                 "refusing to publish artifacts from a dirty worktree; "
                 "commit first or pass --allow-dirty for local verification"
             )
+        raise SystemExit(
+            "refusing to identify a dirty snapshot as HEAD; "
+            "pass --git-sha with the exact source snapshot commit"
+        )
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=root,
@@ -99,6 +104,19 @@ def repository_git_sha(root: Path, allow_dirty: bool) -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+
+def release_git_sha(
+    root: Path, explicit_git_sha: str | None, allow_dirty: bool
+) -> str:
+    """Resolve a release identity without labeling modified source as HEAD."""
+    if explicit_git_sha is not None:
+        if not GIT_SHA_RE.fullmatch(explicit_git_sha):
+            raise SystemExit(
+                "source snapshot SHA must be a lowercase 40-character Git SHA"
+            )
+        return explicit_git_sha
+    return repository_git_sha(root, allow_dirty)
 
 
 def openapi_contract_version(openapi: bytes) -> str:
@@ -170,7 +188,7 @@ def build_contract_artifact(args: argparse.Namespace) -> Path:
             "contracts/content-package/v3 tree exactly"
         )
     version = openapi_contract_version((root / CONTRACT_FILES[0]).read_bytes())
-    git_sha = args.git_sha or repository_git_sha(root, args.allow_dirty)
+    git_sha = release_git_sha(root, args.git_sha, args.allow_dirty)
     manifest: dict[str, object] = {
         "manifest_version": 1,
         "artifact_kind": "listen-contracts",
@@ -231,7 +249,7 @@ def build_runtime_artifact(args: argparse.Namespace) -> Path:
         (root / "contracts/openapi/v1.yaml").read_bytes()
     )
     runtime_version = workspace_runtime_version((root / "Cargo.toml").read_bytes())
-    git_sha = args.git_sha or repository_git_sha(root, args.allow_dirty)
+    git_sha = release_git_sha(root, args.git_sha, args.allow_dirty)
     source_entries = runtime_source_entries(api_http, runtime_dir, runtime_manifest, notices)
     files = {entry.archive_path: sha256_bytes(entry.data) for entry in source_entries}
     manifest: dict[str, object] = {

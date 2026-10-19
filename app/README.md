@@ -28,22 +28,7 @@ The application auto-detects Homebrew paths, or explicit paths can be entered
 in **Settings**. OpenSubtitles and bitmap subtitle display/OCR interaction are
 deferred.
 
-Verification:
-
-```sh
-flutter analyze --fatal-infos --fatal-warnings
-flutter test
-python3 -m unittest discover -s tool -p 'test_*.py'
-tool/build-macos-release.sh
-tool/verify-macos-release.sh
-```
-
-The discovery command is the single Python verification entry point; it
-includes backend artifact, cross-repository status, and roundtrip report/gate
-regressions. The real three-repository rebuild remains explicit:
-
-```sh
-LISTEN_CORE_REPO=/absolute/path/to/listen-core \
-LISTEN_GEN_REPO=/absolute/path/to/listen-gen \
-  tool/verify_local_content_package_roundtrip.sh
-```
+Verification and packaging use the shared root commands `./dev check`,
+`./dev test integration`, and `./dev release`. For focused native checks run
+Flutter analysis/tests and the Python `tool/` unit suite from this directory;
+see [DEVELOPMENT.md](../DEVELOPMENT.md) for exact commands and release inputs.

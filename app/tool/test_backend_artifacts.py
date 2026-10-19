@@ -98,6 +98,7 @@ class BackendArtifactTests(unittest.TestCase):
                         lock=lock_path,
                         contract_archive=str(contract_archive),
                         runtime_archive=str(runtime_archive),
+                        skip_fixture_sync=False,
                     )
                 )
 
@@ -109,6 +110,19 @@ class BackendArtifactTests(unittest.TestCase):
                 )
                 for destination in artifacts.FIXTURE_MAP.values():
                     self.assertTrue((frontend / destination).is_file())
+                fixture_manifest = frontend / "test/fixtures/manifest.json"
+                self.assertTrue(fixture_manifest.is_file())
+                fixture_manifest.unlink()
+
+                artifacts.command_install(
+                    argparse.Namespace(
+                        lock=lock_path,
+                        contract_archive=str(contract_archive),
+                        runtime_archive=str(runtime_archive),
+                        skip_fixture_sync=True,
+                    )
+                )
+                self.assertFalse(fixture_manifest.exists())
             finally:
                 artifacts.ROOT = original_root
 

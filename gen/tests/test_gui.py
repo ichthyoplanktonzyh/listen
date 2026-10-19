@@ -25,11 +25,22 @@ from listen_gen.gui import (
     save_config,
     probe_llm_connection,
     validate_config,
+    _read_static_asset,
 )
 from listen_gen.produce import ProduceOutcome
 
 
 class TestGui(unittest.TestCase):
+    def test_static_assets_are_loaded_from_package_resources(self):
+        content_type, content = _read_static_asset("/")
+        self.assertEqual(content_type, "text/html")
+        self.assertIn(b"listen-gen", content)
+
+    def test_missing_static_asset_falls_back_to_index(self):
+        content_type, content = _read_static_asset("/does-not-exist.js")
+        self.assertEqual(content_type, "text/html")
+        self.assertIn(b"listen-gen", content)
+
     def test_detect_media_type(self):
         self.assertEqual(detect_media_type("sample.md"), "text/markdown")
         self.assertEqual(detect_media_type("book.epub"), "application/epub+zip")

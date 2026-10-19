@@ -800,11 +800,10 @@ class ProduceCliTests(unittest.TestCase):
         self.assertFalse(output.exists())
         self.assertFalse(list(self.directory.glob(".*.machine.tmp")))
 
-    def test_core_round_trip_when_checkout_is_configured(self) -> None:
-        core = os.environ.get("LISTEN_CORE_CHECKOUT")
-        if not core:
-            self.skipTest("LISTEN_CORE_CHECKOUT is not set")
-        example = Path(core) / "target" / "debug" / "examples" / "inspect-package"
+    def test_core_round_trip_when_example_is_built(self) -> None:
+        core = Path(os.environ.get("LISTEN_CORE_CHECKOUT", ROOT.parent / "core"))
+        target = Path(os.environ.get("CARGO_TARGET_DIR", core / "target"))
+        example = target / "debug" / "examples" / "inspect-package"
         if not example.exists():
             self.skipTest("Core inspect-package example is not built")
         request_path = self.write_request(

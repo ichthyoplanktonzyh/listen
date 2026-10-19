@@ -109,15 +109,47 @@ class ContentGeneratorLocator {
 
   String get _home => environment['HOME'] ?? Platform.environment['HOME'] ?? '';
 
+  Directory? get _sourceRoot {
+    final configured = environment['LISTEN_SOURCE_ROOT'] ??
+        Platform.environment['LISTEN_SOURCE_ROOT'];
+    if (configured != null && configured.isNotEmpty) {
+      final directory = Directory(configured).absolute;
+      if (_isListenMonorepo(directory)) return directory;
+    }
+    var candidate = Directory.current.absolute;
+    while (true) {
+      if (_isListenMonorepo(candidate)) return candidate;
+      final parent = candidate.parent;
+      if (parent.path == candidate.path) return null;
+      candidate = parent;
+    }
+  }
+
+  bool _isListenMonorepo(Directory directory) =>
+      File('${directory.path}/app/pubspec.yaml').existsSync() &&
+      File('${directory.path}/core/Cargo.toml').existsSync() &&
+      File('${directory.path}/gen/pyproject.toml').existsSync();
+
   /// Alongside the app bundle, for a future release that ships the toolchain.
   String get _bundledRuntime =>
       '${File(Platform.resolvedExecutable).parent.parent.path}/Resources/runtime';
 
-  /// `flutter run` executes from the repository root, where the same pinned
-  /// Core artifact used by release packaging already owns the shared media
-  /// tools. Finder/release launches use [_bundledRuntime] instead.
-  String get _developmentRuntime =>
-      '${Directory.current.absolute.path}/.backend/runtime/runtime';
+  /// Local runtimes supplied by the monorepo launcher or installed for App.
+  /// Release and Finder launches still search [_bundledRuntime] first.
+  List<String> get _developmentRuntimeDirectories {
+    final configured = environment['LISTEN_CORE_RUNTIME_DIR'] ??
+        Platform.environment['LISTEN_CORE_RUNTIME_DIR'];
+    final sourceRoot = _sourceRoot;
+    return [
+      if (configured != null && configured.isNotEmpty) configured,
+      if (sourceRoot != null)
+        '${sourceRoot.path}/core/third_party/runtime/macos-arm64',
+      if (sourceRoot != null)
+        '${sourceRoot.path}/app/.backend/runtime/runtime',
+      if (sourceRoot == null)
+        '${Directory.current.absolute.path}/.backend/runtime/runtime',
+    ];
+  }
 
   Future<ContentGeneratorSetup> resolve() async {
     final whisper = await _resolveExecutable(
@@ -129,20 +161,23 @@ class ContentGeneratorLocator {
     final ffmpeg = await _resolveExecutable(ffmpegPath, 'ffmpeg', const []);
     final model = await _resolveModel();
 
-    // The acoustic aligner and phoneme sidecars are a research toolchain
-    // living in the listen-core working copy, driven by the same virtualenv.
-    // Each side is only complete when every piece it needs is present.
+    // The acoustic aligner and phoneme sidecars are a research toolchain in
+    // Core, driven by the Gen/Core Python environment. Each side is only
+    // complete when every piece it needs is present.
+    final sourceRoot = _sourceRoot?.path;
     final alignerPython = await _resolveExecutable(this.alignerPython, '', [
       '$_home/LLPlayerNext/.venv/bin/python',
-      '$_home/listen-gen/.venv/bin/python',
-      '$_home/listen-core/.venv/bin/python',
+      if (sourceRoot != null) '$sourceRoot/gen/.venv/bin/python',
+      if (sourceRoot != null) '$sourceRoot/core/.venv/bin/python',
       '$_home/.venv/bin/python',
     ], wantDirectory: false);
     final alignerScript = await _resolveExecutable(this.alignerScript, '', [
-      '$_home/listen-core/scripts/forced-align/align-cli.py',
+      if (sourceRoot != null)
+        '$sourceRoot/core/scripts/forced-align/align-cli.py',
     ], wantDirectory: false);
     final phoneSidecar = await _resolveExecutable(this.phoneSidecar, '', [
-      '$_home/listen-core/scripts/wav2vec2-phoneme-cli.py',
+      if (sourceRoot != null)
+        '$sourceRoot/core/scripts/wav2vec2-phoneme-cli.py',
     ], wantDirectory: false);
     final phoneModelDir = await _resolveModelDirectory();
     final python = await _resolvePython(alignerPython);
@@ -179,7 +214,7 @@ class ContentGeneratorLocator {
     final candidates = <String>[
       if (pythonPath.isNotEmpty) pythonPath,
       '$_bundledRuntime/python3',
-      '$_developmentRuntime/python3',
+      ..._developmentRuntimeDirectories.map((directory) => '$directory/python3'),
       ?resolvedAlignerPython,
       '/opt/homebrew/bin/python3',
       '/usr/local/bin/python3',
@@ -235,7 +270,8 @@ class ContentGeneratorLocator {
       // holding ffmpeg, so every run shipped a `--phones-wav2vec2-model-dir`
       // that could not load and Gen answered `phone_failed` every time.
       if (name.isNotEmpty) '$_bundledRuntime/$name',
-      if (name.isNotEmpty) '$_developmentRuntime/$name',
+      if (name.isNotEmpty)
+        ..._developmentRuntimeDirectories.map((directory) => '$directory/$name'),
       ...extraCandidates,
       if (name.isNotEmpty) '/opt/homebrew/bin/$name',
       if (name.isNotEmpty) '/usr/local/bin/$name',
@@ -263,7 +299,7 @@ class ContentGeneratorLocator {
   }
 
   /// The phoneme model, at the location the research toolchain installs it
-  /// (see listen-core's setup-phoneme-model.sh). The environment override is
+  /// (see Core's setup-phoneme-model.sh). The environment override is
   /// the one the toolchain itself honors.
   Future<String?> _resolveModelDirectory() async {
     final configured = phoneModelDir.isNotEmpty
@@ -273,12 +309,14 @@ class ContentGeneratorLocator {
             environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
             Platform.environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
             '';
+    final sourceRoot = _sourceRoot?.path;
     return _resolveExecutable(configured, '', [
       '$_home/Library/Application Support/listen/models/wav2vec2-phoneme',
       '$_home/Library/Application Support/listen/models/phoneme',
       '$_home/Library/Application Support/LLPlayerNext/models/'
           'wav2vec2-phoneme',
-      '$_home/listen-core/models/wav2vec2-phoneme',
+      if (sourceRoot != null)
+        '$sourceRoot/core/models/wav2vec2-phoneme',
     ], wantDirectory: true);
   }
 

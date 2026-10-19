@@ -4,7 +4,11 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fixtures="$root/test/fixtures/smoke"
 tmp="$(mktemp -d)"
-archive="$root/dist/listen-macos-arm64.zip"
+release_output="${LISTEN_RELEASE_OUTPUT_DIR:-$root/dist}"
+archive="$release_output/listen-macos-arm64.zip"
+backend_lock="${BACKEND_LOCK:?set BACKEND_LOCK to the generated Core lock}"
+gen_lock="${LISTEN_GEN_LOCK_PATH:?set LISTEN_GEN_LOCK_PATH to the generated Gen lock}"
+gen_manifest="${LISTEN_GEN_RELEASE_MANIFEST:?set LISTEN_GEN_RELEASE_MANIFEST to the generated Gen manifest}"
 app="$tmp/package/listen.app"
 pid=""
 
@@ -17,6 +21,11 @@ cleanup() {
   rm -rf "$tmp"
 }
 trap cleanup EXIT
+
+python3 "$root/tool/backend_artifacts.py" --lock "$backend_lock" verify \
+  --skip-fixture-check
+python3 "$root/tool/listen_gen_artifacts.py" --lock "$gen_lock" verify \
+  --manifest "$gen_manifest"
 
 stop_app() {
   if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
@@ -68,8 +77,55 @@ if unzip -Z1 "$archive" | grep -Eq '(^|/)\._|(^|/)\.DS_Store$'; then
 fi
 mkdir -p "$tmp/package"
 ditto -x -k "$archive" "$tmp/package"
+cd "$tmp/package"
 [[ -x "$app/Contents/MacOS/api-http" ]] ||
   fail "release archive does not contain the API sidecar"
+
+# Exercise the exact Dart define embedded into the release. A deliberately
+# invalid debug lock path proves the packaged app ignores development inputs;
+# the manifest is resolved only from the released app bundle.
+invalid_dev_lock="$tmp/invalid-development-lock.json"
+printf '{"not":"a Listen lock"}\n' > "$invalid_dev_lock"
+if ! (
+  unset LISTEN_GEN_RELEASE_MANIFEST
+  LLPLAYERNEXT_VERIFY_GEN_BUNDLE=1 \
+  LISTEN_GEN_LOCK_PATH="$invalid_dev_lock" \
+    "$app/Contents/MacOS/listen"
+) >"$tmp/gen-verification.log" 2>&1; then
+  cat "$tmp/gen-verification.log" >&2
+  fail "the packaged app rejected its compiled Gen lock"
+fi
+python3 - "$tmp/gen-verification.log" "$gen_lock" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+probe_path, lock_path = map(Path, sys.argv[1:])
+lock = json.loads(lock_path.read_text(encoding="utf-8"))
+probe = None
+for line in probe_path.read_text(encoding="utf-8").splitlines():
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    if isinstance(value, dict) and value.get("status") == "verified":
+        probe = value
+        break
+if probe is None:
+    raise SystemExit("packaged app returned no structured Gen verification result")
+expected_artifact = lock.get("artifact", {})
+if (
+    probe.get("source_commit") != lock.get("source_git_sha")
+    or probe.get("artifact_sha256") != expected_artifact.get("sha256")
+    or probe.get("tool_version") != lock.get("tool", {}).get("version")
+):
+    raise SystemExit("packaged app verified a different Gen release than the generated lock")
+print(
+    "Packaged Gen release verified by the app:",
+    probe["source_commit"],
+    probe["artifact_sha256"],
+)
+PY
 
 LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-video.mp4" \
@@ -120,7 +176,7 @@ assert_sqlite_value 'SELECT count(*) FROM media_items;' "2" "audio media item co
 [[ -x "$app/Contents/Resources/runtime/whisper-cli" ]]
 [[ -x "$app/Contents/Resources/runtime/ffmpeg" ]]
 [[ -x "$app/Contents/Resources/runtime/ffprobe" ]]
-python3 "$root/tool/listen_gen_artifacts.py" verify \
+python3 "$root/tool/listen_gen_artifacts.py" --lock "$gen_lock" verify \
   --bundle-dir "$app/Contents/Resources/runtime/listen-gen"
 codesign --verify --deep --strict "$app"
 echo "Packaged macOS MVP smoke test passed."

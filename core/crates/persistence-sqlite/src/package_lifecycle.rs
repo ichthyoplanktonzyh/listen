@@ -983,12 +983,12 @@ impl PackageLifecycleRepository for SqliteRepository {
     ) -> Result<bool, ApplicationError> {
         let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
-        if let Some(adoption) = query_adoption(&tx, material_id.as_str())? {
-            if adoption.release_id == *release_id {
-                return Err(ApplicationError::Conflict(
-                    "cannot delete currently adopted package release; switch adoption first".into(),
-                ));
-            }
+        if let Some(adoption) = query_adoption(&tx, material_id.as_str())?
+            && adoption.release_id == *release_id
+        {
+            return Err(ApplicationError::Conflict(
+                "cannot delete currently adopted package release; switch adoption first",
+            ));
         }
         tx.execute(
             "DELETE FROM package_resource_payloads WHERE material_id=?1 AND release_id=?2",

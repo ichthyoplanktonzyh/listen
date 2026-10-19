@@ -21,11 +21,14 @@ From the repository root:
 ```
 
 Setup resolves Flutter dependencies and prepares an independent Python
-environment under `gen/.venv`. Heavy model/provider extras are opt-in; ordinary
+environment under `gen/.venv`. The small root test dependency set in `tools/requirements-dev.txt` is installed
+in that environment too (including Chinese tokenization for Core checks).
+Heavy model/provider extras are opt-in; ordinary
 setup and fixture tests do not download models or call paid providers. Native
 commands still run from their module directory.
 
-The source-development launcher builds Core and a Gen bundle from the same
+After setup, run/check/test/release use the prepared dependencies without
+implicit pip installs. The source-development launcher builds Core and a Gen bundle from the same
 identified source snapshot, prepares a matching development lock, and starts
 Flutter. Tracked edits and untracked source are supported; ignored build output
 and private environment files are excluded from the snapshot. This workflow
@@ -53,7 +56,8 @@ directories. Use focused module commands while iterating:
 | Gen | `.venv/bin/python -m unittest discover -s tests -v` |
 
 Run the Gen command from `gen/` and the other native commands from their module
-root. Contract, persistence and packaging changes retain their focused tests.
+root. For direct Core shell scripts, first activate `gen/.venv` from the root
+(`source gen/.venv/bin/activate`) so their internal `python3` is Python 3.11+. Contract, persistence and packaging changes retain their focused tests.
 The integration gate builds one source snapshot and proves fixture-based
 production, package installation/adoption, and App consumption. Named tests
 must actually execute and pass; skipped tests or failed build stages do not
@@ -69,8 +73,8 @@ is not validation. Live/paid/ignored model tests require explicit authorization.
 ./dev release
 ```
 
-Release starts from a clean Git commit and builds all product modules from that
-source identity. Core contracts/runtime and the Gen bundle receive source and
+Release starts from a clean Git commit and builds all product modules from an
+isolated export of that committed tree, excluding ignored local files. Core contracts/runtime and the Gen bundle receive source and
 hash manifests; generated App product locks identify these exact outputs.
 Locks and manifests are emitted under ignored output directories and shipped
 with the product as needed. Do not commit an internal pin update after building

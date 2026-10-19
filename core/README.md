@@ -53,7 +53,7 @@ explicitly authorized.
 
 ## Complete App Testing
 
-For pinned-release startup, unreleased local-Core integration, logs, and manual
+For current-source startup, product release verification, logs and manual
 smoke coverage, follow
 [docs/development/full-app-local-testing.md](docs/development/full-app-local-testing.md).
 

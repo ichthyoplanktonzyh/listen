@@ -25,12 +25,18 @@ const RHYTHM_ACOUSTIC_TRACK_ARTIFACT_KIND: &str = "rhythm_acoustic_track";
 const RHYTHM_SPEECH_ACTIVITY_ARTIFACT_KIND: &str = "rhythm_speech_activity";
 
 struct RhythmFrameEvidence<'a> {
-    word_acoustic_cues:
-        &'a HashMap<SubtitleSentenceId, Vec<speech_analysis::audible_structure::RhythmWordAcousticCue>>,
-    acoustic_frames:
-        &'a HashMap<SubtitleSentenceId, Vec<speech_analysis::audible_structure::AcousticFrameSample>>,
-    speech_activity:
-        &'a HashMap<SubtitleSentenceId, Vec<speech_analysis::audible_structure::SpeechActivitySpan>>,
+    word_acoustic_cues: &'a HashMap<
+        SubtitleSentenceId,
+        Vec<speech_analysis::audible_structure::RhythmWordAcousticCue>,
+    >,
+    acoustic_frames: &'a HashMap<
+        SubtitleSentenceId,
+        Vec<speech_analysis::audible_structure::AcousticFrameSample>,
+    >,
+    speech_activity: &'a HashMap<
+        SubtitleSentenceId,
+        Vec<speech_analysis::audible_structure::SpeechActivitySpan>,
+    >,
     observed_phones: &'a HashMap<SubtitleSentenceId, Vec<DetectedPhone>>,
 }
 

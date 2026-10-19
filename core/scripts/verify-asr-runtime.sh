@@ -17,6 +17,5 @@ done
 "$runtime/ffmpeg" -version | grep -qi "configuration:.*--disable-nonfree"
 "$runtime/ffprobe" -version | head -1 | grep -q "ffprobe version"
 "$runtime/whisper-cli" --help >/dev/null 2>&1
-node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' \
-  "$root/third_party/runtime/manifest.json"
+python3 -m json.tool "$root/third_party/runtime/manifest.json" >/dev/null
 echo "ASR runtime and license configuration verified."

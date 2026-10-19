@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Verify and stage the exact listen-gen release pinned by the App lock."""
+"""Verify and stage the exact Gen release named by the product lock."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_LOCK = ROOT / "listen_gen.lock.json"
+DEFAULT_LOCK = Path(os.environ.get("LISTEN_GEN_LOCK_PATH", ROOT / "listen_gen.lock.json"))
 DEFAULT_INSTALL = ROOT / ".listen-gen"
 
 
@@ -80,14 +81,14 @@ def expected_path(
         raise SystemExit("listen_gen.lock has an invalid tool version")
     candidates = [
         DEFAULT_INSTALL / filename,
-        ROOT.parent / "listen-gen" / "dist" / f"listen-gen-{version}" / filename,
+        ROOT.parent / "gen" / "dist" / f"listen-gen-{version}" / filename,
     ]
     for candidate in candidates:
         if candidate.exists() or candidate.is_symlink():
             return candidate.absolute()
     raise BundleNotFound(
-        "pinned listen-gen release is missing; build it in the sibling "
-        "listen-gen repository or install it into .listen-gen"
+        "pinned listen-gen release is missing; build it under the monorepo "
+        "gen/dist directory or install it into .listen-gen"
     )
 
 

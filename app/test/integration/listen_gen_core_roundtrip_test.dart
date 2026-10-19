@@ -25,7 +25,7 @@ String _python3Executable() {
   throw StateError('python3 is required for the Gen integration tests');
 }
 
-/// Real three-repository round trip: a locally built listen-gen release
+/// Real monorepo round trip: a locally built listen-gen release
 /// bundle produces a Content Package v3 from a capability request, and a
 /// locally built Core installs it as a candidate and then adopts it as the
 /// Learning Edition. The coordinator drives the whole product path:
@@ -34,8 +34,8 @@ String _python3Executable() {
 ///
 /// This exercises live subprocesses (the `.pyz` and the Core `api-http`
 /// binary), so it is skipped unless `LISTEN_PACKAGE_E2E=1`. Drive it through
-/// `tool/verify_local_content_package_roundtrip.sh`, which builds both
-/// external repositories at their local HEAD and wires the environment. The
+/// `tool/verify_local_content_package_roundtrip.sh`, which builds Core and Gen
+/// from one isolated root snapshot and wires the environment. The
 /// production `listen_gen.lock.json` is deliberately not touched: the test
 /// derives an equivalent lock from the freshly built manifest so the
 /// product's release verification runs against the exact probe artifact.
@@ -70,7 +70,7 @@ void main() {
     final runtime = manifest['runtime'] as Map<String, dynamic>;
     final lock = <String, dynamic>{
       'manifest_version': 1,
-      'repository': 'ichthyoplanktonzyh/listen-gen',
+      'repository': 'ichthyoplanktonzyh/listen',
       'source_git_sha': source['commit'],
       'release_manifest': {
         'schema': manifest['schema'],
@@ -231,7 +231,7 @@ void main() {
     },
     skip: runE2e
         ? false
-        : 'Set LISTEN_PACKAGE_E2E=1 for the real three-repository round trip',
+        : 'Set LISTEN_PACKAGE_E2E=1 for the real monorepo round trip',
   );
 
   test(

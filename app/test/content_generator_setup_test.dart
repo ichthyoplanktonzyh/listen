@@ -15,7 +15,17 @@ import 'package:llplayer_next/services/content_generator_setup.dart';
 void main() {
   late Directory root;
 
-  setUp(() => root = Directory.systemTemp.createTempSync('generator-setup-'));
+  setUp(() {
+    root = Directory.systemTemp.createTempSync('generator-setup-');
+    for (final path in [
+      'app/pubspec.yaml',
+      'core/Cargo.toml',
+      'gen/pyproject.toml',
+    ]) {
+      final file = File('${root.path}/$path')..createSync(recursive: true);
+      file.writeAsStringSync('fixture');
+    }
+  });
   tearDown(() => root.deleteSync(recursive: true));
 
   File touch(String relative, {int bytes = 1}) {
@@ -46,8 +56,35 @@ void main() {
     whisperPath: touch('bin/whisper-cli').path,
     ffprobePath: touch('bin/ffprobe').path,
     ffmpegPath: touch('bin/ffmpeg').path,
-    environment: {'HOME': root.path},
+    environment: {
+      'HOME': root.path,
+      'LISTEN_SOURCE_ROOT': root.path,
+    },
   );
+
+  test('the monorepo Core runtime supplies development tools', () async {
+    final runtime = 'core/third_party/runtime/macos-arm64';
+    touch('$modelDirectory/ggml-base.bin');
+    final python = compatiblePython('$runtime/python3');
+    final whisper = touch('$runtime/whisper-cli');
+    final ffprobe = touch('$runtime/ffprobe');
+    final ffmpeg = touch('$runtime/ffmpeg');
+
+    final setup = await ContentGeneratorLocator(
+      pythonCompatibilityProbe: (_) async => true,
+      environment: {
+        'HOME': root.path,
+        'LISTEN_SOURCE_ROOT': root.path,
+        'PATH': '',
+      },
+    ).resolve();
+
+    expect(setup.pythonPath, python.path);
+    expect(setup.whisperPath, whisper.path);
+    expect(setup.ffprobePath, ffprobe.path);
+    expect(setup.ffmpegPath, ffmpeg.path);
+    expect(setup.state, ContentGeneratorState.ready);
+  });
 
   test(
     'a Finder launch resolves a compatible Python directly instead of using its PATH',
@@ -63,6 +100,7 @@ void main() {
         ffmpegPath: touch('bin/ffmpeg').path,
         environment: {
           'HOME': root.path,
+          'LISTEN_SOURCE_ROOT': root.path,
           'PATH': '/usr/bin:/bin:/usr/sbin:/sbin',
         },
       ).resolve();
@@ -82,7 +120,11 @@ void main() {
       whisperPath: touch('bin/whisper-cli').path,
       ffprobePath: touch('bin/ffprobe').path,
       ffmpegPath: touch('bin/ffmpeg').path,
-      environment: {'HOME': root.path, 'PATH': '/usr/bin:/bin:/usr/sbin:/sbin'},
+      environment: {
+        'HOME': root.path,
+        'LISTEN_SOURCE_ROOT': root.path,
+        'PATH': '/usr/bin:/bin:/usr/sbin:/sbin',
+      },
     ).resolve();
 
     expect(setup.pythonPath, isEmpty);
@@ -176,12 +218,12 @@ void main() {
   );
 
   test(
-    'the forced-alignment toolchain is discovered in the listen-core checkout',
+    'the forced-alignment toolchain is discovered in the monorepo Core tree',
     () async {
       touch('$modelDirectory/ggml-base.bin');
       final python = touch('LLPlayerNext/.venv/bin/python');
-      final aligner = touch('listen-core/scripts/forced-align/align-cli.py');
-      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+      final aligner = touch('core/scripts/forced-align/align-cli.py');
+      touch('core/scripts/wav2vec2-phoneme-cli.py');
       Directory(
         '${root.path}/Library/Application Support/LLPlayerNext/models/'
         'wav2vec2-phoneme',
@@ -215,8 +257,8 @@ void main() {
   test('a complete toolchain contributes aligner and phoneme argv', () async {
     touch('$modelDirectory/ggml-base.bin');
     touch('LLPlayerNext/.venv/bin/python');
-    touch('listen-core/scripts/forced-align/align-cli.py');
-    touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+    touch('core/scripts/forced-align/align-cli.py');
+    touch('core/scripts/wav2vec2-phoneme-cli.py');
     Directory(
       '${root.path}/Library/Application Support/LLPlayerNext/models/'
       'wav2vec2-phoneme',
@@ -244,8 +286,8 @@ void main() {
     () async {
       touch('$modelDirectory/ggml-base.bin');
       touch('LLPlayerNext/.venv/bin/python');
-      touch('listen-core/scripts/forced-align/align-cli.py');
-      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+      touch('core/scripts/forced-align/align-cli.py');
+      touch('core/scripts/wav2vec2-phoneme-cli.py');
       final modelDir = Directory('${root.path}/elsewhere/phoneme-model')
         ..createSync(recursive: true);
 
@@ -255,6 +297,7 @@ void main() {
         ffmpegPath: touch('bin/ffmpeg').path,
         environment: {
           'HOME': root.path,
+          'LISTEN_SOURCE_ROOT': root.path,
           'LLPLAYERNEXT_PHONEME_MODEL_DIR': modelDir.path,
         },
       ).resolve();
@@ -274,8 +317,8 @@ void main() {
       // and quietly shipped learning packages with no phone timeline at all.
       touch('$modelDirectory/ggml-base.bin');
       touch('LLPlayerNext/.venv/bin/python');
-      touch('listen-core/scripts/forced-align/align-cli.py');
-      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+      touch('core/scripts/forced-align/align-cli.py');
+      touch('core/scripts/wav2vec2-phoneme-cli.py');
       final phonemeModel = Directory(
         '${root.path}/Library/Application Support/listen/models/wav2vec2-phoneme',
       )..createSync(recursive: true);
