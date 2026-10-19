@@ -1,0 +1,365 @@
+{
+  "schema": "llplayer.timeline.v1",
+  "metadata": {
+    "created_at_ms": 1782820800000,
+    "generator": {
+      "id": "phase-2.21-no-phone-rhythm-fixture",
+      "version": "v1",
+      "mode": "synthetic"
+    },
+    "media": {
+      "id": "fixture-no-phone-media",
+      "fingerprint": "p221-fixture-no-phone-rhythm-001",
+      "path": "synthetic://p221-fixture-no-phone-rhythm-001",
+      "title": "Phase 2.21 No Phone RhythmFrame fixture",
+      "duration_ms": 2600
+    },
+    "language": "en",
+    "human_reviewed": true,
+    "extra": {
+      "track_id": "fixture-no-phone-track",
+      "track_fingerprint": "fixture-no-phone-track",
+      "track_source": "fixture-no-phone-rhythm.lltimeline.json"
+    }
+  },
+  "segments": [
+    {
+      "id": "fixture-no-phone-s1",
+      "index": 0,
+      "start_ms": 1000,
+      "end_ms": 2200,
+      "text": "I could have checked the market.",
+      "display_text": "I could have checked the market.",
+      "tokens": [
+        {"index": 0, "kind": "word", "text": "I", "normalized": "i", "start_char": 0, "end_char": 1},
+        {"index": 1, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 1, "end_char": 2},
+        {"index": 2, "kind": "word", "text": "could", "normalized": "could", "start_char": 2, "end_char": 7},
+        {"index": 3, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 7, "end_char": 8},
+        {"index": 4, "kind": "word", "text": "have", "normalized": "have", "start_char": 8, "end_char": 12},
+        {"index": 5, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 12, "end_char": 13},
+        {"index": 6, "kind": "word", "text": "checked", "normalized": "checked", "start_char": 13, "end_char": 20},
+        {"index": 7, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 20, "end_char": 21},
+        {"index": 8, "kind": "word", "text": "the", "normalized": "the", "start_char": 21, "end_char": 24},
+        {"index": 9, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 24, "end_char": 25},
+        {"index": 10, "kind": "word", "text": "market", "normalized": "market", "start_char": 25, "end_char": 31},
+        {"index": 11, "kind": "punctuation", "text": ".", "normalized": null, "start_char": 31, "end_char": 32}
+      ]
+    }
+  ],
+  "word_timelines": [
+    {
+      "id": "fixture-no-phone-word-timeline",
+      "track_id": "fixture-no-phone-track",
+      "media_id": "fixture-no-phone-media",
+      "algorithm_id": "fixture-aligner",
+      "algorithm_version": "v1",
+      "config_hash": "phase-2.21-no-phone",
+      "parent_timeline_id": null,
+      "created_by": "algorithm",
+      "status": "active",
+      "metrics_json": {},
+      "words": [
+        {"sentence_id": "fixture-no-phone-s1", "token_index": 0, "text": "I", "start_ms": 1000, "end_ms": 1040, "confidence": 0.92, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"},
+        {"sentence_id": "fixture-no-phone-s1", "token_index": 2, "text": "could", "start_ms": 1045, "end_ms": 1105, "confidence": 0.92, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"},
+        {"sentence_id": "fixture-no-phone-s1", "token_index": 4, "text": "have", "start_ms": 1105, "end_ms": 1165, "confidence": 0.92, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"},
+        {"sentence_id": "fixture-no-phone-s1", "token_index": 6, "text": "checked", "start_ms": 1165, "end_ms": 1365, "confidence": 0.93, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"},
+        {"sentence_id": "fixture-no-phone-s1", "token_index": 8, "text": "the", "start_ms": 1540, "end_ms": 1600, "confidence": 0.91, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"},
+        {"sentence_id": "fixture-no-phone-s1", "token_index": 10, "text": "market", "start_ms": 1600, "end_ms": 1960, "confidence": 0.94, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"}
+      ],
+      "created_at_ms": 1782820800000,
+      "updated_at_ms": 1782820800000
+    }
+  ],
+  "active_word_timeline_id": "fixture-no-phone-word-timeline",
+  "phone_timelines": [],
+  "active_phone_timeline_id": null,
+  "rhythm_frames": [
+    {
+      "id": "fixture-no-phone-rhythm-s1",
+      "track_id": "fixture-no-phone-track",
+      "media_id": "fixture-no-phone-media",
+      "sentence_id": "fixture-no-phone-s1",
+      "parent_word_timeline_id": "fixture-no-phone-word-timeline",
+      "provider_id": "wordtimeline-rhythm-frame",
+      "provider_version": "phase-2.21-w2",
+      "status": "active",
+      "metrics_json": {
+        "source": "committed_fixture",
+        "word_count": 6
+      },
+      "rhythm_frame": {
+          "generated_from": "wordtimeline_timing_prominence_v1",
+          "references": {
+            "citation": {
+              "label": "citation_form",
+              "source": "dictionary_lexical_stress",
+              "evidence_class": "heuristic_proxy"
+            },
+            "default_connected": {
+              "label": "default_connected_variants",
+              "source": "english_connected_speech_rules_v1",
+              "evidence_class": "heuristic_proxy"
+            },
+            "actual": {
+              "label": "actual_delivery",
+              "source": "word_timeline_duration",
+              "evidence_class": "heuristic_proxy"
+            }
+          },
+          "stress_anchors": [
+            {
+              "token_index": 6,
+              "syllable_index": null,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1165,
+              "end_ms": 1365,
+              "label": "checked",
+              "reason": "Content word is duration-supported by WordTimeline timing.",
+              "importance": "primary",
+              "is_nucleus": true,
+              "prominence": 0.78,
+              "prominence_cues": ["timing"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.78
+            },
+            {
+              "token_index": 10,
+              "syllable_index": null,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1600,
+              "end_ms": 1960,
+              "label": "market",
+              "reason": "Main content word carries the sentence rhythm.",
+              "importance": "primary",
+              "is_nucleus": true,
+              "prominence": 0.86,
+              "prominence_cues": ["timing"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.86
+            }
+          ],
+          "nuclei": [
+            {
+              "phrase_index": 0,
+              "token_index": 6,
+              "syllable_index": null,
+              "start_ms": 1165,
+              "end_ms": 1365,
+              "label": "checked",
+              "reason": "Most prominent audio-supported anchor in this phrase.",
+              "cues": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.78
+            },
+            {
+              "phrase_index": 1,
+              "token_index": 10,
+              "syllable_index": null,
+              "start_ms": 1600,
+              "end_ms": 1960,
+              "label": "market",
+              "reason": "Most prominent audio-supported anchor in this phrase.",
+              "cues": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.86
+            }
+          ],
+          "weak_groups": [
+            {
+              "token_start": 0,
+              "token_end": 4,
+              "phone_start": null,
+              "phone_end": null,
+              "anchor_token_index": 6,
+              "start_ms": 1000,
+              "end_ms": 1165,
+              "label": "I could have",
+              "reason": "Function words are backgrounded around the nearest anchor.",
+              "reduction_refs": ["cs1"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.78
+            }
+          ],
+          "compression_spans": [
+            {
+              "token_start": 0,
+              "token_end": 6,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1000,
+              "end_ms": 1365,
+              "expected_units": 8,
+              "duration_ms": 365,
+              "unit_rate_per_second": 21.9,
+              "label": "I could have checked",
+              "reason": "Several expected sounds are packed into a short time window.",
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.84
+            }
+          ],
+          "phrase_boundaries": [
+            {
+              "after_token_index": 6,
+              "before_token_index": 8,
+              "at_ms": 1540,
+              "reason": "Pause between aligned words suggests an intonation phrase boundary.",
+              "cues": ["pause"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "is_final": false,
+              "confidence": 0.9
+            }
+          ],
+          "connected_speech_refs": [
+            {
+              "id": "cs1",
+              "connected_speech_index": 0,
+              "token_start": 2,
+              "token_end": 4,
+              "phone_start": null,
+              "phone_end": null,
+              "label": "default connected form",
+              "divergence": "teachable_rule",
+              "signal_sources": ["text_prior"],
+              "evidence_class": "heuristic_proxy",
+              "confidence": 0.82
+            },
+            {
+              "id": "cs2",
+              "connected_speech_index": 1,
+              "token_start": 6,
+              "token_end": 8,
+              "phone_start": null,
+              "phone_end": null,
+              "label": "default t/d weakening",
+              "divergence": "teachable_rule",
+              "signal_sources": ["text_prior"],
+              "evidence_class": "heuristic_proxy",
+              "confidence": 0.46
+            },
+            {
+              "id": "cs3",
+              "connected_speech_index": 2,
+              "token_start": 8,
+              "token_end": 8,
+              "phone_start": null,
+              "phone_end": null,
+              "label": "default weak form",
+              "divergence": "teachable_rule",
+              "signal_sources": ["text_prior"],
+              "evidence_class": "heuristic_proxy",
+              "confidence": 0.68
+            }
+          ],
+          "listening_hotspots": [
+            {
+              "id": "weak-no-phone-1",
+              "kind": "weak_group",
+              "token_start": 0,
+              "token_end": 4,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1000,
+              "end_ms": 1165,
+              "label": "I could have",
+              "hint": "The function-word chain is short; listen through it toward checked.",
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.78
+            },
+            {
+              "id": "compressed-no-phone-1",
+              "kind": "compressed_span",
+              "token_start": 0,
+              "token_end": 6,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1000,
+              "end_ms": 1365,
+              "label": "I could have checked",
+              "hint": "This run is packed into a short span; catch the following phrase break.",
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.84
+            },
+            {
+              "id": "hs3",
+              "kind": "connected_speech",
+              "token_start": 2,
+              "token_end": 4,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1045,
+              "end_ms": 1165,
+              "label": "default connected form",
+              "hint": "could have often reduces toward could've in connected speech.",
+              "signal_sources": ["text_prior"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "predicted",
+              "confidence": 0.69
+            },
+            {
+              "id": "hs4",
+              "kind": "connected_speech",
+              "token_start": 6,
+              "token_end": 8,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1165,
+              "end_ms": 1600,
+              "label": "default t/d weakening",
+              "hint": "Final /t/ or /d/ may be weakened before another consonant.",
+              "signal_sources": ["text_prior"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "predicted",
+              "confidence": 0.46
+            },
+            {
+              "id": "hs5",
+              "kind": "connected_speech",
+              "token_start": 8,
+              "token_end": 8,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 1540,
+              "end_ms": 1600,
+              "label": "default weak form",
+              "hint": "This function word often has a lighter connected-speech form.",
+              "signal_sources": ["text_prior"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "predicted",
+              "confidence": 0.68
+            }
+          ],
+          "quality": {
+            "timing_source": "word_timeline",
+            "prominence_sources": ["text_prior", "timing"],
+            "boundary_sources": ["timing"],
+            "connected_speech_source": "text_prior",
+            "phone_evidence_coverage": 0.0,
+            "rhythm_confidence": 0.64
+          }
+      },
+      "created_at_ms": 1782820800000,
+      "updated_at_ms": 1782820800000
+    }
+  ],
+  "chunk_timelines": [],
+  "active_chunk_timeline_id": null,
+  "artifacts": []
+}

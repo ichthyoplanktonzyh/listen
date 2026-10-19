@@ -1,0 +1,43 @@
+{
+  "fixture_version": 1,
+  "evidence_class": "gold",
+  "exemplars": [
+    {"id":"ex-en-comparative","language":"en","text":"The more you practice, the more you improve.","source_snapshot_ref":"manual:en-comparative-v1","token_count":8},
+    {"id":"ex-en-passive-question","language":"en","text":"Wasn't the report approved by the manager?","source_snapshot_ref":"manual:en-passive-question-v1","token_count":7},
+    {"id":"ex-zh-ba","language":"zh","text":"我把书放在桌子上了。","source_snapshot_ref":"manual:zh-ba-v1","token_count":8},
+    {"id":"ex-ja-obligation","language":"ja","text":"もっと練習しなければならない。","source_snapshot_ref":"manual:ja-obligation-v1","token_count":5},
+    {"id":"ex-ja-arbitrary","language":"ja","text":"明日は早く起きたい。","source_snapshot_ref":"manual:ja-arbitrary-v1","token_count":4}
+  ],
+  "constructions": [
+    {"id":"c-en-comparative","language":"en","key":"comparative-correlative","schema_version":1,"display_pattern":"the more X, the more Y","canonical_variant":{"tense":"present","voice":"active","polarity":"affirmative","clause_type":"declarative"},"variant_policy":{"tense":"collapsed","voice":"collapsed","polarity":"collapsed","clause_type":"collapsed"},"slots":[{"name":"x_clause","constraint":"finite_clause","required":true},{"name":"y_clause","constraint":"finite_clause","required":true}]},
+    {"id":"c-en-transitive","language":"en","key":"transitive-clause","schema_version":1,"display_pattern":"SUBJECT VERB OBJECT","canonical_variant":{"tense":"present","voice":"active","polarity":"affirmative","clause_type":"declarative"},"variant_policy":{"tense":"collapsed","voice":"collapsed","polarity":"collapsed","clause_type":"collapsed"},"slots":[{"name":"subject","constraint":"noun_phrase","required":true},{"name":"verb","constraint":"lexical_verb","required":true},{"name":"object","constraint":"noun_phrase","required":false}]},
+    {"id":"c-zh-ba","language":"zh","key":"ba-disposal","schema_version":1,"display_pattern":"AGENT 把 PATIENT VERB RESULT","canonical_variant":{"tense":"base","voice":"not_applicable","polarity":"affirmative","clause_type":"declarative"},"variant_policy":{"tense":"separate","voice":"separate","polarity":"collapsed","clause_type":"separate"},"slots":[{"name":"agent","constraint":"noun_phrase","required":true},{"name":"patient","constraint":"noun_phrase","required":true},{"name":"verb","constraint":"disposal_verb","required":true},{"name":"result","constraint":"resultative_or_location","required":true}]},
+    {"id":"c-ja-obligation","language":"ja","key":"nakereba-naranai-obligation","schema_version":1,"display_pattern":"ACTION しなければならない","canonical_variant":{"tense":"present","voice":"not_applicable","polarity":"affirmative","clause_type":"declarative"},"variant_policy":{"tense":"collapsed","voice":"separate","polarity":"collapsed","clause_type":"collapsed"},"slots":[{"name":"action","constraint":"verbal_action","required":true},{"name":"obligation","constraint":"obligation_auxiliary","required":true}]}
+  ],
+  "occurrences": [
+    {"id":"occ-en-comparative","exemplar_id":"ex-en-comparative","construction_id":"c-en-comparative","token_span":{"start_token_index":0,"end_token_index":8},"variant":{"tense":"present","voice":"active","polarity":"affirmative","clause_type":"declarative"},"slot_bindings":[{"slot_name":"x_clause","token_span":{"start_token_index":0,"end_token_index":4},"text_snapshot":"The more you practice"},{"slot_name":"y_clause","token_span":{"start_token_index":4,"end_token_index":8},"text_snapshot":"the more you improve"}],"provider_id":"manual-gold","provider_version":"v1","evidence_class":"gold"},
+    {"id":"occ-en-transitive-practice","exemplar_id":"ex-en-comparative","construction_id":"c-en-transitive","token_span":{"start_token_index":2,"end_token_index":4},"variant":{"tense":"present","voice":"active","polarity":"affirmative","clause_type":"declarative"},"slot_bindings":[{"slot_name":"subject","token_span":{"start_token_index":2,"end_token_index":3},"text_snapshot":"you"},{"slot_name":"verb","token_span":{"start_token_index":3,"end_token_index":4},"text_snapshot":"practice"}],"provider_id":"manual-gold","provider_version":"v1","evidence_class":"gold"},
+    {"id":"occ-en-transitive-improve","exemplar_id":"ex-en-comparative","construction_id":"c-en-transitive","token_span":{"start_token_index":6,"end_token_index":8},"variant":{"tense":"present","voice":"active","polarity":"affirmative","clause_type":"declarative"},"slot_bindings":[{"slot_name":"subject","token_span":{"start_token_index":6,"end_token_index":7},"text_snapshot":"you"},{"slot_name":"verb","token_span":{"start_token_index":7,"end_token_index":8},"text_snapshot":"improve"}],"provider_id":"manual-gold","provider_version":"v1","evidence_class":"gold"},
+    {"id":"occ-en-passive-question","exemplar_id":"ex-en-passive-question","construction_id":"c-en-transitive","token_span":{"start_token_index":0,"end_token_index":7},"variant":{"tense":"past","voice":"passive","polarity":"negative","clause_type":"interrogative"},"slot_bindings":[{"slot_name":"subject","token_span":{"start_token_index":1,"end_token_index":3},"text_snapshot":"the report"},{"slot_name":"verb","token_span":{"start_token_index":3,"end_token_index":4},"text_snapshot":"approved"},{"slot_name":"object","token_span":{"start_token_index":5,"end_token_index":7},"text_snapshot":"the manager"}],"provider_id":"manual-gold","provider_version":"v1","evidence_class":"gold"},
+    {"id":"occ-zh-ba","exemplar_id":"ex-zh-ba","construction_id":"c-zh-ba","token_span":{"start_token_index":0,"end_token_index":8},"variant":{"tense":"base","voice":"not_applicable","polarity":"affirmative","clause_type":"declarative"},"slot_bindings":[{"slot_name":"agent","token_span":{"start_token_index":0,"end_token_index":1},"text_snapshot":"我"},{"slot_name":"patient","token_span":{"start_token_index":2,"end_token_index":3},"text_snapshot":"书"},{"slot_name":"verb","token_span":{"start_token_index":3,"end_token_index":4},"text_snapshot":"放"},{"slot_name":"result","token_span":{"start_token_index":4,"end_token_index":8},"text_snapshot":"在桌子上了"}],"provider_id":"manual-gold","provider_version":"v1","evidence_class":"gold"},
+    {"id":"occ-ja-obligation","exemplar_id":"ex-ja-obligation","construction_id":"c-ja-obligation","token_span":{"start_token_index":1,"end_token_index":5},"variant":{"tense":"present","voice":"not_applicable","polarity":"affirmative","clause_type":"declarative"},"slot_bindings":[{"slot_name":"action","token_span":{"start_token_index":1,"end_token_index":3},"text_snapshot":"練習し"},{"slot_name":"obligation","token_span":{"start_token_index":3,"end_token_index":5},"text_snapshot":"なければならない"}],"provider_id":"manual-gold","provider_version":"v1","evidence_class":"gold"}
+  ],
+  "user_sentence_patterns": [
+    {"id":"up-zh-ba","language":"zh","pattern_text":"[AGENT] 把 [PATIENT] [VERB] [RESULT]","source_exemplar_id":"ex-zh-ba","source_text_snapshot":"我把书放在桌子上了。","system_construction_id":"c-zh-ba"},
+    {"id":"up-ja-personal","language":"ja","pattern_text":"もっと [ACTION] しなければならない","source_exemplar_id":"ex-ja-obligation","source_text_snapshot":"もっと練習しなければならない。","system_construction_id":null},
+    {"id":"up-ja-arbitrary","language":"ja","pattern_text":"明日は [ADVERB] 起きたい","source_exemplar_id":"ex-ja-arbitrary","source_text_snapshot":"明日は早く起きたい。","system_construction_id":null}
+  ],
+  "capability_profiles": [
+    {"construction_id":"c-en-comparative","recognition":"acquired","production":"unassessed"},
+    {"construction_id":"c-en-transitive","recognition":"acquired","production":"acquired"},
+    {"construction_id":"c-zh-ba","recognition":"unassessed","production":"unassessed"},
+    {"construction_id":"c-ja-obligation","recognition":"not_acquired","production":"unassessed"}
+  ],
+  "evidence": [
+    {"construction_id":"c-en-comparative","capability":"recognition","modality":"reading","outcome":"success","source_exemplar_id":"ex-en-comparative","evidence_class":"gold"},
+    {"construction_id":"c-en-comparative","capability":"recognition","modality":"listening","outcome":"partial","source_exemplar_id":"ex-en-comparative","evidence_class":"gold"},
+    {"construction_id":"c-en-transitive","capability":"production","modality":"writing","outcome":"success","source_exemplar_id":"ex-en-passive-question","evidence_class":"gold"},
+    {"construction_id":"c-en-transitive","capability":"production","modality":"speaking","outcome":"success","source_exemplar_id":"ex-en-comparative","evidence_class":"gold"},
+    {"construction_id":"c-ja-obligation","capability":"recognition","modality":"listening","outcome":"failure","source_exemplar_id":"ex-ja-obligation","evidence_class":"gold"}
+  ]
+}

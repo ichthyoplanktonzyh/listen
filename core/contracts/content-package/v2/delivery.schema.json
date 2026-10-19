@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v2/delivery.schema.json",
+  "title": "Listen Content Package v2 Delivery",
+  "description": "Optional canonical delivery.json: binds the computed release id and may carry untrusted HTTPS acquisition hints by blob digest. Inspection never fetches the hints.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "release_id", "profile"],
+  "properties": {
+    "schema": { "const": "listen.content-package.delivery.v2" },
+    "release_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "profile": {
+      "enum": ["embedded", "referenced", "hybrid"]
+    },
+    "blobs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/deliveryBlob" }
+    },
+    "extensions": { "type": "object" }
+  },
+  "$defs": {
+    "deliveryBlob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "size_bytes"],
+      "properties": {
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "hints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/deliveryHint" }
+        }
+      }
+    },
+    "deliveryHint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^/@]+(?:/[^#]*)?$"
+        }
+      }
+    }
+  }
+}

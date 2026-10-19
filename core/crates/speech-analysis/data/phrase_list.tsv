@@ -1,0 +1,715 @@
+# PHRASE List — Martinez & Schmitt (2012)
+# 505 pedagogically-selected multi-word expressions for L2 listening/reading
+# Format: normalized_phrase\tcategory
+# Categories: discourse_marker, prepositional_phrase, verb_phrase, noun_phrase,
+#   adjective_phrase, adverb_phrase, conjunction, quantifier, sentence_stem,
+#   modal_expression, fixed_expression
+a bit	quantifier
+a bit of	quantifier
+a couple of	quantifier
+a few	quantifier
+a great deal	quantifier
+a great deal of	quantifier
+a little	quantifier
+a little bit	quantifier
+a lot	quantifier
+a lot of	quantifier
+a number of	quantifier
+a pair of	quantifier
+a series of	quantifier
+a sort of	quantifier
+a variety of	quantifier
+according to	prepositional_phrase
+after all	discourse_marker
+ahead of	prepositional_phrase
+all along	adverb_phrase
+all of a sudden	discourse_marker
+all over	adverb_phrase
+all over the place	adverb_phrase
+all right	discourse_marker
+all sorts of	quantifier
+all the same	discourse_marker
+all the time	adverb_phrase
+along with	prepositional_phrase
+and so forth	discourse_marker
+and so on	discourse_marker
+anything else	noun_phrase
+apart from	prepositional_phrase
+as a matter of fact	discourse_marker
+as a result	discourse_marker
+as a result of	prepositional_phrase
+as a whole	adverb_phrase
+as far as	prepositional_phrase
+as for	prepositional_phrase
+as good as	adjective_phrase
+as if	conjunction
+as long as	conjunction
+as much as	quantifier
+as opposed to	prepositional_phrase
+as regards	prepositional_phrase
+as soon as	conjunction
+as though	conjunction
+as to	prepositional_phrase
+as usual	adverb_phrase
+as well	adverb_phrase
+as well as	conjunction
+as yet	adverb_phrase
+at all	adverb_phrase
+at any rate	discourse_marker
+at first	adverb_phrase
+at last	adverb_phrase
+at least	adverb_phrase
+at most	adverb_phrase
+at once	adverb_phrase
+at present	adverb_phrase
+at risk	prepositional_phrase
+at the beginning	prepositional_phrase
+at the end	prepositional_phrase
+at the end of	prepositional_phrase
+at the expense of	prepositional_phrase
+at the moment	adverb_phrase
+at the same time	adverb_phrase
+at the top of	prepositional_phrase
+at times	adverb_phrase
+back and forth	adverb_phrase
+based on	prepositional_phrase
+be able to	modal_expression
+be about to	modal_expression
+be bound to	modal_expression
+be due to	modal_expression
+be going to	modal_expression
+be likely to	modal_expression
+be meant to	modal_expression
+be supposed to	modal_expression
+be to do with	verb_phrase
+be up to	verb_phrase
+be used to	modal_expression
+bear in mind	verb_phrase
+because of	prepositional_phrase
+before long	adverb_phrase
+behind the scenes	adverb_phrase
+belong to	verb_phrase
+bit by bit	adverb_phrase
+break down	verb_phrase
+break out	verb_phrase
+break up	verb_phrase
+bring about	verb_phrase
+bring back	verb_phrase
+bring down	verb_phrase
+bring in	verb_phrase
+bring out	verb_phrase
+bring up	verb_phrase
+by accident	adverb_phrase
+by all means	discourse_marker
+by chance	adverb_phrase
+by far	adverb_phrase
+by hand	adverb_phrase
+by heart	adverb_phrase
+by means of	prepositional_phrase
+by mistake	adverb_phrase
+by no means	adverb_phrase
+by the time	conjunction
+by the way	discourse_marker
+call for	verb_phrase
+call off	verb_phrase
+carry on	verb_phrase
+carry out	verb_phrase
+catch up	verb_phrase
+check out	verb_phrase
+close to	prepositional_phrase
+come about	verb_phrase
+come across	verb_phrase
+come along	verb_phrase
+come around	verb_phrase
+come back	verb_phrase
+come down	verb_phrase
+come down to	verb_phrase
+come from	verb_phrase
+come in	verb_phrase
+come off	verb_phrase
+come on	verb_phrase
+come out	verb_phrase
+come over	verb_phrase
+come through	verb_phrase
+come to	verb_phrase
+come up	verb_phrase
+come up with	verb_phrase
+compared to	prepositional_phrase
+consist of	verb_phrase
+cope with	verb_phrase
+cut down	verb_phrase
+cut off	verb_phrase
+deal with	verb_phrase
+depend on	verb_phrase
+despite the fact that	conjunction
+do away with	verb_phrase
+do up	verb_phrase
+do with	verb_phrase
+do without	verb_phrase
+draw up	verb_phrase
+due to	prepositional_phrase
+each other	noun_phrase
+either way	adverb_phrase
+end up	verb_phrase
+even as	conjunction
+even if	conjunction
+even though	conjunction
+even when	conjunction
+ever since	conjunction
+every now and then	adverb_phrase
+every other	quantifier
+every so often	adverb_phrase
+except for	prepositional_phrase
+face up to	verb_phrase
+fall apart	verb_phrase
+fall behind	verb_phrase
+fall out	verb_phrase
+far from	adverb_phrase
+fed up	adjective_phrase
+figure out	verb_phrase
+fill in	verb_phrase
+fill out	verb_phrase
+find out	verb_phrase
+first of all	discourse_marker
+follow up	verb_phrase
+for ever	adverb_phrase
+for example	discourse_marker
+for good	adverb_phrase
+for instance	discourse_marker
+for long	adverb_phrase
+for the first time	adverb_phrase
+for the most part	adverb_phrase
+for the sake of	prepositional_phrase
+from now on	adverb_phrase
+from time to time	adverb_phrase
+get across	verb_phrase
+get along	verb_phrase
+get at	verb_phrase
+get away	verb_phrase
+get back	verb_phrase
+get by	verb_phrase
+get down	verb_phrase
+get down to	verb_phrase
+get in	verb_phrase
+get into	verb_phrase
+get off	verb_phrase
+get on	verb_phrase
+get out	verb_phrase
+get out of	verb_phrase
+get over	verb_phrase
+get rid of	verb_phrase
+get through	verb_phrase
+get to	verb_phrase
+get together	verb_phrase
+get up	verb_phrase
+give away	verb_phrase
+give back	verb_phrase
+give in	verb_phrase
+give off	verb_phrase
+give out	verb_phrase
+give up	verb_phrase
+go about	verb_phrase
+go ahead	verb_phrase
+go along	verb_phrase
+go along with	verb_phrase
+go around	verb_phrase
+go away	verb_phrase
+go back	verb_phrase
+go by	verb_phrase
+go down	verb_phrase
+go for	verb_phrase
+go in	verb_phrase
+go into	verb_phrase
+go off	verb_phrase
+go on	verb_phrase
+go out	verb_phrase
+go over	verb_phrase
+go through	verb_phrase
+go up	verb_phrase
+go with	verb_phrase
+grow up	verb_phrase
+had better	modal_expression
+hand in	verb_phrase
+hand out	verb_phrase
+hang on	verb_phrase
+hang out	verb_phrase
+hang up	verb_phrase
+happen to	verb_phrase
+hardly ever	adverb_phrase
+have got	verb_phrase
+have got to	modal_expression
+have to	modal_expression
+have to do with	verb_phrase
+head for	verb_phrase
+hear about	verb_phrase
+hear from	verb_phrase
+help out	verb_phrase
+hold on	verb_phrase
+hold out	verb_phrase
+hold up	verb_phrase
+how about	sentence_stem
+how come	sentence_stem
+how many	quantifier
+how much	quantifier
+I mean	discourse_marker
+I see	discourse_marker
+I think	sentence_stem
+I wonder	sentence_stem
+in a hurry	adverb_phrase
+in a minute	adverb_phrase
+in a moment	adverb_phrase
+in a row	adverb_phrase
+in a sense	adverb_phrase
+in a way	adverb_phrase
+in addition	discourse_marker
+in addition to	prepositional_phrase
+in advance	adverb_phrase
+in any case	discourse_marker
+in brief	discourse_marker
+in case	conjunction
+in case of	prepositional_phrase
+in charge of	prepositional_phrase
+in common	adverb_phrase
+in comparison with	prepositional_phrase
+in conclusion	discourse_marker
+in consequence	discourse_marker
+in contrast	discourse_marker
+in control	prepositional_phrase
+in danger	prepositional_phrase
+in detail	adverb_phrase
+in difficulty	prepositional_phrase
+in doubt	prepositional_phrase
+in effect	discourse_marker
+in fact	discourse_marker
+in favour of	prepositional_phrase
+in front of	prepositional_phrase
+in general	discourse_marker
+in line with	prepositional_phrase
+in love	prepositional_phrase
+in need	prepositional_phrase
+in no time	adverb_phrase
+in one's mind	prepositional_phrase
+in order	adverb_phrase
+in order that	conjunction
+in order to	conjunction
+in other words	discourse_marker
+in particular	discourse_marker
+in place	adverb_phrase
+in place of	prepositional_phrase
+in practice	adverb_phrase
+in private	adverb_phrase
+in public	adverb_phrase
+in relation to	prepositional_phrase
+in response to	prepositional_phrase
+in return	adverb_phrase
+in return for	prepositional_phrase
+in short	discourse_marker
+in spite of	prepositional_phrase
+in terms of	prepositional_phrase
+in that	conjunction
+in the absence of	prepositional_phrase
+in the case of	prepositional_phrase
+in the course of	prepositional_phrase
+in the distance	adverb_phrase
+in the end	discourse_marker
+in the event of	prepositional_phrase
+in the eyes of	prepositional_phrase
+in the first place	discourse_marker
+in the form of	prepositional_phrase
+in the future	adverb_phrase
+in the hands of	prepositional_phrase
+in the interest of	prepositional_phrase
+in the light of	prepositional_phrase
+in the long run	adverb_phrase
+in the meantime	adverb_phrase
+in the middle of	prepositional_phrase
+in the name of	prepositional_phrase
+in the past	adverb_phrase
+in the process of	prepositional_phrase
+in the same way	adverb_phrase
+in the wake of	prepositional_phrase
+in the way	adverb_phrase
+in time	adverb_phrase
+in touch	prepositional_phrase
+in trouble	prepositional_phrase
+in turn	adverb_phrase
+in vain	adverb_phrase
+in view of	prepositional_phrase
+insist on	verb_phrase
+instead of	prepositional_phrase
+it is no use	sentence_stem
+it seems	sentence_stem
+it turns out	sentence_stem
+join in	verb_phrase
+just about	adverb_phrase
+just as	conjunction
+just now	adverb_phrase
+keep an eye on	verb_phrase
+keep down	verb_phrase
+keep from	verb_phrase
+keep in mind	verb_phrase
+keep off	verb_phrase
+keep on	verb_phrase
+keep out	verb_phrase
+keep to	verb_phrase
+keep up	verb_phrase
+keep up with	verb_phrase
+kind of	discourse_marker
+knock down	verb_phrase
+known as	adjective_phrase
+lay down	verb_phrase
+lay off	verb_phrase
+lay out	verb_phrase
+lead to	verb_phrase
+leave behind	verb_phrase
+leave out	verb_phrase
+let down	verb_phrase
+let go	verb_phrase
+let in	verb_phrase
+let know	verb_phrase
+let off	verb_phrase
+let out	verb_phrase
+lie down	verb_phrase
+line up	verb_phrase
+little by little	adverb_phrase
+live on	verb_phrase
+live up to	verb_phrase
+long for	verb_phrase
+look after	verb_phrase
+look ahead	verb_phrase
+look around	verb_phrase
+look at	verb_phrase
+look back	verb_phrase
+look down on	verb_phrase
+look for	verb_phrase
+look forward to	verb_phrase
+look into	verb_phrase
+look like	verb_phrase
+look out	verb_phrase
+look over	verb_phrase
+look through	verb_phrase
+look to	verb_phrase
+look up	verb_phrase
+look up to	verb_phrase
+lose out	verb_phrase
+lots of	quantifier
+make do	verb_phrase
+make for	verb_phrase
+make it	verb_phrase
+make of	verb_phrase
+make off	verb_phrase
+make out	verb_phrase
+make sense	verb_phrase
+make sure	verb_phrase
+make up	verb_phrase
+make up for	verb_phrase
+make use of	verb_phrase
+matter of fact	noun_phrase
+may as well	modal_expression
+mean to	verb_phrase
+meet up	verb_phrase
+meet with	verb_phrase
+mess up	verb_phrase
+might as well	modal_expression
+mix up	verb_phrase
+more and more	adverb_phrase
+more or less	adverb_phrase
+move in	verb_phrase
+move on	verb_phrase
+move out	verb_phrase
+move up	verb_phrase
+neither nor	conjunction
+never mind	discourse_marker
+next to	prepositional_phrase
+no doubt	discourse_marker
+no longer	adverb_phrase
+no matter	conjunction
+no matter how	conjunction
+no matter what	conjunction
+no matter when	conjunction
+no matter who	conjunction
+no one	noun_phrase
+no sooner	adverb_phrase
+no way	discourse_marker
+not at all	discourse_marker
+not only	conjunction
+not to mention	discourse_marker
+nothing but	adverb_phrase
+now that	conjunction
+occur to	verb_phrase
+of course	discourse_marker
+off and on	adverb_phrase
+on and on	adverb_phrase
+on average	adverb_phrase
+on behalf of	prepositional_phrase
+on board	prepositional_phrase
+on condition that	conjunction
+on duty	prepositional_phrase
+on earth	adverb_phrase
+on fire	prepositional_phrase
+on foot	adverb_phrase
+on hand	prepositional_phrase
+on holiday	prepositional_phrase
+on offer	prepositional_phrase
+on one's own	adverb_phrase
+on purpose	adverb_phrase
+on reflection	adverb_phrase
+on the basis of	prepositional_phrase
+on the contrary	discourse_marker
+on the edge of	prepositional_phrase
+on the grounds of	prepositional_phrase
+on the one hand	discourse_marker
+on the other hand	discourse_marker
+on the part of	prepositional_phrase
+on the point of	prepositional_phrase
+on the verge of	prepositional_phrase
+on the way	adverb_phrase
+on the whole	discourse_marker
+on time	adverb_phrase
+on top of	prepositional_phrase
+once again	adverb_phrase
+once and for all	adverb_phrase
+once in a while	adverb_phrase
+one another	noun_phrase
+only if	conjunction
+open up	verb_phrase
+or else	conjunction
+or other	conjunction
+or something	discourse_marker
+other than	prepositional_phrase
+out of	prepositional_phrase
+out of control	prepositional_phrase
+out of date	adjective_phrase
+out of order	adjective_phrase
+out of place	adjective_phrase
+out of the question	adjective_phrase
+out of work	prepositional_phrase
+over and above	prepositional_phrase
+over and over	adverb_phrase
+over the top	adjective_phrase
+owing to	prepositional_phrase
+pass away	verb_phrase
+pass on	verb_phrase
+pass out	verb_phrase
+pay attention	verb_phrase
+pay back	verb_phrase
+pay for	verb_phrase
+pay off	verb_phrase
+pick out	verb_phrase
+pick up	verb_phrase
+pile up	verb_phrase
+plan on	verb_phrase
+plenty of	quantifier
+point of view	noun_phrase
+point out	verb_phrase
+prior to	prepositional_phrase
+pull off	verb_phrase
+pull out	verb_phrase
+pull over	verb_phrase
+pull through	verb_phrase
+pull up	verb_phrase
+push for	verb_phrase
+put aside	verb_phrase
+put away	verb_phrase
+put back	verb_phrase
+put down	verb_phrase
+put forward	verb_phrase
+put in	verb_phrase
+put off	verb_phrase
+put on	verb_phrase
+put out	verb_phrase
+put through	verb_phrase
+put together	verb_phrase
+put up	verb_phrase
+put up with	verb_phrase
+quite a bit	quantifier
+quite a few	quantifier
+rather than	conjunction
+reach out	verb_phrase
+refer to	verb_phrase
+regard as	verb_phrase
+regardless of	prepositional_phrase
+rely on	verb_phrase
+result in	verb_phrase
+right away	adverb_phrase
+right now	adverb_phrase
+ring up	verb_phrase
+rule out	verb_phrase
+run away	verb_phrase
+run down	verb_phrase
+run into	verb_phrase
+run off	verb_phrase
+run out	verb_phrase
+run out of	verb_phrase
+run over	verb_phrase
+run through	verb_phrase
+save up	verb_phrase
+search for	verb_phrase
+see about	verb_phrase
+see off	verb_phrase
+see to	verb_phrase
+seek out	verb_phrase
+send off	verb_phrase
+send out	verb_phrase
+set about	verb_phrase
+set aside	verb_phrase
+set back	verb_phrase
+set down	verb_phrase
+set in	verb_phrase
+set off	verb_phrase
+set out	verb_phrase
+set up	verb_phrase
+settle down	verb_phrase
+settle for	verb_phrase
+shake off	verb_phrase
+show off	verb_phrase
+show up	verb_phrase
+shut down	verb_phrase
+shut up	verb_phrase
+side by side	adverb_phrase
+sign up	verb_phrase
+sit back	verb_phrase
+sit down	verb_phrase
+sit up	verb_phrase
+slow down	verb_phrase
+so as to	conjunction
+so far	adverb_phrase
+so long as	conjunction
+so that	conjunction
+sort of	discourse_marker
+speak out	verb_phrase
+speak up	verb_phrase
+speed up	verb_phrase
+stand by	verb_phrase
+stand for	verb_phrase
+stand out	verb_phrase
+stand up	verb_phrase
+start off	verb_phrase
+start out	verb_phrase
+start up	verb_phrase
+stay away	verb_phrase
+stay in	verb_phrase
+stay on	verb_phrase
+stay out	verb_phrase
+stay up	verb_phrase
+step back	verb_phrase
+step down	verb_phrase
+step in	verb_phrase
+stick to	verb_phrase
+stick up	verb_phrase
+stop by	verb_phrase
+such as	conjunction
+suffer from	verb_phrase
+sum up	verb_phrase
+switch off	verb_phrase
+switch on	verb_phrase
+take advantage of	verb_phrase
+take after	verb_phrase
+take apart	verb_phrase
+take away	verb_phrase
+take back	verb_phrase
+take care	verb_phrase
+take care of	verb_phrase
+take down	verb_phrase
+take for granted	verb_phrase
+take in	verb_phrase
+take off	verb_phrase
+take on	verb_phrase
+take out	verb_phrase
+take over	verb_phrase
+take part	verb_phrase
+take place	verb_phrase
+take seriously	verb_phrase
+take through	verb_phrase
+take to	verb_phrase
+take turns	verb_phrase
+take up	verb_phrase
+talk about	verb_phrase
+talk into	verb_phrase
+talk over	verb_phrase
+tear up	verb_phrase
+tell apart	verb_phrase
+thanks to	prepositional_phrase
+that is	discourse_marker
+that is to say	discourse_marker
+the day after tomorrow	adverb_phrase
+the day before yesterday	adverb_phrase
+the fact that	noun_phrase
+the matter	sentence_stem
+the more	quantifier
+the other day	adverb_phrase
+the problem is	sentence_stem
+the reason why	noun_phrase
+the rest of	quantifier
+the thing is	sentence_stem
+the truth is	sentence_stem
+think about	verb_phrase
+think of	verb_phrase
+think over	verb_phrase
+think through	verb_phrase
+think up	verb_phrase
+throw away	verb_phrase
+throw off	verb_phrase
+throw out	verb_phrase
+throw up	verb_phrase
+tie up	verb_phrase
+time and again	adverb_phrase
+to be honest	discourse_marker
+to begin with	discourse_marker
+to do with	prepositional_phrase
+to some extent	adverb_phrase
+to start with	discourse_marker
+to tell the truth	discourse_marker
+together with	prepositional_phrase
+try on	verb_phrase
+try out	verb_phrase
+turn around	verb_phrase
+turn away	verb_phrase
+turn back	verb_phrase
+turn down	verb_phrase
+turn in	verb_phrase
+turn into	verb_phrase
+turn off	verb_phrase
+turn on	verb_phrase
+turn out	verb_phrase
+turn over	verb_phrase
+turn round	verb_phrase
+turn to	verb_phrase
+turn up	verb_phrase
+up and down	adverb_phrase
+up to	prepositional_phrase
+upside down	adverb_phrase
+use up	verb_phrase
+used to	modal_expression
+wait for	verb_phrase
+wake up	verb_phrase
+walk away	verb_phrase
+walk out	verb_phrase
+warm up	verb_phrase
+wash up	verb_phrase
+watch out	verb_phrase
+wear off	verb_phrase
+wear out	verb_phrase
+what about	sentence_stem
+what if	sentence_stem
+what is more	discourse_marker
+whether or not	conjunction
+wind up	verb_phrase
+wipe out	verb_phrase
+with a view to	prepositional_phrase
+with regard to	prepositional_phrase
+with respect to	prepositional_phrase
+with the exception of	prepositional_phrase
+within reach	prepositional_phrase
+without doubt	adverb_phrase
+work on	verb_phrase
+work out	verb_phrase
+work up	verb_phrase
+worry about	verb_phrase
+would like	modal_expression
+would rather	modal_expression
+write down	verb_phrase
+write off	verb_phrase
+write out	verb_phrase
+you know	discourse_marker
+you see	discourse_marker

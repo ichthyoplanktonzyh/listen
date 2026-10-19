@@ -1,0 +1,24 @@
+{
+  "extensions": {},
+  "language": "en",
+  "segments": [
+    {
+      "end_ms": 9000,
+      "extensions": {},
+      "id": "seg-1",
+      "index": 0,
+      "language": "en",
+      "start_ms": 0,
+      "text": "Welcome to the guided tour."
+    },
+    {
+      "end_ms": 18000,
+      "extensions": {},
+      "id": "seg-2",
+      "index": 1,
+      "language": "en",
+      "start_ms": 9000,
+      "text": "Listen closely to each phrase."
+    }
+  ]
+}

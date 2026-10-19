@@ -1,0 +1,244 @@
+[
+  {
+    "name": "release with wrong schema identity",
+    "schema": "v3/release.schema.json",
+    "document": {
+      "schema": "listen.content-package.release.v2",
+      "created_at_ms": 1,
+      "edition": { "edition_id": "e1", "title": "T", "target_language": "en", "support_languages": [] },
+      "material": { "material_id": "m1", "material_revision_id": "r1", "title": "M" },
+      "document_renditions": [],
+      "media_renditions": [],
+      "resources": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "release missing required resources field",
+    "schema": "v3/release.schema.json",
+    "document": {
+      "schema": "listen.content-package.release.v3",
+      "created_at_ms": 1,
+      "edition": { "edition_id": "e1", "title": "T", "target_language": "en", "support_languages": [] },
+      "material": { "material_id": "m1", "material_revision_id": "r1", "title": "M" },
+      "document_renditions": [],
+      "media_renditions": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "release with unexpected field",
+    "schema": "v3/release.schema.json",
+    "document": {
+      "schema": "listen.content-package.release.v3",
+      "created_at_ms": 1,
+      "edition": { "edition_id": "e1", "title": "T", "target_language": "en", "support_languages": [] },
+      "material": { "material_id": "m1", "material_revision_id": "r1", "title": "M" },
+      "document_renditions": [],
+      "media_renditions": [],
+      "resources": [],
+      "entrypoints": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "blob digest is not a sha256 identity",
+    "schema": "v3/definitions.schema.json#/$defs/blobDeclaration",
+    "document": { "digest": "md5:deadbeef", "size_bytes": 1, "embedded": true }
+  },
+  {
+    "name": "blob size zero is rejected",
+    "schema": "v3/definitions.schema.json#/$defs/blobDeclaration",
+    "document": { "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size_bytes": 0, "embedded": true }
+  },
+  {
+    "name": "provenance missing input ledger",
+    "schema": "v3/definitions.schema.json#/$defs/provenanceV3",
+    "document": { "created_at_ms": 1, "tool": { "id": "gen", "version": "1" }, "extensions": {} }
+  },
+  {
+    "name": "provenance provider without version",
+    "schema": "v3/definitions.schema.json#/$defs/provenanceV3",
+    "document": {
+      "created_at_ms": 1,
+      "tool": { "id": "gen", "version": "1" },
+      "provider": { "id": "deepseek" },
+      "input_rendition_ids": [],
+      "input_resource_ids": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "resource role outside base and assistance",
+    "schema": "v3/resource.schema.json#/$defs/resourceDescriptor",
+    "document": {
+      "schema": "listen.payload.x",
+      "kind": "x",
+      "role": "primary",
+      "subject": { "material_revision_id": "r", "rendition_ids": [], "anchor_resource_ids": [] },
+      "dependencies": [],
+      "provenance": { "created_at_ms": 1, "tool": { "id": "gen", "version": "1" }, "input_rendition_ids": [], "input_resource_ids": [], "extensions": {} },
+      "quality": { "review_status": "human_reviewed", "warnings": [], "extensions": {} },
+      "payload_blob": { "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size_bytes": 1, "embedded": true },
+      "extensions": {}
+    }
+  },
+  {
+    "name": "media rendition kind outside audio and video",
+    "schema": "v3/resource.schema.json#/$defs/mediaRenditionDeclaration",
+    "document": {
+      "rendition_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "origin": "source",
+      "kind": "podcast",
+      "media_type": "audio/mpeg",
+      "media_blob": { "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size_bytes": 1, "embedded": true },
+      "media_id": "m1",
+      "fingerprint": "fp",
+      "extensions": {}
+    }
+  },
+  {
+    "name": "structured reading with empty text",
+    "schema": "v3/payload/structured-reading.v1.schema.json",
+    "document": {
+      "language": "en",
+      "text": "",
+      "anchors": [
+        { "anchor_id": "a1", "kind": "sentence", "start_offset": 0, "end_offset": 0 }
+      ],
+      "blocks": [],
+      "spans": [],
+      "document_mappings": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "structured reading anchor end beyond text bytes",
+    "schema": "v3/payload/structured-reading.v1.schema.json",
+    "document": {
+      "language": "en",
+      "text": "Hello.",
+      "anchors": [
+        { "anchor_id": "a1", "kind": "sentence", "start_offset": 0, "end_offset": 99 }
+      ],
+      "blocks": [],
+      "spans": [],
+      "document_mappings": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "structured reading backwards anchor order",
+    "schema": "v3/payload/structured-reading.v1.schema.json",
+    "document": {
+      "language": "en",
+      "text": "Hello world.",
+      "anchors": [
+        { "anchor_id": "a2", "kind": "sentence", "start_offset": 6, "end_offset": 12 },
+        { "anchor_id": "a1", "kind": "sentence", "start_offset": 0, "end_offset": 5 }
+      ],
+      "blocks": [],
+      "spans": [],
+      "document_mappings": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "structured reading with two roots",
+    "schema": "v3/payload/structured-reading.v1.schema.json",
+    "document": {
+      "language": "en",
+      "text": "Hello.",
+      "anchors": [
+        { "anchor_id": "a1", "kind": "sentence", "start_offset": 0, "end_offset": 6 }
+      ],
+      "blocks": [
+        { "block_id": "b1", "kind": "root", "order": 0, "span_anchor_ids": ["a1"], "parent_block_id": null },
+        { "block_id": "b2", "kind": "root", "order": 0, "span_anchor_ids": ["a1"], "parent_block_id": null }
+      ],
+      "spans": [],
+      "document_mappings": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "structured reading unknown block kind",
+    "schema": "v3/payload/structured-reading.v1.schema.json",
+    "document": {
+      "language": "en",
+      "text": "Hello.",
+      "anchors": [
+        { "anchor_id": "a1", "kind": "sentence", "start_offset": 0, "end_offset": 6 }
+      ],
+      "blocks": [
+        { "block_id": "b1", "kind": "leaf", "order": 0, "span_anchor_ids": ["a1"], "parent_block_id": null }
+      ],
+      "spans": [],
+      "document_mappings": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "structured reading non-contiguous sibling order",
+    "schema": "v3/payload/structured-reading.v1.schema.json",
+    "document": {
+      "language": "en",
+      "text": "Hello world.",
+      "anchors": [
+        { "anchor_id": "a1", "kind": "sentence", "start_offset": 0, "end_offset": 12 }
+      ],
+      "blocks": [
+        { "block_id": "b1", "kind": "root", "order": 0, "span_anchor_ids": ["a1"], "parent_block_id": null },
+        { "block_id": "b2", "kind": "section", "order": 5, "span_anchor_ids": ["a1"], "parent_block_id": "b1" }
+      ],
+      "spans": [],
+      "document_mappings": [],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "structured reading empty locator value",
+    "schema": "v3/payload/structured-reading.v1.schema.json",
+    "document": {
+      "language": "en",
+      "text": "Hello.",
+      "anchors": [
+        { "anchor_id": "a1", "kind": "sentence", "start_offset": 0, "end_offset": 6 }
+      ],
+      "blocks": [
+        { "block_id": "b1", "kind": "root", "order": 0, "span_anchor_ids": ["a1"], "parent_block_id": null }
+      ],
+      "spans": [],
+      "document_mappings": [
+        {
+          "anchor_id": "a1",
+          "rendition_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": { "kind": "fragment", "value": "" }
+        }
+      ],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "alignment with negative media time",
+    "schema": "v3/payload/anchor-time-alignment.v1.schema.json",
+    "document": {
+      "anchor_resource_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "rendition_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "alignments": [
+        { "anchor_id": "a1", "media_time_ms": -1 }
+      ],
+      "extensions": {}
+    }
+  },
+  {
+    "name": "alignment with no entries",
+    "schema": "v3/payload/anchor-time-alignment.v1.schema.json",
+    "document": {
+      "anchor_resource_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "rendition_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "alignments": [],
+      "extensions": {}
+    }
+  }
+]

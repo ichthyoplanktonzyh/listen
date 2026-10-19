@@ -1,0 +1,142 @@
+{
+  "schema": "llplayer.rhythm_benchmark_roles.v1",
+  "evidence_classes": [
+    "gold",
+    "silver_label",
+    "heuristic_proxy",
+    "manual_product_qa",
+    "coverage"
+  ],
+  "roles": [
+    {
+      "role": "evidence_quality",
+      "primary_question": "Can the low-level transcript, timing, and phone evidence support a rhythm explanation?",
+      "default_evidence_classes": ["gold", "coverage"],
+      "closeout_use": "supporting_context",
+      "datasets": [
+        {
+          "name": "TIMIT",
+          "access": "existing/local benchmark path",
+          "reference": "human phone and word boundaries",
+          "best_for": ["phone_error_rate", "phone_boundary_offset", "lexical_stress_sanity"],
+          "not_for": ["natural_reduction", "learner_hotspot_truth"]
+        },
+        {
+          "name": "Buckeye",
+          "access": "local corpus if present",
+          "reference": "orthographic words and phone-aligned conversational speech",
+          "best_for": ["natural_timing", "connected_speech_evidence", "manual_product_windows"],
+          "not_for": ["clean_read_speech_phone_gate"]
+        },
+        {
+          "name": "TED-LIUM",
+          "access": "local corpus if present",
+          "reference": "STM transcript and segment timing",
+          "best_for": ["transcript_timing_integrity", "long_form_pipeline_smoke"],
+          "not_for": ["phone_gold", "human_prosody_gold"]
+        }
+      ]
+    },
+    {
+      "role": "weak_prosody_regression",
+      "primary_question": "Do stress anchors and phrase boundaries drift against a public prosody reference?",
+      "default_evidence_classes": ["silver_label"],
+      "closeout_use": "regression_signal",
+      "datasets": [
+        {
+          "name": "Helsinki Prosody / LibriTTS",
+          "access": "public project data plus local LibriTTS audio",
+          "reference": "automatic word-level prominence and boundary labels",
+          "best_for": ["stress_anchor_precision_recall", "phrase_boundary_precision_recall", "large_scale_drift"],
+          "not_for": ["human_gold_claim", "weak_group_truth", "hotspot_usefulness"]
+        }
+      ]
+    },
+    {
+      "role": "human_prosody_gold",
+      "primary_question": "Does RhythmFrame agree with human prosody annotation when licensed/local data is available?",
+      "default_evidence_classes": ["gold"],
+      "closeout_use": "optional_calibration",
+      "datasets": [
+        {
+          "name": "BU Radio Speech Corpus",
+          "access": "LDC licensed local-only",
+          "reference": "human prosodic markers / ToBI-style labels",
+          "best_for": ["pitch_accent_sanity", "phrase_boundary_sanity"],
+          "not_for": ["committed_fixture_data", "unlicensed_distribution"]
+        },
+        {
+          "name": "Rhythm and Pitch Corpus",
+          "access": "LDC licensed local-only",
+          "reference": "Praat/TextGrid rhythm and pitch annotations",
+          "best_for": ["rhythm_pitch_mapping", "human_boundary_sanity"],
+          "not_for": ["large_scale_release_gate"]
+        },
+        {
+          "name": "Aix-MARSEC / ProPOSEC",
+          "access": "SLDR/research resource; verify local terms",
+          "reference": "prosody-rich British English annotation",
+          "best_for": ["tonic_stress", "intonation_unit_boundary"],
+          "not_for": ["American_English_only_claim"]
+        }
+      ]
+    },
+    {
+      "role": "product_listening_qa",
+      "primary_question": "Does the displayed explanation help a learner hear the sentence correctly?",
+      "default_evidence_classes": ["manual_product_qa"],
+      "closeout_use": "release_gate",
+      "datasets": [
+        {
+          "name": "Phase 2.17 real-media cases",
+          "access": "local-only product QA material",
+          "reference": "manual rhythm-frame QA rubric",
+          "best_for": ["hotspot_usefulness", "misleading_rate", "unsupported_rate"],
+          "not_for": ["public_reproducible_corpus_claim"]
+        },
+        {
+          "name": "Buckeye selected windows",
+          "access": "local corpus if present",
+          "reference": "manual labels over natural conversational windows",
+          "best_for": ["weak_groups", "compression_spans", "natural_reductions"],
+          "not_for": ["automatic_gold"]
+        }
+      ]
+    },
+    {
+      "role": "robustness_probe",
+      "primary_question": "Does the rhythm/prosody system remain plausible across dialect, conversation, and model families?",
+      "default_evidence_classes": ["silver_label", "coverage"],
+      "closeout_use": "future_probe",
+      "datasets": [
+        {
+          "name": "IViE",
+          "access": "public site; verify download terms",
+          "reference": "dialectal intonation material",
+          "best_for": ["dialectal_intonation_probe"],
+          "not_for": ["phase_2_20_blocker"]
+        },
+        {
+          "name": "NXT Switchboard",
+          "access": "licensed/heavy local-only ecosystem",
+          "reference": "conversation/prosody annotations",
+          "best_for": ["spontaneous_conversation_robustness"],
+          "not_for": ["quick_public_gate"]
+        },
+        {
+          "name": "Wav2ToBI",
+          "access": "public code/model candidate; verify runtime and license",
+          "reference": "model-produced ToBI-style labels",
+          "best_for": ["future_comparator", "weak_annotator_probe"],
+          "not_for": ["benchmark_by_itself"]
+        }
+      ]
+    }
+  ],
+  "rules": [
+    "Every Phase 2.20 report should declare a benchmark role and evidence class.",
+    "A product closeout gate must not be based only on heuristic_proxy or silver_label scores.",
+    "Restricted corpus data stays local-only; repository fixtures may include only synthetic or redistributable data.",
+    "Small smoke runs validate plumbing and expose failure modes; they do not define product thresholds."
+  ]
+}

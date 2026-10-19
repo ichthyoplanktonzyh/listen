@@ -1,0 +1,2517 @@
+{
+  "report_version": 1,
+  "provider": "stanza",
+  "dataset": "development",
+  "fixture": "testdata/syntactic-analysis/ambiguity-dev-v1.jsonl",
+  "fixture_sha256": "37bfe724e9b105464fb687b7ccda260b49b3c3c4a2ba9dbac46a8e50a632c7b4",
+  "descriptor": {
+    "provider_id": "stanza",
+    "provider_version": "jsonl-v1",
+    "runtime_id": "python-stanza",
+    "runtime_version": "1.13.0",
+    "model_id": "en_ewt",
+    "model_version": "1.13.0",
+    "model_checksum_sha256": "9c8f5d49eb89729e9ea12faee2217e3326123ec7b03b7a304cb842daa6ac959c"
+  },
+  "machine": {
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.11.15",
+    "logical_cpu_count": 10,
+    "memory_bytes": 34359738368
+  },
+  "quality": {
+    "aggregate": {
+      "case_count": 12,
+      "analysis_latency_seconds": 1.0414494168944657,
+      "lexical_alignment_coverage": 1.0,
+      "exact_span_rate": 1.0,
+      "silent_misalignment_count": 0,
+      "macro_accuracy": 0.9166666666666666,
+      "target_accuracy": {
+        "dependency_query.be_going_to_verb": 1,
+        "reference_b.future_going_to": 1,
+        "reference_b.habitual_used_to": 1,
+        "reference_b.have_to_obligation": 1,
+        "reference_b.want_to_reduction": 0.6666666666666666
+      },
+      "high_risk_false_positives": [],
+      "tree_issue_count": 0
+    },
+    "cases": [
+      {
+        "case_id": "syn-dev-real-001",
+        "alignment": {
+          "word_count": 10,
+          "mapped_word_count": 10,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [],
+        "tokens": [
+          {
+            "surface": "Our",
+            "lemma": "our",
+            "upos": "PRON",
+            "xpos": "PRP$",
+            "features": {
+              "Case": "Gen",
+              "Number": "Plur",
+              "Person": "1",
+              "Poss": "Yes",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "nmod:poss",
+            "start_char": 0,
+            "end_char": 3,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "Claire",
+            "lemma": "Claire",
+            "upos": "PROPN",
+            "xpos": "NNP",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "nsubj",
+            "start_char": 4,
+            "end_char": 10,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "Duffy",
+            "lemma": "Duffy",
+            "upos": "PROPN",
+            "xpos": "NNP",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "flat",
+            "start_char": 11,
+            "end_char": 16,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "visited",
+            "lemma": "visit",
+            "upos": "VERB",
+            "xpos": "VBD",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "3",
+              "Tense": "Past",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 17,
+            "end_char": 24,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "a",
+            "lemma": "a",
+            "upos": "DET",
+            "xpos": "DT",
+            "features": {
+              "Definite": "Ind",
+              "PronType": "Art"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "det",
+            "start_char": 25,
+            "end_char": 26,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "school",
+            "lemma": "school",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "obj",
+            "start_char": 27,
+            "end_char": 33,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "in",
+            "lemma": "in",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 9,
+            "dependency_relation": "case",
+            "start_char": 34,
+            "end_char": 36,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              12
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "New",
+            "lemma": "New",
+            "upos": "ADJ",
+            "xpos": "NNP",
+            "features": {
+              "Degree": "Pos"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "amod",
+            "start_char": 37,
+            "end_char": 40,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              14
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "York",
+            "lemma": "York",
+            "upos": "PROPN",
+            "xpos": "NNP",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 9,
+            "dependency_relation": "compound",
+            "start_char": 41,
+            "end_char": 45,
+            "confidence": null,
+            "parser_token_index": 8,
+            "subtitle_token_indices": [
+              16
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "City",
+            "lemma": "City",
+            "upos": "PROPN",
+            "xpos": "NNP",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "obl",
+            "start_char": 46,
+            "end_char": 50,
+            "confidence": null,
+            "parser_token_index": 9,
+            "subtitle_token_indices": [
+              18
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ",",
+            "lemma": ",",
+            "upos": "PUNCT",
+            "xpos": ",",
+            "features": {},
+            "head_parser_token_index": 3,
+            "dependency_relation": "punct",
+            "start_char": 50,
+            "end_char": 51,
+            "confidence": null,
+            "parser_token_index": 10,
+            "subtitle_token_indices": [
+              19
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-real-002",
+        "alignment": {
+          "word_count": 12,
+          "mapped_word_count": 12,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.have_to_obligation",
+            "expected": "allow",
+            "actual": "allow",
+            "correct": true
+          },
+          {
+            "target": "reference_b.habitual_used_to",
+            "expected": "block",
+            "actual": "block",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "who",
+            "lemma": "who",
+            "upos": "PRON",
+            "xpos": "WP",
+            "features": {
+              "PronType": "Int"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "nsubj",
+            "start_char": 0,
+            "end_char": 3,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "had",
+            "lemma": "have",
+            "upos": "VERB",
+            "xpos": "VBD",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "3",
+              "Tense": "Past",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 4,
+            "end_char": 7,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 4,
+            "dependency_relation": "mark",
+            "start_char": 8,
+            "end_char": 10,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "get",
+            "lemma": "get",
+            "upos": "AUX",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 4,
+            "dependency_relation": "aux:pass",
+            "start_char": 11,
+            "end_char": 14,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "used",
+            "lemma": "used",
+            "upos": "ADJ",
+            "xpos": "JJ",
+            "features": {
+              "Degree": "Pos"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "xcomp",
+            "start_char": 15,
+            "end_char": 19,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 8,
+            "dependency_relation": "case",
+            "start_char": 20,
+            "end_char": 22,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "a",
+            "lemma": "a",
+            "upos": "DET",
+            "xpos": "DT",
+            "features": {
+              "Definite": "Ind",
+              "PronType": "Art"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "det",
+            "start_char": 23,
+            "end_char": 24,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              12
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "phone",
+            "lemma": "phone",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "compound",
+            "start_char": 25,
+            "end_char": 30,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              14
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "ban",
+            "lemma": "ban",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 4,
+            "dependency_relation": "obl",
+            "start_char": 31,
+            "end_char": 34,
+            "confidence": null,
+            "parser_token_index": 8,
+            "subtitle_token_indices": [
+              16
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "this",
+            "lemma": "this",
+            "upos": "DET",
+            "xpos": "DT",
+            "features": {
+              "Number": "Sing",
+              "PronType": "Dem"
+            },
+            "head_parser_token_index": 11,
+            "dependency_relation": "det",
+            "start_char": 35,
+            "end_char": 39,
+            "confidence": null,
+            "parser_token_index": 9,
+            "subtitle_token_indices": [
+              18
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "school",
+            "lemma": "school",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 11,
+            "dependency_relation": "compound",
+            "start_char": 40,
+            "end_char": 46,
+            "confidence": null,
+            "parser_token_index": 10,
+            "subtitle_token_indices": [
+              20
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "year",
+            "lemma": "year",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 4,
+            "dependency_relation": "obl:unmarked",
+            "start_char": 47,
+            "end_char": 51,
+            "confidence": null,
+            "parser_token_index": 11,
+            "subtitle_token_indices": [
+              22
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ".",
+            "lemma": ".",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 1,
+            "dependency_relation": "punct",
+            "start_char": 51,
+            "end_char": 52,
+            "confidence": null,
+            "parser_token_index": 12,
+            "subtitle_token_indices": [
+              23
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-real-003",
+        "alignment": {
+          "word_count": 12,
+          "mapped_word_count": 12,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.habitual_used_to",
+            "expected": "allow",
+            "actual": "allow",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "Like",
+            "lemma": "like",
+            "upos": "SCONJ",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 2,
+            "dependency_relation": "mark",
+            "start_char": 0,
+            "end_char": 4,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "I",
+            "lemma": "I",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Sing",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "nsubj",
+            "start_char": 5,
+            "end_char": 6,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "used",
+            "lemma": "use",
+            "upos": "VERB",
+            "xpos": "VBD",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "1",
+              "Tense": "Past",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 10,
+            "dependency_relation": "advcl",
+            "start_char": 7,
+            "end_char": 11,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 4,
+            "dependency_relation": "mark",
+            "start_char": 12,
+            "end_char": 14,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "get",
+            "lemma": "get",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "xcomp",
+            "start_char": 15,
+            "end_char": 18,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "like",
+            "lemma": "like",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 6,
+            "dependency_relation": "case",
+            "start_char": 19,
+            "end_char": 23,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "80s",
+            "lemma": "80s",
+            "upos": "NOUN",
+            "xpos": "NNS",
+            "features": {
+              "NumForm": "Combi",
+              "NumType": "Card",
+              "Number": "Ptan"
+            },
+            "head_parser_token_index": 4,
+            "dependency_relation": "obl",
+            "start_char": 24,
+            "end_char": 27,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              12
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ",",
+            "lemma": ",",
+            "upos": "PUNCT",
+            "xpos": ",",
+            "features": {},
+            "head_parser_token_index": 2,
+            "dependency_relation": "punct",
+            "start_char": 27,
+            "end_char": 28,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              13
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "now",
+            "lemma": "now",
+            "upos": "ADV",
+            "xpos": "RB",
+            "features": {
+              "PronType": "Dem"
+            },
+            "head_parser_token_index": 10,
+            "dependency_relation": "advmod",
+            "start_char": 29,
+            "end_char": 32,
+            "confidence": null,
+            "parser_token_index": 8,
+            "subtitle_token_indices": [
+              15
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "I",
+            "lemma": "I",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Sing",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 10,
+            "dependency_relation": "nsubj",
+            "start_char": 33,
+            "end_char": 34,
+            "confidence": null,
+            "parser_token_index": 9,
+            "subtitle_token_indices": [
+              17
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "get",
+            "lemma": "get",
+            "upos": "VERB",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "1",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 35,
+            "end_char": 38,
+            "confidence": null,
+            "parser_token_index": 10,
+            "subtitle_token_indices": [
+              19
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "like",
+            "lemma": "like",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 12,
+            "dependency_relation": "case",
+            "start_char": 39,
+            "end_char": 43,
+            "confidence": null,
+            "parser_token_index": 11,
+            "subtitle_token_indices": [
+              21
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "90s",
+            "lemma": "90s",
+            "upos": "NOUN",
+            "xpos": "NNS",
+            "features": {
+              "NumForm": "Combi",
+              "NumType": "Card",
+              "Number": "Ptan"
+            },
+            "head_parser_token_index": 10,
+            "dependency_relation": "obl",
+            "start_char": 44,
+            "end_char": 47,
+            "confidence": null,
+            "parser_token_index": 12,
+            "subtitle_token_indices": [
+              23
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ".",
+            "lemma": ".",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 10,
+            "dependency_relation": "punct",
+            "start_char": 47,
+            "end_char": 48,
+            "confidence": null,
+            "parser_token_index": 13,
+            "subtitle_token_indices": [
+              24
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-real-004",
+        "alignment": {
+          "word_count": 9,
+          "mapped_word_count": 9,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.want_to_reduction",
+            "expected": "allow",
+            "actual": "allow",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "Want",
+            "lemma": "want",
+            "upos": "VERB",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "1",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 0,
+            "end_char": 4,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 2,
+            "dependency_relation": "mark",
+            "start_char": 5,
+            "end_char": 7,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "highlight",
+            "lemma": "highlight",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 0,
+            "dependency_relation": "xcomp",
+            "start_char": 8,
+            "end_char": 17,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "a",
+            "lemma": "a",
+            "upos": "DET",
+            "xpos": "DT",
+            "features": {
+              "Definite": "Ind",
+              "PronType": "Art"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "det",
+            "start_char": 18,
+            "end_char": 19,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "military",
+            "lemma": "military",
+            "upos": "ADJ",
+            "xpos": "JJ",
+            "features": {
+              "Degree": "Pos"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "amod",
+            "start_char": 20,
+            "end_char": 28,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "member",
+            "lemma": "member",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "obj",
+            "start_char": 29,
+            "end_char": 35,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "in",
+            "lemma": "in",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 8,
+            "dependency_relation": "case",
+            "start_char": 36,
+            "end_char": 38,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              12
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "your",
+            "lemma": "your",
+            "upos": "PRON",
+            "xpos": "PRP$",
+            "features": {
+              "Case": "Gen",
+              "Person": "2",
+              "Poss": "Yes",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "nmod:poss",
+            "start_char": 39,
+            "end_char": 43,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              14
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "life",
+            "lemma": "life",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "obl",
+            "start_char": 44,
+            "end_char": 48,
+            "confidence": null,
+            "parser_token_index": 8,
+            "subtitle_token_indices": [
+              16
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "?",
+            "lemma": "?",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 0,
+            "dependency_relation": "punct",
+            "start_char": 48,
+            "end_char": 49,
+            "confidence": null,
+            "parser_token_index": 9,
+            "subtitle_token_indices": [
+              17
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-real-005",
+        "alignment": {
+          "word_count": 9,
+          "mapped_word_count": 9,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [],
+        "tokens": [
+          {
+            "surface": "I",
+            "lemma": "I",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Sing",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "nsubj",
+            "start_char": 0,
+            "end_char": 1,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "split"
+          },
+          {
+            "surface": "'ve",
+            "lemma": "have",
+            "upos": "AUX",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "1",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "aux",
+            "start_char": 1,
+            "end_char": 4,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "split"
+          },
+          {
+            "surface": "been",
+            "lemma": "be",
+            "upos": "AUX",
+            "xpos": "VBN",
+            "features": {
+              "Tense": "Past",
+              "VerbForm": "Part"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "cop",
+            "start_char": 5,
+            "end_char": 9,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "in",
+            "lemma": "in",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 5,
+            "dependency_relation": "case",
+            "start_char": 10,
+            "end_char": 12,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "the",
+            "lemma": "the",
+            "upos": "DET",
+            "xpos": "DT",
+            "features": {
+              "Definite": "Def",
+              "PronType": "Art"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "det",
+            "start_char": 13,
+            "end_char": 16,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "system",
+            "lemma": "system",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 17,
+            "end_char": 23,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "long",
+            "lemma": "long",
+            "upos": "ADV",
+            "xpos": "RB",
+            "features": {
+              "Degree": "Pos"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "advmod",
+            "start_char": 24,
+            "end_char": 28,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "enough",
+            "lemma": "enough",
+            "upos": "ADV",
+            "xpos": "RB",
+            "features": {},
+            "head_parser_token_index": 6,
+            "dependency_relation": "advmod",
+            "start_char": 29,
+            "end_char": 35,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              12
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 9,
+            "dependency_relation": "mark",
+            "start_char": 36,
+            "end_char": 38,
+            "confidence": null,
+            "parser_token_index": 8,
+            "subtitle_token_indices": [
+              14
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "know",
+            "lemma": "know",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 6,
+            "dependency_relation": "advcl",
+            "start_char": 39,
+            "end_char": 43,
+            "confidence": null,
+            "parser_token_index": 9,
+            "subtitle_token_indices": [
+              16
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-real-006",
+        "alignment": {
+          "word_count": 8,
+          "mapped_word_count": 8,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [],
+        "tokens": [
+          {
+            "surface": "So",
+            "lemma": "so",
+            "upos": "ADV",
+            "xpos": "RB",
+            "features": {},
+            "head_parser_token_index": 5,
+            "dependency_relation": "advmod",
+            "start_char": 0,
+            "end_char": 2,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "when",
+            "lemma": "when",
+            "upos": "ADV",
+            "xpos": "WRB",
+            "features": {
+              "PronType": "Int"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "advmod",
+            "start_char": 3,
+            "end_char": 7,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "it",
+            "lemma": "it",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Gender": "Neut",
+              "Number": "Sing",
+              "Person": "3",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "nsubj",
+            "start_char": 8,
+            "end_char": 10,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "was",
+            "lemma": "be",
+            "upos": "AUX",
+            "xpos": "VBD",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "3",
+              "Tense": "Past",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "cop",
+            "start_char": 11,
+            "end_char": 14,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "actually",
+            "lemma": "actually",
+            "upos": "ADV",
+            "xpos": "RB",
+            "features": {},
+            "head_parser_token_index": 5,
+            "dependency_relation": "advmod",
+            "start_char": 15,
+            "end_char": 23,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "time",
+            "lemma": "time",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 24,
+            "end_char": 28,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 7,
+            "dependency_relation": "mark",
+            "start_char": 29,
+            "end_char": 31,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              12
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "go",
+            "lemma": "go",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "acl",
+            "start_char": 32,
+            "end_char": 34,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              14
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ",",
+            "lemma": ",",
+            "upos": "PUNCT",
+            "xpos": ",",
+            "features": {},
+            "head_parser_token_index": 5,
+            "dependency_relation": "punct",
+            "start_char": 34,
+            "end_char": 35,
+            "confidence": null,
+            "parser_token_index": 8,
+            "subtitle_token_indices": [
+              15
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-control-001",
+        "alignment": {
+          "word_count": 6,
+          "mapped_word_count": 6,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.future_going_to",
+            "expected": "allow",
+            "actual": "allow",
+            "correct": true
+          },
+          {
+            "target": "dependency_query.be_going_to_verb",
+            "expected": "match",
+            "actual": "match",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "I",
+            "lemma": "I",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Sing",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "nsubj",
+            "start_char": 0,
+            "end_char": 1,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "split"
+          },
+          {
+            "surface": "'m",
+            "lemma": "be",
+            "upos": "AUX",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "1",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "aux",
+            "start_char": 1,
+            "end_char": 3,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "split"
+          },
+          {
+            "surface": "going",
+            "lemma": "go",
+            "upos": "VERB",
+            "xpos": "VBG",
+            "features": {
+              "Tense": "Pres",
+              "VerbForm": "Part"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 4,
+            "end_char": 9,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 4,
+            "dependency_relation": "mark",
+            "start_char": 10,
+            "end_char": 12,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "leave",
+            "lemma": "leave",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "xcomp",
+            "start_char": 13,
+            "end_char": 18,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "after",
+            "lemma": "after",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 6,
+            "dependency_relation": "case",
+            "start_char": 19,
+            "end_char": 24,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "lunch",
+            "lemma": "lunch",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 4,
+            "dependency_relation": "obl",
+            "start_char": 25,
+            "end_char": 30,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ".",
+            "lemma": ".",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 2,
+            "dependency_relation": "punct",
+            "start_char": 30,
+            "end_char": 31,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              11
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-control-002",
+        "alignment": {
+          "word_count": 6,
+          "mapped_word_count": 6,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.future_going_to",
+            "expected": "block",
+            "actual": "block",
+            "correct": true
+          },
+          {
+            "target": "dependency_query.be_going_to_verb",
+            "expected": "no_match",
+            "actual": "no_match",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "I",
+            "lemma": "I",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Sing",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "nsubj",
+            "start_char": 0,
+            "end_char": 1,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "split"
+          },
+          {
+            "surface": "'m",
+            "lemma": "be",
+            "upos": "AUX",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "1",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "aux",
+            "start_char": 1,
+            "end_char": 3,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "split"
+          },
+          {
+            "surface": "going",
+            "lemma": "go",
+            "upos": "VERB",
+            "xpos": "VBG",
+            "features": {
+              "Tense": "Pres",
+              "VerbForm": "Part"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 4,
+            "end_char": 9,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 4,
+            "dependency_relation": "case",
+            "start_char": 10,
+            "end_char": 12,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "London",
+            "lemma": "London",
+            "upos": "PROPN",
+            "xpos": "NNP",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "obl",
+            "start_char": 13,
+            "end_char": 19,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "after",
+            "lemma": "after",
+            "upos": "ADP",
+            "xpos": "IN",
+            "features": {},
+            "head_parser_token_index": 6,
+            "dependency_relation": "case",
+            "start_char": 20,
+            "end_char": 25,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "lunch",
+            "lemma": "lunch",
+            "upos": "NOUN",
+            "xpos": "NN",
+            "features": {
+              "Number": "Sing"
+            },
+            "head_parser_token_index": 2,
+            "dependency_relation": "obl",
+            "start_char": 26,
+            "end_char": 31,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ".",
+            "lemma": ".",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 2,
+            "dependency_relation": "punct",
+            "start_char": 31,
+            "end_char": 32,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              11
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-control-003",
+        "alignment": {
+          "word_count": 6,
+          "mapped_word_count": 6,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.want_to_reduction",
+            "expected": "allow",
+            "actual": "block",
+            "correct": false
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "Who",
+            "lemma": "who",
+            "upos": "PRON",
+            "xpos": "WP",
+            "features": {
+              "PronType": "Int"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "obj",
+            "start_char": 0,
+            "end_char": 3,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "do",
+            "lemma": "do",
+            "upos": "AUX",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "2",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "aux",
+            "start_char": 4,
+            "end_char": 6,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "you",
+            "lemma": "you",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Person": "2",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "nsubj",
+            "start_char": 7,
+            "end_char": 10,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "want",
+            "lemma": "want",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 11,
+            "end_char": 15,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 5,
+            "dependency_relation": "mark",
+            "start_char": 16,
+            "end_char": 18,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "invite",
+            "lemma": "invite",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "xcomp",
+            "start_char": 19,
+            "end_char": 25,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "?",
+            "lemma": "?",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 3,
+            "dependency_relation": "punct",
+            "start_char": 25,
+            "end_char": 26,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              11
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-control-004",
+        "alignment": {
+          "word_count": 6,
+          "mapped_word_count": 6,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.want_to_reduction",
+            "expected": "block",
+            "actual": "block",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "Who",
+            "lemma": "who",
+            "upos": "PRON",
+            "xpos": "WP",
+            "features": {
+              "PronType": "Int"
+            },
+            "head_parser_token_index": 5,
+            "dependency_relation": "obj",
+            "start_char": 0,
+            "end_char": 3,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "do",
+            "lemma": "do",
+            "upos": "AUX",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "2",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "aux",
+            "start_char": 4,
+            "end_char": 6,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "you",
+            "lemma": "you",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Person": "2",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "nsubj",
+            "start_char": 7,
+            "end_char": 10,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "want",
+            "lemma": "want",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 11,
+            "end_char": 15,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 5,
+            "dependency_relation": "mark",
+            "start_char": 16,
+            "end_char": 18,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "win",
+            "lemma": "win",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "xcomp",
+            "start_char": 19,
+            "end_char": 22,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "?",
+            "lemma": "?",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 3,
+            "dependency_relation": "punct",
+            "start_char": 22,
+            "end_char": 23,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              11
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-control-005",
+        "alignment": {
+          "word_count": 9,
+          "mapped_word_count": 9,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.future_going_to",
+            "expected": "allow",
+            "actual": "allow",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "I",
+            "lemma": "I",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Sing",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "nsubj",
+            "start_char": 0,
+            "end_char": 1,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "was",
+            "lemma": "be",
+            "upos": "AUX",
+            "xpos": "VBD",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "3",
+              "Tense": "Past",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 2,
+            "end_char": 5,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ",",
+            "lemma": ",",
+            "upos": "PUNCT",
+            "xpos": ",",
+            "features": {},
+            "head_parser_token_index": 4,
+            "dependency_relation": "punct",
+            "start_char": 5,
+            "end_char": 6,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              3
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "I",
+            "lemma": "I",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Sing",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 4,
+            "dependency_relation": "nsubj",
+            "start_char": 7,
+            "end_char": 8,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              5
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "mean",
+            "lemma": "mean",
+            "upos": "VERB",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Sing",
+              "Person": "1",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "discourse",
+            "start_char": 9,
+            "end_char": 13,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              7
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ",",
+            "lemma": ",",
+            "upos": "PUNCT",
+            "xpos": ",",
+            "features": {},
+            "head_parser_token_index": 4,
+            "dependency_relation": "punct",
+            "start_char": 13,
+            "end_char": 14,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "we",
+            "lemma": "we",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Plur",
+              "Person": "1",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "nsubj",
+            "start_char": 15,
+            "end_char": 17,
+            "confidence": null,
+            "parser_token_index": 6,
+            "subtitle_token_indices": [
+              10
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "were",
+            "lemma": "be",
+            "upos": "AUX",
+            "xpos": "VBD",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Plur",
+              "Person": "1",
+              "Tense": "Past",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "aux",
+            "start_char": 18,
+            "end_char": 22,
+            "confidence": null,
+            "parser_token_index": 7,
+            "subtitle_token_indices": [
+              12
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "going",
+            "lemma": "go",
+            "upos": "VERB",
+            "xpos": "VBG",
+            "features": {
+              "Tense": "Pres",
+              "VerbForm": "Part"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "ccomp",
+            "start_char": 23,
+            "end_char": 28,
+            "confidence": null,
+            "parser_token_index": 8,
+            "subtitle_token_indices": [
+              14
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 10,
+            "dependency_relation": "mark",
+            "start_char": 29,
+            "end_char": 31,
+            "confidence": null,
+            "parser_token_index": 9,
+            "subtitle_token_indices": [
+              16
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "call",
+            "lemma": "call",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 8,
+            "dependency_relation": "xcomp",
+            "start_char": 32,
+            "end_char": 36,
+            "confidence": null,
+            "parser_token_index": 10,
+            "subtitle_token_indices": [
+              18
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      },
+      {
+        "case_id": "syn-dev-control-006",
+        "alignment": {
+          "word_count": 5,
+          "mapped_word_count": 5,
+          "lexical_alignment_coverage": 1.0,
+          "exact_span_rate": 1.0,
+          "silent_misalignment_count": 0
+        },
+        "tree_issues": [],
+        "decisions": [
+          {
+            "target": "reference_b.have_to_obligation",
+            "expected": "allow",
+            "actual": "allow",
+            "correct": true
+          }
+        ],
+        "tokens": [
+          {
+            "surface": "They",
+            "lemma": "they",
+            "upos": "PRON",
+            "xpos": "PRP",
+            "features": {
+              "Case": "Nom",
+              "Number": "Plur",
+              "Person": "3",
+              "PronType": "Prs"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "nsubj",
+            "start_char": 0,
+            "end_char": 4,
+            "confidence": null,
+            "parser_token_index": 0,
+            "subtitle_token_indices": [
+              0
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "have",
+            "lemma": "have",
+            "upos": "VERB",
+            "xpos": "VBP",
+            "features": {
+              "Mood": "Ind",
+              "Number": "Plur",
+              "Person": "3",
+              "Tense": "Pres",
+              "VerbForm": "Fin"
+            },
+            "head_parser_token_index": null,
+            "dependency_relation": "root",
+            "start_char": 5,
+            "end_char": 9,
+            "confidence": null,
+            "parser_token_index": 1,
+            "subtitle_token_indices": [
+              2
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "to",
+            "lemma": "to",
+            "upos": "PART",
+            "xpos": "TO",
+            "features": {},
+            "head_parser_token_index": 3,
+            "dependency_relation": "mark",
+            "start_char": 10,
+            "end_char": 12,
+            "confidence": null,
+            "parser_token_index": 2,
+            "subtitle_token_indices": [
+              4
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "leave",
+            "lemma": "leave",
+            "upos": "VERB",
+            "xpos": "VB",
+            "features": {
+              "VerbForm": "Inf"
+            },
+            "head_parser_token_index": 1,
+            "dependency_relation": "xcomp",
+            "start_char": 13,
+            "end_char": 18,
+            "confidence": null,
+            "parser_token_index": 3,
+            "subtitle_token_indices": [
+              6
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": "now",
+            "lemma": "now",
+            "upos": "ADV",
+            "xpos": "RB",
+            "features": {
+              "PronType": "Dem"
+            },
+            "head_parser_token_index": 3,
+            "dependency_relation": "advmod",
+            "start_char": 19,
+            "end_char": 22,
+            "confidence": null,
+            "parser_token_index": 4,
+            "subtitle_token_indices": [
+              8
+            ],
+            "alignment_status": "exact"
+          },
+          {
+            "surface": ".",
+            "lemma": ".",
+            "upos": "PUNCT",
+            "xpos": ".",
+            "features": {},
+            "head_parser_token_index": 1,
+            "dependency_relation": "punct",
+            "start_char": 22,
+            "end_char": 23,
+            "confidence": null,
+            "parser_token_index": 5,
+            "subtitle_token_indices": [
+              9
+            ],
+            "alignment_status": "exact"
+          }
+        ]
+      }
+    ]
+  },
+  "performance": {
+    "cold_seconds": [
+      2.621839249972254,
+      2.6304782920051366,
+      2.631363208871335
+    ],
+    "cold_p95_seconds": 2.631363208871335,
+    "warm_sentence_p95_ms": 106.44320794381201,
+    "batch_100_seconds": 8.471498624887317,
+    "batch_sentences_per_second": 11.804286871536869,
+    "peak_rss_bytes": 861470720
+  },
+  "quality_peak_rss_bytes": 863174656,
+  "venv_installed_bytes": 1152707791,
+  "consumer_bundle_increment_bytes": 0
+}

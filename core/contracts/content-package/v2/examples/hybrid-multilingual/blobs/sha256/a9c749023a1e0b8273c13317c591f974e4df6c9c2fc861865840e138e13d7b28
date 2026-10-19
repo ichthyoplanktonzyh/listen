@@ -1,0 +1,21 @@
+{
+  "base_resource_id": "sha256:8e5f5bab9583a4464910e2ce6b1b15fbc4b3d2a54688cfa8e7dc8f5ba9ed6af5",
+  "extensions": {},
+  "segments": [
+    {
+      "extensions": {},
+      "id": "tr-1",
+      "index": 0,
+      "source_segment_id": "s1",
+      "text": "大熊猫原产于中国中部。"
+    },
+    {
+      "extensions": {},
+      "id": "tr-2",
+      "index": 1,
+      "source_segment_id": "s2",
+      "text": "它每天都吃竹子。"
+    }
+  ],
+  "support_language": "zh-Hans"
+}

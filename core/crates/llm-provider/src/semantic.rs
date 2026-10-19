@@ -1,0 +1,555 @@
+//! The one place semantic behavior lives.
+//!
+//! [`LlmSemanticProvider`] wraps *any* [`LlmChatAdapter`] and implements both
+//! application seams. Because the prompt, the output schema, and the parsing
+//! are written exactly once here — independent of protocol — swapping the
+//! adapter cannot change what a rubric or judgment means. That invariant is
+//! the Phase 3.12 neutrality proof.
+//!
+//! Providers return **drafts** only. Identity, versioning, snapshot hashing,
+//! and the Phase 3.11 validators stay in the server-side use case, so this
+//! vendor layer can never become a second identity or evidence writer.
+
+use application::{
+    JudgeRequest, JudgmentDraft, LlmChatAdapter, LlmProviderDescriptor, OutputFeedbackDraft,
+    OutputFeedbackProvider, OutputFeedbackRequest, RubricDraft, RubricGenerationRequest,
+    RubricPointDraft, SemanticJudgeProvider, SemanticLlmRuntime, SemanticRubricProvider,
+    SenseGroupPartitionDraft, SenseGroupPartitionProvider, SenseGroupPartitionRequest,
+    StructuredChatRequest,
+};
+use async_trait::async_trait;
+use domain::{
+    JudgmentAbstain, LanguageCode, LlmProviderError, PointJudgment, RubricPoint,
+    RubricPointImportance, SemanticTaskKind,
+};
+use serde::Deserialize;
+
+const RUBRIC_PROMPT_VERSION: &str = "rubric-gen/v1";
+const JUDGE_PROMPT_VERSION: &str = "judge/v1";
+const FEEDBACK_PROMPT_VERSION: &str = "output-feedback/v1";
+const SENSE_GROUP_PROMPT_VERSION: &str = "sense-group-partition/v1";
+const SCHEMA_VERSION: &str = "semantic/v1";
+const MAX_OUTPUT_TOKENS: u32 = 2048;
+
+/// Turns a protocol adapter into semantic rubric/judge providers.
+pub struct LlmSemanticProvider<A: LlmChatAdapter> {
+    adapter: A,
+}
+
+impl<A: LlmChatAdapter> LlmSemanticProvider<A> {
+    pub fn new(adapter: A) -> Self {
+        Self { adapter }
+    }
+
+    pub fn adapter(&self) -> &A {
+        &self.adapter
+    }
+}
+
+#[async_trait]
+impl<A: LlmChatAdapter> SemanticLlmRuntime for LlmSemanticProvider<A> {
+    fn rubric(&self) -> &dyn SemanticRubricProvider {
+        self
+    }
+
+    fn judge(&self) -> &dyn SemanticJudgeProvider {
+        self
+    }
+
+    fn feedback(&self) -> &dyn OutputFeedbackProvider {
+        self
+    }
+
+    fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
+        self
+    }
+
+    async fn probe_structured_output(&self) -> Result<domain::CapabilityClaim, LlmProviderError> {
+        self.adapter.probe_structured_output().await
+    }
+}
+
+fn sense_group_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "boundary_after_token_indices": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 0 }
+            }
+        },
+        "required": ["boundary_after_token_indices"]
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct SenseGroupOutput {
+    boundary_after_token_indices: Vec<u32>,
+}
+
+fn sense_group_request(req: &SenseGroupPartitionRequest) -> StructuredChatRequest {
+    let language = req
+        .language
+        .as_ref()
+        .map(LanguageCode::as_str)
+        .unwrap_or("unknown");
+    let tokens = req
+        .tokens
+        .iter()
+        .map(|token| format!("{}:{}:{:?}", token.index, token.kind, token.text))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let protected = req
+        .protected_spans
+        .iter()
+        .map(|span| format!("{}-{}", span.start_token_index, span.end_token_index))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let candidates = req
+        .candidate_boundary_after_token_indices
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let system = format!(
+        "Partition a {language} subtitle sentence into sense groups for language \
+         learning. Each group must be a contiguous, independently understandable \
+         meaning unit: keep a predicate with the arguments or complements needed \
+         to express its local intention, keep referring noun phrases intact, and \
+         avoid fragments made only of function words. Return token indices after \
+         which a group ends. Do not return the sentence-final boundary. Never split \
+         a protected span. Rule/NLP candidates are hints, not constraints. Do not \
+         rewrite, translate, or omit tokens. Return only JSON matching the schema."
+    );
+    let user = format!(
+        "Source text:\n{}\n\nIndexed tokens (index:kind:text):\n{}\n\n\
+         Protected spans:\n{}\n\nCandidate boundaries after token indices:\n{}",
+        req.source_text,
+        tokens,
+        if protected.is_empty() {
+            "none"
+        } else {
+            &protected
+        },
+        if candidates.is_empty() {
+            "none"
+        } else {
+            &candidates
+        },
+    );
+    StructuredChatRequest {
+        system,
+        user,
+        json_schema: sense_group_schema(),
+        schema_name: "sense_group_partition".into(),
+        max_output_tokens: 512,
+        temperature: Some(0.0),
+    }
+}
+
+#[async_trait]
+impl<A: LlmChatAdapter> SenseGroupPartitionProvider for LlmSemanticProvider<A> {
+    fn descriptor(&self) -> LlmProviderDescriptor {
+        self.adapter.descriptor()
+    }
+
+    async fn partition_sense_groups(
+        &self,
+        request: &SenseGroupPartitionRequest,
+    ) -> Result<SenseGroupPartitionDraft, LlmProviderError> {
+        let response = self
+            .adapter
+            .complete_structured(&sense_group_request(request))
+            .await?;
+        let parsed: SenseGroupOutput =
+            serde_json::from_str(&response.json_text).map_err(|error| {
+                LlmProviderError::SchemaInvalid {
+                    detail: format!("output did not match sense-group schema: {error}"),
+                }
+            })?;
+        Ok(SenseGroupPartitionDraft {
+            boundary_after_token_indices: parsed.boundary_after_token_indices,
+            model_id: response.model_id,
+            prompt_version: Some(SENSE_GROUP_PROMPT_VERSION.into()),
+            schema_version: Some(SCHEMA_VERSION.into()),
+        })
+    }
+}
+
+fn purpose_label(kind: SemanticTaskKind) -> &'static str {
+    match kind {
+        SemanticTaskKind::ReadingComprehension => "reading comprehension",
+        SemanticTaskKind::L1Retelling => "L1 (native-language) retelling",
+        SemanticTaskKind::L2Retelling => "L2 (target-language) retelling",
+        SemanticTaskKind::Dictogloss => "dictogloss reconstruction",
+        SemanticTaskKind::OneSentenceSummary => "one-sentence summary",
+        SemanticTaskKind::Summary => "summary",
+        SemanticTaskKind::OpinionResponse => "opinion response",
+        SemanticTaskKind::PatternProduction => "sentence-pattern production",
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rubric generation
+// ---------------------------------------------------------------------------
+
+fn rubric_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "points": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "importance": { "type": "string", "enum": ["required", "optional"] },
+                        "statement": { "type": "string" },
+                        "accepted_paraphrase_notes": { "type": ["string", "null"] }
+                    },
+                    "required": ["importance", "statement", "accepted_paraphrase_notes"]
+                }
+            }
+        },
+        "required": ["points"]
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct RubricOutput {
+    points: Vec<RubricPointOutput>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RubricPointOutput {
+    importance: RubricPointImportance,
+    statement: String,
+    #[serde(default)]
+    accepted_paraphrase_notes: Option<String>,
+}
+
+fn rubric_request(req: &RubricGenerationRequest) -> StructuredChatRequest {
+    let system = format!(
+        "You extract a fixed scoring rubric of information points for a {} task. \
+         The source is in {} and the learner will respond in {}. \
+         List the atomic information points a faithful response must convey. \
+         Mark each point required or optional. Do not evaluate any response. \
+         Return only JSON matching the schema.",
+        purpose_label(req.purpose),
+        req.source_language.as_str(),
+        req.response_language.as_str(),
+    );
+    StructuredChatRequest {
+        system,
+        user: format!("Source segment transcript:\n{}", req.transcript_snapshot),
+        json_schema: rubric_schema(),
+        schema_name: "semantic_rubric".into(),
+        max_output_tokens: MAX_OUTPUT_TOKENS,
+        temperature: Some(0.0),
+    }
+}
+
+#[async_trait]
+impl<A: LlmChatAdapter> SemanticRubricProvider for LlmSemanticProvider<A> {
+    fn descriptor(&self) -> LlmProviderDescriptor {
+        self.adapter.descriptor()
+    }
+
+    async fn generate_rubric(
+        &self,
+        request: &RubricGenerationRequest,
+    ) -> Result<RubricDraft, LlmProviderError> {
+        let response = self
+            .adapter
+            .complete_structured(&rubric_request(request))
+            .await?;
+        let raw_output: serde_json::Value =
+            serde_json::from_str(&response.json_text).map_err(|error| {
+                LlmProviderError::SchemaInvalid {
+                    detail: format!("output was not valid JSON: {error}"),
+                }
+            })?;
+        let parsed: RubricOutput = serde_json::from_value(raw_output.clone()).map_err(|error| {
+            LlmProviderError::SchemaInvalid {
+                detail: format!("output did not match rubric schema: {error}"),
+            }
+        })?;
+        Ok(RubricDraft {
+            points: parsed
+                .points
+                .into_iter()
+                .map(|point| RubricPointDraft {
+                    importance: point.importance,
+                    statement: point.statement,
+                    accepted_paraphrase_notes: point.accepted_paraphrase_notes,
+                })
+                .collect(),
+            model_id: response.model_id,
+            prompt_version: Some(RUBRIC_PROMPT_VERSION.into()),
+            schema_version: Some(SCHEMA_VERSION.into()),
+            raw_output,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Judgment
+// ---------------------------------------------------------------------------
+
+fn judgment_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "abstain": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "enum": [
+                            "unreliable_transcript",
+                            "empty_response",
+                            "generator_refused",
+                            "other"
+                        ]
+                    },
+                    "note": { "type": ["string", "null"] }
+                },
+                "required": ["reason", "note"]
+            },
+            "points": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "point_id": { "type": "string" },
+                        "verdict": {
+                            "type": "string",
+                            "enum": ["covered", "partial", "missing", "uncertain"]
+                        },
+                        "supporting_spans": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "start_char": { "type": "integer", "minimum": 0 },
+                                    "end_char": { "type": "integer", "minimum": 0 }
+                                },
+                                "required": ["start_char", "end_char"]
+                            }
+                        }
+                    },
+                    "required": ["point_id", "verdict", "supporting_spans"]
+                }
+            }
+        },
+        "required": ["abstain", "points"]
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct JudgmentOutput {
+    #[serde(default)]
+    abstain: Option<JudgmentAbstain>,
+    #[serde(default)]
+    points: Vec<PointJudgment>,
+}
+
+fn point_lines(points: &[RubricPoint]) -> String {
+    points
+        .iter()
+        .map(|point| {
+            format!(
+                "- {} [{}]: {}",
+                point.point_id,
+                match point.importance {
+                    RubricPointImportance::Required => "required",
+                    RubricPointImportance::Optional => "optional",
+                },
+                point.statement,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn judge_request(req: &JudgeRequest) -> StructuredChatRequest {
+    let asr_note = match req.asr_reliability {
+        Some(domain::AsrReliability::Unreliable) => {
+            " The response transcript is flagged UNRELIABLE; if you cannot judge \
+             faithfully, abstain with reason unreliable_transcript."
+        }
+        Some(domain::AsrReliability::Suspect) => {
+            " The response transcript may contain ASR errors; weigh spans cautiously."
+        }
+        _ => "",
+    };
+    let system = format!(
+        "You judge one learner response against a FIXED rubric. For every rubric \
+         point return covered, partial, missing, or uncertain, with response \
+         character spans [start_char, end_char) that support your verdict. Cite \
+         only spans that exist in the response text. Do not invent points. If the \
+         response is empty or the transcript is unusable, abstain instead of \
+         guessing.{asr_note} Return only JSON matching the schema."
+    );
+    let user = format!(
+        "Rubric ({} -> {}), points:\n{}\n\nLearner response ({}):\n{}",
+        req.rubric.source.language.as_str(),
+        req.rubric.response_language.as_str(),
+        point_lines(&req.rubric.points),
+        req.response_language.as_str(),
+        req.response_transcript,
+    );
+    StructuredChatRequest {
+        system,
+        user,
+        json_schema: judgment_schema(),
+        schema_name: "semantic_judgment".into(),
+        max_output_tokens: MAX_OUTPUT_TOKENS,
+        temperature: Some(0.0),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Output feedback (speaking/writing qualitative teacher feedback)
+// ---------------------------------------------------------------------------
+
+fn feedback_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "feedback": { "type": "string" }
+        },
+        "required": ["feedback"]
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct FeedbackOutput {
+    feedback: String,
+}
+
+fn feedback_request(req: &OutputFeedbackRequest) -> StructuredChatRequest {
+    let asr_note = match req.asr_reliability {
+        Some(domain::AsrReliability::Unreliable) => {
+            " The learner response is an ASR transcript flagged UNRELIABLE; \
+             say so and keep the feedback tentative."
+        }
+        Some(domain::AsrReliability::Suspect) => {
+            " The learner response is an ASR transcript that may contain \
+             recognition errors; do not nitpick likely mis-transcriptions."
+        }
+        _ => "",
+    };
+    let system = format!(
+        "You are a supportive language teacher reviewing a learner's {} \
+         response. Read the source material and the task, then give short \
+         qualitative feedback in {}: first name concretely what the learner \
+         did well, then the one or two most useful improvements, quoting \
+         their own wording where helpful. Do not assign scores, verdicts, or \
+         checklists.{asr_note} Return only JSON matching the schema.",
+        purpose_label(req.task_kind),
+        req.response_language.as_str(),
+    );
+    let prompt_block = req
+        .prompt_snapshot
+        .as_deref()
+        .map(|prompt| format!("Task prompt:\n{prompt}\n\n"))
+        .unwrap_or_default();
+    let user = format!(
+        "Source material ({}):\n{}\n\n{}Learner response ({}):\n{}",
+        req.source_language.as_str(),
+        req.source_transcript,
+        prompt_block,
+        req.response_language.as_str(),
+        req.learner_response,
+    );
+    StructuredChatRequest {
+        system,
+        user,
+        json_schema: feedback_schema(),
+        schema_name: "output_feedback".into(),
+        max_output_tokens: MAX_OUTPUT_TOKENS,
+        temperature: Some(0.3),
+    }
+}
+
+#[async_trait]
+impl<A: LlmChatAdapter> OutputFeedbackProvider for LlmSemanticProvider<A> {
+    fn descriptor(&self) -> LlmProviderDescriptor {
+        self.adapter.descriptor()
+    }
+
+    async fn give_feedback(
+        &self,
+        request: &OutputFeedbackRequest,
+    ) -> Result<OutputFeedbackDraft, LlmProviderError> {
+        let response = self
+            .adapter
+            .complete_structured(&feedback_request(request))
+            .await?;
+        let parsed: FeedbackOutput =
+            serde_json::from_str(&response.json_text).map_err(|error| {
+                LlmProviderError::SchemaInvalid {
+                    detail: format!("output did not match feedback schema: {error}"),
+                }
+            })?;
+        if parsed.feedback.trim().is_empty() {
+            return Err(LlmProviderError::SchemaInvalid {
+                detail: "feedback text was empty".into(),
+            });
+        }
+        Ok(OutputFeedbackDraft {
+            feedback: parsed.feedback,
+            model_id: response.model_id,
+            prompt_version: Some(FEEDBACK_PROMPT_VERSION.into()),
+        })
+    }
+}
+
+#[async_trait]
+impl<A: LlmChatAdapter> SemanticJudgeProvider for LlmSemanticProvider<A> {
+    fn descriptor(&self) -> LlmProviderDescriptor {
+        self.adapter.descriptor()
+    }
+
+    async fn judge(&self, request: &JudgeRequest) -> Result<JudgmentDraft, LlmProviderError> {
+        let response = self
+            .adapter
+            .complete_structured(&judge_request(request))
+            .await?;
+        let raw_output: serde_json::Value =
+            serde_json::from_str(&response.json_text).map_err(|error| {
+                LlmProviderError::SchemaInvalid {
+                    detail: format!("output was not valid JSON: {error}"),
+                }
+            })?;
+        let parsed: JudgmentOutput =
+            serde_json::from_value(raw_output.clone()).map_err(|error| {
+                LlmProviderError::SchemaInvalid {
+                    detail: format!("output did not match judgment schema: {error}"),
+                }
+            })?;
+        // Structural sanity the use case also enforces, surfaced early as a
+        // schema error: abstain and per-point verdicts are mutually exclusive.
+        if parsed.abstain.is_some() && !parsed.points.is_empty() {
+            return Err(LlmProviderError::SchemaInvalid {
+                detail: "judgment cannot both abstain and return points".into(),
+            });
+        }
+        Ok(JudgmentDraft {
+            points: parsed.points,
+            abstain: parsed.abstain,
+            model_id: response.model_id,
+            prompt_version: Some(JUDGE_PROMPT_VERSION.into()),
+            schema_version: Some(SCHEMA_VERSION.into()),
+            raw_output,
+        })
+    }
+}

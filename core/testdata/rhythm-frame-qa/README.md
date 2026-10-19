@@ -1,0 +1,159 @@
+# RhythmFrame QA Annotations
+
+Phase 2.20 evaluates whether `sound_analysis.rhythm_frame` helps explain why a
+sentence is hard to hear. Phone PER remains evidence quality; this folder is for
+rhythm-first listening quality.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `annotation.schema.json` | Machine-readable shape for manual QA JSONL rows |
+| `sample-annotations.jsonl` | Small documented example; not a benchmark |
+| `fixture-manifest.jsonl` | Committed synthetic scorer/gate regression manifest |
+| `fixture-rhythm.lltimeline.json` | Minimal committed LLTimeline with two `rhythm_frame` sentences |
+| `fixture-no-phone-rhythm.lltimeline.json` | Committed no-phone evidence LLTimeline proving document-level WordTimeline-driven L1-L3 rhythm consumption |
+| `fixture-annotations.jsonl` | Matching committed manual labels for strict gate smoke tests |
+| `annotations.jsonl` | Optional local/manual labels consumed by the scorer; may be absent |
+
+`annotations.jsonl` can reference local-only media/artifacts. Keep copyrighted
+media and generated full timelines out of git.
+
+## Generate A Template
+
+```bash
+python3 scripts/evaluate-rhythm-frame.py \
+  --manifest testdata/sound-line-real-media/manifest.jsonl \
+  --emit-template \
+  --template-require-rhythm-frame \
+  --limit 10 > testdata/rhythm-frame-qa/annotations.local.jsonl
+```
+
+Current Phase 2.17 artifacts may predate `rhythm_frame`; those rows will show
+`system.status = "missing_rhythm_frame"` until the case is regenerated.
+`--template-require-rhythm-frame` is recommended for Phase 2.21 W8 so manual QA
+only spends attention on sentences with system RhythmFrame output. Template rows
+include empty `nuclei` and `connected_speech_refs` lists because W8 labels phrase
+nuclei and reductions as first-class checks, not just stress anchors.
+
+## Generate A Duration/RMS Comparison Template
+
+Phase 2.20 route correction compares the current CTC-derived `RhythmFrame`
+against active WordTimeline duration/rate and per-word RMS energy evidence before
+changing the product generator:
+
+```bash
+python3 scripts/prepare-rhythm-acoustic-qa.py \
+  --manifest testdata/sound-line-real-media/manifest.jsonl \
+  --case-id p217-brooklyn-news-001 \
+  --limit 10 \
+  --emit-template > testdata/rhythm-frame-qa/acoustic-comparison.local.jsonl
+```
+
+Rows include the normal manual-label fields plus `system_compare`. Duration/rate
+and RMS candidates are `heuristic_proxy` evidence for manual QA, not product
+truth.
+
+Phase 2.21 adds a product generator seam for normalized word-level energy
+prominence cues, but this harness is still an experiment/QA source. Do not copy
+its temporary RMS thresholds into production without calibration.
+
+W4 adds a production-side artifact path (`rhythm_word_acoustic_cues`) that can
+feed RMS relative energy into `RhythmWordAcousticCue`. This is still
+heuristic-proxy evidence until W8 manual QA calibrates and promotes it.
+
+## Committed Fixture Smoke
+
+The synthetic fixture is intentionally small and redistributable. It keeps the
+scorer, strict annotation validation, and quality gate CLI path testable without
+requiring local media regeneration. The manifest also includes a no-phone
+evidence fixture whose `phone_timelines` are empty and whose document-level
+`rhythm_frames` carry WordTimeline-driven anchors/nuclei/weak/compression/
+boundary/hotspot structure. After W3 it also carries text-prior Reference B
+connected-speech refs, so no-phone does not mean no default connected-form
+prediction:
+
+```bash
+python3 scripts/evaluate-rhythm-frame.py \
+  --manifest testdata/rhythm-frame-qa/fixture-manifest.jsonl \
+  --annotations testdata/rhythm-frame-qa/fixture-annotations.jsonl \
+  --strict-annotations \
+  --min-rhythm-coverage 1.0 \
+  --min-annotated-sentences 2 \
+  --min-overall-useful-rate 1.0 \
+  --max-hotspot-misleading-rate 0.0 \
+  --max-hotspot-unsupported-rate 0.0 \
+  --fail-on-quality-gate
+```
+
+## Score
+
+```bash
+python3 scripts/evaluate-rhythm-frame.py \
+  --manifest testdata/sound-line-real-media/manifest.jsonl \
+  --annotations testdata/rhythm-frame-qa/annotations.local.jsonl
+```
+
+Use strict validation before treating manual labels as a gate:
+
+```bash
+python3 scripts/evaluate-rhythm-frame.py \
+  --manifest testdata/sound-line-real-media/manifest.jsonl \
+  --annotations testdata/rhythm-frame-qa/annotations.local.jsonl \
+  --strict-annotations
+```
+
+The JSON output always includes `annotation_validation` and
+`summary.manual_qa`, so invalid score labels, duplicate sentence annotations,
+unknown sentence IDs, and aggregate `correct / misleading / unsupported` counts
+are visible even in non-strict exploratory runs.
+Empty template rows validate successfully but do not count as manual annotations:
+`summary.manual_qa.annotated_sentence_count` only increases after an overall
+score or at least one manual label item is filled.
+
+## Quality Gates
+
+Quality gates are optional until enough local artifacts are refreshed and
+manual labels exist. They are intended for closeout/CI-style checks:
+
+```bash
+python3 scripts/evaluate-rhythm-frame.py \
+  --manifest testdata/sound-line-real-media/manifest.jsonl \
+  --annotations testdata/rhythm-frame-qa/annotations.local.jsonl \
+  --strict-annotations \
+  --min-rhythm-coverage 1.0 \
+  --min-rhythm-frame-sentences 10 \
+  --min-word-timeline-rhythm-sentences 10 \
+  --min-energy-prominence-sentences 10 \
+  --min-annotated-sentences 10 \
+  --min-overall-useful-rate 0.7 \
+  --max-hotspot-misleading-rate 0.1 \
+  --max-hotspot-unsupported-rate 0.2 \
+  --fail-on-quality-gate
+```
+
+The output includes `quality_gates.passed` and one entry per configured gate.
+With `--fail-on-quality-gate`, failures exit with code `4`. For Phase 2.21 W8,
+`word_timeline_rhythm_sentence_count` and `energy_prominence_sentence_count` are
+the promotion checks for the new WordTimeline + acoustic cue path; old v0 phone
+RhythmFrames do not satisfy those counters.
+
+## Manual Rubric
+
+Use the same score vocabulary for hotspot and overall judgments:
+
+| Score | Meaning |
+|---|---|
+| `correct` | Audible evidence and learner-facing explanation both fit |
+| `useful_but_incomplete` | Points to the right region but misses relevant detail |
+| `unclear` | Not clearly wrong, but not useful enough |
+| `misleading` | Points to the wrong word, sound, or reason |
+| `unsupported` | Text-predicted but not supported by the audio |
+
+Mark `phone_detail_needed` when a default rhythm explanation is not enough and
+phone-level evidence should be opened to explain the issue.
+
+Every annotation row must include `stress_anchors`, `nuclei`, `weak_groups`,
+`compression_spans`, `phrase_boundaries`, `connected_speech_refs`, and
+`listening_hotspots`. Use empty arrays when a category is not audible or not
+present; do not omit the field.

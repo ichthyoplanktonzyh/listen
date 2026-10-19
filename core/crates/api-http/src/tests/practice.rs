@@ -1,0 +1,858 @@
+use super::*;
+
+fn speaking_facts_wav() -> Vec<u8> {
+    let sample_rate = 16_000_u32;
+    let sample_count = sample_rate as usize;
+    let data_len = (sample_count * 2) as u32;
+    let mut bytes = Vec::with_capacity(44 + data_len as usize);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&sample_rate.to_le_bytes());
+    bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_len.to_le_bytes());
+    for index in 0..sample_count {
+        let time_ms = index * 1000 / sample_rate as usize;
+        let sample = if (300..500).contains(&time_ms) {
+            0_i16
+        } else {
+            8_000_i16
+        };
+        bytes.extend_from_slice(&sample.to_le_bytes());
+    }
+    bytes
+}
+
+#[tokio::test]
+async fn recording_and_unscored_shadowing_routes_round_trip() {
+    let app = test_app();
+    let recording_path = std::env::temp_dir().join(format!(
+        "llplayer-speaking-facts-{}-{}.wav",
+        std::process::id(),
+        application::now_ms()
+    ));
+    let wav = speaking_facts_wav();
+    std::fs::write(&recording_path, &wav).unwrap();
+    async fn post(app: &Router, path: &str, body: serde_json::Value) -> serde_json::Value {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(path)
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    }
+
+    let session = post(
+        &app,
+        "/v1/practice/sessions",
+        serde_json::json!({"mode": "intensive", "source": "shadowing-route-test"}),
+    )
+    .await;
+    let target = serde_json::json!({
+        "kind": "chunk",
+        "id": "chunk-route-1",
+        "sentence_id": "sentence-route-1",
+        "chunk_id": "chunk-route-1",
+        "start_ms": 100,
+        "end_ms": 900
+    });
+    let item = post(
+        &app,
+        "/v1/practice/items",
+        serde_json::json!({
+            "session_id": session["id"],
+            "kind": "shadowing",
+            "target": target,
+            "prompt_snapshot": "follow this chunk",
+            "expected_text": "follow this chunk",
+            "anchors": []
+        }),
+    )
+    .await;
+    let recording = post(
+        &app,
+        "/v1/recordings",
+        serde_json::json!({
+            "file_path": recording_path.to_string_lossy(),
+            "duration_ms": 1000,
+            "target": item["target"],
+            "source_segment": {
+                "media_id": null,
+                "start_ms": 100,
+                "end_ms": 900,
+                "label": "chunk 1",
+                "subtitle_snapshot": "follow this chunk",
+                "availability": "available"
+            },
+            "language": "en",
+            "audio": {
+                "container": "wav",
+                "codec": "pcm_s16le",
+                "sample_rate_hz": 16000,
+                "channels": 1,
+                "sample_format": "s16",
+                "byte_length": wav.len(),
+                "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "recorder_version": "flutter-recorder-v1"
+        }),
+    )
+    .await;
+    let attempt = post(
+        &app,
+        "/v1/practice/shadowing-attempts",
+        serde_json::json!({
+            "item_id": item["id"],
+            "recording_id": recording["id"]
+        }),
+    )
+    .await;
+    assert_eq!(attempt["result"], "completed");
+    assert!(attempt["score"].is_null());
+    assert_eq!(attempt["generated_observation_ids"], serde_json::json!([]));
+
+    let recording_id = recording["id"].as_str().unwrap();
+    let get_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/recordings/{recording_id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let facts_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/recordings/{recording_id}/audio-facts"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(facts_response.status(), StatusCode::OK);
+    let facts: serde_json::Value = serde_json::from_slice(
+        &to_bytes(facts_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(facts["duration_ms"], 1000);
+    assert_eq!(facts["pauses"].as_array().unwrap().len(), 1);
+    let comparison = post(
+        &app,
+        "/v1/shadowing/comparisons",
+        serde_json::json!({
+            "recording_id": recording_id,
+            "reference_wav_path": recording_path.to_string_lossy()
+        }),
+    )
+    .await;
+    assert_eq!(
+        comparison["analysis_v2"]["abstain_reason"],
+        "missing_reference_timeline"
+    );
+    let analysis_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/recordings/{recording_id}/shadowing-analysis"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(analysis_response.status(), StatusCode::OK);
+    let persisted_analysis: serde_json::Value = serde_json::from_slice(
+        &to_bytes(analysis_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(persisted_analysis["analysis"], comparison["analysis_v2"]);
+    let delete_response = app
+        .oneshot(
+            Request::delete(format!("/v1/recordings/{recording_id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::OK);
+    let _ = std::fs::remove_file(recording_path);
+}
+
+#[tokio::test]
+async fn hunting_occurrence_and_check_routes_round_trip_not_noticed_without_observation() {
+    let app = test_app();
+    let track = setup_phonetic_track(&app, "hunting-route").await;
+    let media_id = track["media_id"].as_str().unwrap();
+    let track_id = track["id"].as_str().unwrap();
+
+    let lexical_response = app
+        .clone()
+        .oneshot(
+            Request::put("/v1/lexical-entries")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "language": "en",
+                        "kind": "word",
+                        "canonical_form": "hello",
+                        "display_form": "hello"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let lexical: serde_json::Value = serde_json::from_slice(
+        &to_bytes(lexical_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let lexical_entry_id = lexical["entry"]["id"].as_str().unwrap();
+    let target_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/hunting/targets")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "lexical_entry_id": lexical_entry_id,
+                        "source_kind": "manual"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let target: serde_json::Value = serde_json::from_slice(
+        &to_bytes(target_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let session_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/practice/sessions")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "mode": "extensive",
+                        "media_id": media_id,
+                        "track_id": track_id,
+                        "source": "hunting_route_test"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session: serde_json::Value = serde_json::from_slice(
+        &to_bytes(session_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    let occurrences_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/hunting/occurrences?media_id={media_id}&track_id={track_id}"
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(occurrences_response.status(), StatusCode::OK);
+    let located: serde_json::Value = serde_json::from_slice(
+        &to_bytes(occurrences_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(located["indexed"], true);
+    let occurrence_id = located["occurrences"][0]["occurrence"]["id"]
+        .as_str()
+        .unwrap();
+
+    let check_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/hunting/checks")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "session_id": session["id"],
+                        "target_id": target["id"],
+                        "occurrence_id": occurrence_id,
+                        "answer": "not_noticed"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(check_response.status(), StatusCode::OK);
+    let check: serde_json::Value = serde_json::from_slice(
+        &to_bytes(check_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(check["answer"], "not_noticed");
+    assert!(check["observation_id"].is_null());
+}
+
+#[tokio::test]
+async fn hunting_target_routes_create_list_and_archive_manual_targets() {
+    let app = test_app();
+    let lexical_response = app
+        .clone()
+        .oneshot(
+            Request::put("/v1/lexical-entries")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "language": "en",
+                        "kind": "word",
+                        "canonical_form": "notice",
+                        "display_form": "notice"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(lexical_response.status(), StatusCode::OK);
+    let lexical: serde_json::Value = serde_json::from_slice(
+        &to_bytes(lexical_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let lexical_entry_id = lexical["entry"]["id"].as_str().unwrap();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/hunting/targets")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "lexical_entry_id": lexical_entry_id,
+                        "source_kind": "manual"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let target: serde_json::Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(target["target_snapshot"], "notice");
+    assert_eq!(target["status"], "active");
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/hunting/targets")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let targets: serde_json::Value = serde_json::from_slice(
+        &to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(targets.as_array().unwrap().len(), 1);
+
+    let archive_response = app
+        .clone()
+        .oneshot(
+            Request::delete(format!(
+                "/v1/hunting/targets/{}",
+                target["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(archive_response.status(), StatusCode::OK);
+    let archived: serde_json::Value = serde_json::from_slice(
+        &to_bytes(archive_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(archived["status"], "archived");
+}
+
+#[tokio::test]
+async fn practice_routes_create_and_read_attempts() {
+    let app = test_app();
+    let item_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/practice/items")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "kind": "dictation",
+                        "target": {
+                            "kind": "chunk",
+                            "id": "chunk-1",
+                            "sentence_id": null,
+                            "chunk_id": "chunk-1",
+                            "start_ms": 100,
+                            "end_ms": 900
+                        },
+                        "prompt_snapshot": "hello world",
+                        "expected_text": "hello world",
+                        "anchors": []
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(item_response.status(), StatusCode::OK);
+    let item: serde_json::Value = serde_json::from_slice(
+        &to_bytes(item_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let item_id = item["id"].as_str().unwrap();
+
+    let attempt_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/practice/attempts")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "item_id": item_id,
+                        "text_answer": "hello",
+                        "create_review_item_on_failure": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(attempt_response.status(), StatusCode::OK);
+    let attempt: serde_json::Value = serde_json::from_slice(
+        &to_bytes(attempt_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(attempt["result"], "partial");
+    assert_eq!(
+        attempt["generated_review_item_ids"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let attempt_id = attempt["id"].as_str().unwrap();
+
+    let due_response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/review/items?limit=8")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(due_response.status(), StatusCode::OK);
+    let due: serde_json::Value = serde_json::from_slice(
+        &to_bytes(due_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let review_id = due[0]["item"]["id"].as_str().unwrap();
+    assert_eq!(due[0]["schedule"]["algorithm"], "fsrs_6_default_v1");
+    assert_eq!(due[0]["state"], "new");
+    assert_eq!(due[0]["origin"]["kind"], "native");
+    assert_eq!(due[0]["card"]["kind"], "source_sentence_recall");
+    assert_eq!(due[0]["card"]["answer"], "hello world");
+
+    let preview_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/review/items/{review_id}/interval-preview"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preview_response.status(), StatusCode::OK);
+    let preview: serde_json::Value = serde_json::from_slice(
+        &to_bytes(preview_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(preview.as_array().unwrap().len(), 4);
+    assert_eq!(preview[0]["rating"], "again");
+
+    let review_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/review/attempts")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"item_id": review_id, "rating": "good"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(review_response.status(), StatusCode::OK);
+    let review_submission: serde_json::Value = serde_json::from_slice(
+        &to_bytes(review_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(review_submission["attempt"]["rating"], "good");
+    assert_eq!(
+        review_submission["schedule"]["algorithm"],
+        "fsrs_6_default_v1"
+    );
+    assert!(
+        review_submission["schedule"]["interval_days"]
+            .as_f64()
+            .unwrap()
+            >= 1.0
+    );
+    assert!(review_submission["schedule"]["stability"].as_f64().unwrap() > 0.0);
+    assert!(
+        review_submission["schedule"]["difficulty"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
+    assert_eq!(
+        review_submission["generated_observation_ids"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        review_submission["hunting_candidate_ids"],
+        serde_json::json!([])
+    );
+
+    let read_response = app
+        .oneshot(
+            Request::get(format!("/v1/practice/attempts/{attempt_id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn upgrade_suggestion_routes_expose_pending_and_history_queries() {
+    let app = test_app();
+    for path in [
+        "/v1/review/upgrade-suggestions",
+        "/v1/review/upgrade-suggestions/history",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(path)
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let values: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+                .unwrap();
+        assert_eq!(values, serde_json::json!([]));
+    }
+
+    let missing = app
+        .oneshot(
+            Request::post("/v1/review/upgrade-suggestions/missing/confirm")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn practice_routes_reject_retired_intensive_endpoints_and_complete_extensive_session() {
+    let app = test_app();
+    let session_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/practice/sessions")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "mode": "extensive",
+                        "media_id": null,
+                        "track_id": null,
+                        "source": "test"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(session_response.status(), StatusCode::OK);
+    let session: serde_json::Value = serde_json::from_slice(
+        &to_bytes(session_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let session_id = session["id"].as_str().unwrap();
+    let retired_summary = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/practice/sessions/{session_id}/summary"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(retired_summary.status(), StatusCode::NOT_FOUND);
+    let retired_stuck = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/practice/stuck-points/mark")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(retired_stuck.status(), StatusCode::NOT_FOUND);
+
+    let complete_response = app
+        .oneshot(
+            Request::post(format!("/v1/listening/sessions/{session_id}/complete"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "comprehension_report": "got_the_gist",
+                        "hunting_summary": {
+                            "prompted_count": 2,
+                            "recognized_count": 1,
+                            "not_recognized_count": 0,
+                            "not_noticed_count": 1
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(complete_response.status(), StatusCode::OK);
+    let completed: serde_json::Value = serde_json::from_slice(
+        &to_bytes(complete_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(completed["ended_at_ms"].is_number());
+}
+
+#[tokio::test]
+async fn practice_routes_capture_and_process_listening_inbox_items() {
+    let app = test_app();
+    let session_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/practice/sessions")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "mode": "extensive",
+                        "media_id": null,
+                        "track_id": null,
+                        "source": "route-test"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(session_response.status(), StatusCode::OK);
+    let session: serde_json::Value = serde_json::from_slice(
+        &to_bytes(session_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let session_id = session["id"].as_str().unwrap();
+
+    let capture_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/listening-inbox/items")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "session_id": session_id,
+                        "target": {
+                            "kind": "sentence",
+                            "id": "sentence-inbox-api-1",
+                            "sentence_id": "sentence-inbox-api-1",
+                            "chunk_id": null,
+                            "start_ms": 1200,
+                            "end_ms": 2200
+                        },
+                        "anchors": [{
+                            "kind": "sentence",
+                            "id": "sentence-inbox-api-1",
+                            "label": "missed this line",
+                            "lexical_entry_id": null,
+                            "sentence_id": "sentence-inbox-api-1",
+                            "token_start": 0,
+                            "token_end": 2,
+                            "start_ms": 1200,
+                            "end_ms": 2200
+                        }],
+                        "label": "missed this line",
+                        "subtitle_snapshot": "missed this line",
+                        "context_before": null,
+                        "context_after": "after"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(capture_response.status(), StatusCode::OK);
+    let captured: serde_json::Value = serde_json::from_slice(
+        &to_bytes(capture_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(captured["status"], "active");
+    let item_id = captured["id"].as_str().unwrap();
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/listening-inbox/items")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let items: serde_json::Value = serde_json::from_slice(
+        &to_bytes(list_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(items.as_array().unwrap().len(), 1);
+
+    let process_response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/v1/listening-inbox/items/{item_id}/process"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"resolution": "review_item"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(process_response.status(), StatusCode::OK);
+    let processed: serde_json::Value = serde_json::from_slice(
+        &to_bytes(process_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(processed["status"], "archived");
+    assert_eq!(processed["resolution"], "review_item");
+    assert_eq!(processed["review_item_ids"].as_array().unwrap().len(), 1);
+}

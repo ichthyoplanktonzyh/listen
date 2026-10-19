@@ -1,0 +1,38 @@
+{
+  "algorithm_id": "torchaudio-ctc-forced-aligner",
+  "algorithm_version": "mms-fa-v1",
+  "config_hash": "candidate-config",
+  "created_at_ms": 2,
+  "created_by": "algorithm",
+  "id": "candidate-v1",
+  "media_id": "media-1",
+  "metrics_json": {},
+  "parent_timeline_id": "baseline-v1",
+  "status": "candidate",
+  "track_id": "track-1",
+  "updated_at_ms": 2,
+  "words": [
+    {
+      "confidence": 0.92,
+      "end_ms": 260,
+      "provider_id": "torchaudio-ctc-forced-aligner",
+      "provider_version": "mms-fa-v1",
+      "sentence_id": "sentence-1",
+      "start_ms": 150,
+      "text": "hello",
+      "timing_source": "forced_aligned",
+      "token_index": 0
+    },
+    {
+      "confidence": 0.88,
+      "end_ms": 560,
+      "provider_id": "torchaudio-ctc-forced-aligner",
+      "provider_version": "mms-fa-v1",
+      "sentence_id": "sentence-1",
+      "start_ms": 300,
+      "text": "world",
+      "timing_source": "forced_aligned",
+      "token_index": 1
+    }
+  ]
+}

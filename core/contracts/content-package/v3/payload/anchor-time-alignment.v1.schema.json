@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v3/payload/anchor-time-alignment.v1.schema.json",
+  "title": "Listen anchor-to-time alignment payload v1",
+  "description": "A Base Resource mapping exact Reading Anchors to exact media-time Rendition Locators. The alignment is meaningful only against the exact Structured Reading Resource and the exact Media Rendition it names; entries are exact or absent, never fabricated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["anchor_resource_id", "rendition_id", "alignments", "extensions"],
+  "properties": {
+    "anchor_resource_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "rendition_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "alignments": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/alignmentEntry" }
+    },
+    "extensions": { "type": "object" }
+  },
+  "$defs": {
+    "alignmentEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchor_id", "media_time_ms"],
+      "properties": {
+        "anchor_id": { "type": "string", "minLength": 1 },
+        "media_time_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

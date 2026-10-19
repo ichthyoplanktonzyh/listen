@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fixtures": {
+    "ambiguity-validation-v1.jsonl": {
+      "sha256": "8f4b4d7ed03180d1866ae2dfc986f4acd5e85886d49fe09920e16fa8b27b7984",
+      "provenance": "Locked before the first Phase 3.9.1 validation run.",
+      "historical_source_path": ".planning/archive/monorepo-baseline/phases/3.9.1-shared-syntactic-analysis-provider/3.9.1-EVALUATION-PREREGISTRATION.md"
+    },
+    "ambiguity-validation-v2.jsonl": {
+      "sha256": "7d2a81147e5fad2da6a0c79392ec62ff8812ffb45a4d7332a58100ac22523e47",
+      "provenance": "Locked before the first spaCy v2 validation run.",
+      "historical_source_path": ".planning/archive/monorepo-baseline/phases/3.9.2-syntax-provider-product-activation/3.9.2-EVALUATION-PREREGISTRATION.md"
+    }
+  }
+}

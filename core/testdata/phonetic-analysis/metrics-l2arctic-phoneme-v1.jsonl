@@ -1,0 +1,10 @@
+{"case_id": "m20-001", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-002", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-004", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-011", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-013", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-015", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-021", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-022", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-023", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}
+{"case_id": "m20-024", "provider_id": "l2-arctic-ipa", "status": "failed", "error": "No module named 'torch'"}

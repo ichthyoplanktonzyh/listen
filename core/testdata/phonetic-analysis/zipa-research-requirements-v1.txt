@@ -1,0 +1,5 @@
+onnxruntime==1.26.0
+soundfile==0.14.0
+librosa==0.11.0
+lhotse==1.33.0
+torch==2.12.0
