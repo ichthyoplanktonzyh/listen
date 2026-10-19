@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "name": "lengthening_without_pause",
+      "text": "We can solve this problem today",
+      "durations_ms": [120, 130, 125, 360, 120, 130],
+      "gaps_ms": [20, 20, 20, 20, 20],
+      "expected_chunks": ["We can solve this", "problem today"]
+    },
+    {
+      "name": "ordinary_duration_does_not_invent_boundary",
+      "text": "We can solve this problem today",
+      "durations_ms": [120, 130, 125, 140, 120, 130],
+      "gaps_ms": [20, 20, 20, 20, 20],
+      "expected_chunks": ["We can solve this problem today"]
+    },
+    {
+      "name": "filled_pause_suppresses_gap",
+      "text": "Well um we should go",
+      "durations_ms": [120, 180, 120, 130, 120],
+      "gaps_ms": [20, 400, 20, 20],
+      "expected_chunks": ["Well um we should go"]
+    },
+    {
+      "name": "very_large_pause_survives_hesitation_penalty",
+      "text": "Well um we should go",
+      "durations_ms": [120, 180, 120, 130, 120],
+      "gaps_ms": [20, 900, 20, 20],
+      "expected_chunks": ["Well um", "we should go"]
+    }
+  ]
+}

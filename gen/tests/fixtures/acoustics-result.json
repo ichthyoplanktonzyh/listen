@@ -1,0 +1,41 @@
+{
+  "schema": "listen_gen.acoustics-result.v1",
+  "provider": {"id": "fixture-acoustics", "version": "1"},
+  "model": {"id": "fixture-acoustics-model", "version": "2026-08"},
+  "config_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "sample_rate_hz": 16000,
+  "measurements": [
+    {
+      "sentence_index": 0,
+      "token_index": 0,
+      "energy": {"rms_dbfs": -22.0, "local_baseline_dbfs": -27.5, "delta_db": 5.5, "prominence": 0.8},
+      "pitch": {"median_f0_hz": 182.0, "local_baseline_f0_hz": 168.0, "delta_semitones": 1.4, "range_semitones": 2.0, "prominence": 0.75, "reset_after": 0.2},
+      "duration": {"duration_ms": 380, "local_ratio": 1.25},
+      "voiced_frame_ratio": 0.92
+    },
+    {
+      "sentence_index": 0,
+      "token_index": 3,
+      "energy": {"rms_dbfs": -26.5, "local_baseline_dbfs": -27.5, "delta_db": 1.0, "prominence": 0.3},
+      "pitch": {"median_f0_hz": 172.0, "local_baseline_f0_hz": 168.0, "delta_semitones": 0.4, "range_semitones": 1.2, "prominence": 0.25, "reset_after": 0.1},
+      "duration": {"duration_ms": 530, "local_ratio": 1.05},
+      "voiced_frame_ratio": 0.68
+    },
+    {
+      "sentence_index": 1,
+      "token_index": 0,
+      "energy": {"rms_dbfs": -25.0, "local_baseline_dbfs": -26.2, "delta_db": 1.2, "prominence": 0.45},
+      "pitch": {"median_f0_hz": 165.0, "local_baseline_f0_hz": 163.0, "delta_semitones": 0.2, "range_semitones": 0.9, "prominence": 0.4, "reset_after": 0.15},
+      "duration": {"duration_ms": 290, "local_ratio": 0.95},
+      "voiced_frame_ratio": 0.75
+    },
+    {
+      "sentence_index": 1,
+      "token_index": 2,
+      "energy": {"rms_dbfs": -23.5, "local_baseline_dbfs": -26.2, "delta_db": 2.7, "prominence": 0.7},
+      "pitch": {"median_f0_hz": 178.0, "local_baseline_f0_hz": 163.0, "delta_semitones": 1.6, "range_semitones": 2.4, "prominence": 0.68, "reset_after": 0.3},
+      "duration": {"duration_ms": 370, "local_ratio": 1.2},
+      "voiced_frame_ratio": 0.85
+    }
+  ]
+}

@@ -1,0 +1,250 @@
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import release_artifacts as artifacts
+
+
+V3_INVENTORY = (
+    "contracts/content-package/v3/README.md",
+    "contracts/content-package/v3/release.schema.json",
+    "contracts/content-package/v3/resource.schema.json",
+    "contracts/content-package/v3/definitions.schema.json",
+    "contracts/content-package/v3/payload/structured-reading.v1.schema.json",
+    "contracts/content-package/v3/payload/anchor-time-alignment.v1.schema.json",
+    "contracts/content-package/v3/tests/negative-schemas.json",
+    "contracts/content-package/v3/examples/document-source/release.json",
+    "contracts/content-package/v3/examples/media-only/release.json",
+    "contracts/content-package/v3/examples/composed/release.json",
+)
+
+
+class ReleaseArtifactTests(unittest.TestCase):
+    def test_dirty_snapshot_cannot_fall_back_to_head(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            source = root / "source.txt"
+            source.write_text("committed snapshot\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "source.txt"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(root),
+                    "-c", "user.name=Test",
+                    "-c", "user.email=test@example.invalid",
+                    "commit", "-qm", "fixture",
+                ],
+                check=True,
+            )
+            source.write_text("modified snapshot\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as caught:
+                artifacts.repository_git_sha(root, allow_dirty=True)
+            self.assertEqual(
+                str(caught.exception),
+                "refusing to identify a dirty snapshot as HEAD; "
+                "pass --git-sha with the exact source snapshot commit",
+            )
+
+    def test_explicit_snapshot_sha_is_validated(self):
+        self.assertEqual(
+            artifacts.release_git_sha(Path("."), "a" * 40, allow_dirty=False),
+            "a" * 40,
+        )
+        with self.assertRaises(SystemExit) as caught:
+            artifacts.release_git_sha(Path("."), "not-a-sha", allow_dirty=True)
+        self.assertEqual(
+            str(caught.exception),
+            "source snapshot SHA must be a lowercase 40-character Git SHA",
+        )
+
+    def test_contract_archive_is_deterministic_and_self_verifying(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in artifacts.CONTRACT_FILES:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if relative.endswith("openapi/v1.yaml"):
+                    path.write_text(
+                        "openapi: 3.1.0\ninfo:\n  title: Fixture\n  version: 1.2.3\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    path.write_text("{}\n", encoding="utf-8")
+            first_dir = root / "first"
+            second_dir = root / "second"
+            base = {
+                "root": root,
+                "git_sha": "a" * 40,
+                "allow_dirty": False,
+            }
+            first = artifacts.build_contract_artifact(
+                argparse.Namespace(output_dir=first_dir, **base)
+            )
+            second = artifacts.build_contract_artifact(
+                argparse.Namespace(output_dir=second_dir, **base)
+            )
+
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            manifest = artifacts.verify_artifact(first)
+            self.assertEqual(manifest["contract_version"], "1.2.3")
+            self.assertEqual(manifest["core_git_sha"], "a" * 40)
+
+    def test_contract_archive_packages_exact_v3_inventory_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in artifacts.CONTRACT_FILES:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if relative.endswith("openapi/v1.yaml"):
+                    path.write_text(
+                        "openapi: 3.1.0\ninfo:\n  title: Fixture\n  version: 1.2.3\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    path.write_bytes(b"fixture-" + relative.encode("utf-8"))
+
+            artifact = artifacts.build_contract_artifact(
+                argparse.Namespace(
+                    root=root,
+                    output_dir=root / "out",
+                    git_sha="a" * 40,
+                    allow_dirty=False,
+                )
+            )
+            manifest = artifacts.verify_artifact(artifact)
+            files = manifest["files"]
+
+            for relative in V3_INVENTORY:
+                self.assertIn(relative, files)
+                self.assertEqual(
+                    files[relative],
+                    artifacts.sha256_bytes(b"fixture-" + relative.encode("utf-8")),
+                )
+
+            # The v3 contract slice of the manifest is exactly the v3 entries
+            # of CONTRACT_FILES: no v3 path may be added or dropped without
+            # updating the inventory, and no v1/v2 content-package path may
+            # re-enter the active contract artifact.
+            v3_contract_files = {
+                relative
+                for relative in artifacts.CONTRACT_FILES
+                if relative.startswith("contracts/content-package/v3/")
+            }
+            content_package_files = {
+                relative
+                for relative in files
+                if relative.startswith("contracts/content-package/")
+            }
+            self.assertEqual(content_package_files, v3_contract_files)
+            self.assertTrue(v3_contract_files.issuperset(V3_INVENTORY))
+
+            (root / V3_INVENTORY[0]).unlink()
+            with self.assertRaises(FileNotFoundError):
+                artifacts.build_contract_artifact(
+                    argparse.Namespace(
+                        root=root,
+                        output_dir=root / "out-missing",
+                        git_sha="a" * 40,
+                        allow_dirty=False,
+                    )
+                )
+
+    def test_runtime_archive_records_every_file_and_executable_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "contracts/openapi").mkdir(parents=True)
+            (root / "contracts/openapi/v1.yaml").write_text(
+                "openapi: 3.1.0\ninfo:\n  title: Fixture\n  version: 1.0.0\n",
+                encoding="utf-8",
+            )
+            (root / "Cargo.toml").write_text(
+                '[workspace.package]\nversion = "0.7.0"\n',
+                encoding="utf-8",
+            )
+            api_http = root / "api-http"
+            api_http.write_bytes(b"api")
+            os.chmod(api_http, 0o755)
+            runtime_dir = root / "runtime-input"
+            runtime_dir.mkdir()
+            runtime_tool = runtime_dir / "whisper-cli"
+            runtime_tool.write_bytes(b"runtime")
+            os.chmod(runtime_tool, 0o755)
+            runtime_manifest = root / "runtime-manifest.json"
+            runtime_manifest.write_text('{"version": 1}\n', encoding="utf-8")
+            (runtime_dir / "manifest.json").write_bytes(runtime_manifest.read_bytes())
+            notices = root / "notices.md"
+            notices.write_text("notices\n", encoding="utf-8")
+            args = argparse.Namespace(
+                root=root,
+                output_dir=root / "output",
+                api_http=api_http,
+                runtime_dir=runtime_dir,
+                runtime_manifest=runtime_manifest,
+                notices=notices,
+                platform="macos",
+                arch="arm64",
+                git_sha="b" * 40,
+                allow_dirty=False,
+            )
+
+            artifact = artifacts.build_runtime_artifact(args)
+            manifest = artifacts.verify_artifact(artifact)
+
+            self.assertEqual(manifest["runtime_version"], "0.7.0")
+            self.assertEqual(manifest["contract_version"], "1.0.0")
+            self.assertIn("bin/api-http", manifest["files"])
+            self.assertIn("runtime/manifest.json", manifest["files"])
+            self.assertIn("runtime/whisper-cli", manifest["files"])
+
+    def test_runtime_archive_rejects_conflicting_runtime_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            api_http = root / "api-http"
+            api_http.write_bytes(b"api")
+            runtime_dir = root / "runtime-input"
+            runtime_dir.mkdir()
+            (runtime_dir / "manifest.json").write_text(
+                '{"version": 2}\n', encoding="utf-8"
+            )
+            runtime_manifest = root / "runtime-manifest.json"
+            runtime_manifest.write_text('{"version": 1}\n', encoding="utf-8")
+            notices = root / "notices.md"
+            notices.write_text("notices\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                SystemExit,
+                "runtime directory manifest.json differs from selected runtime manifest",
+            ):
+                artifacts.runtime_source_entries(
+                    api_http, runtime_dir, runtime_manifest, notices
+                )
+
+    def test_verifier_rejects_tampered_member(self):
+        entries = [
+            artifacts.ArtifactEntry(
+                "manifest.json",
+                artifacts.canonical_json(
+                    {
+                        "files": {
+                            "payload": artifacts.sha256_bytes(b"expected"),
+                        }
+                    }
+                ),
+            ),
+            artifacts.ArtifactEntry("payload", b"tampered"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "tampered.tar.gz"
+            artifacts.write_deterministic_tar_gz(entries, archive)
+            with self.assertRaisesRegex(SystemExit, "hash mismatch"):
+                artifacts.verify_artifact(archive)
+
+
+if __name__ == "__main__":
+    unittest.main()

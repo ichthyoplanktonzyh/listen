@@ -1,0 +1,23 @@
+{
+  "extensions": {},
+  "language": "en",
+  "segments": [
+    {
+      "end_char": 38,
+      "extensions": {},
+      "id": "s1",
+      "index": 0,
+      "language": "en",
+      "start_char": 0
+    },
+    {
+      "end_char": 63,
+      "extensions": {},
+      "id": "s2",
+      "index": 1,
+      "language": "en",
+      "start_char": 38
+    }
+  ],
+  "text": "The panda is native to central China. It eats bamboo every day."
+}

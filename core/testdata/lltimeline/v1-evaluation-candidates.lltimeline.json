@@ -1,0 +1,357 @@
+{
+  "active_chunk_timeline_id": null,
+  "active_phone_timeline_id": null,
+  "active_word_timeline_id": "whisperx-candidate",
+  "artifacts": [
+    {
+      "kind": "evaluation_fixture",
+      "payload": {
+        "purpose": "Phase 4 candidate comparison smoke test"
+      },
+      "provider_id": "llplayernext-test",
+      "provider_version": "v1"
+    }
+  ],
+  "chunk_timelines": [],
+  "metadata": {
+    "created_at_ms": 1781782222000,
+    "extra": {
+      "track_fingerprint": "evaluation-track-fingerprint",
+      "track_id": "track-evaluation",
+      "track_source": "fixture.evaluation.lltimeline.json"
+    },
+    "generator": {
+      "id": "llplayernext-test",
+      "mode": "production_engine",
+      "version": "0.7.0"
+    },
+    "human_reviewed": false,
+    "language": "en",
+    "media": {
+      "duration_ms": 4200,
+      "fingerprint": "evaluation-media-fingerprint",
+      "id": "media-evaluation",
+      "path": null,
+      "title": "LLTimeline Evaluation Fixture"
+    }
+  },
+  "phone_timelines": [],
+  "schema": "llplayer.timeline.v1",
+  "segments": [
+    {
+      "display_text": "Hello world.",
+      "end_ms": 2200,
+      "id": "sentence-evaluation-0",
+      "index": 0,
+      "start_ms": 1000,
+      "text": "Hello world.",
+      "tokens": [
+        {
+          "end_char": 5,
+          "index": 0,
+          "kind": "word",
+          "normalized": "hello",
+          "start_char": 0,
+          "text": "Hello"
+        },
+        {
+          "end_char": 6,
+          "index": 1,
+          "kind": "whitespace",
+          "normalized": null,
+          "start_char": 5,
+          "text": " "
+        },
+        {
+          "end_char": 11,
+          "index": 2,
+          "kind": "word",
+          "normalized": "world",
+          "start_char": 6,
+          "text": "world"
+        },
+        {
+          "end_char": 12,
+          "index": 3,
+          "kind": "punctuation",
+          "normalized": null,
+          "start_char": 11,
+          "text": "."
+        }
+      ]
+    },
+    {
+      "display_text": "This is news.",
+      "end_ms": 4100,
+      "id": "sentence-evaluation-1",
+      "index": 1,
+      "start_ms": 2800,
+      "text": "This is news.",
+      "tokens": [
+        {
+          "end_char": 4,
+          "index": 0,
+          "kind": "word",
+          "normalized": "this",
+          "start_char": 0,
+          "text": "This"
+        },
+        {
+          "end_char": 5,
+          "index": 1,
+          "kind": "whitespace",
+          "normalized": null,
+          "start_char": 4,
+          "text": " "
+        },
+        {
+          "end_char": 7,
+          "index": 2,
+          "kind": "word",
+          "normalized": "is",
+          "start_char": 5,
+          "text": "is"
+        },
+        {
+          "end_char": 8,
+          "index": 3,
+          "kind": "whitespace",
+          "normalized": null,
+          "start_char": 7,
+          "text": " "
+        },
+        {
+          "end_char": 12,
+          "index": 4,
+          "kind": "word",
+          "normalized": "news",
+          "start_char": 8,
+          "text": "news"
+        },
+        {
+          "end_char": 13,
+          "index": 5,
+          "kind": "punctuation",
+          "normalized": null,
+          "start_char": 12,
+          "text": "."
+        }
+      ]
+    }
+  ],
+  "word_timelines": [
+    {
+      "algorithm_id": "whisper-dtw",
+      "algorithm_version": "v1",
+      "config_hash": "dtw-fixture",
+      "created_at_ms": 1781782222000,
+      "created_by": "algorithm",
+      "id": "dtw-baseline",
+      "media_id": "media-evaluation",
+      "metrics_json": {},
+      "parent_timeline_id": null,
+      "status": "candidate",
+      "track_id": "track-evaluation",
+      "updated_at_ms": 1781782222000,
+      "words": [
+        {
+          "confidence": 0.82,
+          "end_ms": 1380,
+          "provider_id": "whisper-dtw",
+          "provider_version": "v1",
+          "sentence_id": "sentence-evaluation-0",
+          "start_ms": 1020,
+          "text": "Hello",
+          "timing_source": "asr_reported",
+          "token_index": 0
+        },
+        {
+          "confidence": 0.8,
+          "end_ms": 1960,
+          "provider_id": "whisper-dtw",
+          "provider_version": "v1",
+          "sentence_id": "sentence-evaluation-0",
+          "start_ms": 1460,
+          "text": "world",
+          "timing_source": "asr_reported",
+          "token_index": 2
+        },
+        {
+          "confidence": 0.78,
+          "end_ms": 3090,
+          "provider_id": "whisper-dtw",
+          "provider_version": "v1",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 2820,
+          "text": "This",
+          "timing_source": "asr_reported",
+          "token_index": 0
+        },
+        {
+          "confidence": 0.77,
+          "end_ms": 3250,
+          "provider_id": "whisper-dtw",
+          "provider_version": "v1",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 3120,
+          "text": "is",
+          "timing_source": "asr_reported",
+          "token_index": 2
+        },
+        {
+          "confidence": 0.76,
+          "end_ms": 3880,
+          "provider_id": "whisper-dtw",
+          "provider_version": "v1",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 3340,
+          "text": "news",
+          "timing_source": "asr_reported",
+          "token_index": 4
+        }
+      ]
+    },
+    {
+      "algorithm_id": "whisperx",
+      "algorithm_version": "large-v3-align",
+      "config_hash": "whisperx-fixture",
+      "created_at_ms": 1781782222001,
+      "created_by": "algorithm",
+      "id": "whisperx-candidate",
+      "media_id": "media-evaluation",
+      "metrics_json": {},
+      "parent_timeline_id": "dtw-baseline",
+      "status": "active",
+      "track_id": "track-evaluation",
+      "updated_at_ms": 1781782222001,
+      "words": [
+        {
+          "confidence": 0.98,
+          "end_ms": 1340,
+          "provider_id": "whisperx",
+          "provider_version": "large-v3-align",
+          "sentence_id": "sentence-evaluation-0",
+          "start_ms": 1050,
+          "text": "Hello",
+          "timing_source": "forced_aligned",
+          "token_index": 0
+        },
+        {
+          "confidence": 0.97,
+          "end_ms": 1880,
+          "provider_id": "whisperx",
+          "provider_version": "large-v3-align",
+          "sentence_id": "sentence-evaluation-0",
+          "start_ms": 1420,
+          "text": "world",
+          "timing_source": "forced_aligned",
+          "token_index": 2
+        },
+        {
+          "confidence": 0.96,
+          "end_ms": 3020,
+          "provider_id": "whisperx",
+          "provider_version": "large-v3-align",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 2860,
+          "text": "This",
+          "timing_source": "forced_aligned",
+          "token_index": 0
+        },
+        {
+          "confidence": 0.94,
+          "end_ms": 3140,
+          "provider_id": "whisperx",
+          "provider_version": "large-v3-align",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 3040,
+          "text": "is",
+          "timing_source": "forced_aligned",
+          "token_index": 2
+        },
+        {
+          "confidence": 0.95,
+          "end_ms": 3680,
+          "provider_id": "whisperx",
+          "provider_version": "large-v3-align",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 3220,
+          "text": "news",
+          "timing_source": "forced_aligned",
+          "token_index": 4
+        }
+      ]
+    },
+    {
+      "algorithm_id": "manual-gold",
+      "algorithm_version": "fixture-v1",
+      "config_hash": "gold-fixture",
+      "created_at_ms": 1781782222002,
+      "created_by": "user",
+      "id": "manual-gold",
+      "media_id": "media-evaluation",
+      "metrics_json": {},
+      "parent_timeline_id": "whisperx-candidate",
+      "status": "published",
+      "track_id": "track-evaluation",
+      "updated_at_ms": 1781782222002,
+      "words": [
+        {
+          "confidence": 1.0,
+          "end_ms": 1335,
+          "provider_id": "manual",
+          "provider_version": "fixture-v1",
+          "sentence_id": "sentence-evaluation-0",
+          "start_ms": 1045,
+          "text": "Hello",
+          "timing_source": "user_adjusted",
+          "token_index": 0
+        },
+        {
+          "confidence": 1.0,
+          "end_ms": 1870,
+          "provider_id": "manual",
+          "provider_version": "fixture-v1",
+          "sentence_id": "sentence-evaluation-0",
+          "start_ms": 1425,
+          "text": "world",
+          "timing_source": "user_adjusted",
+          "token_index": 2
+        },
+        {
+          "confidence": 1.0,
+          "end_ms": 3025,
+          "provider_id": "manual",
+          "provider_version": "fixture-v1",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 2855,
+          "text": "This",
+          "timing_source": "user_adjusted",
+          "token_index": 0
+        },
+        {
+          "confidence": 1.0,
+          "end_ms": 3135,
+          "provider_id": "manual",
+          "provider_version": "fixture-v1",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 3045,
+          "text": "is",
+          "timing_source": "user_adjusted",
+          "token_index": 2
+        },
+        {
+          "confidence": 1.0,
+          "end_ms": 3675,
+          "provider_id": "manual",
+          "provider_version": "fixture-v1",
+          "sentence_id": "sentence-evaluation-1",
+          "start_ms": 3225,
+          "text": "news",
+          "timing_source": "user_adjusted",
+          "token_index": 4
+        }
+      ]
+    }
+  ]
+}

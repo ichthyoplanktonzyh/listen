@@ -1,20 +1,22 @@
 # Listen Ubiquitous Language
 
-This glossary is the canonical cross-repository product language. It does not
-describe endpoints, tables, screens, release versions, or implementation status.
-Repository-local glossaries may add terms but must not redefine these concepts.
+This glossary is the canonical project-wide product language. It specializes
+the model in [MODEL.md](MODEL.md) without redefining it and does not describe
+endpoints, tables, screens, releases, or current implementation status.
+
 A maintained Chinese rendering is available in
-[DOMAIN.zh-CN.md](DOMAIN.zh-CN.md); both files describe the same model and must
-change together.
+[DOMAIN.zh-CN.md](DOMAIN.zh-CN.md). English domain names are the stable
+identifiers used by code and contracts; every domain-language change updates
+both files in the same documentation change.
 
 ## People and languages
 
-**Learner**: The person building one private history of language materials,
-activity, and learning facts.
+**Learner**: The person building a private history of authentic language
+experiences, Meaningful Learning Episodes, and learner-language capabilities.
 _Avoid_: Account, profile, customer
 
-**Content Language**: The language actually present in a material or segment.
-One material may contain more than one.
+**Content Language**: A language actually present in a Source or Complete
+Learning Material. One material may contain more than one.
 _Avoid_: Target Language, Interface Language
 
 **Target Language**: A language the Learner intends to improve. A Learner may
@@ -22,275 +24,369 @@ have more than one.
 _Avoid_: Content Language, selected locale
 
 **Support Language**: A language used to translate or explain a Target
-Language.
+Language. The required Sentence Translation of a Complete Learning Material is
+declared for a Support Language.
 _Avoid_: Interface Language, source language
 
 **Interface Language**: The language used by the Listen application itself.
 _Avoid_: Target Language, Support Language
 
-**Language Capability**: A language-aware ability available for a material,
-such as tokenization, tone, stress, mora, pronunciation, or morphology
-analysis.
-_Avoid_: Supported-language flag, Learning Activity
+**Personal L2 World**: A learner-relative, replaceable interpretation of what
+language objects and relations are currently available to the Learner. It is
+derived from Personal Corpus evidence and explicit Learner authority; it never
+replaces the Corpus history.
+_Avoid_: Personal Corpus, account profile, permanent truth
 
-## Materials and resources
+## Language world and material production
 
-**Content Source**: An external origin that publishes or identifies Language
-Materials, such as a feed, channel, publisher catalog, or learner-owned
-collection.
-_Avoid_: Personal Library, Package Listing
+**Raw Source**: A learner-authorized input to material production, such as a
+file, URL, feed item, article, document, pasted text, podcast, recording, audio,
+or video. It may be acquired, inspected, or previewed, but is not yet the
+formal first-class object of the learning world.
+_Avoid_: Complete Learning Material, Learning Activity
 
-**Source Identity**: A stable, source-scoped identity for one Language Material.
-It establishes provenance but not byte equality or timeline compatibility.
-_Avoid_: File hash, Package Release
+**Content Source**: An external origin that publishes or identifies Raw Sources
+or language-bearing works, such as a feed, channel, publisher catalog, website,
+or learner-owned collection.
+_Avoid_: Raw Source, Personal Corpus, Package Listing
 
-**Language Material**: A language-bearing work the Learner may study, such as an
-article, podcast episode, video, conversation, or recording.
-Its Source Renditions and Structured Reading Resources do not become separate
-Materials.
-_Avoid_: Media file, Content Package, course, Raw Material, Structured Material
+**Source Identity**: A stable, source-scoped identity for one language-bearing
+work or revision. It records provenance but does not by itself prove byte,
+text, semantic, or timeline compatibility.
+_Avoid_: File hash, Material Revision, Package Release
 
-**Material Revision**: A stable semantic and timeline version of a Language
-Material. A changed cut, dub, inserted segment, or text revision may create
-another revision.
-_Avoid_: Media Rendition, Package Release
+**Source Asset**: A concrete learner-authorized content object used as material
+production input: exact bytes or an equivalent bound source, plus digest, size,
+availability, and provenance where applicable.
+_Avoid_: Learning Resource, Personal Corpus Entry, Managed Asset Store
 
-**Source Asset**: A concrete, Learner-authorized content object acquired or
-bound for a Material Revision. It may be copied into a Managed Asset Store or
-referenced in place; storage location and current availability are not its
-semantic identity.
-_Avoid_: Learning Resource, Managed Asset Store, Content Source
+**Material Revision**: One stable semantic and timeline version of a
+language-bearing work. A changed text, cut, dub, insertion, or canonical audio
+may require a new revision.
+_Avoid_: Raw Source, Rendition, Package Release
 
-**Document Rendition**: A concrete document-format realization of a Material
-Revision, such as plain text, Markdown, HTML, EPUB, or PDF. It preserves the
-source representation and may be directly viewable without a Structured
-Reading Resource. Authored markup or layout does not make it a Structured
-Reading Resource; multiple Document Renditions may realize the same revision.
-_Avoid_: Structured Reading Resource, Structured Material, pasted-text form,
-Material Revision
+**Document Rendition**: An exact document-format realization of a Material
+Revision, such as plain text, Markdown, HTML, EPUB, or PDF. It preserves source
+representation and may be a production input; it is not Structured Timed Text.
+_Avoid_: Canonical Text, Structured Timed Text, Complete Learning Material
 
-**Media Rendition**: A concrete playable audio or video realization of a
-Material Revision. Two renditions may represent the same revision without
-identical bytes.
-_Avoid_: Material Revision, Source Identity
+**Media Rendition**: An exact playable audio or video realization of a Material
+Revision. It may be a Source Rendition or a Derived Rendition.
+_Avoid_: Canonical Audio, Material Revision, Language Slice
 
-**Source Rendition**: A Document or Media Rendition realized directly by a
-Learner-authorized Source Asset without generative transformation.
-_Avoid_: Source Asset, Derived Rendition, publisher guarantee
+**Source Rendition**: A Document or Media Rendition realized directly from a
+learner-authorized Source Asset without generative transformation.
+_Avoid_: Source Asset, Derived Rendition
 
 **Derived Rendition**: A Document or Media Rendition produced from exact input
-Renditions or Learning Resources rather than acquired directly as a Source
-Asset. It realizes the same Material Revision only when its meaning and any
-required alignment remain compatible.
-_Avoid_: Source Rendition, Learning Resource, automatic replacement
+Renditions or material-side resources, with provenance and compatibility
+evidence. Faithful TTS may produce a Derived Media Rendition of the same
+Material Revision; a semantic rewrite may not silently do so.
+_Avoid_: Source Rendition, automatic replacement
 
-**Material Capability**: A learner-facing ability that a compatible composition
-of Renditions and Learning Resources can offer, such as Read, Listen, Watch, or
-synchronized Read-and-Listen. Its current availability is a projection, not
-Material identity or a universal measure of quality.
-_Avoid_: Learning Activity, Material Shape, completion score
+**Learning Material Compiler**: The material-production function, principally
+implemented by `listen-gen`, that turns Raw Sources and qualified reusable
+inputs into a Complete Learning Material. It owns provider execution and
+material-side derivation, not learner state or Learning Experience selection.
+_Avoid_: Learning Activity, import form, provider workflow
 
-**Capability Gap**: A Material Capability requested by the Learner but not
-currently available. It may be derivable and does not make the Material invalid
-or incomplete by itself.
-_Avoid_: Broken Material, missing source asset, mandatory generation
+**Complete Learning Material**: The formal first-class material consumed by the
+learning world, qualified for its actual modalities under [MODEL.md](MODEL.md):
+text learning needs no TTS, while present audio requires the full
+sound-processing scope. “Learning Material” is the accepted short form.
+_Avoid_: Raw Source, single file, Content Package, mandatory audio for all text
 
-**Capability Completion**: The material-centered process of resolving existing
-or deriving missing Renditions and Learning Resources needed to satisfy one
-Capability Gap.
-_Avoid_: Universal completeness, automatic generation, provider job
+**Canonical Audio**: The exact audio representation used by the material's
+Structured Timed Text and Speech Learning Representation. It may come from a
+Source Media Rendition or faithful TTS.
+_Avoid_: Any available audio, detached clip, generated pronunciation example
 
-**Timeline Compatibility**: Verified evidence that timed Learning Resources can
-be applied to a Media Rendition without changing their meaning or alignment.
-_Avoid_: Matching Source Identity, approximate similarity
+**Canonical Text**: The exact language-bearing text of one Complete Learning
+Material, whether or not audio exists. It may come from an authored document,
+qualified transcription, or another verified path and pairs with exact
+Canonical Audio when present.
+_Avoid_: UI transcript, translation, OCR cache
 
-**Temporary Material**: A Language Material opened for immediate use without
-being retained in the Personal Library.
-_Avoid_: Learning Material, installed content
+**Source Video**: A video representation retained when the Raw Source includes
+video. Video is not synthetically required for Complete Learning Material.
+_Avoid_: Canonical Audio, generated completion requirement
 
-**Learning Material**: A Language Material as available inside Listen, composed
-from Document Renditions, Media Renditions, and whatever Learning Resources are
-currently available. It is valid without generated enrichment.
-_Avoid_: Content Package, Catalog Entry
+**Structured Reading**: The audio-independent, structured representation of
+Canonical Text with hierarchy, sentence/token spans, and stable Text Anchors.
+It supplies coordinates for reading, translation, Sense Groups, and text-based
+Language Slices.
+_Avoid_: Document Rendition, transcript UI, mandatory audio alignment
 
-**Learning Resource**: A portable, provenance-bearing resource that makes a
-Learning Material more usable for learning.
-_Avoid_: Learner state, cache, model response
+**Structured Timed Text**: The interactive representation that maps stable
+Canonical Text spans to exact Canonical Audio ranges with compatible structure
+references. It adds coordinates for synchronized highlighting, replay, loops,
+and speech learning without being a prerequisite for text-only learning.
+_Avoid_: Plain transcript, subtitle UI, Document Rendition, approximate timing
 
-**Base Resource**: A Learning Resource that describes the material itself in its
-Content Language, such as structured reading content, transcription,
-segmentation, or timing.
-_Avoid_: Translation, learner-specific explanation
+**Text Anchor**: A stable identity for an exact span or structural unit in
+Canonical Text. It is valid within a declared text-structure revision,
+independently of audio; continuity across revisions requires explicit mapping.
+_Avoid_: Screen coordinates, paragraph index, universal cross-version identity
 
-**Structured Reading Resource**: A versioned, format-neutral Base Resource that
-represents exact logical reading content as ordered hierarchy, blocks, and text
-spans with Content Language metadata and stable Reading Anchors. It may map
-those anchors back to one or more Document Renditions, but it is neither an
-original document, a Markdown file, a rendered screen, nor a second Material.
-_Avoid_: Document Rendition, Structured Material, Markdown document,
-extracted-text cache, reading UI state
+**Audio Locator**: An exact time range in Canonical Audio. It may be paired with
+a Text Anchor by Structured Timed Text and referenced by a Language Slice.
+_Avoid_: Language Slice identity, estimated timing presented as exact
 
-**Assistance Resource**: A Learning Resource that helps a particular audience,
-such as a translation, explanation, hint, or level-specific annotation.
-_Avoid_: Base Resource, Learning Fact
+**Sentence Translation**: A sentence- or utterance-aligned translation of
+Canonical Text into a declared Support Language. It belongs to the Complete
+Learning Material contract whether or not the composition includes audio.
+_Avoid_: Optional contextual explanation, interface localization
 
-**Content Enrichment**: The optional process of deriving new Renditions or
-Learning Resources from exact existing inputs to offer another Material
-Capability or improve an available one.
-_Avoid_: Required import step, Learning Activity
+**Speech Learning Representation**: The conceptual learning-oriented speech
+representation spanning material-side Signal Facts and Speech Structure plus
+learner-relative Perceptual Guidance. It is realized by multiple versioned,
+provenance-bearing resources rather than one universal artifact.
+_Avoid_: IPA transcript, RhythmFrame, ChunkTimeline, phonetics annotation view
 
-**Resource Provenance**: The origin, inputs, producer, model, configuration, and
-transformation history needed to explain a Learning Resource.
+**Signal Fact**: A material-side, evidence-bearing fact about Canonical Audio,
+such as word/phone timing, phone realization, duration, energy, pitch/F0,
+voicing, or speech/silence intervals. Observed, forced-aligned, predicted, canonical, and
+estimated facts remain distinguishable.
+_Avoid_: Perceptual Guidance, text prior presented as audio evidence
+
+**Speech Structure**: A replaceable interpretation of signal and text evidence
+into prominence, information/stress anchors, nuclei, weak groups, rhythm,
+compression, prosodic boundaries, Prosodic Chunks, or connected-speech phenomena.
+_Avoid_: Signal Fact, Learner State, fixed universal annotation
+
+**Citation Pronunciation**: A conventional reference pronunciation of the
+language content, independent of how a particular recording realizes it.
+_Avoid_: Observed phones, Actual Delivery
+
+**Connected-speech Prediction**: An evidence-labeled prediction of how language
+may be realized in continuous speech. It can be derived from text without
+claiming that the phenomenon occurred in a recording.
+_Avoid_: Actual Delivery, confirmed audio event
+
+**Actual Delivery**: An evidence-qualified interpretation of how language is
+realized in one exact recording. It remains distinct from reference
+pronunciation and text-derived prediction.
+_Avoid_: Citation Pronunciation, prediction presented as observation
+
+**Prosodic Chunk**: A bounded organization in the speech signal, anchored to
+exact words and projected to audio through compatible timing.
+_Avoid_: Sense Group, lexical phrase, ChunkTimeline
+
+**Sense Group**: A semantic/syntactic, meaning-oriented grouping of text that
+supports reading and bounded learning focus without audio or TTS. It may
+overlap with a Prosodic Chunk but neither proves an audible boundary nor
+inherits the chunk's identity.
+_Avoid_: Prosodic Chunk, reusable lexical phrase
+
+**Connected-speech Phenomenon**: A material-side interpretation of how speech
+realization differs or connects in context, such as reduction, linking,
+assimilation, deletion, flapping, or compression, with evidence and provenance.
+_Avoid_: Unqualified rule label, Learner difficulty
+
+**Perceptual Guidance**: Learner-relative guidance derived from material-side
+speech representation and learner evidence: what to attend to, which cue or
+anchor to reveal, and when to replay. It is part of Learning Experience, not
+fixed material truth.
+_Avoid_: Signal Fact, Gen-authored universal answer, phonetic terminology
+
+**Optional Enrichment**: Grammar, semantic, pragmatic, discourse, cultural, or
+contextual assistance that improves a Complete Learning Material but is not a
+required part of its contract.
+_Avoid_: Sentence Translation, required sound processing, audio-independent Sense Group
+
+**Resource Provenance**: The exact inputs, producer, provider/model, version,
+configuration, transformation, evidence class, and qualification history needed
+to interpret a material-side resource honestly.
 _Avoid_: Quality guarantee, provider log
 
-**Rendition Provenance**: The origin, exact inputs, producer, model,
-configuration, and transformation history needed to explain a Derived
-Rendition.
-_Avoid_: Source Identity, quality guarantee, provider log
+## Learning world
 
-**Reading Anchor**: A stable identity for a logical block or span within one
-exact Base Resource. Reading positions, annotations, corpus occurrences, and
-dependent resources may use it; continuity across another resource or Material
-Revision requires an explicit mapping.
-_Avoid_: Paragraph index, file path, universal cross-version identity
+**Learning Boundary**: The boundary after which the learning system consumes a
+Complete Learning Material and reasons about Learner-relative experience rather
+than provider production steps.
+_Avoid_: File import, package installation, screen navigation
 
-**Rendition Locator**: A format-specific location inside one exact Document or
-Media Rendition, such as a PDF page region, EPUB fragment, source character
-range, or media-time range. It can connect a Reading Anchor to source
-presentation but is not durable learner-state identity by itself.
-_Avoid_: Reading Anchor, Material Revision, screen coordinate
+**Workbench**: The unified learner-facing workspace that consumes material and
+learning semantics supplied by Core and hosts material interaction and Learning
+Activities. Its views and activity modes may vary with the material and intent
+without becoming separate material-consumption systems.
+_Avoid_: Learning Activity, media-only player, provider-output viewer, one fixed layout
 
-## Discovery and acquisition
+**Language Object**: A family of reusable language targets such as a Lexical
+Unit, expression, construction, sound contrast, or other object for which
+learner-language capability may be assessed. The family has no mandatory
+universal database identity.
+_Avoid_: Token, Language Slice, universal parent table
 
-**Content Subscription**: The Learner's durable choice to receive future
-Discovery Items from a Content Source.
-_Avoid_: Personal Library membership, automatic download
+**Learning Activity**: A meaningful cognitive operation through which a Learner
+interacts with a Complete Learning Material, such as listening for meaning,
+intensive listening, reading, dictation, shadowing, reconstruction, speaking,
+or writing.
+_Avoid_: Screen, button, feature, mandatory course stage
 
-**Discovery Item**: A source- or community-provided candidate for a Language
-Material, Material Revision, or Learning Edition that the Learner has not yet
-retained.
-_Avoid_: Learning Material, Package Installation
+**Language Slice**: A stable, re-enterable pointer to a bounded experience in a
+Complete Learning Material: Material Revision, Canonical Text span, Canonical
+Audio rendition/range when available, and compatible resource references. A
+text-only Slice is valid; it normally does not copy audio or become a new
+material.
+_Avoid_: Audio clip file, detached flashcard, Corpus Occurrence
 
-**Material Acquisition**: The learner-authorized act of making required source
-assets usable on a device through download, source playback, or binding a local
-asset.
-_Avoid_: Discovery, redistribution right, Package Installation
+**Learning Focus**: The Language Slice or Language Object currently receiving
+intentional attention inside a Learning Activity.
+_Avoid_: Playback cursor, automatic hover, permanent collection
 
-## Library and corpus
+**Learner Relation**: The durable fact that a Learner has intentionally saved,
+focused, practiced, judged, produced, or reactivated a Language Slice or
+Language Object.
+_Avoid_: Raw click, model inference, package membership
 
-**Personal Library**: The Learner's explicitly retained collection of Learning
-Materials. Membership is durable and synchronized; opening a Temporary Material
-does not add it. Membership is independent of where a source asset is stored on
-the learner's devices.
-_Avoid_: Personal Corpus, playback history, Personal Library folder
+**Meaningful Learning Episode**: A bounded, learner-significant history of what
+happened with a Slice or target, including activity intent, conditions,
+assistance, attempt or judgment, outcome, source context, and provenance.
+_Avoid_: Page view, raw clickstream, capability projection
 
-**Managed Asset Store**: Device-local storage managed by Listen for verified
-copies of source assets bound to retained Learning Materials. It supports local
-availability but does not define Personal Library membership; a retained
-material may instead reference an asset in place.
-_Avoid_: Personal Library, Personal Library folder
+**Exposure**: The fact that language was presented or played. It does not prove
+attention, learning, or acquisition.
+_Avoid_: Meaningful Learning Episode, acquired capability
 
-**Personal Corpus**: A searchable view of language occurrences derived from the
-Personal Library. The view is rebuildable; the library and resources are
-authoritative.
-_Avoid_: Personal Library, search-index files
+**Attention**: Evidence that the Learner intentionally focused on a Slice,
+target, or cue. It does not by itself prove learning or acquisition.
+_Avoid_: Exposure, acquired capability
 
-**Community Corpus**: The searchable public corpus derived from published
-Learning Editions and Package Releases.
-_Avoid_: Personal Corpus, external search provider
+**Learning Observation**: An append-only fact about a learner action, attempt,
+condition, assistance level, and outcome. It may support a Meaningful Learning
+Episode but is not automatically qualified Evidence.
+_Avoid_: Telemetry aggregate, Learner Inference
 
-**Corpus Occurrence**: One occurrence of a word, phrase, construction, sound, or
-other language span in a specific material context, optionally anchored to a
-media range.
-_Avoid_: Search result row, dictionary entry, decontextualized token
+**Learning Fact**: A durable fact the Learner cannot safely recreate, including
+Meaningful Learning Episodes, explicit decisions, attempts, corrections, and
+qualified outcomes. High-frequency telemetry and replaceable conclusions are
+not Learning Facts.
+_Avoid_: Clickstream, Learner Inference, generated cache
 
-**Search Scope**: The corpus boundary selected for a query: Current Material,
-Personal Corpus, or Community Corpus.
-_Avoid_: Separate search feature
+**Evidence**: A stated, versioned qualification of Learning Facts or
+Observations for one conclusion. Retention alone does not make a fact evidence
+for every capability.
+_Avoid_: Observation, permanent truth
 
-**External Context Reference**: An ephemeral, attributed result from an
-external context provider. It is not part of a Listen corpus unless the source
-material enters through normal intake.
-_Avoid_: Corpus Occurrence, imported Learning Resource
+**Assistance**: A factual condition of an attempt or episode, such as audio
+replay, focus range, perceptual cue, speech explanation, timed text,
+translation, source visibility, imitation, or another support.
+_Avoid_: Capability score, universal total order
 
-## Activity and personal state
+**Scaffold**: Assistance intentionally exposed to make the current cognitive
+operation possible. Listen prefers the Minimum Sufficient Scaffold and records
+what was available or used.
+_Avoid_: Answer reveal by default, acquired capability
 
-**Learning Activity**: A way the Learner chooses to engage with a Learning
-Material through listening, reading, speaking, writing, or a future experience.
-_Avoid_: Mandatory lesson step, screen, feature
+**Acquisition Experience**: The learner-relative experience selected to change
+or test a learner-language capability. It may reactivate, repair perception,
+support retrieval, elicit production, or test transfer.
+_Avoid_: Scheduler, Content Package, generic exercise row
 
-**Learning Fact**: A durable factual record of an explicit choice or meaningful
-learning outcome. It excludes high-frequency telemetry and replaceable model
-conclusions.
-_Avoid_: Raw clickstream, Learning Inference
+**Perceptual Repair**: A listening acquisition sequence in which failed
+perception leads to attention guidance and another act of listening, with only
+the minimum useful support exposed.
+_Avoid_: Phonetic explanation consumption, answer memorization
 
-**Learning Record**: Learner-owned history and state that cannot be safely
-reconstructed from public packages, including progress, notes, saved items, and
-Learning Facts.
-_Avoid_: Content Package, generated cache
+**Transfer Experience**: An experience that tests or develops capability under
+a changed sentence, speaker, rate, prosody, acoustic realization, modality, or
+context rather than only repeating the same item.
+_Avoid_: Same-recording replay, final mastery proof
 
-**Lexical Capability Profile**: The Learner-owned assessment of one Lexical Unit
-across independent reading, listening, speaking, and writing capabilities. Each
-capability is unassessed, not acquired, or acquired; absence of evidence remains
-unassessed, and explicit Learner authority outranks a replaceable projection.
-_Avoid_: Package Resource, one linear vocabulary level
+## Personal Corpus and learner state
 
-**Personal Expression**: A Learner-owned expression pattern, its immutable
-revisions, and speaking or writing attempts. A source snapshot may preserve
-origin, but the expression and history outlive the source.
-_Avoid_: Community Learning Resource, generated phrase candidate
+**Personal Library**: The Learner's intentionally retained collection of Raw
+Sources and Complete Learning Materials. It supports ownership and availability
+but is not the Personal Corpus.
+_Avoid_: Personal Corpus, file-system folder, playback history
 
-**Learning Inference**: A replaceable, versioned interpretation derived from
-Learning Facts, such as difficulty or capability estimates.
-_Avoid_: Learning Fact, permanent truth
+**Personal Corpus Entry**: One Language Slice plus its Learner Relation and
+Meaningful Learning History, including source context, assistance, and
+outcomes. It can originate in text-only learning or an explicit save without
+requiring a completed exercise.
+_Avoid_: Search-result row, bookmark, copied audio clip
 
-**Training Candidate**: An optional, ranked suggestion for a next learning
-action. It does not become a plan without the Learner's choice.
+**Personal Corpus**: The durable, learner-owned history of authentic Language
+Slices with their relations and Meaningful Learning Episodes. It serves as
+memory, Evidence Base, and a browsable Experience Reservoir from which the
+Learner can choose further learning or review; indexes are rebuildable projections.
+_Avoid_: Personal Library, vocabulary deck, search index, Personal L2 World
+
+**Corpus Occurrence**: A rebuildable material-side occurrence of a Language
+Object or span in context. It can help discover Slices but does not become a
+Personal Corpus Entry until a Learner Relation and meaningful history exist.
+_Avoid_: Personal Corpus Entry, dictionary entry
+
+**Experience Reservoir**: The Personal Corpus viewed as reusable authentic
+material for review, repair, retrieval, production, and transfer.
+_Avoid_: Generated question bank, mandatory queue
+
+**Learner State**: A simple, durable or explicitly authoritative state about a
+Learner–Language Object relation. Detailed subskill interpretation remains a
+replaceable Learner Inference unless the product deliberately promotes it.
+_Avoid_: Personal Corpus history, giant capability tensor
+
+**Capability Dimension**: One independent reading, listening, speaking, or
+writing relation for a Language Object. No dimension is inferred from another
+without its own qualified evidence or explicit Learner authority.
+_Avoid_: Material Capability, one linear vocabulary level
+
+**Lexical Capability Profile**: The Learner-owned or evidence-projected state of
+one Lexical Unit across the four Capability Dimensions. Unassessed means no
+current conclusion and never means not acquired.
+_Avoid_: Package Resource, one vocabulary status
+
+**Learner Inference**: A replaceable, versioned interpretation derived from
+Personal Corpus Evidence, such as difficulty, capability, robustness, or a
+suggested next experience.
+_Avoid_: Learning Fact, explicit Learner decision, permanent truth
+
+**Training Candidate**: An optional, explainable suggestion for a next
+Acquisition Experience. It does not become a plan without Learner choice or an
+explicitly accepted policy.
 _Avoid_: Mandatory assignment, Learning Fact
+
+**Review Schedule**: The time policy that decides when a learner-language
+relation should be reactivated. It does not decide what Acquisition Experience
+occurs when the item returns.
+_Avoid_: Learning Experience, review activity definition
 
 ## Distribution and community
 
-**Content Package**: A portable, data-only bundle of material descriptors,
-Renditions, and Learning Resources. It contains neither executable providers nor
-personal Learning Records.
-_Avoid_: Database export, model bundle, learner backup
+**Learning Edition**: A producer's coherent, qualified composition of the
+Renditions and material-side resources that satisfy a Complete Learning
+Material contract for a Material Revision, declared audience, Target Language,
+and Support Language.
+_Avoid_: Material Revision, learner state, activity sequence
 
-**Delivery Profile**: How a Content Package supplies its blobs: embedded,
-externally referenced, or a mixture.
-_Avoid_: Separate package format
+**Content Package**: A portable, data-only distribution bundle for a Learning
+Edition. It contains no executable provider and no personal Learning Facts.
+_Avoid_: Course, learner backup, model bundle
 
-**Learning Edition**: One producer's coherent pedagogical composition of
-compatible Renditions and Learning Resources for a Material Revision, declared
-audience, Target Language, and optional Support Languages. It may offer one or
-multiple Material Capabilities.
-_Avoid_: Material Revision, Package Release
-
-**Package Release**: An immutable, content-addressed publication of one Learning
-Edition.
+**Package Release**: An immutable, content-addressed publication of one
+Learning Edition.
 _Avoid_: Mutable latest package, Package Listing
 
 **Package Listing**: A mutable community record grouping Package Releases and
 carrying discovery, ranking, moderation, and update information.
 _Avoid_: Content Package, immutable release
 
-**Package Installation**: The local record that a Package Release was validated
-and made available as candidate Renditions and Learning Resources. It neither
-adopts the edition nor silently activates candidates.
-_Avoid_: Download, Package Release, Learning Edition Adoption
+**Package Installation**: The local fact that a Package Release was validated
+and made available. It does not itself create a Personal Corpus Entry or choose
+a Learning Activity.
+_Avoid_: Learning Edition Adoption, acquisition experience
 
-**Learning Edition Adoption**: The Learner's explicit decision to use a
-coherent selection of compatible Renditions and Learning Resources from an
-installed Learning Edition for one Learning Material.
-_Avoid_: Package Installation, package-declared active state
+**Learning Edition Adoption**: The Learner's explicit decision to use one
+installed, qualified Complete Learning Material composition.
+_Avoid_: Package Installation, learner capability
 
-**Publisher Status**: The declared or verified identity class of a publisher,
-independent of review quality and redistribution rights.
-_Avoid_: Review Status, License Status
+**Community Corpus**: A searchable projection over public, rights-compatible
+Complete Learning Materials and their occurrences. It contains no private
+Learner Relations or Meaningful Learning Episodes.
+_Avoid_: Personal Corpus, external search provider
 
-**Review Status**: The declared level and method of content review, independent
-of publisher identity and redistribution rights.
-_Avoid_: Publisher Status, correctness guarantee
-
-**License Status**: Available evidence about permission to use or redistribute a
-resource, independent of publisher identity and review quality.
-_Avoid_: Publisher Status, availability
+**External Context Reference**: An attributed, ephemeral result from an
+external provider. It does not enter a Listen corpus unless its source is
+compiled and retained through the ordinary material and learning boundaries.
+_Avoid_: Corpus Occurrence, Personal Corpus Entry

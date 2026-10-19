@@ -1,0 +1,10 @@
+{"case_id": "m20-001", "provider_id": "slplab-l2-english", "hf_model_id": "slplab/wav2vec2-large-robust-L2-english-phoneme-recognition", "elapsed_seconds": 198.18, "phone_count": 35, "device": "mps"}
+{"case_id": "m20-002", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-004", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-011", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-013", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-015", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-021", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-022", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-023", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}
+{"case_id": "m20-024", "provider_id": "slplab-l2-english", "status": "failed", "error": "Calculated padded input size per channel: (0). Kernel size: (10). Kernel size can't be greater than actual input size"}

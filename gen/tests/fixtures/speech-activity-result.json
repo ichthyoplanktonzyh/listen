@@ -1,0 +1,11 @@
+{
+  "schema": "listen_gen.speech-activity-result.v1",
+  "provider": {"id": "fixture-speech-activity", "version": "1"},
+  "model": {"id": "fixture-vad", "version": "2026-08"},
+  "config_sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "spans": [
+    {"start_ms": 0, "end_ms": 100, "activity": "silence"},
+    {"start_ms": 100, "end_ms": 1900, "activity": "speech"},
+    {"start_ms": 1900, "end_ms": 2200, "activity": "silence"}
+  ]
+}

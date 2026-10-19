@@ -1,0 +1,186 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../models/api_failure.dart';
+import '../models/download_status.dart';
+
+export '../models/download_status.dart';
+
+/// Owns the full online-download lifecycle as a single source of truth.
+///
+/// This replaces the split state that used to live across `_PlayerScreenState`
+/// (`activeDownload` + `downloadError` + `downloadGeneration`) and
+/// `PlayerController` (`downloadProgress` + `downloadedMediaPath`), which could
+/// disagree between frames (Phase 2.22 SM-03).
+///
+/// State machine:
+///
+/// ```
+/// none --starting/attach--> downloading --complete--> completed
+///                                        --error----> failed
+/// downloading|completed|failed --cancel/dismiss--> none
+/// ```
+///
+/// A monotonic [_generation] guard drops late progress/completion callbacks from
+/// a cancelled, dismissed or superseded download, and a [_disposed] guard stops
+/// notifications after the owning widget is gone (replacing the old `mounted`
+/// checks). The controller depends only on plain `Stream`/`Future` primitives,
+/// not on the concrete download service, so it is unit-testable.
+class DownloadController extends ChangeNotifier {
+  DownloadController({
+    DownloadFailureMapper? failureMapper,
+    this.failedAutoDismiss = const Duration(seconds: 10),
+  }) : _failureMapper = failureMapper ?? _fallbackFailure;
+
+  final DownloadFailureMapper _failureMapper;
+
+  /// How long a `failed` bar stays before it auto-dismisses, or null to keep it
+  /// until the caller retries or dismisses it.
+  ///
+  /// A transient bar over the player wants the timer; a state that lives on a
+  /// list row the learner is still looking at does not — auto-hiding there
+  /// would take the failure away while they are reading it.
+  ///
+  /// A `completed` bar intentionally persists either way so its "Open" action
+  /// stays available (opening the media dismisses it).
+  final Duration? failedAutoDismiss;
+
+  void Function()? _cancelActive;
+  final _subscriptions = <StreamSubscription<dynamic>>[];
+  Timer? _autoDismissTimer;
+  int _generation = 0;
+  bool _disposed = false;
+  DownloadStatusSnapshot? _snapshot;
+
+  /// Current typed download state, or `null` when no bar should show.
+  DownloadStatusSnapshot? get snapshot => _snapshot;
+
+  bool get isDownloading => _snapshot?.kind == DownloadStatusKind.downloading;
+
+  /// Completed download path, if the bar is currently in the completed state.
+  String? get downloadedMediaPath => _snapshot?.downloadedMediaPath;
+
+  /// A new download is starting: bump the generation, drop any active handle
+  /// and clear a stale completed/failed bar so it cannot linger.
+  void starting() {
+    _generation++;
+    _disposeActive();
+    _setSnapshot(null);
+  }
+
+  /// Attach a live download's [progress]/[completed] streams and its [cancel]
+  /// handle, then wire them to the typed snapshot.
+  ///
+  /// [onCompleted]/[onFailed] are optional side effects (e.g. status text). They
+  /// only fire for the current generation and while the controller is alive, so
+  /// they cannot run after cancel/dismiss/dispose.
+  ///
+  /// [onFailed] receives a typed [ApiFailure], not the exception's text. It used
+  /// to receive `error.toString()`, and every caller pasted that into a
+  /// sentence — see [DownloadStatusSnapshot.failed].
+  void attach({
+    required Stream<double?> progress,
+    required Future<String?> completed,
+    required void Function() cancel,
+    void Function(String path)? onCompleted,
+    void Function(ApiFailure failure)? onFailed,
+  }) {
+    final generation = _generation;
+    _cancelActive = cancel;
+    // Starts unknown rather than at zero: nothing has been measured yet, and
+    // a 0% bar that never moves is the shape a hang takes.
+    _setSnapshot(const DownloadStatusSnapshot.downloading(progress: null));
+    _subscriptions.add(
+      progress.listen((value) {
+        if (_stale(generation)) return;
+        _setSnapshot(DownloadStatusSnapshot.downloading(progress: value));
+      }),
+    );
+    completed.then(
+      (path) {
+        if (_stale(generation)) return;
+        _cancelActive = null;
+        final trimmed = path?.trim();
+        if (trimmed != null && trimmed.isNotEmpty) {
+          _setSnapshot(DownloadStatusSnapshot.completed(trimmed));
+          onCompleted?.call(trimmed);
+        } else {
+          _setSnapshot(null);
+        }
+      },
+      onError: (Object error) {
+        if (_stale(generation)) return;
+        _cancelActive = null;
+        final failure = _failureMapper(error);
+        _setSnapshot(DownloadStatusSnapshot.failed(failure));
+        _scheduleFailedAutoDismiss();
+        onFailed?.call(failure);
+      },
+    );
+  }
+
+  /// The download could not even start (e.g. the launch call threw).
+  ///
+  /// Takes an already-described [ApiFailure] so the caller's `catch` hands the
+  /// exception to `describeApiFailure` rather than to a sentence.
+  void fail(ApiFailure failure) {
+    _cancelActive = null;
+    _setSnapshot(DownloadStatusSnapshot.failed(failure));
+    _scheduleFailedAutoDismiss();
+  }
+
+  void _scheduleFailedAutoDismiss() {
+    _autoDismissTimer?.cancel();
+    final delay = failedAutoDismiss;
+    if (delay == null) {
+      _autoDismissTimer = null;
+      return;
+    }
+    final generation = _generation;
+    _autoDismissTimer = Timer(delay, () {
+      if (_stale(generation)) return;
+      if (_snapshot?.kind == DownloadStatusKind.failed) _setSnapshot(null);
+    });
+  }
+
+  /// Cancel an in-flight download and hide the bar.
+  void cancel() {
+    _generation++;
+    _disposeActive();
+    _setSnapshot(null);
+  }
+
+  /// Dismiss a completed/failed bar (also safe on an in-flight download).
+  void dismiss() => cancel();
+
+  bool _stale(int generation) => _disposed || generation != _generation;
+
+  void _setSnapshot(DownloadStatusSnapshot? value) {
+    _snapshot = value;
+    if (!_disposed) notifyListeners();
+  }
+
+  void _disposeActive() {
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
+    _cancelActive?.call();
+    _cancelActive = null;
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _subscriptions.clear();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _disposeActive();
+    super.dispose();
+  }
+}
+
+typedef DownloadFailureMapper = ApiFailure Function(Object error);
+
+ApiFailure _fallbackFailure(Object error) =>
+    error is ApiFailure ? error : ApiFailure(raw: '$error');

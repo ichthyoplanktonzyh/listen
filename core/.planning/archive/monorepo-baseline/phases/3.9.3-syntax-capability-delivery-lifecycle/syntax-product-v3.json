@@ -1,0 +1,51 @@
+{
+  "report_version": 1,
+  "qualified_at": "2026-07-13T22:20:00+08:00",
+  "delivery": {
+    "provider_id": "spacy",
+    "provider_version": "jsonl-v2",
+    "runtime_version": "3.8.13",
+    "model_id": "en_core_web_sm",
+    "model_version": "3.8.0",
+    "model_checksum_sha256": "adda6df4860f555a57e6e31635f233359ab471dafa177d58d96a8d4198450a7c",
+    "requirements_sha256": "5f3e9d9a3d2db5e021a301e26e06b0cc3809512bbdb0d5c7a77c012db3f24831",
+    "sidecar_sha256": "3c0c018233e0653173ca3e894a7e2138442e285d94c3048b2e7797a76c330857",
+    "delivery_checksum_sha256": "278506b6e229c3795b3a44d7275a88079f7c60f8343a11a326dbdef647a65bf1",
+    "expected_install_bytes": 162250752,
+    "observed_installed_bytes": 142969731,
+    "base_bundle_runtime_model_bytes": 0
+  },
+  "real_track": {
+    "cue_count": 244,
+    "word_count": 1773,
+    "first_rebuild_seconds": 2.10,
+    "hot_cache_seconds": 0.11,
+    "analyzed_sentence_count": 243,
+    "fallback_sentence_count": 1,
+    "fallback_reason": "invalid_sentence",
+    "resident_sidecar_rss_bytes": 163315712,
+    "cache_survived_backend_restart": true
+  },
+  "lifecycle_exercised": [
+    "clean_install",
+    "validate",
+    "update",
+    "cancel",
+    "retry",
+    "disable",
+    "enable",
+    "stale_delivery",
+    "missing_model_partial",
+    "restore",
+    "uninstall"
+  ],
+  "consumer_decisions": {
+    "artifact": "qualified",
+    "b.future_going_to": "qualified",
+    "b.habitual_used_to": "qualified",
+    "b.have_to": "qualified",
+    "b.want_to": "fallback_only",
+    "sense_group": "qualified",
+    "dependency_matcher": "qualified"
+  }
+}

@@ -1,0 +1,10 @@
+[package]
+name = "diagnosis-core"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domain = { path = "../domain" }
+serde_json.workspace = true

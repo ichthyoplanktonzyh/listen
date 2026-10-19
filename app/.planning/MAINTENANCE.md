@@ -1,0 +1,45 @@
+> Monorepo transition (2026-10-19): root [STATE.md](../../STATE.md),
+> [ROADMAP.md](../../ROADMAP.md), and [DEVELOPMENT.md](../../DEVELOPMENT.md)
+> own current project coordination. This module record retains local/history
+> evidence; split-repository handoff and pin prerequisites are superseded by
+> [decision 0005](../../decisions/0005-single-repository-development.md).
+
+# Planning Maintenance
+
+## 文件职责
+
+| 文件 | 职责 | 更新时机 |
+|---|---|---|
+| `PROJECT.md` | app 愿景、用户价值、边界和非目标 | 产品方向改变 |
+| `REQUIREMENTS.md` | 可测试的前端要求 | 需求增删改 |
+| `ROADMAP.md` | 前端阶段、依赖和优先级 | 排期改变 |
+| `STATE.md` | 当前体验状态、pinned core、下一步 | 每个有效工作切片 |
+| `MILESTONES.md` | 已完成 frontend phase 索引 | phase/milestone 收口 |
+| `codebase/*` | 当前 Flutter 代码事实 | 架构或结构改变 |
+| `CHANGELOG.md` | 已发布、人工整理的历史 | release 收口 |
+
+## 维护规则
+
+- 文档只写本仓可从 Flutter 代码、测试、lock、build 或 owner 决策验证的事实。
+- 不复制 core roadmap、Rust 架构或 backend planning。
+- 后端依赖用 `backend.lock.json` 和稳定链接描述，不写“当前 core main”。
+- `STATE.md` 保持简短；不复制 changelog，不记录瞬时分支状态。
+- `codebase/` 从当前 `lib/`、`macos/`、`tool/`、`test/` 更新。
+- 完成的 phase 写 `CLOSEOUT.md` 后冻结。
+- 普通 feature、fix、refactor、planning、docs 分支不修改根 `CHANGELOG.md`。
+- 发布负责人在发布 app version 时，根据已合并 PR 一次性整理 `CHANGELOG.md`；重点记录
+  用户可见功能、修复、兼容性、迁移与已知限制。
+
+## Frontend Phase 生命周期
+
+```text
+.planning/phases/<id>-<slug>/
+├── <id>-CONTEXT.md
+├── <id>-PLAN.md
+├── UI-SPEC.md          # visible work when needed
+└── <id>-CLOSEOUT.md
+```
+
+CONTEXT 记录 user journey、问题和证据；PLAN 记录切片与验证；UI-SPEC 记录状态、
+布局、响应式、可访问性和交互约束；CLOSEOUT 记录测试、截图/人工证据、core pin
+和剩余风险。

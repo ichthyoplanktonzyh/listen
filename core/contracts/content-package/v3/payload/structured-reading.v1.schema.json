@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v3/payload/structured-reading.v1.schema.json",
+  "title": "Listen structured reading payload v1",
+  "description": "A self-contained, format-neutral Base Resource: exact UTF-8 logical text with ordered hierarchy, blocks/spans, language metadata, stable anchors, and optional mappings into exact Document Rendition Locators. Every anchor range is a half-open byte window into the exact text and must stay in bounds and in monotonic byte order. A Reading Anchor is stable only inside the exact Resource identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["language", "text", "anchors", "blocks", "spans", "document_mappings", "extensions"],
+  "properties": {
+    "language": { "$ref": "#/$defs/languageTag" },
+    "text": { "type": "string", "minLength": 1 },
+    "anchors": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/anchor" }
+    },
+    "blocks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/block" }
+    },
+    "spans": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/span" }
+    },
+    "document_mappings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/documentMapping" }
+    },
+    "extensions": { "type": "object" }
+  },
+  "$defs": {
+    "languageTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchor_id", "kind", "start_offset", "end_offset"],
+      "properties": {
+        "anchor_id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["block", "span", "sentence"] },
+        "start_offset": { "type": "integer", "minimum": 0 },
+        "end_offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block_id", "kind", "order", "span_anchor_ids"],
+      "properties": {
+        "block_id": { "type": "string", "minLength": 1 },
+        "kind": {
+          "type": "string",
+          "enum": ["root", "book", "chapter", "section", "heading", "paragraph"]
+        },
+        "order": { "type": "integer", "minimum": 0 },
+        "span_anchor_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "parent_block_id": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+      }
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["span_id", "anchor_id"],
+      "properties": {
+        "span_id": { "type": "string", "minLength": 1 },
+        "anchor_id": { "type": "string", "minLength": 1 },
+        "parent_anchor_id": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["epub_itemref", "pdf_page", "character_range", "fragment"]
+        },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    },
+    "documentMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchor_id", "rendition_id", "locator"],
+      "properties": {
+        "anchor_id": { "type": "string", "minLength": 1 },
+        "rendition_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "locator": { "$ref": "#/$defs/locator" }
+      }
+    }
+  }
+}

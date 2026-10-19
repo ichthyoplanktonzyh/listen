@@ -1,0 +1,29 @@
+{
+  "provider_id": "shadowing-v2",
+  "provider_version": "v2",
+  "coverage": 0.0,
+  "confidence": 0.0,
+  "evidence_coverage": {
+    "word_alignment": 0.0,
+    "phone_alignment": 0.0,
+    "stress": 0.0,
+    "rhythm": 0.0,
+    "f0": 0.0,
+    "energy": 0.0,
+    "missing": [
+      {
+        "component": "phone_recognition",
+        "reason": "provider_unavailable"
+      }
+    ]
+  },
+  "audio_quality": {
+    "snr_db": 12.5,
+    "clipping_ratio": 0.0,
+    "dc_offset": 0.0,
+    "sample_rate_hz": 16000,
+    "channels": 1
+  },
+  "abstain_reason": "provider_unavailable",
+  "word_details": []
+}

@@ -1,0 +1,1128 @@
+import 'types.dart';
+
+/// Platform-independent microphone authorization state used by practice and
+/// conversation features. Platform services translate native values into this
+/// model; presentation code never depends on the recorder implementation.
+enum MicrophonePermissionStatus {
+  granted,
+  denied,
+  restricted,
+  notDetermined,
+  unavailable,
+}
+
+class PracticeSession {
+  const PracticeSession({
+    required this.id,
+    required this.mode,
+    this.mediaId,
+    this.trackId,
+    required this.source,
+    required this.startedAtMs,
+    this.endedAtMs,
+  });
+
+  factory PracticeSession.fromJson(Map<String, dynamic> json) =>
+      PracticeSession(
+        id: json['id'] as String,
+        mode: json['mode'] as String,
+        mediaId: json['media_id'] as String?,
+        trackId: json['track_id'] as String?,
+        source: json['source'] as String,
+        startedAtMs: json['started_at_ms'] as int,
+        endedAtMs: json['ended_at_ms'] as int?,
+      );
+
+  final String id;
+  final String mode;
+  final String? mediaId;
+  final String? trackId;
+  final String source;
+  final int startedAtMs;
+  final int? endedAtMs;
+
+  PracticeSession copyWith({int? endedAtMs}) => PracticeSession(
+    id: id,
+    mode: mode,
+    mediaId: mediaId,
+    trackId: trackId,
+    source: source,
+    startedAtMs: startedAtMs,
+    endedAtMs: endedAtMs ?? this.endedAtMs,
+  );
+}
+
+class CreatePracticeSession {
+  const CreatePracticeSession({
+    required this.mode,
+    this.mediaId,
+    this.trackId,
+    this.source,
+  });
+
+  final String mode;
+  final String? mediaId;
+  final String? trackId;
+  final String? source;
+
+  Map<String, dynamic> toJson() => {
+    'mode': mode,
+    'media_id': mediaId,
+    'track_id': trackId,
+    'source': source,
+  };
+}
+
+class HuntingCompletionSummary {
+  const HuntingCompletionSummary({
+    required this.promptedCount,
+    required this.recognizedCount,
+    required this.notRecognizedCount,
+    required this.notNoticedCount,
+  });
+
+  final int promptedCount;
+  final int recognizedCount;
+  final int notRecognizedCount;
+  final int notNoticedCount;
+
+  Map<String, dynamic> toJson() => {
+    'prompted_count': promptedCount,
+    'recognized_count': recognizedCount,
+    'not_recognized_count': notRecognizedCount,
+    'not_noticed_count': notNoticedCount,
+  };
+}
+
+class PracticeTarget {
+  const PracticeTarget({
+    required this.kind,
+    this.id,
+    this.sentenceId,
+    this.chunkId,
+    this.startMs,
+    this.endMs,
+  });
+
+  factory PracticeTarget.fromJson(Map<String, dynamic> json) => PracticeTarget(
+    kind: json['kind'] as String,
+    id: json['id'] as String?,
+    sentenceId: json['sentence_id'] as String?,
+    chunkId: json['chunk_id'] as String?,
+    startMs: json['start_ms'] as int?,
+    endMs: json['end_ms'] as int?,
+  );
+
+  final String kind;
+  final String? id;
+  final String? sentenceId;
+  final String? chunkId;
+  final int? startMs;
+  final int? endMs;
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind,
+    'id': id,
+    'sentence_id': sentenceId,
+    'chunk_id': chunkId,
+    'start_ms': startMs,
+    'end_ms': endMs,
+  };
+}
+
+class PracticeAnchor {
+  const PracticeAnchor({
+    required this.kind,
+    required this.id,
+    this.label,
+    this.lexicalEntryId,
+    this.sentenceId,
+    this.tokenStart,
+    this.tokenEnd,
+    this.startMs,
+    this.endMs,
+  });
+
+  factory PracticeAnchor.fromJson(Map<String, dynamic> json) => PracticeAnchor(
+    kind: json['kind'] as String,
+    id: json['id'] as String,
+    label: json['label'] as String?,
+    lexicalEntryId: json['lexical_entry_id'] as String?,
+    sentenceId: json['sentence_id'] as String?,
+    tokenStart: json['token_start'] as int?,
+    tokenEnd: json['token_end'] as int?,
+    startMs: json['start_ms'] as int?,
+    endMs: json['end_ms'] as int?,
+  );
+
+  final String kind;
+  final String id;
+  final String? label;
+  final String? lexicalEntryId;
+  final String? sentenceId;
+  final int? tokenStart;
+  final int? tokenEnd;
+  final int? startMs;
+  final int? endMs;
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind,
+    'id': id,
+    'label': label,
+    'lexical_entry_id': lexicalEntryId,
+    'sentence_id': sentenceId,
+    'token_start': tokenStart,
+    'token_end': tokenEnd,
+    'start_ms': startMs,
+    'end_ms': endMs,
+  };
+}
+
+class PracticeItem {
+  const PracticeItem({
+    required this.id,
+    this.sessionId,
+    required this.kind,
+    required this.target,
+    required this.promptSnapshot,
+    required this.expectedAnswer,
+    required this.anchors,
+    required this.createdAtMs,
+  });
+
+  factory PracticeItem.fromJson(Map<String, dynamic> json) => PracticeItem(
+    id: json['id'] as String,
+    sessionId: json['session_id'] as String?,
+    kind: json['kind'] as String,
+    target: PracticeTarget.fromJson(json['target'] as Map<String, dynamic>),
+    promptSnapshot: json['prompt_snapshot'] as String,
+    expectedAnswer: json['expected_answer'],
+    anchors: ((json['anchors'] as List<dynamic>?) ?? const [])
+        .map((value) => PracticeAnchor.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    createdAtMs: json['created_at_ms'] as int,
+  );
+
+  final String id;
+  final String? sessionId;
+  final String kind;
+  final PracticeTarget target;
+  final String promptSnapshot;
+  final Object? expectedAnswer;
+  final List<PracticeAnchor> anchors;
+  final int createdAtMs;
+}
+
+class CreatePracticeItem {
+  const CreatePracticeItem({
+    this.sessionId,
+    required this.kind,
+    required this.target,
+    required this.promptSnapshot,
+    required this.expectedText,
+    required this.anchors,
+  });
+
+  final String? sessionId;
+  final String kind;
+  final PracticeTarget target;
+  final String promptSnapshot;
+  final String expectedText;
+  final List<PracticeAnchor> anchors;
+
+  Map<String, dynamic> toJson() => {
+    'session_id': sessionId,
+    'kind': kind,
+    'target': target.toJson(),
+    'prompt_snapshot': promptSnapshot,
+    'expected_text': expectedText,
+    'anchors': anchors.map((value) => value.toJson()).toList(growable: false),
+  };
+}
+
+class SubmitPracticeAttempt {
+  const SubmitPracticeAttempt({
+    required this.itemId,
+    required this.textAnswer,
+    required this.createReviewItemOnFailure,
+  });
+
+  final String itemId;
+  final String textAnswer;
+  final bool createReviewItemOnFailure;
+
+  Map<String, dynamic> toJson() => {
+    'item_id': itemId,
+    'text_answer': textAnswer,
+    'create_review_item_on_failure': createReviewItemOnFailure,
+  };
+}
+
+class PlayableSegment {
+  const PlayableSegment({
+    this.mediaId,
+    required this.startMs,
+    required this.endMs,
+    required this.label,
+    required this.subtitleSnapshot,
+    required this.availability,
+  });
+
+  factory PlayableSegment.fromJson(Map<String, dynamic> json) =>
+      PlayableSegment(
+        mediaId: json['media_id'] as String?,
+        startMs: json['start_ms'] as int,
+        endMs: json['end_ms'] as int,
+        label: json['label'] as String,
+        subtitleSnapshot: json['subtitle_snapshot'] as String,
+        availability: json['availability'] as String,
+      );
+
+  final String? mediaId;
+  final int startMs;
+  final int endMs;
+  final String label;
+  final String subtitleSnapshot;
+  final String availability;
+
+  Map<String, dynamic> toJson() => {
+    'media_id': mediaId,
+    'start_ms': startMs,
+    'end_ms': endMs,
+    'label': label,
+    'subtitle_snapshot': subtitleSnapshot,
+    'availability': availability,
+  };
+}
+
+class RecordingAudioMetadata {
+  const RecordingAudioMetadata({
+    required this.container,
+    required this.codec,
+    required this.sampleRateHz,
+    required this.channels,
+    required this.sampleFormat,
+    required this.byteLength,
+    required this.contentSha256,
+  });
+
+  factory RecordingAudioMetadata.fromJson(Map<String, dynamic> json) =>
+      RecordingAudioMetadata(
+        container: json['container'] as String,
+        codec: json['codec'] as String,
+        sampleRateHz: json['sample_rate_hz'] as int,
+        channels: json['channels'] as int,
+        sampleFormat: json['sample_format'] as String,
+        byteLength: json['byte_length'] as int,
+        contentSha256: json['content_sha256'] as String,
+      );
+
+  final String container;
+  final String codec;
+  final int sampleRateHz;
+  final int channels;
+  final String sampleFormat;
+  final int byteLength;
+  final String contentSha256;
+
+  Map<String, dynamic> toJson() => {
+    'container': container,
+    'codec': codec,
+    'sample_rate_hz': sampleRateHz,
+    'channels': channels,
+    'sample_format': sampleFormat,
+    'byte_length': byteLength,
+    'content_sha256': contentSha256,
+  };
+}
+
+class RecordingAsset {
+  const RecordingAsset({
+    required this.id,
+    required this.filePath,
+    required this.createdAtMs,
+    required this.durationMs,
+    this.practiceAttemptId,
+    required this.target,
+    required this.sourceSegment,
+    required this.language,
+    required this.audio,
+    required this.recorderVersion,
+  });
+
+  factory RecordingAsset.fromJson(Map<String, dynamic> json) => RecordingAsset(
+    id: json['id'] as String,
+    filePath: json['file_path'] as String,
+    createdAtMs: json['created_at_ms'] as int,
+    durationMs: json['duration_ms'] as int,
+    practiceAttemptId: json['practice_attempt_id'] as String?,
+    target: PracticeTarget.fromJson(json['target'] as Map<String, dynamic>),
+    sourceSegment: PlayableSegment.fromJson(
+      json['source_segment'] as Map<String, dynamic>,
+    ),
+    language: json['language'] as String,
+    audio: RecordingAudioMetadata.fromJson(
+      json['audio'] as Map<String, dynamic>,
+    ),
+    recorderVersion: json['recorder_version'] as String,
+  );
+
+  final String id;
+  final String filePath;
+  final int createdAtMs;
+  final int durationMs;
+  final String? practiceAttemptId;
+  final PracticeTarget target;
+  final PlayableSegment sourceSegment;
+  final String language;
+  final RecordingAudioMetadata audio;
+  final String recorderVersion;
+}
+
+class CreateRecordingAsset {
+  const CreateRecordingAsset({
+    required this.filePath,
+    required this.durationMs,
+    required this.target,
+    required this.sourceSegment,
+    required this.language,
+    required this.audio,
+    required this.recorderVersion,
+  });
+
+  final String filePath;
+  final int durationMs;
+  final PracticeTarget target;
+  final PlayableSegment sourceSegment;
+  final String language;
+  final RecordingAudioMetadata audio;
+  final String recorderVersion;
+
+  Map<String, dynamic> toJson() => {
+    'file_path': filePath,
+    'duration_ms': durationMs,
+    'target': target.toJson(),
+    'source_segment': sourceSegment.toJson(),
+    'language': language,
+    'audio': audio.toJson(),
+    'recorder_version': recorderVersion,
+  };
+}
+
+class AudioPauseInterval {
+  const AudioPauseInterval({required this.startMs, required this.endMs});
+
+  factory AudioPauseInterval.fromJson(Map<String, dynamic> json) =>
+      AudioPauseInterval(
+        startMs: json['start_ms'] as int,
+        endMs: json['end_ms'] as int,
+      );
+
+  final int startMs;
+  final int endMs;
+}
+
+class AudioWaveformSummary {
+  const AudioWaveformSummary({
+    required this.durationMs,
+    required this.bucketMs,
+    required this.peaks,
+    required this.rms,
+  });
+
+  factory AudioWaveformSummary.fromJson(Map<String, dynamic> json) =>
+      AudioWaveformSummary(
+        durationMs: json['duration_ms'] as int,
+        bucketMs: json['bucket_ms'] as int,
+        peaks: (json['peaks'] as List<dynamic>)
+            .map((value) => (value as num).toDouble())
+            .toList(growable: false),
+        rms: (json['rms'] as List<dynamic>)
+            .map((value) => (value as num).toDouble())
+            .toList(growable: false),
+      );
+
+  final int durationMs;
+  final int bucketMs;
+  final List<double> peaks;
+  final List<double> rms;
+}
+
+class RecordingAudioFacts {
+  const RecordingAudioFacts({
+    required this.recordingId,
+    required this.durationMs,
+    required this.pauses,
+    required this.waveform,
+  });
+
+  factory RecordingAudioFacts.fromJson(Map<String, dynamic> json) =>
+      RecordingAudioFacts(
+        recordingId: json['recording_id'] as String,
+        durationMs: json['duration_ms'] as int,
+        pauses: (json['pauses'] as List<dynamic>)
+            .map(
+              (value) =>
+                  AudioPauseInterval.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        waveform: AudioWaveformSummary.fromJson(
+          json['waveform'] as Map<String, dynamic>,
+        ),
+      );
+
+  final String recordingId;
+  final int durationMs;
+  final List<AudioPauseInterval> pauses;
+  final AudioWaveformSummary waveform;
+
+  int get totalPauseMs =>
+      pauses.fold(0, (total, pause) => total + pause.endMs - pause.startMs);
+}
+
+class ShadowingComparison {
+  const ShadowingComparison({
+    required this.attemptId,
+    required this.referenceSegment,
+    required this.recordingId,
+    required this.durationDeltaMs,
+    required this.referencePauses,
+    required this.recordingPauses,
+    this.meanAbsolutePauseOffsetMs,
+    required this.referenceWaveform,
+    required this.recordingWaveform,
+  });
+
+  factory ShadowingComparison.fromJson(Map<String, dynamic> json) {
+    final alignment = json['pause_alignment'] as Map<String, dynamic>;
+    return ShadowingComparison(
+      attemptId: json['attempt_id'] as String,
+      referenceSegment: PlayableSegment.fromJson(
+        json['reference_segment'] as Map<String, dynamic>,
+      ),
+      recordingId: json['recording_id'] as String,
+      durationDeltaMs: json['duration_delta_ms'] as int,
+      referencePauses: (alignment['reference_pauses'] as List<dynamic>)
+          .map(
+            (value) =>
+                AudioPauseInterval.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+      recordingPauses: (alignment['recording_pauses'] as List<dynamic>)
+          .map(
+            (value) =>
+                AudioPauseInterval.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+      meanAbsolutePauseOffsetMs: alignment['mean_absolute_offset_ms'] as int?,
+      referenceWaveform: AudioWaveformSummary.fromJson(
+        json['reference_waveform'] as Map<String, dynamic>,
+      ),
+      recordingWaveform: AudioWaveformSummary.fromJson(
+        json['recording_waveform'] as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  final String attemptId;
+  final PlayableSegment referenceSegment;
+  final String recordingId;
+  final int durationDeltaMs;
+  final List<AudioPauseInterval> referencePauses;
+  final List<AudioPauseInterval> recordingPauses;
+  final int? meanAbsolutePauseOffsetMs;
+  final AudioWaveformSummary referenceWaveform;
+  final AudioWaveformSummary recordingWaveform;
+}
+
+class PracticeTokenEvaluation {
+  const PracticeTokenEvaluation({
+    this.expected,
+    this.actual,
+    required this.result,
+  });
+
+  factory PracticeTokenEvaluation.fromJson(Map<String, dynamic> json) =>
+      PracticeTokenEvaluation(
+        expected: json['expected'] as String?,
+        actual: json['actual'] as String?,
+        result: json['result'] as String,
+      );
+
+  final String? expected;
+  final String? actual;
+  final String result;
+}
+
+class PracticeEvaluation {
+  const PracticeEvaluation({
+    required this.summary,
+    required this.tokenResults,
+    required this.extra,
+  });
+
+  factory PracticeEvaluation.fromJson(
+    Map<String, dynamic> json,
+  ) => PracticeEvaluation(
+    summary: json['summary'] as String,
+    tokenResults: ((json['token_results'] as List<dynamic>?) ?? const [])
+        .map(
+          (value) =>
+              PracticeTokenEvaluation.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+    extra: json['extra'],
+  );
+
+  final String summary;
+  final List<PracticeTokenEvaluation> tokenResults;
+  final Object? extra;
+}
+
+class PracticeAttempt {
+  const PracticeAttempt({
+    required this.id,
+    required this.itemId,
+    required this.submittedAtMs,
+    required this.input,
+    required this.result,
+    this.score,
+    required this.evaluation,
+    required this.generatedObservationIds,
+    required this.generatedReviewItemIds,
+  });
+
+  factory PracticeAttempt.fromJson(Map<String, dynamic> json) =>
+      PracticeAttempt(
+        id: json['id'] as String,
+        itemId: json['item_id'] as String,
+        submittedAtMs: json['submitted_at_ms'] as int,
+        input: json['input'],
+        result: json['result'] as String,
+        score: (json['score'] as num?)?.toDouble(),
+        evaluation: PracticeEvaluation.fromJson(
+          json['evaluation'] as Map<String, dynamic>,
+        ),
+        generatedObservationIds:
+            ((json['generated_observation_ids'] as List<dynamic>?) ?? const [])
+                .cast<String>()
+                .toList(growable: false),
+        generatedReviewItemIds:
+            ((json['generated_review_item_ids'] as List<dynamic>?) ?? const [])
+                .cast<String>()
+                .toList(growable: false),
+      );
+
+  final String id;
+  final String itemId;
+  final int submittedAtMs;
+  final Object? input;
+  final String result;
+  final double? score;
+  final PracticeEvaluation evaluation;
+  final List<String> generatedObservationIds;
+  final List<String> generatedReviewItemIds;
+
+  PracticeAttempt copyWith({List<String>? generatedReviewItemIds}) =>
+      PracticeAttempt(
+        id: id,
+        itemId: itemId,
+        submittedAtMs: submittedAtMs,
+        input: input,
+        result: result,
+        score: score,
+        evaluation: evaluation,
+        generatedObservationIds: generatedObservationIds,
+        generatedReviewItemIds:
+            generatedReviewItemIds ?? this.generatedReviewItemIds,
+      );
+}
+
+class ReviewSource {
+  const ReviewSource({
+    required this.kind,
+    this.id,
+    this.practiceAttemptId,
+    this.lexicalEntryId,
+    this.mediaId,
+    this.trackId,
+  });
+
+  factory ReviewSource.fromJson(Map<String, dynamic> json) => ReviewSource(
+    kind: json['kind'] as String,
+    id: json['id'] as String?,
+    practiceAttemptId: json['practice_attempt_id'] as String?,
+    lexicalEntryId: json['lexical_entry_id'] as String?,
+    mediaId: json['media_id'] as String?,
+    trackId: json['track_id'] as String?,
+  );
+
+  final String kind;
+  final String? id;
+  final String? practiceAttemptId;
+  final String? lexicalEntryId;
+  final String? mediaId;
+  final String? trackId;
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind,
+    'id': id,
+    'practice_attempt_id': practiceAttemptId,
+    'lexical_entry_id': lexicalEntryId,
+    'media_id': mediaId,
+    'track_id': trackId,
+  };
+}
+
+class ReviewItem {
+  const ReviewItem({
+    required this.id,
+    required this.source,
+    required this.anchors,
+    required this.promptSnapshot,
+    required this.status,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  factory ReviewItem.fromJson(Map<String, dynamic> json) => ReviewItem(
+    id: json['id'] as String,
+    source: ReviewSource.fromJson(json['source'] as Map<String, dynamic>),
+    anchors: ((json['anchors'] as List<dynamic>?) ?? const [])
+        .map((value) => PracticeAnchor.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    promptSnapshot: json['prompt_snapshot'] as String,
+    status: json['status'] as String,
+    createdAtMs: json['created_at_ms'] as int,
+    updatedAtMs: json['updated_at_ms'] as int,
+  );
+
+  final String id;
+  final ReviewSource source;
+  final List<PracticeAnchor> anchors;
+  final String promptSnapshot;
+  final String status;
+  final int createdAtMs;
+  final int updatedAtMs;
+}
+
+class CreateReviewItem {
+  const CreateReviewItem({
+    required this.source,
+    required this.anchors,
+    required this.promptSnapshot,
+  });
+
+  final ReviewSource source;
+  final List<PracticeAnchor> anchors;
+  final String promptSnapshot;
+
+  Map<String, dynamic> toJson() => {
+    'source': source.toJson(),
+    'anchors': anchors.map((value) => value.toJson()).toList(growable: false),
+    'prompt_snapshot': promptSnapshot,
+  };
+}
+
+class ReviewSchedule {
+  const ReviewSchedule({
+    required this.itemId,
+    required this.algorithm,
+    required this.dueAtMs,
+    required this.lapseCount,
+    this.stability,
+    this.difficulty,
+    this.intervalDays,
+  });
+
+  factory ReviewSchedule.fromJson(Map<String, dynamic> json) => ReviewSchedule(
+    itemId: json['item_id'] as String,
+    algorithm: json['algorithm'] as String,
+    dueAtMs: json['due_at_ms'] as int,
+    stability: (json['stability'] as num?)?.toDouble(),
+    difficulty: (json['difficulty'] as num?)?.toDouble(),
+    intervalDays: (json['interval_days'] as num?)?.toDouble(),
+    lapseCount: json['lapse_count'] as int,
+  );
+
+  final String itemId;
+  final String algorithm;
+  final int dueAtMs;
+  final double? stability;
+  final double? difficulty;
+  final double? intervalDays;
+  final int lapseCount;
+}
+
+/// The scheduling state of a review card, as the FSRS-6 scheduler reports it.
+///
+/// This is read off the wire, never inferred. The card head used to say "New
+/// card" for every card with zero lapses — false for any card reviewed and
+/// never forgotten — and inferring the state from `interval_days` instead only
+/// swaps one guess for a better guess. The scheduler is the one that knows.
+enum ReviewCardState {
+  newCard('new'),
+  learning('learning'),
+  relearning('relearning'),
+  review('review');
+
+  const ReviewCardState(this.wire);
+
+  final String wire;
+
+  static ReviewCardState fromJson(String value) =>
+      values.firstWhere((state) => state.wire == value);
+}
+
+class ReviewAttempt {
+  const ReviewAttempt({
+    required this.id,
+    required this.itemId,
+    required this.reviewedAtMs,
+    required this.rating,
+    this.practiceAttemptId,
+    this.nextDueAtMs,
+  });
+
+  factory ReviewAttempt.fromJson(Map<String, dynamic> json) => ReviewAttempt(
+    id: json['id'] as String,
+    itemId: json['item_id'] as String,
+    reviewedAtMs: json['reviewed_at_ms'] as int,
+    rating: json['rating'] as String,
+    practiceAttemptId: json['practice_attempt_id'] as String?,
+    nextDueAtMs: json['next_due_at_ms'] as int?,
+  );
+
+  final String id;
+  final String itemId;
+  final int reviewedAtMs;
+  final String rating;
+  final String? practiceAttemptId;
+  final int? nextDueAtMs;
+}
+
+class ReviewCard {
+  const ReviewCard({
+    required this.kind,
+    required this.answer,
+    this.cue,
+    this.target,
+  });
+
+  factory ReviewCard.fromJson(Map<String, dynamic> json) => ReviewCard(
+    kind: json['kind'] as String,
+    cue: json['cue'] as String?,
+    answer: json['answer'] as String,
+    target: json['target'] as String?,
+  );
+
+  final String kind;
+  final String? cue;
+  final String answer;
+  final String? target;
+}
+
+class ReviewQueueEntry {
+  const ReviewQueueEntry({
+    required this.item,
+    required this.schedule,
+    required this.state,
+    required this.card,
+    required this.origin,
+  });
+
+  factory ReviewQueueEntry.fromJson(
+    Map<String, dynamic> json,
+  ) => ReviewQueueEntry(
+    item: ReviewItem.fromJson(json['item'] as Map<String, dynamic>),
+    schedule: ReviewSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
+    state: ReviewCardState.fromJson(json['state'] as String),
+    card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
+    origin: ReviewItemOrigin.fromJson(json['origin'] as Map<String, dynamic>),
+  );
+
+  final ReviewItem item;
+  final ReviewSchedule schedule;
+  final ReviewCardState state;
+  final ReviewCard card;
+  final ReviewItemOrigin origin;
+
+  int? get playbackStartMs => item.anchors
+      .map((value) => value.startMs)
+      .whereType<int>()
+      .fold<int?>(
+        null,
+        (value, next) => value == null || next < value ? next : value,
+      );
+
+  int? get playbackEndMs => item.anchors
+      .map((value) => value.endMs)
+      .whereType<int>()
+      .fold<int?>(
+        null,
+        (value, next) => value == null || next > value ? next : value,
+      );
+}
+
+/// Where a card came from. An `imported_anki` card carries no listening
+/// evidence of its own, so [hasListeningEnhancements] is the backend saying
+/// which of listen's own affordances the card can actually support — the
+/// session reads it instead of assuming every card was born here.
+class ReviewItemOrigin {
+  const ReviewItemOrigin({
+    required this.kind,
+    required this.ankiGuid,
+    required this.deckId,
+    required this.deckName,
+    required this.hasListeningEnhancements,
+  });
+
+  factory ReviewItemOrigin.fromJson(Map<String, dynamic> json) =>
+      ReviewItemOrigin(
+        kind: json['kind'] as String,
+        ankiGuid: json['anki_guid'] as String?,
+        deckId: json['deck_id'] as String?,
+        deckName: json['deck_name'] as String?,
+        hasListeningEnhancements: json['has_listening_enhancements'] as bool,
+      );
+
+  final String kind;
+  final String? ankiGuid;
+  final String? deckId;
+  final String? deckName;
+  final bool hasListeningEnhancements;
+
+  bool get isImportedAnki => kind == 'imported_anki';
+}
+
+class ReviewSubmission {
+  const ReviewSubmission({
+    required this.attempt,
+    required this.schedule,
+    required this.generatedObservationIds,
+    required this.huntingCandidateIds,
+    required this.upgradeSuggestions,
+  });
+
+  factory ReviewSubmission.fromJson(
+    Map<String, dynamic> json,
+  ) => ReviewSubmission(
+    attempt: ReviewAttempt.fromJson(json['attempt'] as Map<String, dynamic>),
+    schedule: ReviewSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
+    generatedObservationIds:
+        ((json['generated_observation_ids'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+    huntingCandidateIds:
+        ((json['hunting_candidate_ids'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+    upgradeSuggestions:
+        ((json['upgrade_suggestions'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  UpgradeSuggestion.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+  );
+
+  final ReviewAttempt attempt;
+  final ReviewSchedule schedule;
+  final List<String> generatedObservationIds;
+  final List<String> huntingCandidateIds;
+  final List<UpgradeSuggestion> upgradeSuggestions;
+}
+
+class HuntingCandidate {
+  const HuntingCandidate({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.reviewItemId,
+    required this.targetSnapshot,
+    required this.promptSnapshot,
+    required this.failureCount,
+    required this.status,
+    required this.createdAtMs,
+    required this.lastFailedAtMs,
+    this.sentenceId,
+    this.mediaId,
+    this.trackId,
+  });
+
+  factory HuntingCandidate.fromJson(Map<String, dynamic> json) =>
+      HuntingCandidate(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        reviewItemId: json['review_item_id'] as String,
+        sentenceId: json['sentence_id'] as String?,
+        mediaId: json['media_id'] as String?,
+        trackId: json['track_id'] as String?,
+        targetSnapshot: json['target_snapshot'] as String,
+        promptSnapshot: json['prompt_snapshot'] as String,
+        failureCount: json['failure_count'] as int,
+        status: json['status'] as String,
+        createdAtMs: json['created_at_ms'] as int,
+        lastFailedAtMs: json['last_failed_at_ms'] as int,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String reviewItemId;
+  final String? sentenceId;
+  final String? mediaId;
+  final String? trackId;
+  final String targetSnapshot;
+  final String promptSnapshot;
+  final int failureCount;
+  final String status;
+  final int createdAtMs;
+  final int lastFailedAtMs;
+}
+
+class HuntingTarget {
+  const HuntingTarget({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.sourceKind,
+    required this.targetSnapshot,
+    required this.status,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.sourceId,
+  });
+
+  factory HuntingTarget.fromJson(Map<String, dynamic> json) => HuntingTarget(
+    id: json['id'] as String,
+    lexicalEntryId: json['lexical_entry_id'] as String,
+    sourceKind: json['source_kind'] as String,
+    sourceId: json['source_id'] as String?,
+    targetSnapshot: json['target_snapshot'] as String,
+    status: json['status'] as String,
+    createdAtMs: json['created_at_ms'] as int,
+    updatedAtMs: json['updated_at_ms'] as int,
+  );
+
+  final String id;
+  final String lexicalEntryId;
+  final String sourceKind;
+  final String? sourceId;
+  final String targetSnapshot;
+  final String status;
+  final int createdAtMs;
+  final int updatedAtMs;
+}
+
+class HuntingOccurrence {
+  const HuntingOccurrence({
+    required this.targetId,
+    required this.lexicalEntryId,
+    required this.targetSnapshot,
+    required this.occurrence,
+  });
+
+  factory HuntingOccurrence.fromJson(Map<String, dynamic> json) =>
+      HuntingOccurrence(
+        targetId: json['target_id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        targetSnapshot: json['target_snapshot'] as String,
+        occurrence: CorpusOccurrence.fromJson(
+          json['occurrence'] as Map<String, dynamic>,
+        ),
+      );
+
+  final String targetId;
+  final String lexicalEntryId;
+  final String targetSnapshot;
+  final CorpusOccurrence occurrence;
+}
+
+class HuntingOccurrenceQueryResult {
+  const HuntingOccurrenceQueryResult({
+    required this.indexed,
+    required this.occurrences,
+  });
+
+  factory HuntingOccurrenceQueryResult.fromJson(Map<String, dynamic> json) =>
+      HuntingOccurrenceQueryResult(
+        indexed: json['indexed'] as bool,
+        occurrences: (json['occurrences'] as List<dynamic>)
+            .map(
+              (value) =>
+                  HuntingOccurrence.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+      );
+
+  final bool indexed;
+  final List<HuntingOccurrence> occurrences;
+}
+
+class HuntingCheckResult {
+  const HuntingCheckResult({
+    required this.answer,
+    required this.eventId,
+    this.observationId,
+  });
+
+  factory HuntingCheckResult.fromJson(Map<String, dynamic> json) =>
+      HuntingCheckResult(
+        answer: json['answer'] as String,
+        eventId: json['event_id'] as String,
+        observationId: json['observation_id'] as String?,
+      );
+
+  final String answer;
+  final String eventId;
+  final String? observationId;
+}
+
+class UpgradeSuggestion {
+  const UpgradeSuggestion({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.lexicalDisplayForm,
+    required this.previousStatus,
+    required this.suggestedStatus,
+    required this.status,
+    required this.evidenceContextCount,
+    required this.evidenceIds,
+    required this.threshold,
+    required this.evidenceClass,
+    required this.createdAtMs,
+    this.resolvedAtMs,
+    this.cooldownUntilMs,
+  });
+
+  factory UpgradeSuggestion.fromJson(Map<String, dynamic> json) =>
+      UpgradeSuggestion(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        lexicalDisplayForm: json['lexical_display_form'] as String,
+        previousStatus: json['previous_status'] as String,
+        suggestedStatus: json['suggested_status'] as String,
+        status: json['status'] as String,
+        evidenceContextCount: json['evidence_context_count'] as int,
+        evidenceIds: ((json['evidence_ids'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+        threshold: json['threshold'] as int,
+        evidenceClass: json['evidence_class'] as String,
+        createdAtMs: json['created_at_ms'] as int,
+        resolvedAtMs: json['resolved_at_ms'] as int?,
+        cooldownUntilMs: json['cooldown_until_ms'] as int?,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String lexicalDisplayForm;
+  final String previousStatus;
+  final String suggestedStatus;
+  final String status;
+  final int evidenceContextCount;
+  final List<String> evidenceIds;
+  final int threshold;
+  final String evidenceClass;
+  final int createdAtMs;
+  final int? resolvedAtMs;
+  final int? cooldownUntilMs;
+}

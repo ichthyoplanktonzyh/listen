@@ -1,0 +1,1 @@
+-- Learning content is stored on lexical_entries from migration 0007 onward.

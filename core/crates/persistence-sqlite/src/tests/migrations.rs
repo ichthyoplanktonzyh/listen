@@ -1,0 +1,2551 @@
+use super::*;
+use crate::learning_material::{LEGACY_BLANK_TITLE_FALLBACK, backfill_legacy_media_materials};
+
+#[test]
+fn new_database_migrates_to_latest() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+    let connection = repo.connection.lock();
+    assert!(!table_exists(&connection, removed_resource_table_name()));
+    assert!(table_exists(&connection, "hunting_candidates"));
+    assert!(table_exists(&connection, "hunting_targets"));
+    assert!(table_exists(&connection, "recognition_evidence"));
+    assert!(table_exists(&connection, "upgrade_suggestions"));
+    assert!(table_exists(&connection, "lexical_capability_states"));
+    assert!(table_exists(&connection, "lexical_capability_history"));
+}
+
+#[test]
+fn v54_marks_legacy_synthetic_lltimeline_media_missing_without_deleting_resources_or_history() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let connection = repo.connection.lock();
+    connection
+        .execute_batch(
+            r#"
+            INSERT INTO media_items
+              (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms,availability)
+            VALUES
+              ('detached','lltimeline://detached','detached-fp','Detached','"video"',1000,1,1,'"available"'),
+              ('real','/tmp/real.mp4','real-fp','Real','"video"',1000,1,1,'"available"');
+            INSERT INTO subtitle_tracks
+              (id,media_id,fingerprint,language,source,status)
+            VALUES
+              ('detached-track','detached','track-fp','en','lltimeline-json-v1','"available"');
+            INSERT INTO lltimeline_resources
+              (track_id,metadata_json,artifacts_json,updated_at_ms)
+            VALUES
+              ('detached-track','{"media":{"path":"/old/source.mp4"}}','[]',1);
+            INSERT INTO learning_events
+              (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json)
+            VALUES
+              ('history',1,'"familiar_material_marked"','"media"','detached',NULL,'{}');
+            PRAGMA user_version=53;
+            "#,
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT availability FROM media_items WHERE id='detached'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        "\"missing\""
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT availability FROM media_items WHERE id='real'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        "\"available\""
+    );
+    for table in ["subtitle_tracks", "lltimeline_resources", "learning_events"] {
+        assert_eq!(
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            1,
+            "{table} survives availability correction"
+        );
+    }
+}
+
+#[test]
+fn v45_removes_role_reply_facts_projections_and_recording_file() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let recording_path =
+        std::env::temp_dir().join(format!("llplayer-role-reply-{}.wav", std::process::id()));
+    std::fs::write(&recording_path, b"role reply audio").unwrap();
+    let connection = repo.connection.lock();
+    connection
+        .execute_batch(&format!(
+            r#"
+            PRAGMA user_version=44;
+            INSERT INTO lexical_entries
+              (id,language,kind,granularity,normalization,normalized_key,canonical_form,
+               normalized_form,display_form,normalization_provider,normalization_version,
+               updated_at_ms,learning_updated_at_ms)
+            VALUES ('role-word','en','"word"','word','lemma','ticket','ticket','ticket',
+                    'ticket','test','1',1,1);
+            INSERT INTO recording_assets
+              (id,language,file_path,duration_ms,created_at_ms,asset_json)
+            VALUES ('role-recording','en','{}',1000,1,'{{}}');
+            INSERT INTO semantic_rubrics
+              (id,version,purpose,start_ms,end_ms,source_language,response_language,
+               source_sha256,created_at_ms,rubric_json)
+            VALUES ('role-rubric',1,'"role_reply"',0,1000,'en','en','hash',1,'{{}}');
+            INSERT INTO semantic_task_attempts
+              (id,kind,rubric_id,rubric_version,status,started_at_ms,attempt_json)
+            VALUES ('role-attempt','"role_reply"','role-rubric',1,'"completed"',2,
+                    '{{"responses":[{{"recording_asset_id":"role-recording"}}]}}');
+            INSERT INTO semantic_judgments
+              (id,attempt_id,response_revision,rubric_id,rubric_version,abstained,
+               created_at_ms,judgment_json)
+            VALUES ('role-judgment','role-attempt',1,'role-rubric',1,0,3,'{{}}');
+            INSERT INTO judgment_adjudications
+              (id,judgment_id,point_id,occurred_at_ms,adjudication_json)
+            VALUES ('role-adjudication','role-judgment','point',4,'{{}}');
+            INSERT INTO learning_observations
+              (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+               surface_form,origin,source_ref,occurred_at_ms)
+            VALUES ('role-observation','role-word','','"speaking"','"constructed_speaking"',
+                    '"success"','"none"','ticket','"practice_task"',
+                    'speaking:role-attempt:role-word',5);
+            INSERT INTO projection_proposals
+              (id,lexical_entry_id,capability,algorithm_version,evidence_as_of_ms,
+               proposal_json,created_at_ms)
+            VALUES ('role-proposal','role-word','"speaking"','speaking-proposal-v1',5,
+                    '{{"evidence":[{{"observation_id":"role-observation"}}]}}',6);
+            INSERT INTO projection_decisions
+              (id,proposal_id,decision_json,decided_at_ms)
+            VALUES ('role-decision','role-proposal','{{"decision":"confirm"}}',7);
+            INSERT INTO lexical_capability_states
+              (lexical_entry_id,sense_id,capability,projection_json,updated_at_ms)
+            VALUES ('role-word','','"speaking"','{{"conclusion":"acquired"}}',7);
+            INSERT INTO lexical_capability_history
+              (id,lexical_entry_id,sense_id,capability,previous_state_json,new_state_json,
+               change_kind,changed_at_ms)
+            VALUES ('role-history','role-word','','"speaking"','{{}}','{{}}',
+                    '"projection_updated"',7);
+            INSERT INTO review_items
+              (id,source_kind,status,created_at_ms,updated_at_ms,item_json)
+            VALUES ('role-review','"speaking_attempt"','"active"',8,8,
+                    '{{"source":{{"id":"role-attempt"}}}}');
+            "#,
+            recording_path.to_string_lossy().replace('\'', "''")
+        ))
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    for table in [
+        "semantic_rubrics",
+        "semantic_task_attempts",
+        "semantic_judgments",
+        "judgment_adjudications",
+        "learning_observations",
+        "projection_proposals",
+        "projection_decisions",
+        "lexical_capability_states",
+        "lexical_capability_history",
+        "review_items",
+        "recording_assets",
+    ] {
+        let count: u32 = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 0, "{table} retained Role Reply data");
+    }
+    assert!(!recording_path.exists());
+}
+
+#[test]
+fn v23_backfills_uncleared_legacy_observations_with_explicit_provenance() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE lexical_entries (
+              id TEXT PRIMARY KEY NOT NULL,
+              status TEXT,
+              updated_at_ms INTEGER NOT NULL,
+              learning_updated_at_ms INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO lexical_entries VALUES ('entry', NULL, 1, 0);
+            CREATE TABLE lexical_observations (
+              id TEXT PRIMARY KEY NOT NULL,
+              lexical_entry_id TEXT NOT NULL,
+              sentence_id TEXT,
+              sentence_id_snapshot TEXT NOT NULL,
+              original_form TEXT NOT NULL,
+              result TEXT NOT NULL,
+              created_at_ms INTEGER NOT NULL,
+              cleared_at_ms INTEGER
+            );
+            INSERT INTO lexical_observations VALUES
+              ('legacy-1', 'entry', 's1', 's1', 'went', '"not_recognized_in_context"', 100, NULL),
+              ('legacy-2', 'entry', 's2', 's2', 'go', '"recognized_in_context"', 200, NULL),
+              ('legacy-cleared', 'entry', 's3', 's3', 'gone', '"recognized_in_context"', 300, 400);
+            PRAGMA user_version=21;
+            "#,
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    let rows: Vec<(String, String, String, String, String, u64)> = {
+        let mut statement = connection
+            .prepare(
+                "SELECT capability,task_type,outcome,origin,surface_form,occurred_at_ms
+                 FROM learning_observations ORDER BY occurred_at_ms",
+            )
+            .unwrap();
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    // Cleared legacy markings are retracted judgments, not evidence.
+    assert_eq!(rows.len(), 2);
+    for (capability, task_type, _, origin, _, _) in &rows {
+        assert_eq!(capability, "\"listening\"");
+        assert_eq!(task_type, "\"context_marking\"");
+        assert_eq!(origin, "\"legacy_backfill\"");
+    }
+    assert_eq!(rows[0].2, "\"failure\"");
+    assert_eq!(rows[0].4, "went");
+    assert_eq!(rows[0].5, 100);
+    assert_eq!(rows[1].2, "\"success\"");
+
+    // Re-running the backfill must not duplicate rows.
+    backfill_legacy_observations(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_observations", [], |row| row
+                .get::<_, u32>(
+                0
+            ))
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
+fn v22_backfills_legacy_status_as_sourced_capability_projections() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE lexical_entries (
+              id TEXT PRIMARY KEY NOT NULL,
+              status TEXT,
+              updated_at_ms INTEGER NOT NULL,
+              learning_updated_at_ms INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO lexical_entries VALUES
+              ('none', NULL, 1, 0),
+              ('unknown', '"unknown_meaning"', 2, 20),
+              ('not-heard', '"known_not_recognized"', 3, 30),
+              ('heard', '"known_recognized"', 4, 40);
+            CREATE TABLE lexical_observations (
+              id TEXT PRIMARY KEY NOT NULL,
+              lexical_entry_id TEXT NOT NULL,
+              sentence_id TEXT,
+              sentence_id_snapshot TEXT NOT NULL,
+              original_form TEXT NOT NULL,
+              result TEXT NOT NULL,
+              created_at_ms INTEGER NOT NULL,
+              cleared_at_ms INTEGER
+            );
+            PRAGMA user_version=21;
+            "#,
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM lexical_capability_states",
+                [],
+                |row| { row.get::<_, u32>(0) }
+            )
+            .unwrap(),
+        5
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM lexical_capability_history",
+                [],
+                |row| { row.get::<_, u32>(0) }
+            )
+            .unwrap(),
+        5
+    );
+    let projection: CapabilityProjection = connection
+        .query_row(
+            "SELECT projection_json FROM lexical_capability_states
+             WHERE lexical_entry_id='not-heard' AND capability='\"listening\"'",
+            [],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .unwrap();
+    assert_eq!(projection.conclusion, CapabilityConclusion::NotAcquired);
+    assert_eq!(
+        projection.source,
+        CapabilityProjectionSource::LegacyLearningStatusMigration
+    );
+    assert_eq!(projection.updated_at_ms, 30);
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT status FROM lexical_entries WHERE id='not-heard'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+        "\"known_not_recognized\""
+    );
+}
+
+#[test]
+fn current_version_with_legacy_lexical_schema_is_destructively_repaired() {
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    for migration in [
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    for migration in [
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        LEGACY_PHASE_218_LEXICAL_SCHEMA,
+        include_str!("../../migrations/0008_pronunciation.sql"),
+        include_str!("../../migrations/0009_phonetic_analysis.sql"),
+        include_str!("../../migrations/0010_word_timelines.sql"),
+        include_str!("../../migrations/0011_lltimeline_resources.sql"),
+        include_str!("../../migrations/0012_subtitle_resource_lifecycle.sql"),
+        include_str!("../../migrations/0013_chunk_timelines.sql"),
+        include_str!("../../migrations/0014_phone_timelines.sql"),
+        include_str!("../../migrations/0015_learning_loop.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute(
+            "INSERT INTO lexical_entries
+                 (id,language,kind,canonical_form,normalized_form,display_form,status,
+                  normalization_provider,normalization_version,user_corrected,updated_at_ms,
+                  learning_updated_at_ms)
+                 VALUES ('legacy-entry','en','\"word\"','hello','hello','Hello',
+                         '\"known_recognized\"','legacy','v1',0,10,0)",
+            [],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 15).unwrap();
+
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "lexical_entries",
+            &["granularity", "normalization", "normalized_key"]
+        ),
+        0
+    );
+    assert!(!table_exists(&connection, "lexical_observations"));
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "lexical_entries",
+            &["granularity", "normalization", "normalized_key"]
+        ),
+        3
+    );
+    assert!(table_exists(&connection, "lexical_observations"));
+    assert!(!table_exists(&connection, removed_resource_table_name()));
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM lexical_entries", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn pronunciation_cache_isolated_by_provider_version() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let pronunciation = WordPronunciation {
+        token_index: 0,
+        text: "Hello".into(),
+        normalized: "hello".into(),
+        variants: vec![],
+    };
+    repo.save_word_pronunciation("en", "en-US", &pronunciation, "provider", "v1")
+        .unwrap();
+
+    assert!(
+        repo.get_word_pronunciation("en", "en-US", "hello", "provider", "v1")
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        repo.get_word_pronunciation("en", "en-US", "hello", "provider", "v2")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        repo.get_word_pronunciation("en", "en-GB", "hello", "provider", "v1")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn upgrades_historical_v1_database() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(include_str!("../../migrations/0001_media.sql"))
+        .unwrap();
+    connection.pragma_update(None, "user_version", 1).unwrap();
+    migrate(&connection).unwrap();
+    let version: u32 = connection
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, MIGRATION_VERSION);
+}
+
+#[test]
+fn upgrades_historical_v2_database() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(include_str!("../../migrations/0001_media.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../../migrations/0002_learning.sql"))
+        .unwrap();
+    connection.pragma_update(None, "user_version", 2).unwrap();
+    migrate(&connection).unwrap();
+    let version: u32 = connection
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, MIGRATION_VERSION);
+}
+
+#[test]
+fn upgrades_historical_v5_database_and_adds_transcription_assets() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(include_str!("../../migrations/0001_media.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../../migrations/0002_learning.sql"))
+        .unwrap();
+    connection
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../../migrations/0003_subtitle_identity.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../../migrations/0004_vocabulary_assets.sql"))
+        .unwrap();
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    connection
+        .execute_batch(include_str!(
+            "../../migrations/0005_learning_experience.sql"
+        ))
+        .unwrap();
+    connection.pragma_update(None, "user_version", 5).unwrap();
+    migrate(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM transcription_jobs", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn upgrades_historical_v7_database_and_resets_lexical_assets() {
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    for migration in [
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    for migration in [
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.pragma_update(None, "user_version", 7).unwrap();
+    connection
+        .execute(
+            "INSERT INTO lexical_entries
+                 (id,language,kind,granularity,normalization,normalized_key,
+                  canonical_form,normalized_form,display_form,status,
+                  normalization_provider,normalization_version,user_corrected,updated_at_ms,
+                  learning_updated_at_ms)
+                 VALUES ('asset','en','\"word\"','core.word','core.lemma','hello',
+                         'hello','hello','Hello','\"known_recognized\"',
+                         'legacy','v1',0,10,0)",
+            [],
+        )
+        .unwrap();
+    migrate(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM lexical_entries", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+    assert!(table_exists(&connection, "lexical_observations"));
+    assert!(!table_exists(&connection, removed_resource_table_name()));
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+}
+
+#[test]
+fn upgrades_historical_v8_database_and_adds_phonetic_analysis_assets() {
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    for migration in [
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    for migration in [
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+        include_str!("../../migrations/0008_pronunciation.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.pragma_update(None, "user_version", 8).unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM phonetic_analysis_jobs", [], |row| {
+                row.get::<_, u32>(0)
+            })
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM phonetic_analyses", [], |row| {
+                row.get::<_, u32>(0)
+            })
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn upgrades_historical_v9_database_and_adds_word_timeline_assets() {
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    for migration in [
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    for migration in [
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+        include_str!("../../migrations/0008_pronunciation.sql"),
+        include_str!("../../migrations/0009_phonetic_analysis.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.pragma_update(None, "user_version", 9).unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM word_timeline_runs", [], |row| {
+                row.get::<_, u32>(0)
+            })
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM lltimeline_resources", [], |row| {
+                row.get::<_, u32>(0)
+            })
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn upgrades_historical_v10_database_and_adds_lltimeline_resources() {
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    for migration in [
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    for migration in [
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+        include_str!("../../migrations/0008_pronunciation.sql"),
+        include_str!("../../migrations/0009_phonetic_analysis.sql"),
+        include_str!("../../migrations/0010_word_timelines.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.pragma_update(None, "user_version", 10).unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM lltimeline_resources", [], |row| {
+                row.get::<_, u32>(0)
+            })
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn upgrades_v30_database_with_sense_folder_update_guard() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    connection
+        .execute_batch(
+            "DROP TRIGGER validate_lexical_sense_folder_occurrence_parent_update;
+             PRAGMA user_version=30;",
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'
+                 AND name='validate_lexical_sense_folder_occurrence_parent_update'",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn upgrades_v29_database_with_empty_optional_sense_folders() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    connection
+        .execute_batch(
+            "DROP TRIGGER validate_lexical_sense_folder_occurrence_parent;
+             DROP TABLE lexical_sense_folder_occurrences;
+             DROP TABLE lexical_sense_folders;
+             PRAGMA user_version=29;",
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert!(table_exists(&connection, "lexical_sense_folders"));
+    assert!(table_exists(
+        &connection,
+        "lexical_sense_folder_occurrences"
+    ));
+}
+
+#[test]
+fn v46_seeds_fsrs_without_resetting_legacy_review_progress() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let connection = repo.connection.lock();
+    connection
+        .execute(
+            "INSERT INTO review_items
+             (id,source_kind,status,created_at_ms,updated_at_ms,item_json)
+             VALUES ('legacy-review','\"sentence\"','\"active\"',1,1,'{}')",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO review_schedules(item_id,due_at_ms,algorithm,schedule_json)
+             VALUES ('legacy-review',8640000000,'listen_review_v1_heuristic_proxy',?1)",
+            [serde_json::json!({
+                "item_id": "legacy-review",
+                "algorithm": "listen_review_v1_heuristic_proxy",
+                "due_at_ms": 8_640_000_000_u64,
+                "stability": null,
+                "difficulty": null,
+                "interval_days": 30.0,
+                "lapse_count": 3
+            })
+            .to_string()],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 45).unwrap();
+
+    migrate(&connection).unwrap();
+
+    let value: serde_json::Value = serde_json::from_str(
+        &connection
+            .query_row(
+                "SELECT schedule_json FROM review_schedules WHERE item_id='legacy-review'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["algorithm"], "fsrs_6_default_v1");
+    assert_eq!(value["interval_days"], 30.0);
+    assert_eq!(value["lapse_count"], 3);
+    assert_eq!(value["review_count"], 1);
+    assert!(value["stability"].as_f64().unwrap() > 0.0);
+    assert!(value["difficulty"].as_f64().unwrap() > 0.0);
+}
+
+#[test]
+fn v57_drops_retired_chunk_timeline_storage_after_upgrade() {
+    // R5 retirement: a database that carries the historical 0013
+    // `chunk_timeline_runs` table (with rows) must lose that storage when it
+    // upgrades, while the rest of the schema upgrades normally. Dropping the
+    // table never cascades to learner history: it held replaceable analysis
+    // artifacts only.
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+        include_str!("../../migrations/0008_pronunciation.sql"),
+        include_str!("../../migrations/0009_phonetic_analysis.sql"),
+        include_str!("../../migrations/0010_word_timelines.sql"),
+        include_str!("../../migrations/0011_lltimeline_resources.sql"),
+        include_str!("../../migrations/0012_subtitle_resource_lifecycle.sql"),
+        include_str!("../../migrations/0013_chunk_timelines.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute(
+            "INSERT INTO media_items
+               (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms)
+             VALUES ('legacy-media','/tmp/legacy.mp4','fp','Legacy','\"video\"',NULL,1,1)",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO subtitle_tracks (id,media_id,fingerprint,language,source,status)
+             VALUES ('legacy-track','legacy-media','fp',NULL,'test','\"available\"')",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO chunk_timeline_runs
+               (id,track_id,media_id,status,timeline_json,created_at_ms,updated_at_ms)
+             VALUES ('legacy-chunk','legacy-track','legacy-media','\"active\"','{}',1,1)",
+            [],
+        )
+        .unwrap();
+    assert!(table_exists(&connection, "chunk_timeline_runs"));
+    connection.pragma_update(None, "user_version", 13).unwrap();
+
+    migrate(&connection).unwrap();
+
+    let version: u32 = connection
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, MIGRATION_VERSION);
+    assert!(!table_exists(&connection, "chunk_timeline_runs"));
+    assert!(table_exists(&connection, "subtitle_tracks"));
+    // The row is gone with its table; the track itself survives.
+    let count: u32 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM subtitle_tracks WHERE id='legacy-track'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn fresh_schema_never_retains_chunk_timeline_storage() {
+    // A database created from scratch applies the immutable 0013 migration
+    // (which is history) and then the forward v57 drop, so the retired table
+    // must not survive the final schema.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    let version: u32 = connection
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, MIGRATION_VERSION);
+    assert!(!table_exists(&connection, "chunk_timeline_runs"));
+}
+
+#[test]
+fn v58_backfills_preexisting_media_rows_as_retained_with_creation_time() {
+    // Upgrade stability: every media row that existed before membership
+    // became explicit stays in the Personal Library after v58, with a
+    // deterministic membership time equal to its creation time. A row that
+    // is registered after the upgrade (Temporary Material) is not affected by
+    // the backfill.
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+        include_str!("../../migrations/0008_pronunciation.sql"),
+        include_str!("../../migrations/0009_phonetic_analysis.sql"),
+        include_str!("../../migrations/0010_word_timelines.sql"),
+        include_str!("../../migrations/0011_lltimeline_resources.sql"),
+        include_str!("../../migrations/0012_subtitle_resource_lifecycle.sql"),
+        include_str!("../../migrations/0013_chunk_timelines.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute(
+            "INSERT INTO media_items
+               (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms)
+             VALUES
+               ('old-a','/tmp/a.mp4','fp-a','A','\"video\"',NULL,111,222),
+               ('old-b','/tmp/b.mp4','fp-b','B','\"audio\"',NULL,333,444)",
+            [],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 13).unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    // Every preexisting row is retained with its creation time.
+    let rows: Vec<(String, Option<u64>)> = {
+        let mut statement = connection
+            .prepare("SELECT id, retained_at_ms FROM media_items ORDER BY id")
+            .unwrap();
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        rows,
+        vec![
+            ("old-a".to_owned(), Some(111)),
+            ("old-b".to_owned(), Some(333)),
+        ]
+    );
+    // Non-membership columns are untouched by the backfill.
+    let (path, created_at_ms): (String, u64) = connection
+        .query_row(
+            "SELECT path, created_at_ms FROM media_items WHERE id='old-a'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(path, "/tmp/a.mp4");
+    assert_eq!(created_at_ms, 111);
+}
+
+#[test]
+fn fresh_schema_ends_at_v59_with_nullable_membership_column() {
+    // A database created from scratch runs the forward v58 migration too, so
+    // the latest (v59) schema still carries the nullable `retained_at_ms`
+    // membership column on `media_items`, with no rows to backfill.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        table_column_count(&connection, "media_items", &["retained_at_ms"]),
+        1,
+        "retained_at_ms column must exist"
+    );
+    let nullable: u8 = connection
+        .query_row(
+            "SELECT \"notnull\" FROM pragma_table_info('media_items')
+             WHERE name='retained_at_ms'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(nullable, 0, "retained_at_ms must be nullable");
+}
+
+#[test]
+fn fresh_schema_reports_v59_with_learning_material_tables_and_columns() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    // Read the schema version before locking the connection: `schema_version`
+    // acquires the same non-reentrant mutex.
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+    let connection = repo.connection.lock();
+    for table in [
+        "learning_materials",
+        "material_revisions",
+        "material_source_assets",
+        "material_document_renditions",
+        "material_media_renditions",
+        "material_media_bindings",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "learning_materials",
+            &[
+                "id",
+                "current_revision_id",
+                "retained_at_ms",
+                "created_at_ms",
+                "updated_at_ms",
+            ],
+        ),
+        5
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_revisions",
+            &["id", "material_id", "title", "created_at_ms"],
+        ),
+        4
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_source_assets",
+            &[
+                "revision_id",
+                "asset_id",
+                "media_type",
+                "byte_length",
+                "sha256_digest",
+                "binding_json",
+                "availability_json",
+                "created_at_ms"
+            ],
+        ),
+        8
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_document_renditions",
+            &[
+                "revision_id",
+                "rendition_id",
+                "origin",
+                "media_type",
+                "language",
+                "digest",
+                "byte_size",
+                "source_asset_id",
+                "producer_json",
+                "compatibility_json"
+            ],
+        ),
+        10
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_media_renditions",
+            &[
+                "revision_id",
+                "rendition_id",
+                "origin",
+                "kind",
+                "media_type",
+                "fingerprint",
+                "availability",
+                "media_sha256",
+                "media_byte_size",
+                "media_id",
+                "producer_json",
+                "compatibility_json"
+            ],
+        ),
+        12
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_media_bindings",
+            &["media_id", "material_id"],
+        ),
+        2
+    );
+    // A PRIMARY KEY on a SQLite rowid table does not imply NOT NULL, so the
+    // identifier columns must declare it explicitly.
+    for (table, column) in [
+        ("learning_materials", "id"),
+        ("material_revisions", "id"),
+        ("material_media_bindings", "media_id"),
+        ("material_document_renditions", "rendition_id"),
+        ("material_media_renditions", "rendition_id"),
+        ("material_source_assets", "asset_id"),
+    ] {
+        let notnull: u8 = connection
+            .query_row(
+                &format!(
+                    "SELECT \"notnull\" FROM pragma_table_info('{table}')
+                     WHERE name='{column}'"
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(notnull, 1, "{table}.{column} must be NOT NULL");
+    }
+}
+
+#[test]
+fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_foreign_key() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let connection = repo.connection.lock();
+    // The material/revision reference is circular, so the material row is
+    // inserted before its revision exists; the deferred `current_revision_id`
+    // foreign key only validates at commit time.
+    {
+        let tx = connection.unchecked_transaction().unwrap();
+        tx.execute_batch(
+            r#"
+            INSERT INTO learning_materials
+              (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+            VALUES ('material-1','revision-1',100,100,100);
+            INSERT INTO material_revisions
+              (id,material_id,title,created_at_ms)
+            VALUES ('revision-1','material-1','First title',100);
+            INSERT INTO material_document_renditions
+              (revision_id,rendition_id,origin,media_type,language,digest,
+               byte_size,source_asset_id,producer_json,compatibility_json)
+            VALUES ('revision-1','asset-text','source','text/plain',NULL,
+                    '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+                    5,NULL,NULL,NULL);
+            INSERT INTO material_media_renditions
+              (revision_id,rendition_id,origin,kind,media_type,fingerprint,
+               availability,media_sha256,media_byte_size,media_id,producer_json,compatibility_json)
+            VALUES ('revision-1','asset-media','source','audio','audio/mpeg',
+                    'media-1-fp','available',NULL,NULL,'media-1',NULL,NULL);
+            INSERT INTO material_media_bindings
+              (media_id,material_id)
+            VALUES ('media-1','material-1');
+            "#,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+    }
+    // A material whose current revision is never created cannot commit.
+    {
+        let tx = connection.unchecked_transaction().unwrap();
+        tx.execute(
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('orphan','missing-revision',NULL,1,1)",
+            [],
+        )
+        .unwrap();
+        assert!(tx.commit().is_err());
+    }
+    // The failed COMMIT (deferred foreign key violation) left no active
+    // transaction behind: the orphan row was rolled back and the connection
+    // is clean for the checks below.
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM learning_materials WHERE id='orphan'",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        0
+    );
+    // Timestamp and asset invariants reject invalid rows.
+    for (label, sql) in [
+        (
+            "updated_at_ms precedes created_at_ms",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('bad-time','revision-1',NULL,200,100)",
+        ),
+        (
+            "retained_at_ms precedes created_at_ms",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('bad-retained','revision-1',50,100,100)",
+        ),
+        (
+            "retained_at_ms postdates updated_at_ms",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('bad-retained-late','revision-1',150,100,100)",
+        ),
+        (
+            "unknown document rendition origin",
+            "INSERT INTO material_document_renditions
+               (revision_id,rendition_id,origin,media_type,language,digest,
+                byte_size,source_asset_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','futuristic','text/plain',NULL,
+                     x'6162',
+                     '907d14fb3af2b0d4f18c8d46abe9a7b504ffb9f9a8f7b0a2e94d0f5a5a5a5a5a5',
+                     2,NULL,NULL,NULL)",
+        ),
+        (
+            "unknown media rendition kind",
+            "INSERT INTO material_media_renditions
+               (revision_id,rendition_id,origin,kind,media_type,fingerprint,
+                availability,media_sha256,media_byte_size,media_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','source','podcast','audio/mpeg',
+                     'fp','available',NULL,NULL,'media-1',NULL,NULL)",
+        ),
+        (
+            "unknown media rendition availability",
+            "INSERT INTO material_media_renditions
+               (revision_id,rendition_id,origin,kind,media_type,fingerprint,
+                availability,media_sha256,media_byte_size,media_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','source','audio','audio/mpeg',
+                     'fp','queued',NULL,NULL,'media-1',NULL,NULL)",
+        ),
+        (
+            "malformed producer_json",
+            "INSERT INTO material_document_renditions
+               (revision_id,rendition_id,origin,media_type,language,digest,
+                byte_size,source_asset_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','source','text/plain',NULL,
+                     '907d14fb3af2b0d4f18c8d46abe9a7b504ffb9f9a8f7b0a2e94d0f5a5a5a5a5a5',
+,NULL,'{not json}',NULL)",
+        ),
+        // Rowid-table PRIMARY KEYs in SQLite do not imply NOT NULL; the FK
+        // references below are valid, so rejection must come from the explicit
+        // NOT NULL on the identifier columns.
+        (
+            "NULL learning_materials identifier",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES (NULL,'revision-1',NULL,100,100)",
+        ),
+        (
+            "NULL material_revisions identifier",
+            "INSERT INTO material_revisions
+               (id,material_id,title,created_at_ms)
+             VALUES (NULL,'material-1','Title',100)",
+        ),
+        (
+            "NULL material_media_bindings identifier",
+            "INSERT INTO material_media_bindings
+               (media_id,material_id)
+             VALUES (NULL,'material-1')",
+        ),
+    ] {
+        assert!(
+            connection.execute(sql, []).is_err(),
+            "{label} must be rejected"
+        );
+    }
+    // RESTRICT (never CASCADE/SET NULL) keeps learner history durable.
+    assert!(
+        connection
+            .execute("DELETE FROM learning_materials WHERE id='material-1'", [])
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute("DELETE FROM material_revisions WHERE id='revision-1'", [])
+            .is_err()
+    );
+    // Valid rows committed above are readable after the rejected writes.
+    let (title, rendition_count): (String, u32) = connection
+        .query_row(
+            "SELECT title,
+                    (SELECT COUNT(*) FROM material_media_renditions
+                     WHERE revision_id='revision-1')
+                  + (SELECT COUNT(*) FROM material_document_renditions
+                     WHERE revision_id='revision-1')
+             FROM material_revisions WHERE id='revision-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(title, "First title");
+    assert_eq!(rendition_count, 2);
+}
+
+#[test]
+fn sparse_v58_fixture_without_media_items_upgrades_to_v59_learning_material_schema() {
+    // Sparse historical fixtures model a schema that never carried the v1
+    // media foundation. The v59 learning-material schema must upgrade such a
+    // database cleanly: `material_media_bindings` deliberately has no FK to
+    // `media_items`, so materials can reference media that is not registered.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    // Rebuild the fixture shape: full v58 schema minus the v59 learning-material
+    // tables (including the v61 canonical renditions) and the v1 media
+    // foundation. Dropping a table removes its own indexes, and children are
+    // dropped before parents even though foreign keys are disabled.
+    drop_v59_learning_material_tables(&connection);
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE media_items;
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 58).unwrap();
+    assert!(!table_exists(&connection, "media_items"));
+    assert!(!table_exists(&connection, "learning_materials"));
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    for table in [
+        "learning_materials",
+        "material_revisions",
+        "material_source_assets",
+        "material_document_renditions",
+        "material_media_renditions",
+        "material_media_bindings",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
+}
+
+#[test]
+fn v63_repairs_bound_media_revision_and_repoints_legacy_identity() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+
+    let media_id = MediaId::parse("media-v63-repair").unwrap();
+    let rendition = MediaRendition::new(
+        RenditionOrigin::Source,
+        MediaKind::Video,
+        "video/mp4",
+        "fingerprint-v63-repair",
+        MediaAvailability::Available,
+        Some(media_id.clone()),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let material_id = initial_material_id(&[], &[Rendition::Media(rendition.clone())]).unwrap();
+    let revision = MaterialRevision::new(
+        material_id.clone(),
+        "Repairable media",
+        Vec::new(),
+        vec![Rendition::Media(rendition.clone())],
+        100,
+    )
+    .unwrap();
+    let material = LearningMaterial::new(&revision, None, 100, 100).unwrap();
+    let legacy_revision_id = MaterialRevisionId::parse("legacy-revision-v63").unwrap();
+
+    let tx = connection.unchecked_transaction().unwrap();
+    tx.execute(
+        "INSERT INTO media_items
+           (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms,
+            availability,retained_at_ms)
+         VALUES (?1,'/tmp/repair.mp4',?2,?3,'\"video\"',NULL,100,100,
+                 '\"available\"',NULL)",
+        params![
+            media_id.as_str(),
+            "fingerprint-v63-repair",
+            "Repairable media"
+        ],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT INTO learning_materials
+           (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+         VALUES (?1,?2,NULL,100,100)",
+        params![material.id.as_str(), legacy_revision_id.as_str()],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT INTO material_revisions (id,material_id,title,created_at_ms)
+         VALUES (?1,?2,?3,100)",
+        params![
+            legacy_revision_id.as_str(),
+            material.id.as_str(),
+            revision.title
+        ],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT INTO material_media_bindings (media_id,material_id) VALUES (?1,?2)",
+        params![media_id.as_str(), material.id.as_str()],
+    )
+    .unwrap();
+    tx.pragma_update(None, "user_version", 62).unwrap();
+    tx.commit().unwrap();
+
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM material_media_renditions WHERE revision_id=?1",
+                [legacy_revision_id.as_str()],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        0,
+        "the fixture must reproduce the empty revision seen in the user database"
+    );
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT current_revision_id FROM learning_materials WHERE id=?1",
+                [material.id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        revision.id.as_str()
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT rendition_id FROM material_media_renditions WHERE revision_id=?1",
+                [revision.id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        rendition.id.as_str()
+    );
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+}
+
+/// Rebuilds the historical v58 fixture shape inside an already-migrated
+/// database: the full latest schema minus the v59 learning-material tables
+/// (including the v61 canonical renditions built on top of them).
+/// `media_items` keeps the v58 `retained_at_ms` membership column.
+fn drop_v59_learning_material_tables(connection: &Connection) {
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE IF EXISTS source_identity_mappings;
+             DROP TABLE IF EXISTS capability_attempts;
+             DROP TABLE IF EXISTS material_document_renditions;
+             DROP TABLE IF EXISTS material_media_renditions;
+             DROP TABLE IF EXISTS material_source_assets;
+             DROP TABLE IF EXISTS material_assets;
+             DROP TABLE IF EXISTS material_media_bindings;
+             DROP TABLE IF EXISTS material_revisions;
+             DROP TABLE IF EXISTS learning_materials;
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+}
+
+/// Rebuilds the historical v59 fixture shape inside an already-migrated
+/// database: the full latest schema minus the v60 package-lifecycle tables.
+fn drop_v60_package_lifecycle_tables(connection: &Connection) {
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE package_adoptions;
+             DROP TABLE package_resource_payloads;
+             DROP TABLE package_installations;
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+}
+
+/// One complete v60 package-lifecycle fixture: a material graph row plus an
+/// installation with one payload and an adoption referencing it.
+fn seed_v60_package_lifecycle_rows(connection: &Connection) {
+    let tx = connection.unchecked_transaction().unwrap();
+    tx.execute_batch(
+        r#"
+        INSERT INTO learning_materials
+          (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+        VALUES ('package-material','package-revision',NULL,100,100);
+        INSERT INTO material_revisions
+          (id,material_id,title,created_at_ms)
+        VALUES ('package-revision','package-material','Package material',100);
+        INSERT INTO material_document_renditions
+          (revision_id, rendition_id, origin, media_type, language, digest,
+           byte_size, source_asset_id, producer_json,
+           compatibility_json)
+        VALUES ('package-revision','asset-package','source','text/plain',NULL,
+                'bc4a71180870f7945155fbb02f4b0a2e3faa2a62d6d31b7039013055ed19869a',
+                7,NULL,NULL,NULL);
+        INSERT INTO package_installations
+          (material_id,release_id,material_revision_id,release_created_at_ms,
+           edition_json,resources_json,renditions_json,installed_at_ms)
+        VALUES ('package-material','sha256:release-package','package-revision',1,
+                '{"edition_id":"edition-package","title":"Package","target_language":"en","support_languages":[]}',
+                '[]','[]',10);
+        INSERT INTO package_resource_payloads
+          (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+        VALUES ('package-material','sha256:release-package','resource-package',
+                'document_text','listen.payload.document-text.v1','sha256:abcdef',3,x'010203');
+        INSERT INTO package_adoptions
+          (material_id,release_id,material_revision_id,edition_json,
+           selected_resource_ids_json,exclusive_selections_json,
+           selected_rendition_ids_json,adopted_at_ms)
+        VALUES ('package-material','sha256:release-package','package-revision',
+                '{"edition_id":"edition-package","title":"Package","target_language":"en","support_languages":[]}',
+                '["resource-package"]',
+                '[{"family":"exclusive:document_text","resource_id":"resource-package"}]',
+                '[]',20);
+        "#,
+    )
+    .unwrap();
+    tx.commit().unwrap();
+}
+
+/// One legacy media row fixture and the deterministic material/revision the
+/// v59 backfill must derive from it, through the same domain constructors the
+/// backfill uses.
+struct LegacyFixture {
+    media_id: &'static str,
+    kind: MediaKind,
+    fingerprint: &'static str,
+    availability: MediaAvailability,
+    title: &'static str,
+    retained_at_ms: Option<u64>,
+    created_at_ms: u64,
+    updated_at_ms: u64,
+}
+
+impl LegacyFixture {
+    fn expected(&self) -> (LearningMaterial, MaterialRevision) {
+        let media_type = match self.kind {
+            MediaKind::Video => "video/mp4".to_owned(),
+            MediaKind::Audio => "audio/mpeg".to_owned(),
+        };
+        let rendition = MediaRendition::new(
+            domain::RenditionOrigin::Source,
+            self.kind,
+            media_type,
+            self.fingerprint,
+            self.availability,
+            Some(MediaId::parse(self.media_id).unwrap()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let renditions = vec![domain::Rendition::Media(rendition)];
+        let material_id = initial_material_id(&[], &renditions).unwrap();
+        let revision = MaterialRevision::new(
+            material_id.clone(),
+            self.title,
+            Vec::new(),
+            renditions,
+            self.created_at_ms,
+        )
+        .unwrap();
+        let material = LearningMaterial::new(
+            &revision,
+            self.retained_at_ms,
+            self.created_at_ms,
+            self.updated_at_ms,
+        )
+        .unwrap();
+        (material, revision)
+    }
+}
+
+#[test]
+fn v59_backfills_legacy_media_rows_into_durable_learning_materials() {
+    // A representative v58 upgrade: retained and temporary media rows, a
+    // whitespace-only historical title, a detached (missing) rendition, plus
+    // representative legacy state (media row, playback progress, subtitle
+    // track, learner history) that the backfill must never touch.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    drop_v59_learning_material_tables(&connection);
+    connection.pragma_update(None, "user_version", 58).unwrap();
+    connection
+        .execute_batch(
+            r#"
+            INSERT INTO media_items
+              (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms,availability,retained_at_ms)
+            VALUES
+              ('retained-media','/tmp/retained.mp4','fp-retained','Retained Media','"video"',NULL,1000,2000,'"available"',1500),
+              ('temp-media','/tmp/temp.mp4','fp-temp','Temporary','"audio"',NULL,3000,4000,'"available"',NULL),
+              ('blank-title','/tmp/blank.mp4','fp-blank','   ','"video"',NULL,5000,6000,'"available"',5000),
+              ('archived-media','lltimeline://archived','fp-archived','Archived','"audio"',NULL,7000,8000,'"missing"',NULL);
+            INSERT INTO playback_progress (media_id,position_ms,updated_at_ms)
+              VALUES ('retained-media',1234,1500);
+            INSERT INTO subtitle_tracks (id,media_id,fingerprint,language,source,status)
+              VALUES ('retained-track','retained-media','track-fp',NULL,'test','"available"');
+            INSERT INTO learning_events
+              (id,occurred_at_ms,kind,subject_kind,subject_id,event_json)
+            VALUES
+              ('history-event',1600,'"familiar_material_marked"','"media"','retained-media','{}');
+            "#,
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+
+    // The deterministic expectations: one material per legacy row, with the
+    // blank title replaced by the documented fallback and the detached
+    // availability snapshot preserved.
+    let expected: Vec<(LearningMaterial, MaterialRevision)> = [
+        LegacyFixture {
+            media_id: "archived-media",
+            kind: MediaKind::Audio,
+            fingerprint: "fp-archived",
+            availability: MediaAvailability::Missing,
+            title: "Archived",
+            retained_at_ms: None,
+            created_at_ms: 7000,
+            updated_at_ms: 8000,
+        },
+        LegacyFixture {
+            media_id: "blank-title",
+            kind: MediaKind::Video,
+            fingerprint: "fp-blank",
+            availability: MediaAvailability::Available,
+            title: LEGACY_BLANK_TITLE_FALLBACK,
+            retained_at_ms: Some(5000),
+            created_at_ms: 5000,
+            updated_at_ms: 6000,
+        },
+        LegacyFixture {
+            media_id: "retained-media",
+            kind: MediaKind::Video,
+            fingerprint: "fp-retained",
+            availability: MediaAvailability::Available,
+            title: "Retained Media",
+            retained_at_ms: Some(1500),
+            created_at_ms: 1000,
+            updated_at_ms: 2000,
+        },
+        LegacyFixture {
+            media_id: "temp-media",
+            kind: MediaKind::Audio,
+            fingerprint: "fp-temp",
+            availability: MediaAvailability::Available,
+            title: "Temporary",
+            retained_at_ms: None,
+            created_at_ms: 3000,
+            updated_at_ms: 4000,
+        },
+    ]
+    .into_iter()
+    .map(|fixture| fixture.expected())
+    .collect();
+    let expected_ids: Vec<String> = {
+        let mut ids: Vec<String> = expected
+            .iter()
+            .map(|(material, _)| material.id.as_str().to_owned())
+            .collect();
+        ids.sort();
+        ids
+    };
+    let stored_ids: Vec<String> = {
+        let mut statement = connection
+            .prepare("SELECT id FROM learning_materials ORDER BY id")
+            .unwrap();
+        statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        stored_ids, expected_ids,
+        "graph material ids must be deterministic"
+    );
+
+    // Material rows: current revision pointer, exact membership mirroring of
+    // `retained_at_ms`, and preserved timestamps.
+    for (material, revision) in &expected {
+        let (current_revision_id, retained_at_ms, created_at_ms, updated_at_ms): (
+            String,
+            Option<u64>,
+            u64,
+            u64,
+        ) = connection
+            .query_row(
+                "SELECT current_revision_id, retained_at_ms, created_at_ms, updated_at_ms
+                 FROM learning_materials WHERE id=?1",
+                [material.id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(current_revision_id, revision.id.as_str());
+        assert_eq!(retained_at_ms, material.retained_at_ms);
+        assert_eq!(created_at_ms, material.created_at_ms);
+        assert_eq!(updated_at_ms, material.updated_at_ms);
+    }
+
+    // Revision rows: exact title (including the blank-title fallback) and the
+    // material's own creation timestamp.
+    for (material, revision) in &expected {
+        let (material_id, title, created_at_ms): (String, String, u64) = connection
+            .query_row(
+                "SELECT material_id, title, created_at_ms
+                 FROM material_revisions WHERE id=?1",
+                [revision.id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(material_id, material.id.as_str());
+        assert_eq!(title, revision.title);
+        assert_eq!(created_at_ms, revision.created_at_ms);
+    }
+
+    // Media rendition rows: one source rendition at the exact deterministic
+    // id, whose typed columns snapshot origin/kind/media_type/fingerprint/
+    // availability and never carry the media path.
+    for (_, revision) in &expected {
+        let domain::Rendition::Media(rendition) = revision.renditions.first().unwrap() else {
+            panic!("legacy backfill must produce a media rendition");
+        };
+        let (rendition_id, origin, kind, media_type, fingerprint, availability, media_id): (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+        ) = connection
+            .query_row(
+                "SELECT rendition_id, origin, kind, media_type, fingerprint,
+                        availability, media_id
+                 FROM material_media_renditions WHERE revision_id=?1",
+                [revision.id.as_str()],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(rendition_id, rendition.id.as_str());
+        assert_eq!(origin, "source");
+        assert_eq!(
+            kind,
+            serde_json::to_value(rendition.kind)
+                .unwrap()
+                .as_str()
+                .unwrap()
+        );
+        assert_eq!(media_type, rendition.media_type);
+        assert_eq!(fingerprint, rendition.fingerprint);
+        assert_eq!(
+            availability,
+            serde_json::to_value(rendition.availability)
+                .unwrap()
+                .as_str()
+                .unwrap()
+        );
+        assert_eq!(
+            media_id,
+            rendition.media_id.as_ref().map(|id| id.as_str().to_owned())
+        );
+    }
+
+    // Media bindings: every legacy media id resolves to exactly its material,
+    // and the binding deliberately carries no FK to `media_items` (only the
+    // material parent).
+    for (_, revision) in &expected {
+        let domain::Rendition::Media(rendition) = revision.renditions.first().unwrap() else {
+            unreachable!("legacy backfill produces media renditions only");
+        };
+        let media_id = rendition
+            .media_id
+            .as_ref()
+            .expect("legacy backfill media renditions bind their media id");
+        let material_id: String = connection
+            .query_row(
+                "SELECT material_id FROM material_media_bindings WHERE media_id=?1",
+                [media_id.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(material_id, revision.material_id.as_str());
+    }
+    let binding_fks: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare("SELECT \"table\", \"from\" FROM pragma_foreign_key_list('material_media_bindings')")
+            .unwrap();
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        binding_fks,
+        vec![("learning_materials".to_owned(), "material_id".to_owned())]
+    );
+
+    // Legacy state is untouched: media rows, playback progress, subtitle
+    // tracks, and learner history survive the backfill unchanged.
+    let (path, retained_at_ms, created_at_ms): (String, Option<u64>, u64) = connection
+        .query_row(
+            "SELECT path, retained_at_ms, created_at_ms FROM media_items
+             WHERE id='retained-media'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(path, "/tmp/retained.mp4");
+    assert_eq!(retained_at_ms, Some(1500));
+    assert_eq!(created_at_ms, 1000);
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT position_ms FROM playback_progress WHERE media_id='retained-media'",
+                [],
+                |row| row.get::<_, u64>(0),
+            )
+            .unwrap(),
+        1234
+    );
+    for (table, expected_count) in [
+        ("media_items", 4_u32),
+        ("subtitle_tracks", 1),
+        ("learning_events", 1),
+    ] {
+        assert_eq!(
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            expected_count,
+            "{table} must be preserved"
+        );
+    }
+
+    // Idempotency: retrying the v59 upgrade (user_version reset) and directly
+    // re-running the backfill inside an explicit transaction must not
+    // duplicate any graph rows.
+    connection.pragma_update(None, "user_version", 58).unwrap();
+    migrate(&connection).unwrap();
+    {
+        let tx = connection.unchecked_transaction().unwrap();
+        backfill_legacy_media_materials(&tx).unwrap();
+        tx.commit().unwrap();
+    }
+    for table in [
+        "learning_materials",
+        "material_revisions",
+        "material_media_renditions",
+        "material_media_bindings",
+    ] {
+        assert_eq!(
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            4,
+            "{table} must stay idempotent across retries"
+        );
+    }
+}
+
+#[test]
+fn v59_backfill_rejects_invalid_legacy_media_rows_without_partial_persistence() {
+    // A legacy row that cannot become a valid material (blank fingerprint
+    // fails `MediaRendition::new`) converts into the repository migration
+    // error path: the whole v59 transaction rolls back atomically instead of
+    // silently dropping the invalid row or persisting partial state.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    drop_v59_learning_material_tables(&connection);
+    connection.pragma_update(None, "user_version", 58).unwrap();
+    connection
+        .execute_batch(
+            r#"
+            INSERT INTO media_items
+              (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms,availability,retained_at_ms)
+            VALUES
+              ('good-media','/tmp/good.mp4','fp-good','Good','"video"',NULL,1,2,'"available"',1),
+              ('bad-media','/tmp/bad.mp4','','Bad','"video"',NULL,1,2,'"available"',1);
+            "#,
+        )
+        .unwrap();
+
+    assert!(migrate(&connection).is_err());
+
+    // The failed migration rolled back atomically: the schema version never
+    // advanced, no graph table (or learning-material schema) survived, and no
+    // legacy row was touched.
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        58
+    );
+    for table in [
+        "learning_materials",
+        "material_revisions",
+        "material_source_assets",
+        "material_document_renditions",
+        "material_media_renditions",
+        "material_media_bindings",
+    ] {
+        assert!(
+            !table_exists(&connection, table),
+            "{table} must not survive the rolled-back migration"
+        );
+    }
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM media_items", [], |row| {
+                row.get::<_, u32>(0)
+            })
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
+fn fresh_schema_ends_at_v60_with_package_lifecycle_tables_and_columns() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+    let connection = repo.connection.lock();
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "package_installations",
+            &[
+                "material_id",
+                "release_id",
+                "material_revision_id",
+                "release_created_at_ms",
+                "edition_json",
+                "resources_json",
+                "renditions_json",
+                "installed_at_ms",
+            ],
+        ),
+        8
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "package_resource_payloads",
+            &[
+                "material_id",
+                "release_id",
+                "resource_id",
+                "kind",
+                "schema",
+                "digest",
+                "size_bytes",
+                "body",
+            ],
+        ),
+        8
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "package_adoptions",
+            &[
+                "material_id",
+                "release_id",
+                "material_revision_id",
+                "edition_json",
+                "selected_resource_ids_json",
+                "exclusive_selections_json",
+                "selected_rendition_ids_json",
+                "adopted_at_ms",
+            ],
+        ),
+        8
+    );
+    // A PRIMARY KEY on a SQLite rowid table does not imply NOT NULL, so the
+    // identifier columns must declare it explicitly.
+    for (table, column) in [
+        ("package_installations", "material_id"),
+        ("package_installations", "release_id"),
+        ("package_installations", "material_revision_id"),
+        ("package_resource_payloads", "resource_id"),
+        ("package_adoptions", "material_id"),
+    ] {
+        let notnull: u8 = connection
+            .query_row(
+                &format!(
+                    "SELECT \"notnull\" FROM pragma_table_info('{table}')
+                     WHERE name='{column}'"
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(notnull, 1, "{table}.{column} must be NOT NULL");
+    }
+    // The payload/adoption tables carry a composite FK to the installation
+    // identity, and every parent reference is RESTRICT.
+    let payload_fks: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare(
+                "SELECT \"table\", \"from\" FROM pragma_foreign_key_list('package_resource_payloads')",
+            )
+            .unwrap();
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        payload_fks,
+        vec![
+            ("package_installations".to_owned(), "material_id".to_owned()),
+            ("package_installations".to_owned(), "release_id".to_owned()),
+            ("learning_materials".to_owned(), "material_id".to_owned()),
+        ]
+    );
+    let adoption_fks: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare("SELECT \"table\", \"from\" FROM pragma_foreign_key_list('package_adoptions')")
+            .unwrap();
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        adoption_fks,
+        vec![
+            ("package_installations".to_owned(), "material_id".to_owned()),
+            ("package_installations".to_owned(), "release_id".to_owned()),
+            (
+                "material_revisions".to_owned(),
+                "material_revision_id".to_owned()
+            ),
+            ("learning_materials".to_owned(), "material_id".to_owned()),
+        ]
+    );
+    // The delete behavior of every FK edge is RESTRICT, never CASCADE or
+    // SET NULL, so durable package facts cannot be deleted by accident.
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        let behaviors: Vec<String> = {
+            let mut statement = connection
+                .prepare(&format!(
+                    "SELECT \"on_delete\" FROM pragma_foreign_key_list('{table}')"
+                ))
+                .unwrap();
+            statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        for behavior in behaviors {
+            assert_eq!(behavior, "RESTRICT", "{table} must RESTRICT deletes");
+        }
+    }
+}
+
+#[test]
+fn v59_database_upgrades_to_v60_preserving_material_rows_byte_for_byte() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    let material_before: (String, String, Option<u64>, u64, u64) = connection
+        .query_row(
+            "SELECT id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms
+             FROM learning_materials WHERE id='package-material'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .unwrap();
+    let revision_before: (String, String, String, u64) = connection
+        .query_row(
+            "SELECT id,material_id,title,created_at_ms
+             FROM material_revisions WHERE id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .unwrap();
+    let asset_before: (String, String, String) = connection
+        .query_row(
+            "SELECT rendition_id, origin, media_type
+             FROM material_document_renditions WHERE revision_id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+
+    drop_v60_package_lifecycle_tables(&connection);
+    connection.pragma_update(None, "user_version", 59).unwrap();
+    assert!(!table_exists(&connection, "package_installations"));
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
+    // The pre-upgrade material graph is preserved byte for byte: no
+    // fictional package/adoption backfill and no rewrite of existing rows.
+    let material_after: (String, String, Option<u64>, u64, u64) = connection
+        .query_row(
+            "SELECT id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms
+             FROM learning_materials WHERE id='package-material'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .unwrap();
+    let revision_after: (String, String, String, u64) = connection
+        .query_row(
+            "SELECT id,material_id,title,created_at_ms
+             FROM material_revisions WHERE id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .unwrap();
+    let asset_after: (String, String, String) = connection
+        .query_row(
+            "SELECT rendition_id, origin, media_type
+             FROM material_document_renditions WHERE revision_id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(material_after, material_before);
+    assert_eq!(revision_after, revision_before);
+    assert_eq!(asset_after, asset_before);
+    // The v59 graph rows and legacy learner state stay untouched by v60.
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_materials", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1
+    );
+    // No fictional package rows were backfilled for existing materials.
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM package_installations", [], |row| row
+                .get::<_, u32>(
+                0
+            ),)
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn v60_migration_retry_is_idempotent() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    drop_v60_package_lifecycle_tables(&connection);
+    connection.pragma_update(None, "user_version", 59).unwrap();
+    migrate(&connection).unwrap();
+    // A retry after a downgrade/upgrade cycle rebuilds the empty schema and
+    // leaves the material graph rows (and the fixture's package rows, which
+    // were dropped with their tables) converging on the deterministic shape.
+    migrate(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        assert_eq!(
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            0,
+            "{table} must be idempotent across retries"
+        );
+    }
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_materials", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn v60_migration_failure_rolls_back_schema_and_version_atomically() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    // A colliding `package_installations` table without the referenced
+    // columns makes the payloads table creation fail inside the v60
+    // transaction.
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE package_adoptions;
+             DROP TABLE package_resource_payloads;
+             DROP TABLE package_installations;
+             CREATE TABLE package_installations (collision TEXT NOT NULL);
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 59).unwrap();
+
+    assert!(migrate(&connection).is_err());
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        59,
+        "a failed v60 migration must not advance user_version"
+    );
+    assert!(
+        table_exists(&connection, "package_installations"),
+        "the colliding table survives"
+    );
+    assert!(
+        !table_exists(&connection, "package_resource_payloads"),
+        "the payload table must not survive the rolled-back migration"
+    );
+    assert!(
+        !table_exists(&connection, "package_adoptions"),
+        "the adoption table must not survive the rolled-back migration"
+    );
+}
+
+#[test]
+fn package_lifecycle_schema_constraints_reject_invalid_rows() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    let valid_edition =
+        r#"{"edition_id":"edition-x","title":"X","target_language":"en","support_languages":[]}"#;
+    for (label, sql) in [
+        (
+            "NULL installation identifier",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES (NULL,'sha256:r',NULL,1,'{}','[]','[]',1)",
+        ),
+        (
+            "negative installation timestamp",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:neg',NULL,1,'{}','[]','[]',-1)",
+        ),
+        (
+            "malformed edition_json",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:bad-json',NULL,1,'{not json}','[]','[]',1)",
+        ),
+        (
+            "missing revision FK",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:missing-rev','no-such-revision',1,'{}','[]','[]',1)",
+        ),
+        (
+            "missing material FK",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('no-such-material','sha256:missing-mat',NULL,1,'{}','[]','[]',1)",
+        ),
+        (
+            "duplicate installation identity",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:release-package','package-revision',1,'{}','[]','[]',1)",
+        ),
+        (
+            "NULL payload resource identifier",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:release-package',NULL,'k','s','d',1,x'01')",
+        ),
+        (
+            "negative payload size",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:release-package','r2','k','s','d',-1,x'01')",
+        ),
+        (
+            "payload without installation",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:no-install','r3','k','s','d',1,x'01')",
+        ),
+        (
+            "duplicate payload resource",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:release-package','resource-package','k','s','d',1,x'01')",
+        ),
+        (
+            "malformed adoption selection JSON",
+            "INSERT INTO package_adoptions
+               (material_id,release_id,material_revision_id,edition_json,
+                selected_resource_ids_json,exclusive_selections_json,
+                selected_rendition_ids_json,adopted_at_ms)
+             VALUES ('package-material','sha256:release-package','package-revision',?1,
+                     '{bad','[]','[]',1)",
+        ),
+        (
+            "adoption for a material without an installation",
+            "INSERT INTO package_adoptions
+               (material_id,release_id,material_revision_id,edition_json,
+                selected_resource_ids_json,exclusive_selections_json,
+                selected_rendition_ids_json,adopted_at_ms)
+             VALUES ('package-material','sha256:never-installed','package-revision',?1,
+                     '[]','[]','[]',1)",
+        ),
+    ] {
+        let rejected = if sql.contains("?1") {
+            connection.execute(sql, params![valid_edition]).is_err()
+        } else {
+            connection.execute(sql, []).is_err()
+        };
+        assert!(rejected, "{label} must be rejected");
+    }
+    // A negative adoption timestamp is rejected too.
+    assert!(
+        connection
+            .execute(
+                "INSERT INTO package_adoptions
+                   (material_id,release_id,material_revision_id,edition_json,
+                    selected_resource_ids_json,exclusive_selections_json,
+                    selected_rendition_ids_json,adopted_at_ms)
+                 VALUES ('package-material','sha256:release-package','package-revision',?1,
+                         '[]','[]','[]',-1)",
+                params![valid_edition],
+            )
+            .is_err(),
+        "negative adoption timestamp must be rejected"
+    );
+}
+
+#[test]
+fn deleting_material_or_revision_referenced_by_package_state_is_rejected() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    // Installation, payload, and adoption all reference the material graph
+    // with RESTRICT: deleting the material, the revision, or the installation
+    // that package state references must never succeed or cascade.
+    assert!(
+        connection
+            .execute(
+                "DELETE FROM learning_materials WHERE id='package-material'",
+                []
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "DELETE FROM material_revisions WHERE id='package-revision'",
+                []
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "DELETE FROM package_installations WHERE material_id='package-material'",
+                []
+            )
+            .is_err()
+    );
+    // All rows survive the rejected deletes.
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM package_installations", [], |row| row
+                .get::<_, u32>(
+                0
+            ),)
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM package_resource_payloads",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM package_adoptions", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1
+    );
+    // Deleting the adoption and payload first, then the installation, is the
+    // only way to remove package state; it still never touches the material.
+    connection
+        .execute(
+            "DELETE FROM package_adoptions WHERE material_id='package-material'",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "DELETE FROM package_resource_payloads WHERE material_id='package-material'",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "DELETE FROM package_installations WHERE material_id='package-material'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_materials", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1,
+        "package state removal must never cascade into the material graph"
+    );
+}

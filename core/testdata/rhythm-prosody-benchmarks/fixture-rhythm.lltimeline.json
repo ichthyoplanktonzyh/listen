@@ -1,0 +1,148 @@
+{
+  "schema": "llplayer.timeline.v1",
+  "metadata": {
+    "created_at_ms": 1782816000000,
+    "generator": {
+      "id": "phase-2.21-helsinki-prosody-fixture",
+      "version": "v1",
+      "mode": "synthetic"
+    },
+    "media": {
+      "id": "fixture-helsinki-media",
+      "fingerprint": "fixture_000001_000001_000000_000000",
+      "path": "synthetic://fixture_000001_000001_000000_000000",
+      "title": "Phase 2.21 Helsinki prosody adapter fixture",
+      "duration_ms": 1800
+    },
+    "language": "en",
+    "human_reviewed": true
+  },
+  "segments": [
+    {
+      "id": "fixture-helsinki-s1",
+      "index": 0,
+      "start_ms": 0,
+      "end_ms": 1500,
+      "text": "The market opened early.",
+      "display_text": "The market opened early."
+    }
+  ],
+  "word_timelines": [],
+  "phone_timelines": [
+    {
+      "id": "fixture-helsinki-phone-s1",
+      "sentence_id": "fixture-helsinki-s1",
+      "status": "candidate",
+      "sound_analysis": {
+        "provider_id": "fixture",
+        "provider_version": "v1",
+        "model_revision": "v1",
+        "phone_set": "arpabet",
+        "generated_from": "expected_phones_aligned_to_observed_timing",
+        "learning_phones": [],
+        "connected_speech": [],
+        "syllables": [],
+        "prosodic_phrases": [],
+        "rhythm_frame": {
+          "generated_from": "wordtimeline_timing_acoustic_prominence_v1",
+          "references": {
+            "citation": {
+              "label": "citation_form",
+              "source": "dictionary_lexical_stress",
+              "evidence_class": "heuristic_proxy"
+            },
+            "default_connected": {
+              "label": "default_connected_variants",
+              "source": "english_connected_speech_rules_v1",
+              "evidence_class": "heuristic_proxy"
+            },
+            "actual": {
+              "label": "actual_delivery",
+              "source": "word_timeline_duration_energy",
+              "evidence_class": "heuristic_proxy"
+            }
+          },
+          "stress_anchors": [
+            {
+              "token_index": 2,
+              "syllable_index": 0,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 240,
+              "end_ms": 620,
+              "label": "market",
+              "reason": "High Helsinki prominence label.",
+              "importance": "primary",
+              "is_nucleus": true,
+              "prominence": 0.95,
+              "prominence_cues": ["timing", "energy"],
+              "signal_sources": ["timing", "energy"],
+              "evidence_class": "silver_label",
+              "claim_status": "audio_supported",
+              "confidence": 0.95
+            },
+            {
+              "token_index": 4,
+              "syllable_index": 1,
+              "phone_start": null,
+              "phone_end": null,
+              "start_ms": 700,
+              "end_ms": 1040,
+              "label": "opened",
+              "reason": "Prominent Helsinki label.",
+              "importance": "secondary",
+              "is_nucleus": false,
+              "prominence": 0.82,
+              "prominence_cues": ["timing"],
+              "signal_sources": ["timing"],
+              "evidence_class": "silver_label",
+              "claim_status": "audio_supported",
+              "confidence": 0.82
+            }
+          ],
+          "nuclei": [
+            {
+              "phrase_index": 0,
+              "token_index": 2,
+              "syllable_index": 0,
+              "start_ms": 240,
+              "end_ms": 620,
+              "label": "market",
+              "reason": "Phrase-scoped nucleus candidate in fixture labels.",
+              "cues": ["timing", "energy"],
+              "evidence_class": "silver_label",
+              "claim_status": "audio_supported",
+              "confidence": 0.95
+            }
+          ],
+          "weak_groups": [],
+          "compression_spans": [],
+          "phrase_boundaries": [
+            {
+              "after_token_index": 4,
+              "before_token_index": 6,
+              "at_ms": 1040,
+              "reason": "High Helsinki word-boundary label after opened.",
+              "cues": ["pause"],
+              "signal_sources": ["timing"],
+              "evidence_class": "silver_label",
+              "claim_status": "audio_supported",
+              "is_final": false,
+              "confidence": 0.9
+            }
+          ],
+          "connected_speech_refs": [],
+          "listening_hotspots": [],
+          "quality": {
+            "timing_source": "word_timeline",
+            "prominence_sources": ["timing", "energy"],
+            "boundary_sources": ["timing"],
+            "connected_speech_source": "phone_segmental",
+            "phone_evidence_coverage": 0.0,
+            "rhythm_confidence": 0.9
+          }
+        }
+      }
+    }
+  ]
+}

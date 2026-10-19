@@ -1,0 +1,852 @@
+#!/usr/bin/env python3
+"""Deterministic listen-gen release bundle builder and verifier.
+
+Produces an immutable Gen handoff consisting of a runnable Python zipapp
+and a sidecar release manifest. Builds do not call Git and do not access
+the network; the source commit is supplied by the caller and pinned in the
+manifest only.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib
+import io
+import json
+import os
+import re
+import shutil
+import sys
+import tempfile
+import tomllib
+import zipfile
+from pathlib import Path
+
+RELEASE_BUNDLE_SCHEMA = "listen_gen.release-bundle.v1"
+SOURCE_REPOSITORY = "https://github.com/ichthyoplanktonzyh/listen"
+TOOL_NAME = "listen-gen"
+REQUIRED_PYTHON = ">=3.11"
+MACHINE_EVENT_SCHEMA = "listen_gen.machine-event.v2"
+MACHINE_PROTOCOL_VERSION = 2
+TOOL_ID = "listen-gen"
+PROVIDER_REQUIREMENTS = {
+    "fixture": [],
+    "command": ["ffprobe", "ffmpeg", "asr-wrapper"],
+    "whisper-cpp": ["ffprobe", "ffmpeg", "whisper-cli", "whisper-model"],
+}
+CONTRACT_DESCRIPTOR_NAME = "content-package-contract.json"
+EXPECTED_CONTRACT_DESCRIPTOR = {
+    "authority": {
+        "path": "core/contracts/content-package/v3",
+        "repository": "ichthyoplanktonzyh/listen",
+    },
+    "package_schema": "listen.content-package.release.v3",
+    "release_schema_id": "listen.content-package.release.v3",
+    "schema_version": 3,
+    "v3": {
+        "authority": {
+            "path": "core/contracts/content-package/v3",
+            "repository": "ichthyoplanktonzyh/listen",
+        },
+        "package_schema": "listen.content-package.release.v3",
+        "release_schema_id": "listen.content-package.release.v3",
+        "plan_schema_id": "listen.content-package.plan.v3",
+        "schema_version": 3,
+    },
+}
+
+# The release binds to an explicit runtime/toolchain identity that the
+# verifier checks strictly and consumers record immutably. The runtime is the
+# interpreter family and version requirement; the toolchain is every external
+# tool the released bundle may bind to, with the Gen stage families that
+# require it. A manifest cannot silently add, drop, or re-role a tool: the
+# verifier recomputes the canonical identity from these constants and from the
+# union of ``PROVIDER_REQUIREMENTS``.
+#
+# The content-package contract identity comes only from a real Core
+# contract artifact manifest: the manifest's ``contract_version`` and the
+# SHA-256 of its
+# ``core/contracts/content-package/v3/release.schema.json`` file are
+# copied verbatim. Gen never invents a Core release identity; a build without
+# a freshly built monorepo Core manifest abstains with a hard error.
+RUNTIME_IDENTITY_SCHEMA = "listen_gen.runtime-identity.v1"
+RUNTIME_IDENTITY_VERSION = 1
+RUNTIME_FAMILY = "python"
+TOOLCHAIN_IDENTITY_SCHEMA = "listen_gen.toolchain-identity.v1"
+TOOLCHAIN_IDENTITY_VERSION = 1
+RUNTIME_ROLE_NAMES = (
+    "media",
+    "asr",
+)
+TOOLCHAIN_ROLES: dict[str, tuple[str, ...]] = {
+    "asr-wrapper": ("asr",),
+    "ffmpeg": ("media", "asr"),
+    "ffprobe": ("media", "asr"),
+    "whisper-cli": ("asr",),
+    "whisper-model": ("asr",),
+}
+CORE_RELEASE_SCHEMA_RELATIVE = "contracts/content-package/v3/release.schema.json"
+
+
+def _canonical_toolchain() -> list[dict[str, object]]:
+    """The canonical, sorted toolchain identity for this release.
+
+    The declared tool ids must be exactly the union of the per-provider
+    requirements and every role must be a known stage family; a source edit
+    that drifts these apart is a release identity error, not a silent
+    manifest change.
+    """
+    required: set[str] = set()
+    for tools in PROVIDER_REQUIREMENTS.values():
+        required.update(tools)
+    if set(TOOLCHAIN_ROLES) != required:
+        raise ReleaseBundleError("release manifest is invalid")
+    known_roles = set(RUNTIME_ROLE_NAMES)
+    for tool_id, roles in TOOLCHAIN_ROLES.items():
+        if not tool_id or set(roles) - known_roles:
+            raise ReleaseBundleError("release manifest is invalid")
+    return [
+        {"id": tool_id, "roles": list(roles)}
+        for tool_id, roles in sorted(TOOLCHAIN_ROLES.items())
+    ]
+
+
+def _canonical_runtime_identity() -> dict[str, object]:
+    return {
+        "schema": RUNTIME_IDENTITY_SCHEMA,
+        "version": RUNTIME_IDENTITY_VERSION,
+        "runtime": {
+            "family": RUNTIME_FAMILY,
+            "requires": REQUIRED_PYTHON,
+        },
+        "toolchain": {
+            "schema": TOOLCHAIN_IDENTITY_SCHEMA,
+            "version": TOOLCHAIN_IDENTITY_VERSION,
+            "tools": _canonical_toolchain(),
+        },
+    }
+
+SOURCE_COMMIT_RE = re.compile(r"[0-9a-f]{40}")
+SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}")
+SHEBANG = b"#!/usr/bin/env python3\n"
+FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+ENTRY_MODE = 0o100644
+ARCHIVE_MODE = 0o755
+WEB_ASSET_SUFFIXES = frozenset(
+    {".html", ".css", ".js", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2"}
+)
+
+ROOT_MAIN_SOURCE = """\
+from __future__ import annotations
+
+import sys
+
+if sys.version_info < (3, 11):
+    raise SystemExit("listen-gen requires Python 3.11 or newer")
+
+from listen_gen.cli import main
+
+raise SystemExit(main())
+"""
+
+MANIFEST_ROOT_FIELDS = frozenset(
+    {
+        "schema",
+        "tool",
+        "source",
+        "machine_protocol",
+        "content_package_contract",
+        "runtime",
+        "runtime_identity",
+        "artifact",
+    }
+)
+MANIFEST_TOOL_FIELDS = frozenset({"id", "version"})
+MANIFEST_SOURCE_FIELDS = frozenset({"repository", "commit"})
+MANIFEST_PROTOCOL_FIELDS = frozenset({"schema", "version"})
+MANIFEST_CONTRACT_FIELDS = frozenset(
+    {
+        "authority",
+        "release_schema_id",
+        "package_schema",
+        "schema_version",
+        "contract_version",
+        "canonical_sha256",
+    }
+)
+MANIFEST_AUTHORITY_FIELDS = frozenset({"repository", "path"})
+MANIFEST_RUNTIME_FIELDS = frozenset({"python_requires", "provider_requirements"})
+MANIFEST_RUNTIME_IDENTITY_FIELDS = frozenset(
+    {"schema", "version", "runtime", "toolchain"}
+)
+MANIFEST_RUNTIME_IDENTITY_RUNTIME_FIELDS = frozenset({"family", "requires"})
+MANIFEST_TOOLCHAIN_FIELDS = frozenset({"schema", "version", "tools"})
+MANIFEST_TOOLCHAIN_TOOL_FIELDS = frozenset({"id", "roles"})
+MANIFEST_ARTIFACT_FIELDS = frozenset(
+    {"filename", "format", "entrypoint", "size_bytes", "sha256"}
+)
+
+
+class ReleaseBundleError(Exception):
+    pass
+
+
+def _canonical_json_bytes(document: object) -> bytes:
+    return json.dumps(
+        document,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _canonical_json_file_bytes(document: object) -> bytes:
+    return _canonical_json_bytes(document) + b"\n"
+
+
+def _sha256_hex(data: bytes) -> str:
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def _load_protocol_constants(repo_root: Path) -> dict[str, object]:
+    """Import protocol constants from the checkout source, never an install.
+
+    All cached ``listen_gen`` modules are removed for the duration of the
+    import so a different checkout is never shadowed by the caller's state,
+    and the caller's module state is fully restored afterwards.
+    """
+    src = str(repo_root / "src")
+    saved_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "listen_gen" or name.startswith("listen_gen.")
+    }
+    for name in saved_modules:
+        del sys.modules[name]
+    sys.path.insert(0, src)
+    try:
+        try:
+            protocol = importlib.import_module("listen_gen.protocol_v2")
+            constants = {
+                "tool_id": protocol.TOOL_ID,
+                "tool_version": protocol.TOOL_VERSION,
+                "machine_event_schema": protocol.MACHINE_EVENT_SCHEMA_V2,
+                "machine_protocol_version": protocol.MACHINE_PROTOCOL_VERSION,
+            }
+        except Exception:
+            raise ReleaseBundleError("release source package is missing")
+        finally:
+            for name in [
+                name
+                for name in sys.modules
+                if name == "listen_gen" or name.startswith("listen_gen.")
+            ]:
+                del sys.modules[name]
+        return constants
+    finally:
+        sys.modules.update(saved_modules)
+        try:
+            sys.path.remove(src)
+        except ValueError:
+            pass
+
+
+def _read_project_metadata(repo_root: Path) -> tuple[str, str]:
+    try:
+        raw = (repo_root / "pyproject.toml").read_bytes()
+    except FileNotFoundError:
+        raise ReleaseBundleError("release manifest is invalid")
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+        raise ReleaseBundleError("release manifest is invalid")
+    project = data.get("project")
+    if not isinstance(project, dict):
+        raise ReleaseBundleError("release manifest is invalid")
+    name = project.get("name")
+    version = project.get("version")
+    requires_python = project.get("requires-python")
+    if name != TOOL_NAME or not isinstance(version, str) or requires_python != REQUIRED_PYTHON:
+        raise ReleaseBundleError("release manifest is invalid")
+    return version, requires_python
+
+
+def _read_contract_descriptor(repo_root: Path) -> dict[str, object]:
+    path = repo_root / CONTRACT_DESCRIPTOR_NAME
+    if not path.is_file():
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    try:
+        parsed = json.loads(path.read_text("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if parsed != EXPECTED_CONTRACT_DESCRIPTOR:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    return parsed
+
+
+def _read_core_contract_manifest(manifest_path: Path) -> dict[str, object]:
+    """Read contract identity from the freshly built monorepo Core artifact.
+
+    The manifest must carry ``contract_version`` and a SHA-256 for the v3
+    ``release.schema.json`` file; both are copied verbatim into the Gen
+    release manifest so the contract identity never comes from this
+    repository's local contract descriptor.
+    """
+    try:
+        raw = manifest_path.read_bytes()
+    except OSError as error:
+        raise ReleaseBundleError(
+            "core contract manifest is not valid JSON"
+        ) from error
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ReleaseBundleError(
+            "core contract manifest is not valid JSON"
+        ) from error
+    if not isinstance(parsed, dict):
+        raise ReleaseBundleError("core contract manifest is invalid")
+    source_commit = parsed.get("core_git_sha")
+    if not isinstance(source_commit, str) or not SOURCE_COMMIT_RE.fullmatch(
+        source_commit
+    ):
+        raise ReleaseBundleError("core contract manifest is invalid")
+    contract_version = parsed.get("contract_version")
+    if not isinstance(contract_version, str) or not contract_version:
+        raise ReleaseBundleError("core contract manifest is invalid")
+    files = parsed.get("files")
+    if not isinstance(files, dict):
+        raise ReleaseBundleError("core contract manifest is invalid")
+    digest = files.get(CORE_RELEASE_SCHEMA_RELATIVE)
+    if not isinstance(digest, str) or not SHA256_RE.fullmatch(f"sha256:{digest}"):
+        raise ReleaseBundleError("core contract manifest is invalid")
+    return {
+        "source_commit": source_commit,
+        "contract_version": contract_version,
+        "release_schema_sha256": f"sha256:{digest}",
+    }
+
+
+def _collect_source_entries(repo_root: Path) -> list[tuple[str, bytes]]:
+    package_root = repo_root / "src" / "listen_gen"
+    if not package_root.is_dir():
+        raise ReleaseBundleError("release archive content does not match source")
+    entries: list[tuple[str, bytes]] = []
+    for path in sorted(package_root.rglob("*")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        relative_parts = path.relative_to(package_root).parts
+        if any(part.startswith(".") or part == "__pycache__" for part in relative_parts):
+            continue
+        if relative_parts[0] == "web_assets":
+            if path.suffix.lower() not in WEB_ASSET_SUFFIXES:
+                continue
+        elif path.suffix != ".py":
+            continue
+        archive_path = "listen_gen/" + path.relative_to(package_root).as_posix()
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            raise ReleaseBundleError("release archive content does not match source")
+        if path.suffix == ".py":
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ReleaseBundleError("release archive content does not match source")
+            raw = (
+                text.replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .encode("utf-8")
+            )
+        entries.append((archive_path, raw))
+    entries.append(("__main__.py", ROOT_MAIN_SOURCE.encode("utf-8")))
+    entries.sort(key=lambda item: item[0])
+    return entries
+
+
+def _build_pyz_bytes(entries: list[tuple[str, bytes]]) -> bytes:
+    seen: set[str] = set()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+        for archive_path, data in entries:
+            if archive_path in seen:
+                raise ReleaseBundleError("release archive is invalid")
+            if "\\" in archive_path or archive_path.startswith("/"):
+                raise ReleaseBundleError("release archive is invalid")
+            if ".." in archive_path.split("/"):
+                raise ReleaseBundleError("release archive is invalid")
+            seen.add(archive_path)
+            info = zipfile.ZipInfo(filename=archive_path, date_time=FIXED_DATE_TIME)
+            info.compress_type = zipfile.ZIP_STORED
+            info.create_system = 3
+            info.external_attr = ENTRY_MODE << 16
+            archive.writestr(info, data)
+    return SHEBANG + buffer.getvalue()
+
+
+def _write_pyz(path: Path, data: bytes) -> None:
+    path.write_bytes(data)
+    try:
+        # Best effort: execution must not depend on the executable bit.
+        path.chmod(ARCHIVE_MODE)
+    except OSError:
+        pass
+
+
+def _build_manifest(
+    version: str,
+    source_commit: str,
+    constants: dict[str, object],
+    contract_descriptor: dict[str, object],
+    core_contract: dict[str, object],
+    pyz_bytes: bytes,
+) -> dict[str, object]:
+    authority = contract_descriptor["authority"]
+    assert isinstance(authority, dict)
+    return {
+        "schema": RELEASE_BUNDLE_SCHEMA,
+        "tool": {
+            "id": constants["tool_id"],
+            "version": constants["tool_version"],
+        },
+        "source": {
+            "repository": SOURCE_REPOSITORY,
+            "commit": source_commit,
+        },
+        "machine_protocol": {
+            "schema": constants["machine_event_schema"],
+            "version": constants["machine_protocol_version"],
+        },
+        "content_package_contract": {
+            "authority": {
+                "repository": authority["repository"],
+                "path": authority["path"],
+            },
+            "release_schema_id": contract_descriptor["release_schema_id"],
+            "package_schema": contract_descriptor["package_schema"],
+            "schema_version": contract_descriptor["schema_version"],
+            "contract_version": core_contract["contract_version"],
+            "canonical_sha256": core_contract["release_schema_sha256"],
+        },
+        "runtime": {
+            "python_requires": REQUIRED_PYTHON,
+            "provider_requirements": PROVIDER_REQUIREMENTS,
+        },
+        "runtime_identity": _canonical_runtime_identity(),
+        "artifact": {
+            "filename": f"listen-gen-{version}.pyz",
+            "format": "python-zipapp",
+            "entrypoint": "__main__.py",
+            "size_bytes": len(pyz_bytes),
+            "sha256": _sha256_hex(pyz_bytes),
+        },
+    }
+
+
+def build_release_bundle(
+    repo_root: Path,
+    output_parent: Path,
+    source_commit: str,
+    *,
+    core_contract_manifest: Path,
+) -> tuple[Path, Path]:
+    repo_root = Path(repo_root)
+    output_parent = Path(output_parent)
+    if not isinstance(source_commit, str) or not SOURCE_COMMIT_RE.fullmatch(
+        source_commit
+    ):
+        raise ReleaseBundleError("source commit must be a lowercase 40-character SHA")
+    version, _ = _read_project_metadata(repo_root)
+    constants = _load_protocol_constants(repo_root)
+    if constants["tool_id"] != TOOL_ID:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["tool_version"] != version:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["machine_event_schema"] != MACHINE_EVENT_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["machine_protocol_version"] != MACHINE_PROTOCOL_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    contract_descriptor = _read_contract_descriptor(repo_root)
+    core_contract = _read_core_contract_manifest(
+        Path(core_contract_manifest)
+    )
+    if core_contract["source_commit"] != source_commit:
+        raise ReleaseBundleError(
+            "core contract manifest source does not match release source"
+        )
+
+    bundle_dir = output_parent / f"listen-gen-{version}"
+    if bundle_dir.exists():
+        raise ReleaseBundleError("release bundle directory already exists")
+    output_parent.mkdir(parents=True, exist_ok=True)
+
+    staging = None
+    try:
+        staging = Path(
+            tempfile.mkdtemp(
+                prefix=f".listen-gen-{version}.staging.", dir=str(output_parent)
+            )
+        )
+        entries = _collect_source_entries(repo_root)
+        pyz_bytes = _build_pyz_bytes(entries)
+        manifest = _build_manifest(
+            version,
+            source_commit,
+            constants,
+            contract_descriptor,
+            core_contract,
+            pyz_bytes,
+        )
+        pyz_name = f"listen-gen-{version}.pyz"
+        manifest_name = f"listen-gen-{version}.release.json"
+        _write_pyz(staging / pyz_name, pyz_bytes)
+        (staging / manifest_name).write_bytes(_canonical_json_file_bytes(manifest))
+        verify_release_bundle(
+            repo_root,
+            staging / manifest_name,
+            core_contract_manifest=Path(core_contract_manifest),
+        )
+        os.replace(str(staging), str(bundle_dir))
+        staging = None
+        return bundle_dir / pyz_name, bundle_dir / manifest_name
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
+
+
+def _check_keys(mapping: object, expected: frozenset[str]) -> None:
+    if not isinstance(mapping, dict) or set(mapping) != expected:
+        raise ReleaseBundleError("release manifest is invalid")
+
+
+def _parse_manifest(manifest_path: Path) -> dict[str, object]:
+    try:
+        raw = manifest_path.read_bytes()
+    except OSError:
+        raise ReleaseBundleError("release manifest is invalid")
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ReleaseBundleError("release manifest is invalid")
+    if not isinstance(parsed, dict):
+        raise ReleaseBundleError("release manifest is invalid")
+    if raw != _canonical_json_file_bytes(parsed):
+        raise ReleaseBundleError("release manifest is invalid")
+    _check_keys(parsed, MANIFEST_ROOT_FIELDS)
+    if parsed["schema"] != RELEASE_BUNDLE_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    tool = parsed["tool"]
+    _check_keys(tool, MANIFEST_TOOL_FIELDS)
+    version = tool["version"]
+    if tool["id"] != TOOL_ID or not isinstance(version, str) or not version:
+        raise ReleaseBundleError("release manifest is invalid")
+    if manifest_path.name != f"listen-gen-{version}.release.json":
+        raise ReleaseBundleError("release manifest is invalid")
+    source = parsed["source"]
+    _check_keys(source, MANIFEST_SOURCE_FIELDS)
+    if source["repository"] != SOURCE_REPOSITORY:
+        raise ReleaseBundleError("release manifest is invalid")
+    commit = source["commit"]
+    if not isinstance(commit, str) or not SOURCE_COMMIT_RE.fullmatch(commit):
+        raise ReleaseBundleError("release manifest is invalid")
+    machine_protocol = parsed["machine_protocol"]
+    _check_keys(machine_protocol, MANIFEST_PROTOCOL_FIELDS)
+    if machine_protocol["schema"] != MACHINE_EVENT_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    protocol_version = machine_protocol["version"]
+    if type(protocol_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if protocol_version != MACHINE_PROTOCOL_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    contract = parsed["content_package_contract"]
+    _check_keys(contract, MANIFEST_CONTRACT_FIELDS)
+    authority = contract["authority"]
+    _check_keys(authority, MANIFEST_AUTHORITY_FIELDS)
+    if authority != EXPECTED_CONTRACT_DESCRIPTOR["authority"]:
+        raise ReleaseBundleError("release manifest is invalid")
+    if (
+        contract["release_schema_id"]
+        != EXPECTED_CONTRACT_DESCRIPTOR["release_schema_id"]
+    ):
+        raise ReleaseBundleError("release manifest is invalid")
+    if contract["package_schema"] != EXPECTED_CONTRACT_DESCRIPTOR["package_schema"]:
+        raise ReleaseBundleError("release manifest is invalid")
+    schema_version = contract["schema_version"]
+    if type(schema_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if schema_version != EXPECTED_CONTRACT_DESCRIPTOR["schema_version"]:
+        raise ReleaseBundleError("release manifest is invalid")
+    contract_version = contract["contract_version"]
+    if not isinstance(contract_version, str) or not contract_version:
+        raise ReleaseBundleError("release manifest is invalid")
+    canonical_sha256 = contract["canonical_sha256"]
+    if not isinstance(canonical_sha256, str) or not SHA256_RE.fullmatch(
+        canonical_sha256
+    ):
+        raise ReleaseBundleError("release manifest is invalid")
+    runtime = parsed["runtime"]
+    _check_keys(runtime, MANIFEST_RUNTIME_FIELDS)
+    if runtime["python_requires"] != REQUIRED_PYTHON:
+        raise ReleaseBundleError("release manifest is invalid")
+    if runtime["provider_requirements"] != PROVIDER_REQUIREMENTS:
+        raise ReleaseBundleError("release manifest is invalid")
+    runtime_identity = parsed["runtime_identity"]
+    _check_keys(runtime_identity, MANIFEST_RUNTIME_IDENTITY_FIELDS)
+    if runtime_identity["schema"] != RUNTIME_IDENTITY_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    identity_version = runtime_identity["version"]
+    if type(identity_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if identity_version != RUNTIME_IDENTITY_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    identity_runtime = runtime_identity["runtime"]
+    _check_keys(identity_runtime, MANIFEST_RUNTIME_IDENTITY_RUNTIME_FIELDS)
+    if identity_runtime["family"] != RUNTIME_FAMILY:
+        raise ReleaseBundleError("release manifest is invalid")
+    if identity_runtime["requires"] != REQUIRED_PYTHON:
+        raise ReleaseBundleError("release manifest is invalid")
+    if identity_runtime["requires"] != runtime["python_requires"]:
+        raise ReleaseBundleError("release manifest is invalid")
+    toolchain = runtime_identity["toolchain"]
+    _check_keys(toolchain, MANIFEST_TOOLCHAIN_FIELDS)
+    if toolchain["schema"] != TOOLCHAIN_IDENTITY_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    toolchain_version = toolchain["version"]
+    if type(toolchain_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if toolchain_version != TOOLCHAIN_IDENTITY_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    tools = toolchain["tools"]
+    if not isinstance(tools, list):
+        raise ReleaseBundleError("release manifest is invalid")
+    for tool in tools:
+        _check_keys(tool, MANIFEST_TOOLCHAIN_TOOL_FIELDS)
+        if not isinstance(tool["id"], str) or not tool["id"]:
+            raise ReleaseBundleError("release manifest is invalid")
+        roles = tool["roles"]
+        if not isinstance(roles, list):
+            raise ReleaseBundleError("release manifest is invalid")
+        if any(not isinstance(role, str) or not role for role in roles):
+            raise ReleaseBundleError("release manifest is invalid")
+    if tools != _canonical_toolchain():
+        raise ReleaseBundleError("release manifest is invalid")
+    artifact = parsed["artifact"]
+    _check_keys(artifact, MANIFEST_ARTIFACT_FIELDS)
+    filename = artifact["filename"]
+    expected_filename = f"listen-gen-{version}.pyz"
+    if (
+        not isinstance(filename, str)
+        or filename != expected_filename
+        or "/" in filename
+        or "\\" in filename
+        or ".." in filename
+    ):
+        raise ReleaseBundleError("release manifest is invalid")
+    if artifact["format"] != "python-zipapp":
+        raise ReleaseBundleError("release manifest is invalid")
+    if artifact["entrypoint"] != "__main__.py":
+        raise ReleaseBundleError("release manifest is invalid")
+    size_bytes = artifact["size_bytes"]
+    if type(size_bytes) is not int or size_bytes < 0:
+        raise ReleaseBundleError("release manifest is invalid")
+    sha256 = artifact["sha256"]
+    if not isinstance(sha256, str) or not SHA256_RE.fullmatch(sha256):
+        raise ReleaseBundleError("release manifest is invalid")
+    return parsed
+
+
+def _check_archive_structure(archive: zipfile.ZipFile) -> None:
+    if archive.comment:
+        raise ReleaseBundleError("release archive is invalid")
+    names = archive.namelist()
+    if len(names) != len(set(names)):
+        raise ReleaseBundleError("release archive is invalid")
+    if names != sorted(names):
+        raise ReleaseBundleError("release archive is invalid")
+    for name in names:
+        if name.startswith("/") or "\\" in name:
+            raise ReleaseBundleError("release archive is invalid")
+        if ".." in name.split("/"):
+            raise ReleaseBundleError("release archive is invalid")
+        info = archive.getinfo(name)
+        if info.is_dir():
+            raise ReleaseBundleError("release archive is invalid")
+        if info.compress_type != zipfile.ZIP_STORED:
+            raise ReleaseBundleError("release archive is invalid")
+        if info.date_time != FIXED_DATE_TIME:
+            raise ReleaseBundleError("release archive is invalid")
+        if info.create_system != 3:
+            raise ReleaseBundleError("release archive is invalid")
+        if info.external_attr != ENTRY_MODE << 16:
+            raise ReleaseBundleError("release archive is invalid")
+
+
+def verify_release_bundle(
+    repo_root: Path,
+    manifest_path: Path,
+    *,
+    core_contract_manifest: Path,
+) -> dict[str, object]:
+    repo_root = Path(repo_root)
+    manifest_path = Path(manifest_path)
+    manifest = _parse_manifest(manifest_path)
+    project_version, requires_python = _read_project_metadata(repo_root)
+    constants = _load_protocol_constants(repo_root)
+    if constants["tool_id"] != TOOL_ID:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["tool_version"] != project_version:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["machine_event_schema"] != MACHINE_EVENT_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["machine_protocol_version"] != MACHINE_PROTOCOL_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    if manifest["tool"] != {
+        "id": constants["tool_id"],
+        "version": constants["tool_version"],
+    }:
+        raise ReleaseBundleError("release manifest is invalid")
+    if manifest["machine_protocol"] != {
+        "schema": constants["machine_event_schema"],
+        "version": constants["machine_protocol_version"],
+    }:
+        raise ReleaseBundleError("release manifest is invalid")
+    if manifest["runtime"]["python_requires"] != requires_python:
+        raise ReleaseBundleError("release manifest is invalid")
+    version = manifest["tool"]["version"]
+    artifact = manifest["artifact"]
+    artifact_path = manifest_path.parent / artifact["filename"]
+    if not artifact_path.is_file():
+        raise ReleaseBundleError("release artifact is missing")
+    data = artifact_path.read_bytes()
+    if len(data) != artifact["size_bytes"]:
+        raise ReleaseBundleError("release artifact size mismatch")
+    if _sha256_hex(data) != artifact["sha256"]:
+        raise ReleaseBundleError("release artifact checksum mismatch")
+    if not data.startswith(SHEBANG):
+        raise ReleaseBundleError("release archive is invalid")
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise ReleaseBundleError("release archive is invalid")
+    with archive:
+        _check_archive_structure(archive)
+        expected_entries = _collect_source_entries(repo_root)
+        if archive.namelist() != [name for name, _ in expected_entries]:
+            raise ReleaseBundleError("release archive content does not match source")
+        for name, expected_bytes in expected_entries:
+            if archive.read(name) != expected_bytes:
+                raise ReleaseBundleError("release archive content does not match source")
+    contract_descriptor = _read_contract_descriptor(repo_root)
+    core_contract = _read_core_contract_manifest(Path(core_contract_manifest))
+    if core_contract["source_commit"] != manifest["source"]["commit"]:
+        raise ReleaseBundleError(
+            "core contract manifest source does not match release source"
+        )
+    contract = manifest["content_package_contract"]
+    authority = contract["authority"]
+    assert isinstance(authority, dict)
+    if authority != contract_descriptor["authority"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if contract["release_schema_id"] != contract_descriptor["release_schema_id"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if contract["package_schema"] != contract_descriptor["package_schema"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if contract["schema_version"] != contract_descriptor["schema_version"]:
+        raise ReleaseBundleError("content package contract descriptor is invalid")
+    if contract["contract_version"] != core_contract["contract_version"]:
+        raise ReleaseBundleError("core contract manifest is invalid")
+    if contract["canonical_sha256"] != core_contract["release_schema_sha256"]:
+        raise ReleaseBundleError("core contract manifest is invalid")
+    return {
+        "status": "verified",
+        "tool": {"id": TOOL_ID, "version": version},
+        "artifact_sha256": artifact["sha256"],
+        "runtime_identity": manifest["runtime_identity"],
+    }
+
+
+def _resolve_repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _cmd_build(args: argparse.Namespace) -> int:
+    artifact_path, manifest_path = build_release_bundle(
+        _resolve_repo_root(),
+        Path(args.output_parent),
+        args.source_commit,
+        core_contract_manifest=Path(args.core_contract_manifest),
+    )
+    bundle_name = artifact_path.parent.name
+    print(
+        json.dumps(
+            {
+                "status": "created",
+                "artifact": f"{bundle_name}/{artifact_path.name}",
+                "manifest": f"{bundle_name}/{manifest_path.name}",
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    )
+    return 0
+
+
+def _cmd_verify(args: argparse.Namespace) -> int:
+    result = verify_release_bundle(
+        _resolve_repo_root(),
+        Path(args.manifest),
+        core_contract_manifest=Path(args.core_contract_manifest),
+    )
+    print(
+        json.dumps(
+            result,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    )
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="release_bundle",
+        description="Build and verify the deterministic listen-gen release bundle.",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    build_parser = subparsers.add_parser("build", help="build the release bundle")
+    build_parser.add_argument(
+        "--source-commit", required=True, help="40-character lowercase Git SHA"
+    )
+    build_parser.add_argument(
+        "--core-contract-manifest",
+        required=True,
+        help="fresh Core contract artifact manifest built from this monorepo snapshot",
+    )
+    build_parser.add_argument(
+        "--output-parent", required=True, help="directory that receives the bundle"
+    )
+    build_parser.set_defaults(func=_cmd_build)
+    verify_parser = subparsers.add_parser("verify", help="verify a release bundle")
+    verify_parser.add_argument("manifest", help="path to the release manifest")
+    verify_parser.add_argument(
+        "--core-contract-manifest",
+        required=True,
+        help="fresh Core contract artifact manifest built from this monorepo snapshot",
+    )
+    verify_parser.set_defaults(func=_cmd_verify)
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except ReleaseBundleError as error:
+        print(f"release bundle error: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

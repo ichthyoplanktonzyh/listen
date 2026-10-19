@@ -1,0 +1,22 @@
+# Root-level output from the monorepo developer entrypoint.
+/.dev/
+/build/
+/dist/
+**/.venv/
+**/__pycache__/
+**/.dart_tool/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+node_modules/
+
+# Local credentials and generated language/tool caches.
+**/.env
+**/.env.*
+!**/.env.example
+**/.backend/
+**/.listen-gen/
+*.py[cod]
+*.log
+*.sqlite
+*.sqlite3

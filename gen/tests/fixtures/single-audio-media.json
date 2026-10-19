@@ -1,0 +1,6 @@
+{
+  "streams": [
+    {"codec_type": "video", "index": 0},
+    {"codec_type": "audio", "index": 1}
+  ]
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v2/payload/subtitle-text-track.v1.schema.json",
+  "title": "Listen subtitle_text_track payload v1",
+  "description": "The v1 subtitle text track payload shape, reused verbatim in v2. Anchors timed segments with tokens and per-segment language.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "language",
+    "source_kind",
+    "sentences"
+  ],
+  "properties": {
+    "language": {
+      "$ref": "#/$defs/languageTag"
+    },
+    "source_kind": {
+      "enum": [
+        "asr",
+        "embedded_subtitle",
+        "sidecar_subtitle",
+        "manual",
+        "unknown"
+      ]
+    },
+    "sentences": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/sentence"
+      }
+    }
+  },
+  "$defs": {
+    "languageTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
+    },
+    "sentence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "index",
+        "start_ms",
+        "end_ms",
+        "original_text",
+        "display_text",
+        "tokens"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "original_text": {
+          "type": "string"
+        },
+        "display_text": {
+          "type": "string"
+        },
+        "tokens": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/token"
+          }
+        }
+      }
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "kind",
+        "text",
+        "normalized",
+        "start_char",
+        "end_char"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "enum": [
+            "word",
+            "whitespace",
+            "punctuation",
+            "other"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "normalized": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start_char": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_char": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

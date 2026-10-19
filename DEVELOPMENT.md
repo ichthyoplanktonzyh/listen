@@ -1,178 +1,127 @@
-# Development And Maintenance
+# Listen Development
 
-> Status: owner-approved operating model, 2026-08-09.
+Listen is one repository with Flutter `app/`, Rust `core/`, Python `gen/`, and
+project documentation. A feature, its contract changes, and its adapters ship
+through one branch and review. See [decision 0005](decisions/0005-single-repository-development.md).
 
-Listen is a single-owner, multi-repository project developed with a Supervisor
-and replaceable implementation Workers.
+## Prerequisites and setup
 
-## Roles
+The supported desktop release target is macOS Apple Silicon. Install Flutter
+with macOS desktop support, Xcode, Rust matching `core/Cargo.toml`, and Python
+3.11 or newer for Gen. The root launcher resolves the Python runtime rather
+than relying on macOS's older system Python. Use `./dev --help` for command and
+configuration details.
 
-### Product Owner
+From the repository root:
 
-The owner decides product meaning, priorities, compatibility policy, and genuine
-product tradeoffs. The owner may explicitly override the selected Worker or any
-technical decision.
+```sh
+./dev setup
+./dev status
+./dev run
+```
 
-### Supervisor
+Setup resolves Flutter dependencies and prepares an independent Python
+environment under `gen/.venv`. The small root test dependency set in `tools/requirements-dev.txt` is installed
+in that environment too (including Chinese tokenization for Core checks).
+Heavy model/provider extras are opt-in; ordinary
+setup and fixture tests do not download models or call paid providers. Native
+commands still run from their module directory.
 
-The Supervisor is the technical and delivery lead. It owns requirements,
-architecture, code-derived diagnosis, task decomposition, dependency planning,
-Worker selection, review of actual diffs, independent validation, documentation,
-commits, pull requests, merges, and releases within an approved work scope.
+After setup, run/check/test/release use the prepared dependencies without
+implicit pip installs. The source-development launcher builds Core and a Gen bundle from the same
+identified source snapshot, prepares a matching development lock, and starts
+Flutter. Tracked edits and untracked source are supported; ignored build output
+and private environment files are excluded from the snapshot. This workflow
+needs no component release, old repository checkout, or manually edited pin.
 
-The Supervisor stops for owner input only when a product choice is genuinely
-missing, the requested scope must materially expand, or an external action is
-irreversible and was not authorized.
+Core runs as an authenticated loopback sidecar. App owns startup/exit and checks
+the API/contract handshake. Gen remains an independent process with bounded
+progress/cancellation. Debug builds accept explicitly supplied current-source
+artifacts; release builds use their embedded generated lock and bundled bytes.
 
-### Implementation Worker
+## Verification
 
-Worker is a role, not a model name or provider. A Worker may be a native Codex
-subagent, an agent reached through OpenCode, or another configured implementation
-runtime. The Supervisor may create and select Workers by task complexity,
-reliability, latency, cost, and tool compatibility; the owner may explicitly
-override the choice.
+```sh
+./dev check
+./dev test integration
+```
 
-The current default Worker is the native `luna_max_coder`, using GPT-5.6 Luna
-with `max` reasoning effort. DeepSeek V4 Flash through OpenCode remains an
-approved alternative. These are execution defaults rather than product or
-repository architecture and may be replaced as models and runtimes evolve.
+The shared entry points run native gates with the correct module working
+directories. Use focused module commands while iterating:
 
-The Supervisor may use different Worker types in one deliverable when ownership
-does not overlap. The selected runtime is stated in each assignment and handoff;
-changing it does not require owner approval unless it also changes product scope,
-compatibility policy, cost authorization, or an irreversible external action.
+| Module | Checks |
+|---|---|
+| App | `flutter analyze --fatal-infos --fatal-warnings`; `flutter test`; `python3 -m unittest discover -s tool -p 'test_*.py'` |
+| Core | `./scripts/test.sh --rust --strict`; `./scripts/validate-contracts.sh`; `python3 -m unittest scripts/test_release_artifacts.py` |
+| Gen | `.venv/bin/python -m unittest discover -s tests -v` |
 
-Source code, tests, schemas, migrations, scripts, and runtime configuration are
-implemented by Workers. The Supervisor directly owns prose documentation and
-delivery coordination. A Worker does not commit, push, publish, or silently
-expand product scope.
+Run the Gen command from `gen/` and the other native commands from their module
+root. For direct Core shell scripts, first activate `gen/.venv` from the root
+(`source gen/.venv/bin/activate`) so their internal `python3` is Python 3.11+. Contract, persistence and packaging changes retain their focused tests.
+The integration gate builds one source snapshot and proves fixture-based
+production, package installation/adoption, and App consumption. Named tests
+must actually execute and pass; skipped tests or failed build stages do not
+count as success. No live model credentials are needed.
 
-Auto mode is allowed only for a bounded task whose repository, file ownership,
-acceptance criteria, forbidden actions, and validation commands are explicit.
-Ambiguous work returns to the Supervisor for refinement first.
+There is currently no checked-in GitHub Actions workflow running these checks.
+Record the exact local commands and outcomes in the PR. A job that never starts
+is not validation. Live/paid/ignored model tests require explicit authorization.
 
-## Work modes
+## Product releases
 
-Use the smallest independently verifiable and deliverable scope.
+```sh
+./dev release
+```
 
-### Repository-local slice
+Release starts from a clean Git commit and builds all product modules from an
+isolated export of that committed tree, excluding ignored local files. Core contracts/runtime and the Gen bundle receive source and
+hash manifests; generated App product locks identify these exact outputs.
+Locks and manifests are emitted under ignored output directories and shipped
+with the product as needed. Do not commit an internal pin update after building
+or mutate a published artifact to reuse a version/tag.
 
-One repository changes while its published boundaries remain compatible. It is
-developed, tested, merged, and released independently. Examples include Core
-internals, a Gen provider behind an existing producer contract, or App UX that
-requires no new backend data.
+The macOS runtime needs the prepared third-party tool bundle under
+`core/third_party/runtime/macos-arm64/`, matching
+`core/third_party/runtime/manifest.json`, plus its license notices. These local
+binary inputs are not Git source and are never committed. The preparation
+scripts and notices under `core/third_party/runtime/` remain the authority for
+those inputs. Release verification must include the packaged runtime and the
+App outside the checkout; a successful compile alone is insufficient.
 
-### Contract-evolution slice
+The old committed `app/backend.lock.json` and `app/listen_gen.lock.json` retain
+the split-release baseline for historical diagnostics. They do not determine
+current-source development or the new product release. Do not substitute
+unverified binaries or disable handshake/hash verification to make a build pass.
 
-An authority repository publishes a versioned boundary. Before the first
-maintained product baseline, it may make a coordinated breaking cutover under
-the policy below. After that baseline, compatibility and migration are explicit
-release decisions. Consumers always adopt exact versions and immutable
-artifacts; repositories do not consume moving branches in production.
+## Manual desktop smoke
 
-### Cross-repository vertical slice
+After launching the app:
 
-A user outcome crosses existing boundaries and therefore requires coordinated
-changes. The Supervisor builds a dependency DAG, serializes shared seams, runs
-independent repository work in parallel when ownership does not overlap, and
-closes with a real cross-repository round trip.
+1. Check startup and the absence of sidecar/compatibility errors.
+2. Open a local supported document or media fixture; verify reading or
+   playback, pause, seek, subtitle timing and sentence looping as applicable.
+3. Exercise the changed Core-backed operation and its loading/empty/error/
+   retry/cancel states. For generation changes, run a fixture request and check
+   progress, package adoption and the resulting composition.
+4. Close the app and verify its sidecar/child processes exit.
+5. Repeat the relevant flow using the packaged application outside the source
+   tree when changing runtime assembly or release scripts.
 
-A vertical slice does not mean all three repositories must change. It means the
-smallest complete outcome determines the coordination scope.
+Core logs remain in `~/Library/Logs/listen/core.log`; Flutter logs are visible
+in the launcher terminal. Do not delete learner data to repair a development
+setup. Use isolated test data for fixtures and migration proofs.
 
-## Pre-Phase-1 evolution and compatibility
+## Documentation and Git
 
-Listen currently has no external users and no maintained public compatibility
-baseline. Until the Phase 1 stack release is accepted, internal App interfaces,
-Core APIs and persistence for unfinished Phase 1 concepts, Gen protocols, test
-fixtures, and development data may be replaced directly when the replacement
-better expresses the accepted product model.
+Root model/glossary/context/journey documents own product semantics. Root
+`STATE.md` and `ROADMAP.md` own active project coordination. Module codebase
+notes describe local implementation; old phase plans, ADRs and repository
+handoffs are historical evidence. This migration does not implement the newer
+Complete Learning Material product model.
 
-Do not add compatibility adapters, dual reads or writes, deprecated paths,
-feature flags, or migrations solely to preserve pre-Phase-1 behavior. Prefer
-one coordinated cutover and remove the displaced path. Local test and
-development data may be reset unless the owner explicitly identifies a data set
-that must survive; such a data set receives one bounded migration rather than a
-permanent compatibility layer.
-
-This freedom does not relax contract or release discipline:
-
-- all affected repositories must agree on the exact new contract and prove a
-  real round trip before the cutover is accepted;
-- already published tags, schemas, packages, and binary artifacts remain
-  immutable, even when the active stack no longer supports them;
-- a changed wire or package meaning receives a new version or schema identity
-  rather than silently reinterpreting a published identity;
-- external format and protocol standards, source fidelity, provenance, learner
-  data ownership, and security invariants still apply;
-- unrelated learner behavior is not changed merely because compatibility is
-  inexpensive.
-
-The accepted Phase 1 stack release becomes Listen's first maintained
-compatibility baseline. Any later breaking change must state its supported
-upgrade path, data migration, and consumer impact explicitly.
-
-## Worker assignment contract
-
-Every implementation assignment states:
-
-- objective and user-visible or contract outcome;
-- absolute repository path;
-- exclusive file or module ownership;
-- relevant facts and interfaces;
-- acceptance and failure semantics;
-- non-goals and forbidden actions;
-- exact local validation;
-- required handoff evidence.
-
-Parallel Workers, including Workers using different models or runtimes, must
-have non-overlapping ownership. Shared contracts and shared files are changed
-serially. Workers preserve other edits and adapt to concurrent work rather than
-reverting it.
-
-## Review and validation
-
-Completion requires three evidence layers when applicable:
-
-1. the Worker runs focused tests and static checks for its owned change;
-2. the Supervisor reviews the actual diff and independently reruns repository
-   quality gates;
-3. a boundary change runs a real cross-repository contract probe, round trip,
-   or end-to-end journey.
-
-Generated output, a Worker summary, or a green focused test alone is not review.
-No paid model or live credential test runs unless explicitly authorized.
-
-The Supervisor waits for Worker events rather than repeatedly polling. Failed or
-incomplete handoffs are narrowed and returned or reassigned. A reassignment keeps
-the original scope and ownership explicit, records the execution-model change,
-and receives the same independent review and validation.
-
-## Git and releases
-
-- Each repository has independent branches, commits, pull requests, versions,
-  quality gates, and releases.
-- Use one coherent branch and pull request per repository per deliverable.
-- Use Conventional Commit subjects and review the exact staged scope.
-- Merge cross-repository work in dependency order.
-- Consumers pin immutable contracts and artifacts; production never depends on
-  a sibling checkout or moving `main`.
-- Sibling checkouts are allowed only for explicit development integration tests.
-- Release only when a consumable boundary or product artifact exists; do not
-  mechanically publish every internal refactor.
-- Never overwrite a published tag or artifact.
-
-## Documentation and tracking
-
-Stable product truth belongs in this repository. Code facts, executable
-contracts, and repository-local decisions stay in their owning code repository.
-Tasks and transient plans belong in issues, a project board, or the Supervisor's
-working plan. `ROADMAP.md` contains outcomes and exit criteria; `STATE.md`
-contains only the current project position and next decision.
-
-## Definition of done
-
-A slice is done only when behavior and failure semantics are implemented,
-relevant gates pass independently, compatibility and migration impact are
-explicit, canonical documentation matches the result, cross-repository evidence
-exists when needed, and the intended branches/PRs/releases have been delivered.
+Use one branch/PR per coherent change, including all affected modules. Preserve
+existing user changes, use focused Conventional Commits, and update changelogs
+only during a release. Do not merge a PR or archive the former repositories
+without the owner's authorization. Their issues, releases, PR links and local
+worktrees remain valid history. Import provenance and validation are recorded
+in [the migration record](docs/development/monorepo-migration.md).

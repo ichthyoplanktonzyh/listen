@@ -1,0 +1,593 @@
+# Listen Project Model
+
+> Status: owner-approved theoretical baseline, revision 3, 2026-09-08.
+
+This document is the project-level authority for Listen's theoretical model.
+It defines the relationship among the language world, the learning world,
+Complete Learning Materials, Personal Corpus, learner state, and capability
+acquisition. Product principles in [PRODUCT.md](PRODUCT.md), domain terms in
+[DOMAIN.md](DOMAIN.md), and module responsibilities in
+[CONTEXT-MAP.md](CONTEXT-MAP.md) must remain consistent with this model.
+
+This is a product and domain model, not an executable schema. App, Core, and Gen
+may temporarily lag it while their contracts are realigned. Current speech
+artifact names are implementation details; the durable representation boundary
+defined here must not be reduced to one provider, model, timeline, or analysis
+type.
+
+## Definition
+
+Listen is an authentic-material language-capability acquisition system. It
+compiles arbitrary sources into complete, interactive language experiences,
+lets a Learner retain re-enterable Language Slices with their meaningful
+learning history, and uses those experiences to develop independent reading,
+listening, speaking, and writing capabilities.
+
+Its model spine is:
+
+```text
+Language Material
+      -> Learning Experience
+      -> Personal Corpus
+      -> Capability Growth
+```
+
+Listen is not a media player with subtitles and lookup attached, and it is not
+a mandatory curriculum or a collection of disconnected exercises. Its center
+is the continuing relationship between a Learner and authentic language.
+
+## Two worlds and one formal boundary
+
+Listen separates the material-side language world from the learner-relative
+learning world:
+
+```text
+LANGUAGE WORLD
+────────────────────────────────────
+Raw Source
+    ↓
+Learning Material Compiler / listen-gen
+    ↓
+Complete Learning Material
+    ├── Canonical Text / Structured Reading
+    ├── Sentence Translation
+    ├── text-side Sense Groups, independent of audio
+    ├── when audio is present: full sound-processing scope
+    │   ├── Canonical Audio / Structured Timed Text
+    │   └── material-side Speech Learning Representation
+    └── optional enrichments
+
+══════════════ LEARNING BOUNDARY ══════════════
+
+LEARNING WORLD
+────────────────────────────────────
+Learner × Complete Learning Material
+    ↓
+Learning Activity
+    ↓
+Language Slice / Focus
+    ↓
+Meaningful Learning Episode
+    ↓
+Personal Corpus
+    ├── Experience Reservoir ─────────┐
+    └── Evidence Base                 │
+             ↓                        │
+      Learner State / Personal L2 World
+      Reading / Listening / Speaking / Writing
+             └───────────┬────────────┘
+                         ↓
+              Next Learning Experience
+                         ↺
+```
+
+The language world answers: **what is this language experience?**
+
+The learning world answers: **what has happened between this Learner and this
+language, and what should happen next?**
+
+A file, URL, feed item, article, EPUB, podcast, audio file, video, or pasted text
+enters Listen as a Raw Source. It may be acquired, inspected, previewed, or used
+as production input before compilation, but it is not yet the formal first-class
+object of the learning system. Formal learning begins from a Complete Learning
+Material that satisfies the contract below.
+
+## Complete Learning Material contract
+
+"Complete" means qualified for the material's actual modalities under the
+contract below, not that every material must acquire audio. Text-only material
+can support formal reading and other text-based Learning Activities without
+TTS. When audio is present, its full sound-processing scope is required; Listen
+does not divide it into minimum processing and optional speech enhancements.
+Unrelated optional explanations do not become validity requirements.
+
+### 1. Language Experience
+
+The canonical core is:
+
+```text
+Canonical Text     REQUIRED
+Structured Reading REQUIRED
+Audio              PRESENT IN SOURCE OR REQUESTED THROUGH TTS
+Video              IF THE SOURCE HAS VIDEO
+```
+
+A text source does not need audio to become a Complete Learning Material. The
+Learner may request faithful TTS when a sound-based experience is wanted. An
+audio source, or video with an audio track, gains canonical text through
+transcription or another verified text path. Source video is preserved when
+present; Listen does not require synthetic video or invent an audio track for
+silent video.
+
+When audio exists, audio and text are aligned representations of one Material
+Revision, not two separate learner-owned materials. Adding faithful TTS need
+not change the text's identity, but every audio-dependent resource binds to its
+exact rendition; another voice or recording cannot reuse timings implicitly.
+
+### 2. Interactive Representation
+
+Structured Reading supplies exact canonical text, hierarchy, sentence/token
+spans, and stable Text Anchors independently of audio. It supports reading,
+lookup, translation, Language Slices, and meaningful learning history without
+inventing audio locators.
+
+Sense Group analysis belongs to this text side: semantic/syntactic grouping
+does not require audio or TTS. Text-only materials can support meaning-group
+reading, focusing, and Slice selection. The same groups can also accompany
+audio-backed learning, but are not evidence of audible prosodic boundaries.
+
+When audio exists, Structured Timed Text relates that text structure to the
+exact Canonical Audio:
+
+```text
+Utterance / Sentence
+├── stable identity
+├── canonical text span
+├── audio time range
+├── Token
+│   ├── text span
+│   ├── lexical identity when available
+│   └── audio time range
+└── compatible text/speech structure references
+```
+
+Structured Timed Text adds synchronized highlighting, sentence replay, bounded
+loops, and timed speech explanation to the text-based interaction coordinates.
+Its absence is not a defect in a text-only material with no requested audio.
+
+Exactness matters. Stable text anchors, time locators, resource identities, and
+compatibility evidence must make clear which Material Revision and canonical
+audio/text pair a resource describes. An inferred or approximate mapping must
+not be presented as exact.
+
+### 3. Meaning Scaffold
+
+A Complete Learning Material includes sentence-level translation for the
+declared Support Language used by the Learner. Translation is part of the
+material contract rather than an accidental enrichment. This requirement is
+independent of whether audio exists.
+
+Grammar, semantics, pragmatics, discourse, cultural context, and other
+explanations are valuable optional enrichments. Their absence does not make the
+material incomplete when the required sentence translation exists.
+
+### 4. Speech Learning Representation
+
+Speech Learning Representation is Listen's distinctive bridge from a sound
+recording to learnable listening experience. Its purpose is not merely to label
+phonetic phenomena; it must support the question: **why does the real speech
+sound this way, and where should the Learner direct attention?**
+
+For any material with source audio, the full material-side sound-processing
+scope is required without a separate enhancement request. Learner-requested
+TTS enters the same scope once audio is generated. That scope covers:
+
+- qualified text, sentence/word timing, and exact audio/text alignment;
+- reusable text-side Sense Groups together with distinct audio-side prosodic
+  grouping; Sense Groups remain independently usable without audio;
+- continuous and word-level acoustic evidence, including duration, energy,
+  pitch/voicing where applicable, and speech/silence intervals;
+- information/stress anchors, nuclei, weak groups, compression, and boundaries;
+- audio-backed phone evidence and its relationship to canonical pronunciation;
+- Citation Pronunciation, Connected-speech Prediction, and Actual Delivery
+  comparison, including evidence-qualified connected-speech phenomena;
+- material-side listening hotspots that can support contextual Perceptual
+  Guidance and focused replay.
+
+Full processing is an obligation to cover and qualify this scope, not a demand
+that every recording exhibit every phenomenon or that every measurement be
+possible. Absence of a phenomenon, inapplicability, insufficient evidence,
+unsupported analysis, and processing failure remain distinct, explicit
+outcomes. A skipped or failed analysis is not relabeled as successful full
+processing; predictions never fill an observed-evidence gap as if measured.
+Provider limitations are production limitations, not an optional speech tier.
+
+The Learner decides which results to view or use, not whether existing audio
+receives this processing. Minimum Sufficient Scaffold still governs how much
+help an Activity reveals; it does not reduce material-production scope.
+
+Speech Learning Representation has three layers:
+
+```text
+Signal Facts
+    ↓
+Speech Structure
+    ↓
+Perceptual Guidance
+```
+
+#### Signal Facts
+
+Signal Facts are material-side, evidence-bearing descriptions of the actual
+audio, such as:
+
+- word and phone timing;
+- observed phone realization;
+- duration, energy, pitch/F0, and other acoustic cues;
+- continuous acoustic tracks, voicing, and speech/silence intervals;
+- confidence, provenance, signal source, and evidence class.
+
+Predicted, canonical, forced-aligned, and directly observed facts remain
+distinguishable. Text priors and timing estimates must not masquerade as
+observed acoustic evidence.
+
+#### Speech Structure
+
+Speech Structure interprets signal and text evidence into useful organization,
+such as:
+
+- prominence, information/stress anchors, and nuclei;
+- rhythm, weak groups, compression, and listening hotspots;
+- prosodic boundaries and Prosodic Chunks;
+- reduction, linking, assimilation, deletion, and other connected-speech
+  phenomena.
+
+This is a conceptual layer over multiple versioned resources, not one universal
+artifact. A semantic Sense Group is distinct from a Prosodic Chunk. A Prosodic
+Chunk binds exact words to compatible audio timing without requiring a
+particular implementation artifact.
+
+Citation Pronunciation describes conventional reference pronunciation;
+Connected-speech Prediction describes a possible contextual realization;
+Actual Delivery interprets evidence from this exact recording. These are
+comparison perspectives, not the three layers of Speech Learning Representation
+and not interchangeable claims of observation.
+
+#### Perceptual Guidance
+
+Perceptual Guidance turns material-side facts into learner-relative attention
+guidance: what to listen for now, which anchor matters, which support to reveal,
+and when to replay.
+
+It is not fixed material truth and must not be precomputed by Gen as one answer
+for every Learner. The same speech can require different guidance depending on
+the Learner's prior meaning knowledge, listening evidence, current failure, and
+available support.
+
+Speech analysis is useful only when it can be converted into a better act of
+listening. Listen is a perceptual learning system, not a phonetics annotation
+viewer.
+
+## Production and learning responsibilities
+
+The boundary can be summarized as:
+
+> Gen compiles Language Experience; Core and App compile Learner-relative
+> Learning Experience.
+
+Gen describes the material: canonical representations, boundaries, alignment,
+actual speech realization, acoustic facts, prosodic structure, translations,
+and other reusable material-side resources. Gen owns provider execution and
+records exact provenance and qualification.
+
+Core owns the canonical semantics for Complete Learning Materials, Language
+Slices, meaningful learning facts, evidence, learner state, and capability
+projections. It preserves the distinction between durable facts and replaceable
+interpretation.
+
+App owns the learner-facing experience: activity intent, attention, progressive
+support, interaction, re-entry, and navigation between a Slice and its original
+context.
+
+Once a Complete Learning Material crosses the learning boundary, the learning
+system consumes its declared contract and does not depend on how a particular
+provider or recipe produced it.
+
+### Unified Workbench consumption
+
+All processed materials pass through Core's validation, organization, and
+semantic interpretation before the same App Workbench consumes them. The
+Workbench is the common material-interaction and Learning Activity workspace,
+not a consumer of provider-specific Gen output or production recipes.
+
+Text-only, audio, video, and subsequently enriched materials share this
+consumption boundary. Views, components, and activity modes adapt to the
+material's qualified resources and the Learner's intent: text and Sense Group
+interaction need no audio, while audio-backed views add synchronized playback
+and sound-learning support. Adding TTS extends the same material's experience
+in the Workbench rather than introducing a separate consumption workflow.
+
+Selecting a Personal Corpus Entry for learning or review returns to this
+Workbench with its Language Slice, Activity intent, and relevant history. The
+Workbench does not replace the Corpus's separate browsing role or equate
+browsing with a Learning Activity.
+
+Unified means one shared consumption model, not one fixed layout, one global
+instance, or one monolithic implementation component. A Workbench hosts
+Activities; it is not itself a Learning Activity. This is the target product
+boundary, not a claim that current App implementations are already unified.
+
+## Learning Activity
+
+The central relation in the learning world is:
+
+```text
+Learner × Complete Learning Material
+```
+
+A Learning Activity names the meaningful cognitive operation the Learner is
+performing with that material, such as listening for meaning, intensive
+listening, reading, dictation, shadowing, reconstruction, speaking, or writing.
+
+A screen, button, subtitle toggle, replay control, or explanation panel is not
+automatically a Learning Activity. It may be a support action inside one.
+Listen keeps the Activity family open and does not require a universal course
+sequence or a large taxonomy before real product evidence demands it.
+
+## Language Slice
+
+A Language Slice is the atomic re-enterable experience pointer of the Personal
+Corpus:
+
+```text
+Language Slice
+├── Material Revision
+├── canonical text span
+├── exact audio rendition and time range, when available
+└── compatible related resource references
+```
+
+A Slice may cover a word, expression, phrase, Sense Group, Prosodic Chunk,
+sentence, utterance, or another bounded audio/text span. It does not normally
+copy a new audio file or become a new Material. It points back to the original
+material so the Learner can reopen the Slice, recover surrounding context, and
+return to the whole experience. A text-only Slice is fully valid and can enter
+the Personal Corpus without audio. Re-entry then means reopening the text and
+its context, not mandatory playback.
+
+Later TTS can add compatible listening resources and new listening episodes;
+it cannot turn earlier reading episodes into listening experience, rewrite
+their assistance conditions, or silently rebind old audio locators.
+
+## Meaningful Learning Episode
+
+Listen preserves the distinctions:
+
+```text
+Exposure ≠ Attention
+Attention ≠ Learning
+Learning ≠ Acquisition
+```
+
+Playback passing a point, pausing, opening text, or clicking a token is first an
+interaction observation or telemetry event. It must not silently become learner
+state.
+
+A Meaningful Learning Episode records a learner-significant relationship with a
+Slice or target, for example:
+
+- explicitly saving or focusing a Slice;
+- explicitly reporting difficulty or lack of understanding;
+- completing a bounded recognition or production attempt;
+- failing, receiving a speech cue, then successfully perceiving the audio;
+- producing language with recorded assistance conditions;
+- succeeding or failing in a new context, speaker, rate, or realization.
+
+The episode preserves conditions, assistance, source context, outcome, and
+provenance richly enough for future reinterpretation. Personal Corpus stores
+meaningful learning history, not raw clickstream.
+
+## Personal Corpus
+
+The Personal Corpus is not merely a retained-material collection, search index,
+bookmark list, or vocabulary deck. Its atomic entry is:
+
+```text
+Personal Corpus Entry
+    = Language Slice
+    + Learner Relation
+    + Meaningful Learning History
+```
+
+It has three simultaneous roles:
+
+1. **Memory** — what authentic language the Learner has meaningfully
+   experienced.
+2. **Evidence Base** — durable facts from which learner state may be inferred.
+3. **Experience Reservoir** — original and related Slices that can be reused for
+   review, repair, production, and transfer.
+
+The Personal Corpus is the compounding mechanism of Listen. Multiple authentic
+occurrences of the same language object naturally form a personalized training
+set rather than isolated cards.
+
+An Entry concretely preserves its re-enterable Slice and source context, the
+Learner's intentional relation, and the history of what happened: intent,
+available/used assistance, attempts or judgments, outcomes, and provenance.
+An explicit save may be the first meaningful episode; a completed exercise or
+mastery judgment is not a prerequisite. Merely importing or browsing material
+does not create this relationship automatically.
+
+Initially, the Corpus is a freely browsable personal language space. The
+Learner can inspect entries and their context/history, then explicitly add
+selected entries to learning or review and enter the corresponding Activity.
+Browsing is not itself a new attempt or evidence of acquisition. An adaptive
+recommendation engine or scheduler is not required for this loop; later
+suggestions assist rather than replace Learner choice.
+
+## Personal L2 World and learner state
+
+Personal Corpus answers: **what has the Learner experienced?** It is durable
+fact history.
+
+Personal L2 World answers: **what can currently be inferred about the
+Learner's second-language world?** It is a replaceable interpretation or
+projection.
+
+```text
+Personal Corpus
+      ↓
+Evidence qualification and interpretation
+      ↓
+Learner State / Personal L2 World
+```
+
+Changing an inference algorithm may reinterpret history but must not rewrite or
+delete the underlying Corpus episodes. Explicit Learner authority remains
+separate from automatic inference.
+
+## Four independent capability dimensions
+
+Each relevant Language Object may participate in four independent learner
+relations:
+
+```text
+Language Object
+├── Reading
+├── Listening
+├── Speaking
+└── Writing
+```
+
+Evidence in one dimension does not imply capability in another. Seeing and
+understanding an expression does not prove real-time auditory recognition;
+auditory recognition does not prove speaking or writing retrieval.
+
+Long-lived capability state should remain simple while episode evidence remains
+rich. Listen does not prematurely persist a large capability tensor for
+auditory discrimination, segmentation, reduction, prosody, speaker robustness,
+rate tolerance, and every other subskill. Those details remain available in
+episode evidence and may support future, versioned projections when real usage
+justifies them.
+
+## Acquisition Experience and review
+
+Listen review is not only card recall. It combines:
+
+```text
+Reactivation + Re-perception + Transfer
+```
+
+The system separates two decisions:
+
+- **When** should a learner-language relation be reactivated? A scheduler such
+  as SRS or FSRS may answer this.
+- **What** should the Learner experience when it returns? Listen's acquisition
+  experience answers this.
+
+Scheduling is not the Learning Experience.
+The early product supports Learner-selected re-entry from the Personal Corpus
+without requiring a schedule or automatic next-experience decision.
+
+### Listening acquisition loop
+
+Listening currently has the clearest model:
+
+1. **Re-enter the original experience.** Begin from the original Slice, audio
+   first, without immediately revealing text or translation.
+2. **Repair with the minimum sufficient scaffold.** After failure, add only the
+   least support needed:
+
+   ```text
+   original audio
+       ↓
+   replay / focus range
+       ↓
+   rhythm or perceptual cue
+       ↓
+   speech explanation
+       ↓
+   timed text
+       ↓
+   translation
+   ```
+
+3. **Re-perceive.** Direct attention using Speech Learning Representation, then
+   listen again so support leads back to successful perception rather than to
+   memorized terminology.
+4. **Transfer.** Move beyond same-recording acoustic memory to a new sentence,
+   speaker, rate, prosody, acoustic realization, or context. Same-Slice success
+   alone is not final proof of robust listening capability.
+
+Reading, speaking, and writing will have their own acquisition experience
+spaces:
+
+```text
+Reading:  written form -> language structure -> meaning
+Listening: acoustic signal -> perception -> segmentation -> form -> meaning
+Speaking: meaning/intention -> expression retrieval -> phonological planning -> speech
+Writing:  meaning/intention -> expression retrieval -> lexical/construction choice -> text
+```
+
+The model preserves all four dimensions without prematurely productizing every
+possible activity or adaptive policy.
+
+## Policy restraint
+
+Listen may eventually need target selection, experience selection,
+scaffolding, assessment, transfer, scheduling, and stop policies. The current
+product should not implement a large abstract policy system before behavior
+shows that it is necessary.
+
+For now, it must answer three practical questions:
+
+```text
+What difficulty just occurred, and what is the most direct useful help?
+
+Which meaningful experiences enter the Personal Corpus, and when return?
+
+When they return, how should authentic language be experienced again?
+```
+
+## Relationship with Sensa
+
+Listen is independently viable and does not currently depend on Sensa.
+
+Long term, Sensa may center Meaning Acquisition while Listen centers authentic
+Language Experience and four-dimensional capability acquisition. They may
+eventually share Language Identity, Personal Corpus, and reliable learner facts.
+Listen must not introduce cross-product coupling before Sensa validates its own
+acquisition model with real users.
+
+## Durable invariants
+
+- Formal learning begins from Complete Learning Material, not Raw Source.
+- Text-only material supports formal learning without TTS; audio generation is
+  on demand, not a condition of text-learning validity.
+- Existing audio and newly generated TTS receive the same full sound-processing
+  scope, never a minimum-plus-optional-enhancement tier.
+- Canonical Text, Structured Reading, and declared Sentence Translation support
+  text learning; Structured Timed Text binds exact audio when it exists.
+- Full processing and honest evidence do not require every phenomenon to exist.
+- Full material preparation does not require displaying every scaffold.
+- Sense Groups support text-only learning independently of audio; they are not
+  an optional sound enhancement or a substitute for Prosodic Chunks.
+- Material-side facts and learner-relative guidance remain separate.
+- Signal evidence states what is observed, predicted, or inferred honestly.
+- Sense Group and Prosodic Chunk remain distinct.
+- Learning Activity describes a cognitive relation, not UI structure.
+- Processed materials pass through Core and share one App Workbench consumption
+  boundary; different views and Activity modes do not create separate systems.
+- A Language Slice remains linked to its original material and context.
+- A text-only Slice is valid; later audio never rewrites earlier experience.
+- Personal Corpus retains meaningful episodes, not raw clickstream.
+- Early Corpus re-entry is learner-selected browsing, learning, and review;
+  automated selection is not a prerequisite.
+- Personal Corpus facts and Personal L2 World projections never collapse into
+  one mutable state.
+- Reading, listening, speaking, and writing do not imply one another.
+- Durable state stays simple; rich evidence remains available for later
+  reinterpretation.
+- Review separates scheduling from acquisition experience and aims for transfer,
+  not same-item memorization.
+- Learner facts outlive replaceable packages, analyses, models, and providers.

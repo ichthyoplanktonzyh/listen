@@ -1,0 +1,407 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+python3 -m unittest "$root/scripts/test_release_artifacts.py"
+cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked
+# Content Package v2: JSON syntax over the v2 contract tree, then the v2 suite.
+while IFS= read -r -d '' v2_json; do
+  python3 -m json.tool "$v2_json" >/dev/null
+done < <(find "$root/contracts/content-package/v2" -name '*.json' -print0)
+cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked v2::
+# Content Package v3: JSON syntax over the v3 contract tree, the v3 suite,
+# then real JSON Schema validation of the examples and package bodies.
+while IFS= read -r -d '' v3_json; do
+  python3 -m json.tool "$v3_json" >/dev/null
+done < <(find "$root/contracts/content-package/v3" -name '*.json' -print0)
+cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked v3::
+python3 "$root/scripts/validate_content_package_schemas.py" "$root/contracts/content-package"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m unittest \
+  "$root/scripts/test_content_package_schemas.py"
+python3 "$root/scripts/openapi_contract.py" check
+if command -v openapi-generator >/dev/null 2>&1; then
+  openapi-generator validate -i "$root/contracts/openapi/v1.yaml"
+fi
+
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
+  "$root/scripts/check-architecture-coupling.py" \
+  "$root/scripts/test_architecture_coupling.py" \
+  "$root/scripts/benchmark-datasets.py" \
+  "$root/scripts/evaluate-word-timelines.py" \
+  "$root/scripts/forced-align/mfa-align-cli.py" \
+  "$root/scripts/lltimeline_common.py" \
+  "$root/scripts/lltimeline-resource.py" \
+  "$root/scripts/syntactic-analysis/syntax-sidecar.py" \
+  "$root/scripts/syntactic-analysis/evaluate_provider.py" \
+  "$root/scripts/syntactic-analysis/evaluate_provider_v2.py" \
+  "$root/scripts/syntactic-analysis/real_media_qa.py" \
+  "$root/scripts/syntactic-analysis/real_media_qa_v2.py" \
+  "$root/scripts/syntactic-analysis/test_real_media_qa.py" \
+  "$root/scripts/syntactic-analysis/test_evaluate_provider.py" \
+  "$root/scripts/syntactic-analysis/test_evaluate_provider_v2.py" \
+  "$root/scripts/syntactic-analysis/test_syntax_sidecar_contract.py" \
+  "$root/scripts/validate-syntactic-fixtures.py" \
+  "$root/scripts/validate-syntactic-fixtures-v2.py" \
+  "$root/scripts/lltimeline-resource.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/check-architecture-coupling.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m unittest \
+  "$root/scripts/test_architecture_coupling.py"
+bash -n "$root/scripts/syntactic-analysis/setup-spacy-product.sh"
+python3 -m json.tool "$root/scripts/syntactic-analysis/product-assets-v2.json" >/dev/null
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/test_lltimeline_common.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/forced-align/test_align_cli_contract.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/forced-align/test_mfa_align_cli_contract.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/syntactic-analysis/test_syntax_sidecar_contract.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/syntactic-analysis/test_evaluate_provider.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/syntactic-analysis/test_evaluate_provider_v2.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/syntactic-analysis/test_real_media_qa.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/validate-syntactic-fixtures.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/validate-syntactic-fixtures-v2.py"
+word_report="$(
+  python3 "$root/scripts/evaluate-word-timelines.py" compare \
+    --baseline "$root/testdata/word-timelines/baseline-v1.json" \
+    --candidate "$root/testdata/word-timelines/candidate-v1.json" \
+    --gold "$root/testdata/word-timelines/gold-v1.json" \
+    --markdown-output "$tmp/word-timeline-report.md"
+)"
+lltimeline_evaluation_report="$(
+  python3 "$root/scripts/evaluate-word-timelines.py" compare-lltimeline \
+    --input "$root/testdata/lltimeline/v1-evaluation-candidates.lltimeline.json" \
+    --baseline-timeline dtw-baseline \
+    --candidate-timeline whisperx-candidate \
+    --gold-timeline manual-gold \
+    --markdown-output "$tmp/lltimeline-evaluation-report.md"
+)"
+lltimeline_report="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate \
+    "$root/testdata/lltimeline/v1-minimal.lltimeline.json"
+)"
+lltimeline_evaluation_validation="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate \
+    "$root/testdata/lltimeline/v1-evaluation-candidates.lltimeline.json"
+)"
+timit_fixture="$tmp/timit-smoke"
+mkdir -p "$timit_fixture"
+cp -R "$root/testdata/benchmark-datasets/timit-smoke/." "$timit_fixture/"
+ffmpeg -hide_banner -loglevel error -y \
+  -f lavfi -i sine=frequency=660:duration=1.25 \
+  -ac 1 -ar 16000 -sample_fmt s16 "$timit_fixture/DR1/FAKE0/SX000.WAV"
+ffmpeg -hide_banner -loglevel error -y \
+  -f lavfi -i sine=frequency=880:duration=1.0 \
+  -ac 1 -ar 16000 -sample_fmt s16 "$timit_fixture/DR1/FAKE0/SX001.WAV"
+timit_output="$tmp/timit-smoke.lltimeline.json"
+timit_report="$(
+  python3 "$root/scripts/benchmark-datasets.py" timit-to-lltimeline \
+    --input-dir "$timit_fixture" \
+    --output "$timit_output" \
+    --media-title "TIMIT Smoke"
+)"
+timit_validation="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate "$timit_output"
+)"
+timit_bundle_report="$(
+  python3 "$root/scripts/benchmark-datasets.py" prepare-alignment-bundle \
+    --input "$timit_output" \
+    --output-dir "$tmp/timit-bundle"
+)"
+timit_aligned="$tmp/timit-aligned.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const timeline = doc.word_timelines[0];
+const bySentence = new Map();
+for (const word of timeline.words) {
+  if (!bySentence.has(word.sentence_id)) bySentence.set(word.sentence_id, []);
+  bySentence.get(word.sentence_id).push(word);
+}
+const timings = [];
+for (const segment of doc.segments) {
+  const words = (bySentence.get(segment.id) || []).sort((a, b) => a.token_index - b.token_index);
+  words.forEach((word, wordIndex) => timings.push({
+    segment_index: segment.index,
+    word_index: wordIndex,
+    text: word.text,
+    start_ms: word.start_ms,
+    end_ms: word.end_ms,
+    score: 1
+  }));
+}
+fs.writeFileSync(process.argv[2], JSON.stringify({timings}, null, 2) + "\n");
+' "$timit_output" "$timit_aligned"
+timit_candidate_output="$tmp/timit-candidate.lltimeline.json"
+timit_candidate_report="$(
+  python3 "$root/scripts/benchmark-datasets.py" add-alignment-candidate \
+    --input "$timit_output" \
+    --aligned-json "$timit_aligned" \
+    --output "$timit_candidate_output" \
+    --timeline-id timit-smoke-candidate
+)"
+timit_candidate_validation="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate "$timit_candidate_output"
+)"
+timit_candidate_evaluation="$(
+  python3 "$root/scripts/evaluate-word-timelines.py" compare-lltimeline \
+    --input "$timit_candidate_output" \
+    --baseline-timeline @active \
+    --candidate-timeline timit-smoke-candidate
+)"
+
+node -e '
+const fs = require("fs");
+const report = JSON.parse(process.argv[1]);
+const md = fs.readFileSync(process.argv[2], "utf8");
+const lltimelineReport = JSON.parse(process.argv[3]);
+const lltimelineMd = fs.readFileSync(process.argv[4], "utf8");
+if (report.report_version !== 1) throw new Error("word timeline report version missing");
+if (report.weak_metrics.matched_word_count !== 2) throw new Error("word timeline match count failed");
+if (report.weak_metrics.offsets.start_offset_ms.mean !== -5) throw new Error("start offset mean failed");
+if (report.gold_metrics.start_mae_ms !== 5) throw new Error("gold start MAE failed");
+if (!md.includes("Word Timeline Evaluation")) throw new Error("word timeline markdown missing");
+if (lltimelineReport.source_document.baseline_timeline_id !== "dtw-baseline") throw new Error("LLTimeline baseline id missing");
+if (lltimelineReport.source_document.candidate_timeline_id !== "whisperx-candidate") throw new Error("LLTimeline candidate id missing");
+if (lltimelineReport.gold_metrics.coverage !== 1) throw new Error("LLTimeline gold coverage failed");
+if (lltimelineReport.weak_metrics.offsets.tail_lag_ms.sentence_count !== 2) throw new Error("LLTimeline tail lag metric failed");
+if (lltimelineReport.weak_metrics.offsets.end_offset_ms.p95_abs !== 182) throw new Error("LLTimeline p95 metric failed");
+if (!lltimelineMd.includes("Gold Metrics")) throw new Error("LLTimeline evaluation markdown missing");
+' "$word_report" "$tmp/word-timeline-report.md" "$lltimeline_evaluation_report" "$tmp/lltimeline-evaluation-report.md"
+
+node -e '
+const fs = require("fs");
+const report = JSON.parse(process.argv[1]);
+const evaluation = JSON.parse(process.argv[2]);
+const timit = JSON.parse(process.argv[3]);
+const timitValidation = JSON.parse(process.argv[4]);
+const timitDocument = JSON.parse(fs.readFileSync(process.argv[5], "utf8"));
+const timitBundle = JSON.parse(process.argv[6]);
+const timitCandidate = JSON.parse(process.argv[7]);
+const timitCandidateValidation = JSON.parse(process.argv[8]);
+const timitCandidateEvaluation = JSON.parse(process.argv[9]);
+const timitManifest = timitDocument.artifacts.find((artifact) => artifact.kind === "benchmark_dataset_manifest").payload;
+if (report.schema !== "llplayer.timeline.v1") throw new Error("LLTimeline schema missing");
+if (report.segments !== 1) throw new Error("LLTimeline segment fixture failed");
+if (report.word_timelines !== 1) throw new Error("LLTimeline word timeline fixture failed");
+if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTimeline active timeline fixture failed");
+if (evaluation.segments !== 2) throw new Error("LLTimeline evaluation fixture segments failed");
+if (evaluation.word_timelines !== 3) throw new Error("LLTimeline evaluation fixture timelines failed");
+if (evaluation.active_word_timeline_id !== "whisperx-candidate") throw new Error("LLTimeline evaluation active timeline failed");
+if (timit.segments !== 2) throw new Error("TIMIT converter segment count failed");
+if (timit.words !== 9) throw new Error("TIMIT converter word count failed");
+if (timit.phones !== 15) throw new Error("TIMIT converter phone count failed");
+if (timitValidation.schema !== "llplayer.timeline.v1") throw new Error("TIMIT LLTimeline schema failed");
+if (timitValidation.word_timelines !== 1) throw new Error("TIMIT LLTimeline word timeline failed");
+if (timitManifest.boundary_adjustment_count !== 1) throw new Error("TIMIT overlap repair count failed");
+if (timitManifest.skipped_word_row_count !== 1) throw new Error("TIMIT skipped word count failed");
+if (timitBundle.segment_count !== 2) throw new Error("TIMIT bundle segment count failed");
+if (timitBundle.word_count !== 9) throw new Error("TIMIT bundle word count failed");
+if (!fs.existsSync(timitBundle.audio_path)) throw new Error("TIMIT bundle audio missing");
+if (timitCandidate.timeline_id !== "timit-smoke-candidate") throw new Error("TIMIT candidate timeline id failed");
+if (timitCandidate.words !== 9) throw new Error("TIMIT candidate word count failed");
+if (timitCandidateValidation.word_timelines !== 2) throw new Error("TIMIT candidate validation failed");
+if (timitCandidateEvaluation.weak_metrics.matched_word_count !== 9) throw new Error("TIMIT candidate evaluation match failed");
+if (timitCandidateEvaluation.weak_metrics.offsets.start_offset_ms.mean_abs !== 0) throw new Error("TIMIT candidate evaluation offset failed");
+' "$lltimeline_report" "$lltimeline_evaluation_validation" "$timit_report" "$timit_validation" "$timit_output" "$timit_bundle_report" "$timit_candidate_report" "$timit_candidate_validation" "$timit_candidate_evaluation"
+
+node -e '
+const fs = require("fs");
+const schema = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const examples = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const events = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const openapi = fs.readFileSync(process.argv[4], "utf8");
+const client = fs.readFileSync(process.argv[5], "utf8");
+const routerSource = process.argv
+  .slice(6)
+  .map(path => fs.readFileSync(path, "utf8"))
+  .join("\n");
+if (schema.$defs.command.properties.version.const !== 1) throw new Error("command version missing");
+if (schema.$defs.event.properties.version.const !== 1) throw new Error("event version missing");
+if (!Array.isArray(examples) || examples.length === 0) throw new Error("examples missing");
+if (events.properties.version.const !== 1) throw new Error("event schema version missing");
+for (const path of ["/v1/health", "/v1/media", "/v1/lltimeline/import", "/v1/media/{media_id}/lltimeline/import", "/v1/media/{media_id}/progress", "/v1/media/{media_id}/subtitles", "/v1/subtitles/{track_id}", "/v1/subtitles/{track_id}/archive", "/v1/subtitles/{track_id}/restore", "/v1/subtitles/{track_id}/language", "/v1/subtitles/{track_id}/export", "/v1/pronunciation/providers", "/v1/pronunciation/lookup", "/v1/pronunciation/analyze-sentence", "/v1/pronunciation/rules", "/v1/subtitles/{track_id}/pronunciation", "/v1/subtitles/{track_id}/pronunciation-analysis", "/v1/subtitles/{track_id}/word-timings", "/v1/subtitles/{track_id}/word-timelines", "/v1/subtitles/{track_id}/word-timelines/summary", "/v1/subtitles/{track_id}/lltimeline/export", "/v1/word-timelines/{timeline_id}", "/v1/word-timelines/{timeline_id}/activate", "/v1/word-timelines/{timeline_id}/publish", "/v1/word-timelines/{timeline_id}/archive", "/v1/word-timelines/{timeline_id}/export", "/v1/subtitles/{track_id}/phone-timelines", "/v1/subtitles/{track_id}/phone-timelines/summary", "/v1/phone-timelines/{timeline_id}", "/v1/phone-timelines/{timeline_id}/activate", "/v1/phone-timelines/{timeline_id}/archive", "/v1/phone-timelines/{timeline_id}/export", "/v1/speech/jobs", "/v1/speech/jobs/{job_id}", "/v1/speech/jobs/{job_id}/cancel", "/v1/speech/jobs/{job_id}/retry", "/v1/lexical-entries/batch", "/v1/lexical-entries", "/v1/lexical-entries/{id}", "/v1/lexical-entries/{id}/learning-content", "/v1/lexical-observations", "/v1/lexical-normalization", "/v1/sentences/{sentence_id}/phrase-candidates", "/v1/practice/sessions", "/v1/practice/items", "/v1/practice/attempts", "/v1/practice/attempts/{id}", "/v1/listening/sessions/{id}/complete", "/v1/review/items", "/v1/review/items/{id}", "/v1/review/attempts", "/v1/learning-resources", "/v1/subtitle-search", "/v1/vocabulary", "/v1/vocabulary/export", "/v1/vocabulary/import", "/v1/vocabulary/import-external", "/v1/media/{media_id}/availability", "/v1/materials", "/v1/materials/{material_id}", "/v1/materials/{material_id}/revisions", "/v1/materials/{material_id}/revisions/{revision_id}", "/v1/materials/{material_id}/library-membership", "/v1/materials/{material_id}/package-installations", "/v1/materials/{material_id}/editions", "/v1/materials/{material_id}/edition-adoption", "/v1/materials/{material_id}/source-assets/{source_asset_id}/availability", "/v1/materials/{material_id}/capabilities", "/v1/materials/{material_id}/capability-attempts", "/v1/materials/{material_id}/capability-attempts/{attempt_id}", "/v1/source-identities/mappings", "/v1/source-identities/resolve", "/v1/source-identities/{source_id}/items/{item_id}", "/v1/media/{media_id}/material", "/v1/events", "/v1/dictionary", "/v1/languages", "/v1/languages/{code}/profile", "/v1/sentences/{sentence_id}/diagnosis", "/v1/transcription/providers", "/v1/transcription/models", "/v1/recording-transcriptions", "/v1/recording-transcriptions/{job_id}", "/v1/recording-transcriptions/{job_id}/cancel", "/v1/phonetic-analysis/providers", "/v1/phonetic-analysis/models", "/v1/phonetic-analysis/jobs", "/v1/phonetic-analysis/jobs/clear", "/v1/subtitles/{track_id}/phonetic-analyses", "/v1/phonetic-analysis/{analysis_id}/findings", "/v1/phonetic-analysis/findings/{finding_id}/feedback"]) {
+  if (!openapi.includes(path + ":")) throw new Error(`OpenAPI missing ${path}`);
+}
+for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id}", "/v1/transcription/jobs/{job_id}/cancel", "/v1/transcription/jobs/{job_id}/retry", "/v1/transcription/jobs/{job_id}/archive", "/v1/subtitles/{track_id}/chunk-timelines", "/v1/subtitles/{track_id}/chunk-timelines/summary", "/v1/chunk-timelines/{timeline_id}", "/v1/chunk-timelines/{timeline_id}/activate", "/v1/chunk-timelines/{timeline_id}/archive", "/v1/chunk-timelines/{timeline_id}/export"]) {
+  if (openapi.includes(removed + ":")) throw new Error(`removed OpenAPI path ${removed} must stay absent`);
+}
+for (const removedWire of ["chunk_timelines:", "active_chunk_timeline_id:", "ChunkTimeline:", "ChunkTimelineSummary:", "ChunkBoundarySource:", "GenerateChunkTimeline:"]) {
+  if (openapi.includes(removedWire)) throw new Error(`removed OpenAPI wire surface ${removedWire} must stay absent`);
+}
+if (!openapi.includes("version: 4.0.0")) throw new Error("OpenAPI must report the current Phase 1 canonical contract 4.0.0");
+if (!openapi.includes("openapi: 3.1.0")) throw new Error("OpenAPI specification line must stay 3.1.0");
+if (!openapi.includes("/v1/media/{media_id}/library-membership:")) throw new Error("OpenAPI library-membership path missing");
+if (!client.includes("retainMedia(mediaId: string): Promise<MediaItem>")) throw new Error("generated retainMedia client method missing");
+if (!client.includes("unretainMedia(mediaId: string): Promise<MediaItem>")) throw new Error("generated unretainMedia client method missing");
+if (!client.includes("retained_at_ms: number | null;")) throw new Error("generated MediaItem retained_at_ms missing");
+if (!client.includes("retain?: boolean | null;")) throw new Error("generated RegisterMedia retain missing");
+if (!openapi.includes("retained_at_ms:")) throw new Error("OpenAPI MediaItem retained_at_ms missing");
+if (!openapi.includes("retain:")) throw new Error("OpenAPI RegisterMedia retain missing");
+// Learning-material surface (4.0.0): canonical material operations, matching
+// DTOs, nullable membership evidence on LearningMaterial, and no path on any
+// material DTO.
+for (const materialPath of ["/v1/materials", "/v1/materials/{material_id}", "/v1/materials/{material_id}/revisions", "/v1/materials/{material_id}/revisions/{revision_id}", "/v1/materials/{material_id}/library-membership", "/v1/media/{media_id}/material", "/v1/materials/{material_id}/source-assets/{source_asset_id}/availability"]) {
+  if (!openapi.includes(materialPath + ":")) throw new Error(`OpenAPI missing material path ${materialPath}`);
+}
+// Material Capability surface (4.0.0): the five-state projection and durable
+// production attempts.
+for (const capabilityPath of ["/v1/materials/{material_id}/capabilities", "/v1/materials/{material_id}/capability-attempts", "/v1/materials/{material_id}/capability-attempts/{attempt_id}"]) {
+  if (!openapi.includes(capabilityPath + ":")) throw new Error(`OpenAPI missing capability path ${capabilityPath}`);
+}
+for (const capabilityOperation of ["listMaterialCapabilities", "startMaterialCapabilityAttempt", "finalizeMaterialCapabilityAttempt"]) {
+  if (!openapi.includes(`operationId: ${capabilityOperation}`)) throw new Error(`OpenAPI missing capability operationId ${capabilityOperation}`);
+}
+// Source Identity surface (4.0.0): canonical-key mappings to exact revisions.
+for (const sourceIdentityPath of ["/v1/source-identities/mappings", "/v1/source-identities/resolve", "/v1/source-identities/{source_id}/items/{item_id}"]) {
+  if (!openapi.includes(sourceIdentityPath + ":")) throw new Error(`OpenAPI missing source identity path ${sourceIdentityPath}`);
+}
+for (const sourceIdentityOperation of ["registerSourceIdentityMapping", "resolveSourceIdentity", "resolveSourceIdentityPath"]) {
+  if (!openapi.includes(`operationId: ${sourceIdentityOperation}`)) throw new Error(`OpenAPI missing source identity operationId ${sourceIdentityOperation}`);
+}
+// Package lifecycle surface (3.3.0): three fixed operations with the exact
+// operationIds, matching request/response DTOs, and enum strings.
+for (const packagePath of ["/v1/materials/{material_id}/package-installations", "/v1/materials/{material_id}/editions", "/v1/materials/{material_id}/edition-adoption"]) {
+  if (!openapi.includes(packagePath + ":")) throw new Error(`OpenAPI missing package lifecycle path ${packagePath}`);
+}
+for (const packageOperation of ["installMaterialPackage", "listLearningEditions", "adoptLearningEdition"]) {
+  if (!openapi.includes(`operationId: ${packageOperation}`)) throw new Error(`OpenAPI missing package lifecycle operationId ${packageOperation}`);
+}
+if (!client.includes("installMaterialPackage(\n    materialId: string,\n    input: InstallMaterialPackageRequest,\n  ): Promise<LearningEditionDetails>")) throw new Error("generated installMaterialPackage signature missing");
+if (!client.includes("listLearningEditions(materialId: string): Promise<LearningEditionDetails[]>")) throw new Error("generated listLearningEditions signature missing");
+if (!client.includes("adoptLearningEdition(\n    materialId: string,\n    input: AdoptLearningEditionRequest,\n  ): Promise<LearningEditionDetails>")) throw new Error("generated adoptLearningEdition signature missing");
+for (const packageSchema of ["InstallMaterialPackageRequest", "AdoptLearningEditionRequest", "LearningEditionDetails", "LearningEditionResource", "LearningEditionRendition"]) {
+  if (!openapi.includes(`    ${packageSchema}:`)) throw new Error(`missing OpenAPI package lifecycle schema ${packageSchema}`);
+}
+for (const enumLine of ["role: { enum: [base, assistance] }", "availability: { enum: [available, missing, opaque] }", "review_status: { enum: [unreviewed, machine_checked, human_reviewed] }"]) {
+  if (!openapi.includes(enumLine)) throw new Error(`missing OpenAPI package lifecycle enum ${enumLine}`);
+}
+// Package lifecycle error contract (3.3.0): every typed error code must be
+// recorded in the canonical OpenAPI, the fixed public messages and retryable
+// flags must be present, and each operation must formally declare its exact
+// error responses.
+for (const code of ["not_found", "package_installation_invalid", "edition_adoption_conflict", "package_lifecycle_failed"]) {
+  if (!openapi.includes(`code: ${code}`)) throw new Error(`missing OpenAPI package lifecycle error code ${code}`);
+}
+for (const message of ["package release is invalid or incompatible", "learning edition cannot be adopted", "local package lifecycle operation failed"]) {
+  if (!openapi.includes(message)) throw new Error(`missing OpenAPI package lifecycle error message ${message}`);
+}
+const installBlock = openapi.slice(openapi.indexOf("operationId: installMaterialPackage"), openapi.indexOf("/v1/materials/{material_id}/editions:"));
+const editionsBlock = openapi.slice(openapi.indexOf("operationId: listLearningEditions"), openapi.indexOf("/v1/materials/{material_id}/edition-adoption:"));
+const adoptionBlock = openapi.slice(openapi.indexOf("operationId: adoptLearningEdition"), openapi.indexOf("/v1/media/{media_id}/material:"));
+for (const status of ['"404"', '"422"', '"500"']) {
+  if (!installBlock.includes(status)) throw new Error(`installMaterialPackage must declare ${status} responses`);
+}
+for (const status of ['"404"', '"500"']) {
+  if (!editionsBlock.includes(status)) throw new Error(`listLearningEditions must declare ${status} responses`);
+}
+for (const status of ['"404"', '"409"', '"500"']) {
+  if (!adoptionBlock.includes(status)) throw new Error(`adoptLearningEdition must declare ${status} responses`);
+}
+// Package lifecycle privacy contract (3.3.0): the local package location is a
+// necessary write-only request input. It must exist on
+// InstallMaterialPackageRequest, but no package lifecycle response DTO may
+// declare it or any other private fact.
+if (!client.includes("export interface InstallMaterialPackageRequest {\n  package_path: string;")) throw new Error("InstallMaterialPackageRequest must carry the write-only package_path input");
+// Privacy inspection covers only the package lifecycle response DTO section
+// (LearningEditionDetails, LearningEditionResource, LearningEditionRendition):
+// paths, manifests/release JSON, payloads/bytes/blobs, schemas, digests,
+// sizes, dependency edges, and internal persistence/provenance facts are
+// forbidden there. The request DTOs are exempt by design.
+const packageResponseDtos = client.slice(client.indexOf("export interface LearningEditionResource"), client.indexOf("export interface Progress"));
+if (/^\s*(package_path|media_path|file_path|local_path|manifest|release_json|payload|payload_bytes|payload_blob|bytes|blob|blob_path|schema|digest|size|size_bytes|dependency|dependencies|provenance|tool_id|model_id|provider_id):/m.test(packageResponseDtos)) throw new Error("package lifecycle response DTOs must not declare path/manifest/payload/blob/schema/digest/size/dependency/internal-fact fields");
+for (const materialOperation of ["listLearningMaterials(", "createLearningMaterial(", "readLearningMaterial(", "appendLearningMaterialRevision(", "readLearningMaterialRevision(", "retainLearningMaterial(", "unretainLearningMaterial(", "resolveLearningMaterialForMedia(", "updateSourceAssetAvailability(", "listMaterialCapabilities(", "startMaterialCapabilityAttempt(", "finalizeMaterialCapabilityAttempt(", "registerSourceIdentityMapping(", "resolveSourceIdentity(", "resolveSourceIdentityPath("]) {
+  if (!client.includes(materialOperation)) throw new Error(`generated client material operation missing ${materialOperation}`);
+}
+if (!client.includes("listLearningMaterials(): Promise<MaterialDetails[]>")) throw new Error("generated listLearningMaterials signature missing");
+if (!client.includes("createLearningMaterial(input: CreateLearningMaterial): Promise<MaterialDetails>")) throw new Error("generated createLearningMaterial signature missing");
+if (!client.includes("readLearningMaterial(materialId: string): Promise<MaterialDetails>")) throw new Error("generated readLearningMaterial signature missing");
+if (!client.includes("appendLearningMaterialRevision(\n    materialId: string,\n    input: AppendMaterialRevision,\n  ): Promise<MaterialDetails>")) throw new Error("generated appendLearningMaterialRevision signature missing");
+if (!client.includes("readLearningMaterialRevision(\n    materialId: string,\n    revisionId: string,\n  ): Promise<MaterialRevision>")) throw new Error("generated readLearningMaterialRevision signature missing");
+if (!client.includes("retainLearningMaterial(materialId: string): Promise<MaterialDetails>")) throw new Error("generated retainLearningMaterial signature missing");
+if (!client.includes("unretainLearningMaterial(materialId: string): Promise<MaterialDetails>")) throw new Error("generated unretainLearningMaterial signature missing");
+if (!client.includes("resolveLearningMaterialForMedia(mediaId: string): Promise<MaterialDetails>")) throw new Error("generated resolveLearningMaterialForMedia signature missing");
+for (const materialSchema of ["LearningMaterial", "SourceAsset", "DocumentRendition", "MediaRendition", "MaterialRevision", "MaterialDetails", "SourceAssetInput", "DocumentRenditionInput", "MediaRenditionInput", "CreateLearningMaterial", "AppendMaterialRevision", "MaterialCapabilityProjection", "CapabilityAttempt", "StartCapabilityAttemptRequest", "FinalizeCapabilityAttemptRequest", "SourceIdentityMapping", "SourceItemEvidence", "RegisterSourceIdentityMappingRequest"]) {
+  if (!openapi.includes(`    ${materialSchema}:`)) throw new Error(`missing OpenAPI material schema ${materialSchema}`);
+}
+// The canonical component schemas must declare their required typed columns.
+if (!openapi.includes("    SourceAsset:\n") || !openapi.includes("required: [id, media_type, byte_length, sha256_digest, binding, availability, created_at_ms]")) throw new Error("SourceAsset must require its typed columns");
+if (!openapi.includes("    DocumentRendition:\n") || !openapi.includes("required: [id, origin, media_type, language, digest, byte_size, source_asset_id]")) throw new Error("DocumentRendition must require its typed columns");
+if (!openapi.includes("    MediaRendition:\n") || !openapi.includes("required: [id, origin, kind, media_type, fingerprint, availability, media_id, media_sha256, media_byte_size]")) throw new Error("MediaRendition must require its typed columns");
+// Document rendition inputs bind a Source Asset by index and never carry
+// extracted text.
+if (!openapi.includes("required: [media_type, digest, byte_size, source_asset_index]")) throw new Error("DocumentRenditionInput must require exact byte facts and a Source Asset index");
+for (const retiredWire of ["text_sha256:", "text_byte_size:"]) {
+  if (openapi.includes(retiredWire)) throw new Error(`retired inline document text wire surface ${retiredWire} must stay absent`);
+}
+// Capability attempts have honest terminal states; cancelled and superseded
+// are never failed attempts.
+if (!openapi.includes("status: { enum: [running, succeeded, failed, cancelled, superseded] }")) throw new Error("CapabilityAttempt status must carry the four honest terminal states");
+if (!openapi.includes("status: { enum: [succeeded, failed, cancelled] }")) throw new Error("FinalizeCapabilityAttemptRequest must support cancellation");
+// Adopted composition surface (4.0.0): the single Core-owned composition
+// interface with its typed content reads and stable failure codes.
+for (const compositionPath of ["/v1/materials/{material_id}/composition", "/v1/materials/{material_id}/composition/resources/{resource_id}/payload", "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob"]) {
+  if (!openapi.includes(compositionPath + ":")) throw new Error(`OpenAPI missing composition path ${compositionPath}`);
+}
+for (const compositionOperation of ["readMaterialComposition", "readCompositionResourcePayload", "readCompositionRenditionBlob"]) {
+  if (!openapi.includes(`operationId: ${compositionOperation}`)) throw new Error(`OpenAPI missing composition operationId ${compositionOperation}`);
+}
+for (const compositionSchema of ["AdoptedComposition", "CompositionResource", "CompositionRendition", "CompositionBinding"]) {
+  if (!openapi.includes(`    ${compositionSchema}:`)) throw new Error(`missing OpenAPI composition schema ${compositionSchema}`);
+}
+for (const compositionError of ["composition_integrity_failure", "source_unavailable"]) {
+  if (!openapi.includes(`code: ${compositionError}`)) throw new Error(`missing OpenAPI composition error code ${compositionError}`);
+}
+if (!client.includes("readMaterialComposition(materialId: string): Promise<AdoptedComposition>")) throw new Error("generated readMaterialComposition signature missing");
+if (!client.includes("readCompositionResourcePayload(materialId: string, resourceId: string): Promise<Blob>")) throw new Error("generated readCompositionResourcePayload signature missing");
+if (!client.includes("readCompositionRenditionBlob(materialId: string, renditionId: string): Promise<Blob>")) throw new Error("generated readCompositionRenditionBlob signature missing");
+if (client.includes("text_sha256: string;")) throw new Error("generated DocumentRendition inline text digest must stay absent");
+if (client.includes("text_byte_size: number;")) throw new Error("generated DocumentRendition inline text size must stay absent");
+// The capability projection must be a five-state enum over the known
+// capabilities.
+if (!openapi.includes("enum: [available, derivable, generating, unavailable, failed_attempt]")) throw new Error("MaterialCapabilityProjection must carry the five-state status enum");
+// LearningMaterial must carry required-but-nullable membership evidence in
+// addition to the MediaItem copy (two occurrences total).
+if ((client.match(/retained_at_ms: number \| null;/g) || []).length < 2) throw new Error("generated LearningMaterial retained_at_ms must be nullable");
+// Material DTOs never expose a path: no material interface may declare a
+// path-like field on LearningMaterial, MaterialRevision, MaterialDetails, or
+// either asset shape. Match actual field declarations (line-leading
+// `path:`/`file_path:`/`local_path:` keys) so prose comments that merely say
+// the word "path" cannot trip the gate.
+const materialDtos = client.slice(client.indexOf("export interface LearningMaterial"), client.indexOf("export interface Progress"));
+if (/^\s*(path|file_path|local_path):/m.test(materialDtos)) throw new Error("material DTOs must not expose a path field");
+if (routerSource.includes("/v1/transcription/jobs")) throw new Error("removed transcription jobs route must stay absent from the router");
+const implementedPaths = [...new Set([...routerSource.matchAll(/"((?:\/v1\/)[^"]+)"/g)].map(match => match[1]))].sort();
+const documentedPaths = [...new Set([...openapi.matchAll(/^  (\/v1\/[^:]+):/gm)].map(match => match[1]))].sort();
+const undocumented = implementedPaths.filter(path => !documentedPaths.includes(path));
+const unimplemented = documentedPaths.filter(path => !implementedPaths.includes(path));
+if (undocumented.length || unimplemented.length) {
+  throw new Error(`OpenAPI route drift\nimplemented but undocumented: ${JSON.stringify(undocumented)}\ndocumented but unimplemented: ${JSON.stringify(unimplemented)}`);
+}
+for (const operation of ["health()", "registerMedia(", "importLLTimeline(", "importLLTimelineForMedia(", "updateProgress(", "importSubtitle(", "mediaSubtitles(", "readSubtitle(", "archiveSubtitle(", "restoreSubtitle(", "updateTrackLanguage(", "deleteSubtitle(", "exportSubtitle(", "pronunciationProviders(", "pronunciationLookup(", "analyzeSentencePronunciation(", "pronunciationRules(", "trackPronunciation(", "generateTrackPronunciation(", "trackWordTimings(", "generateTrackWordTimings(", "trackWordTimelines(", "trackWordTimelineSummaries(", "createTrackWordTimeline(", "exportTrackLLTimeline(", "wordTimeline(", "activateWordTimeline(", "publishWordTimeline(", "archiveWordTimeline(", "exportWordTimeline(", "deleteWordTimeline(", "trackPhoneTimelines(", "trackPhoneTimelineSummaries(", "phoneTimeline(", "activatePhoneTimeline(", "archivePhoneTimeline(", "exportPhoneTimeline(", "deletePhoneTimeline(", "speechBatchJobs(", "createSpeechBatchJob(", "speechBatchJob(", "cancelSpeechBatchJob(", "retrySpeechBatchJob(", "listLexicalEntries(", "upsertLexicalEntry(", "normalizeLexical(", "correctLemma(", "phraseCandidates(", "createPracticeSession(", "createPracticeItem(", "submitPracticeAttempt(", "practiceAttempt(", "completeListeningSession(", "createReviewItem(", "listDueReviewItems(", "submitReviewAttempt(", "listUpgradeSuggestions(", "upgradeSuggestionHistory(", "confirmUpgradeSuggestion(", "rejectUpgradeSuggestion(", "reviewItem(", "learningResources(", "installLearningResource(", "removeLearningResource(", "searchSubtitles(", "downloadSubtitle(", "transcriptionProviders(", "transcriptionModels(", "installTranscriptionModel(", "registerCustomTranscriptionModel(", "phoneticAnalysisProviders(", "phoneticAnalysisModels(", "installPhoneticAnalysisModel(", "registerCustomPhoneticAnalysisModel(", "cancelPhoneticAnalysisModelInstall(", "deletePhoneticAnalysisModel(", "phoneticAnalysisJobs(", "createPhoneticAnalysisJob(", "clearTerminalPhoneticAnalysisJobs(", "phoneticAnalysisJob(", "cancelPhoneticAnalysisJob(", "retryPhoneticAnalysisJob(", "trackPhoneticAnalyses(", "phoneticAnalysisFindings(", "updatePhoneticFindingFeedback(", "readLexicalEntries(", "lexicalEntryDetails(", "updateLexicalLearningContent(", "createLexicalObservation(", "listVocabulary(", "exportVocabulary(", "importVocabulary(", "importExternalVocabulary(", "updateMediaAvailability(", "dictionaryLookup(", "listLanguages(", "languageProfile(", "diagnoseSentence(", "listLearningMaterials(", "createLearningMaterial(", "readLearningMaterial(", "appendLearningMaterialRevision(", "readLearningMaterialRevision(", "retainLearningMaterial(", "unretainLearningMaterial(", "resolveLearningMaterialForMedia(", "updateSourceAssetAvailability(", "listMaterialCapabilities(", "startMaterialCapabilityAttempt(", "finalizeMaterialCapabilityAttempt(", "registerSourceIdentityMapping(", "resolveSourceIdentity(", "resolveSourceIdentityPath("]) {
+  if (!client.includes(operation)) throw new Error(`client experiment missing ${operation}`);
+}
+for (const operation of ["transcriptionJobs(", "createTranscriptionJob(", "transcriptionJob(", "cancelTranscriptionJob(", "retryTranscriptionJob(", "archiveTranscriptionJob(", "trackChunkTimelines(", "generateChunkTimeline(", "trackChunkTimelineSummaries(", "chunkTimeline(", "activateChunkTimeline(", "archiveChunkTimeline(", "exportChunkTimeline(", "deleteChunkTimeline("]) {
+  if (client.includes(operation)) throw new Error(`removed client operation ${operation} must stay absent`);
+}
+for (const schema of ["WordTiming", "WordTimeline", "WordTimelineSummary", "CreateWordTimeline", "LLTimelineDocument", "PhoneTimeline", "PhoneTimelineSummary", "DetectedPhone", "PhoneAlignment", "PhoneticFinding", "LexicalEntry", "LexicalEntryDetails", "LexicalNormalization", "ReviewSchedule", "ReviewAttempt", "ReviewCardKind", "ReviewCard", "ReviewQueueEntry", "ReviewSubmission", "UpgradeSuggestionStatus", "UpgradeSuggestion", "LearningResource", "SubtitleSearchRequest", "SubtitleSearchResult", "LearningMaterial", "SourceAsset", "DocumentRendition", "MediaRendition", "MaterialRevision", "MaterialDetails", "SourceAssetInput", "DocumentRenditionInput", "MediaRenditionInput", "CreateLearningMaterial", "AppendMaterialRevision"]) {
+  if (!openapi.includes(`    ${schema}:`)) throw new Error(`missing OpenAPI schema ${schema}`);
+}
+if (!openapi.includes("version: { enum: [5, 6, 7] }")) throw new Error("vocabulary asset versions v5-v7 missing");
+if (!openapi.includes("phonetic_finding_feedback:")) throw new Error("phonetic feedback backup missing");
+if (!openapi.includes("audio_url: { type: [string, \"null\"] }")) throw new Error("provider pronunciation audio missing");
+if (!client.includes("sense_group_analyses?: SenseGroupAnalysis[];")) throw new Error("generated LLTimeline sense-group analyses missing");
+if (!client.includes("active_sense_group_analysis_id?: string | null;")) throw new Error("generated LLTimeline active sense-group id missing");
+if (!client.includes("chunks: ProsodicChunk[];")) throw new Error("generated Prosody declared chunks missing");
+if (client.includes("chunk_timelines")) throw new Error("generated retired chunk timeline fields must stay absent");
+if (client.includes("chunk_timeline")) throw new Error("generated retired chunk timeline identity must stay absent");
+for (const item of examples) {
+  if (item.version !== 1 || (!item.command && !item.event)) throw new Error("invalid example");
+}
+console.log(`Validated player, event, and OpenAPI contracts with ${examples.length} examples.`);
+' "$root/contracts/player-adapter/player-contract.schema.json" \
+  "$root/contracts/player-adapter/examples.json" \
+  "$root/contracts/events/v1.schema.json" \
+  "$root/contracts/openapi/v1.yaml" \
+  "$root/contracts/generated/local-api-v1.ts" \
+  "$root/crates/api-http/src/lib.rs" \
+  "$root/crates/api-http/src/routes/router.rs"

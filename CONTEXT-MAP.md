@@ -1,193 +1,252 @@
 # Listen Context Map
 
-This map assigns product authority across current repositories and the required
-future hosted context. It describes durable seams, not source directories or
-deployment technology. Product purpose is defined in [PRODUCT.md](PRODUCT.md)
-and shared terms in [DOMAIN.md](DOMAIN.md).
+This map assigns authority across the language world and learning world defined
+in [MODEL.md](MODEL.md). All current modules live in one Git repository (see [decision 0005](decisions/0005-single-repository-development.md)).
+It describes durable seams, not detailed source directories,
+transport shapes, or current implementation completeness.
 
 ## Contexts
 
-### Learning Experience — `listen-app`
+### Learning Experience — `app/`
 
-Owns learner-facing material intake, Personal Library interaction, Content
-Subscriptions, discovery inbox, Material Acquisition, capability presentation,
-safe direct document rendering, consumer-bundled decoding for supported
-formats, playback and reading, corpus search, account and synchronization UX,
-package adoption/update decisions, and orchestration of local runtimes.
+Owns the learner-facing learning world:
 
-It does not define canonical learning state, package validity, production
-semantics, or community registry truth.
+- selecting and resuming a Learning Activity;
+- presenting a Complete Learning Material;
+- owning the unified Workbench that consumes Core-provided materials and
+  learning semantics across modalities and Activity modes;
+- supporting text-only learning and Sense Group interaction without TTS;
+- requesting TTS on Learner intent and presenting full audio-processing status;
+- establishing a Language Slice or Learning Focus;
+- exposing the Minimum Sufficient Scaffold;
+- turning Speech Learning Representation into contextual Perceptual Guidance;
+- recording learner intent, attempts, and explicit judgments through Core;
+- navigating between a Personal Corpus Entry, its Slice, and original material;
+- browsing Corpus history and explicitly adding selected entries to learning
+  or review without requiring automatic recommendations;
+- presenting review, repair, production, and transfer experiences;
+- source discovery, acquisition, preview, compilation progress, and recovery UX.
 
-### Semantic Runtime — `listen-core`
+App does not define canonical material validity, Speech Structure truth,
+Personal Corpus facts, capability projection semantics, provider execution, or
+community registry truth.
 
-Owns executable contracts and semantics for Learning Materials, Learning
-Resources, Document and Media Renditions, Structured Reading Resources, Reading
-Anchors, Material Capabilities and compatibility, Content Package validation,
-Personal Library state, Personal Corpus occurrences, Package Installation,
-Learning Edition Adoption, Learning Records, language capabilities,
-persistence, and synchronization merge semantics.
+### Semantic Runtime — `core/`
 
-It does not own learner-facing journeys, content-production implementations, or
-multi-tenant community infrastructure.
+Owns the executable semantics and persistence boundaries for:
 
-### Content Production — `listen-gen`
+- Complete Learning Material identity and contract validation;
+- Material Revisions, canonical representations, Structured Reading, Structured
+  Timed Text, exact anchors/locators, and resource compatibility;
+- Language Objects, Language Slices, Learner Relations, Meaningful Learning
+  Episodes, Learning Observations, and Learning Facts;
+- Personal Corpus and rebuildable occurrence/search projections;
+- evidence qualification, Learner State, Personal L2 World projections, and
+  independent reading/listening/speaking/writing capability dimensions;
+- activity/attempt facts, assistance conditions, schedules, candidates, and
+  explicit Learner authority;
+- package validation, installation, adoption, and synchronization merge
+  semantics.
 
-Owns replaceable production of reusable Derived Renditions, Learning Resources,
-and Content Packages: derivation planning for requested Capability Completion,
-media preprocessing, optional document extraction and OCR, TTS and
-transcription, alignment, provider execution, generation recipes,
-qualification, provenance, deterministic packaging, and honest degradation.
+Core does not own provider implementations, learner-facing navigation, fixed
+activity choreography, or hosted community infrastructure.
 
-It does not own Learner state, package activation, learning journeys, community
-ranking, or canonical package schemas.
+### Learning Material Production — `gen/`
 
-### Project Governance — `listen`
+Owns the language-world compiler that turns Raw Sources into qualified,
+reusable Complete Learning Materials:
 
-Owns product purpose, shared language, cross-context boundaries, top-level
-learner journeys, development policy, project state, and the outcome roadmap.
-It owns no executable contract or implementation fact.
+- Source intake normalization and exact input identity;
+- faithful TTS for text Sources when requested, not as a text-learning gate;
+- transcription and text qualification for audio/video Sources;
+- Structured Timed Text and audio/text alignment;
+- audio-independent text-side Sense Group analysis;
+- Sentence Translation for declared Support Languages;
+- Signal Facts, Speech Structure, and other material-side Speech Learning
+  Representation resources;
+- optional grammar, semantic, pragmatic, discourse, and contextual enrichment;
+- provider/model selection, recipes, provenance, evidence classes,
+  qualification, deterministic packaging, and honest failure.
 
-### Community And Sync — required future context
+Gen may emit multiple compatible resources rather than one monolithic speech
+artifact. Present audio requires the full sound-processing scope in
+[MODEL.md](MODEL.md); neither provider defaults nor missing analysis turn it
+into an optional enhancement. Gen does not own Perceptual Guidance, Learner
+State, Meaningful Learning Episodes, Personal Corpus, review scheduling, or
+activity selection.
 
-Will own accounts and devices, private-state replication, Package Listings and
-immutable release distribution, Community Corpus indexing, publishers,
+### Project Governance — root documentation
+
+Owns the project model, product semantics, ubiquitous language,
+cross-module responsibilities, learner journeys, roadmap, durable project
+decisions, and current project state. Root prose does not override executable contracts or runtime
+facts owned by the modules.
+
+### Community and Sync — required future context
+
+Will own accounts/devices, private-state replication, immutable package
+distribution, mutable listings, public Community Corpus indexing, publishers,
 subscriptions, ratings, reports, moderation, and update discovery.
 
-Its repository, protocols, service decomposition, and deployment remain
-undecided. No existing repository may silently absorb it.
+Public material distribution and private Personal Corpus synchronization remain
+separate data planes even if one hosted product implements both. Repository,
+protocol, service, and deployment boundaries remain undecided.
 
 ## External contexts
 
-- **Material Sources** publish or identify language-bearing material. Discovery
-  does not grant playback, download, or redistribution rights.
-- **Model Providers** perform replaceable generation or learner-dependent
-  inference. Output must cross a typed, provenance-bearing seam.
-- **External Context Providers** return supplemental contexts such as YouGlish.
-  Results remain attributed and ephemeral unless their material enters through
-  normal intake.
+- **Material Sources** publish or identify Raw Sources. Discovery does not grant
+  playback, download, compilation, or redistribution rights.
+- **Model Providers** perform replaceable material production or
+  learner-relative inference. Their outputs cross typed, provenance-bearing
+  seams and never become authority merely because a model produced them.
+- **External Context Providers** return supplemental authentic contexts. Their
+  results remain attributed and ephemeral until ordinary material compilation
+  and learning relations bring them into Listen.
+- **Sensa** is a potential future peer centered on Meaning Acquisition. Listen
+  has no current runtime or data dependency on it.
 
 ## Relationships
 
 ```text
-listen-app  -- learner intents / results / events --> listen-core
-listen-app  -- generation request / progress ------> listen-gen
-listen-gen  -- immutable Content Package ----------> listen-core
+Material Sources
+      │ Raw Source
+      ▼
+App acquisition / preview
+      │ production request and exact authorized inputs
+      ▼
+Gen  -- qualified Complete Learning Material package --> Core
+                                                               │
+                                                               │ canonical model,
+                                                               │ episodes, corpus,
+                                                               │ learner state
+                                                               ▼
+                                                     App Workbench
+                                                               │
+                                                               ▼
+                                                       Learning Experience
 
-listen-app  -- discovery / publishing / sync ------> Community And Sync
-listen-core -- domain changes / merge semantics ---> Community And Sync
+App  <---- discovery / publishing / sync ----> Community and Sync
+Core <---- private merge semantics ----------> Community and Sync
 
-Material Sources ----------> listen-app discovery and acquisition
-Model Providers ------------> listen-gen or listen-core adapters
-External Context Providers -> listen-app supplemental context
-
-listen ---------------------> project meaning and governance links
+listen -----> project meaning and governance links
 ```
-
-Core publishes canonical runtime and package contracts. Gen consumes the
-package contract and produces data-only artifacts. App pins compatible Core and
-Gen releases and owns final assembly. No production integration depends on a
-sibling checkout or moving branch.
 
 ## Authority matrix
 
 | Concern | Authority |
 |---|---|
-| Product purpose and shared language | `listen` |
-| Cross-repository roadmap and development policy | `listen` |
-| Top-level learner journeys and experience invariants | `listen` |
-| Detailed UI states, discovery, and acquisition UX | `listen-app` |
-| Safe document rendering and basic supported-format decoding | `listen-app` |
-| Canonical Learning Record and material state | `listen-core` |
-| Rendition, Structured Reading Resource, and Reading Anchor semantics | `listen-core` |
-| Material Capability, compatibility, and candidate/adoption semantics | `listen-core` |
-| Runtime and Content Package contracts | `listen-core` |
-| Package validation, installation, and adoption semantics | `listen-core` |
-| Resource recipes and provider execution | `listen-gen` |
-| Derivation planning and Derived Rendition production | `listen-gen` |
-| Optional expensive or reusable extraction and OCR production | `listen-gen` |
-| Generation-provider selection | Producer through `listen-gen` |
-| Package discovery, distribution, and Community Corpus | Community And Sync |
-| Private-state replication | Community And Sync using Core merge semantics |
-| Local/downloaded asset availability | Learner device and source adapters |
+| Project theoretical model and durable invariants | `listen` |
+| Product principles and ubiquitous language | `listen` |
+| Detailed learner-facing Activity and scaffold UX | `app/` |
+| Unified Workbench and its material/Activity views | `app/` using Core semantics |
+| Source discovery, acquisition, preview, and production progress UX | `app/` |
+| Complete Learning Material executable contract | `core/` |
+| Structured Timed Text, anchors, locators, and compatibility | `core/` |
+| Language Slice, episode, Personal Corpus, and learner facts | `core/` |
+| Evidence, Learner State, and capability projection semantics | `core/` |
+| Raw Source derivation and provider execution | `gen/` |
+| Canonical audio/text production and alignment | `gen/` |
+| Sentence Translation production | `gen/` |
+| Signal Facts and Speech Structure production | `gen/` |
+| Perceptual Guidance selection and presentation | Core semantics + App experience |
+| Package validation, installation, and adoption | `core/` |
+| Public package discovery and distribution | Community and Sync |
+| Private-state replication | Community and Sync using Core merge semantics |
 | External context results | External provider with attribution and limits |
 
 ## Stable seams
 
-### App to Core
+### App to Gen: material production intent
 
-Expresses learner intent and observable outcomes. Intake, retention, Package
-Installation, and Learning Edition Adoption remain distinct even when one
-learner action coordinates them. UI structure, transport parsing, database
-layout, and provider configuration are not shared semantics.
+App supplies the exact learner-authorized Raw Source, target material identity,
+declared Target/Support Languages, reusable compatible inputs, and requested
+Complete Learning Material contract. Gen owns provider execution, derivation,
+qualification, progress, cancellation, retry, provenance, and immutable output.
 
-### Gen to Core
+App does not prescribe provider steps, and Gen does not decide how a Learner
+will experience the result.
 
-The seam is the versioned, data-only Content Package carrying exact Derived
-Renditions, Learning Resources, provenance, dependencies, and compatibility.
-Gen does not write Core storage or emit Core lifecycle state; Core does not
-expose generation-provider details through validation.
+### Gen to Core: qualified material-side artifact
 
-### App to Gen
+The seam is a versioned, data-only Content Package carrying one qualified
+Learning Edition: canonical text and Structured Reading, translation, text-side
+groups, and, when audio is present, the audio, Structured Timed Text, and full
+material-side speech resources. Optional enrichments, exact dependencies,
+provenance, evidence class, and compatibility remain explicit.
 
-The seam is one bounded production request within Capability Completion, naming
-the exact Material Revision, available Renditions and Resources, and requested
-Material Capability. Gen owns the derivation graph and provider execution; it
-returns progress, cancellation, warnings, provenance, and an immutable output
-artifact. App owns the learner experience and never prescribes the provider
-workflow.
+Core validates identity and the modality-aware contract before exposing the
+composition as Complete Learning Material. Installed candidates do not silently
+become learner facts or overwrite adopted material.
 
-### Document processing
+### Core to Workbench: unified material consumption
 
-Document decoding is a replaceable adapter behind a typed Core-owned seam. A
-consumer-bundled adapter or Gen may produce a candidate Structured Reading
-Resource, and Core validates its identity, subject, anchors, provenance, and
-applicability; Core also owns any persistence and selection semantics. Basic
-viewing of a supported Document Rendition never requires Gen, and no parser or
-renderer becomes the canonical owner of material or learner state.
+Core validates and organizes processed material resources and supplies their
+canonical semantics and learning projections to the App Workbench. The
+[unified consumption boundary](MODEL.md#unified-workbench-consumption) applies
+to text-only, audio, video, and later-enriched materials alike.
 
-Document inputs are untrusted data. Direct rendering or extraction does not
-grant a document executable-code authority, hidden network access, or access to
-credentials and unrelated local files.
+App owns adaptive views, components, and Activity modes within that Workbench;
+it does not bypass Core to interpret provider-specific Gen results as material
+authority. TTS enrichment and Corpus-selected learning/review use the same
+boundary rather than separate material consumers. Source preview and Corpus
+browsing remain distinct journeys, not additional formal-learning workbenches.
 
-### Client to Community And Sync
+### App to Core: learner intent and factual outcomes
 
-Public content distribution and private-state synchronization are separate data
-planes even if one hosted product implements both. Public artifacts are
-content-addressed and re-downloadable; private data is authenticated, mergeable,
-and learner-owned.
+App expresses material choice, activity intent, bounded Slice/Focus,
+assistance conditions, attempts, explicit judgments, and observable outcomes.
+Core records durable facts and returns canonical reads and projections.
+
+UI state, clickstream, provider configuration, and model prompts do not become
+shared semantic authority.
+
+### Material facts to learner-relative guidance
+
+Signal Facts and Speech Structure are reusable material-side resources.
+Perceptual Guidance is derived at experience time using the current Slice,
+Activity, recent failure, Learner State, prior meaning knowledge, and available
+supports.
+
+The seam must preserve why a cue is available, what evidence supports it, and
+what assistance the Learner actually received. A generated explanation cannot
+rewrite the underlying Signal Facts or learner history.
+
+### Client to Community and Sync
+
+Public compiled material and private learning history use separate authority,
+privacy, lifecycle, and deletion semantics. Public artifacts are
+content-addressed and replaceable; Personal Corpus entries and meaningful
+learner facts are authenticated, mergeable, and learner-owned.
 
 ## Architectural invariants
 
-- Raw material is usable before enrichment.
-- Source Assets preserve Learner-authorized source evidence. Document and Media
-  Renditions may be Source or Derived Renditions, and every Derived Rendition
-  retains provenance and compatibility evidence.
-- A Material is valid with any supported set of modalities. An absent modality
-  becomes a Capability Gap only for a requested experience.
-- A Learning Material owns the active learner-facing composition. A Learning
-  Edition provides one coherent reusable composition of compatible Renditions
-  and Learning Resources; neither is one monolithic resource.
-- TTS produces a Derived Media Rendition; text-to-time alignment remains a
-  separate Base Resource, and neither replaces the source document.
-- One material may expose Read, Listen, and Watch without being split into
-  modality-specific library objects.
-- A Reading Anchor is stable within an exact Base Resource. Cross-resource or
-  cross-revision continuity requires explicit compatibility or mapping and
-  never relies only on page or paragraph index.
-- Subscription or automatic download does not itself retain a material.
-- Enrichment is optional, incremental, replaceable, and honestly degraded.
-- A Content Package contains no personal Learning Records or executable provider
-  code.
-- Package Releases are immutable; updates require learner intent.
-- Installation exposes candidates; only adoption chooses a coherent selection.
-- Learning Activities and learner-owned state are not children of a Package
-  Release. Package or source changes cannot erase vocabulary capability,
-  Personal Expressions, progress, or completed activity history.
-- Package and resource complexity stays behind material-centered intents.
-- Base and Assistance Resources have independent identity and lifecycle.
-- Language behavior is selected by capabilities, not a universal English-shaped
-  workflow.
-- Missing advanced capability never disables basic reading or playback.
-- Temporary Material enters the Personal Library only through learner intent.
-- Corpus indexes and Learning Inferences are rebuildable projections.
-- External-provider results remain supplemental, not hidden corpus authority.
+- Raw Source and Complete Learning Material are different lifecycle stages.
+- Formal Learning Activities consume only a validated Complete Learning
+  Material contract.
+- Processed materials reach one unified App Workbench through Core; Workbench
+  views and Activity modes vary without bypassing the semantic boundary.
+- Text-only material can support formal learning without TTS.
+- Present audio receives the full sound-processing scope; requested TTS enters
+  the same scope, not a reduced tier.
+- Canonical audio, when present, and canonical text represent one Material Revision.
+- Structured Reading supplies audio-independent coordinates; Structured Timed
+  Text binds them to exact audio.
+- Sentence Translation is required for the declared learner-facing Support
+  Language; other explanations are optional enrichments.
+- Speech Learning Representation spans multiple qualified resources and never
+  collapses into one provider-specific artifact.
+- Predicted, estimated, canonical, aligned, and observed speech evidence remain
+  distinguishable.
+- Sense Group and Prosodic Chunk remain separate concepts and lifecycles.
+- Sense Group analysis and learning are available independently of audio.
+- Gen owns material-side representation; learner-relative Perceptual Guidance
+  remains in the learning world.
+- Language Slices point back to the original Material Revision and context.
+- Text-only Slices are valid; adding audio never rewrites earlier episode facts.
+- Personal Corpus facts outlive packages, models, projections, and indexes.
+- Exposure and clickstream do not automatically become learner state.
+- Reading, listening, speaking, and writing remain independent dimensions.
+- Review scheduling and Acquisition Experience selection remain separate.
+- Public material never contains private Meaningful Learning Episodes.
+- Sensa integration remains a future option, not a present architectural
+  dependency.

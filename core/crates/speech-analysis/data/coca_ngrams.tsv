@@ -1,0 +1,463 @@
+# COCA n-gram collocations — seed data
+# Filtered: MI >= 3.0, 2-5 grams, top entries by frequency
+# Format: normalized_phrase\tmi_score
+# MI = log2(P(w1..wn) / P(w1)*...*P(wn))
+# MI >= 10.0: extremely fixed (idioms, compounds)
+# MI 7.0-9.9: very strong collocation
+# MI 5.0-6.9: strong collocation
+# MI 3.0-4.9: moderate collocation
+# NOTE: MI scores are approximate/estimated for seed data.
+# Replace with actual COCA frequency data when available.
+# --- 5-grams ---
+at the end of	9.85
+for the first time in	7.40
+on the other side of	7.10
+the rest of the world	5.50
+the end of the day	6.80
+at the top of the	7.20
+for the rest of the	5.80
+the middle of the night	9.20
+the back of the room	6.40
+the edge of the bed	7.10
+by the end of the	6.90
+the bottom of the page	7.50
+the top of the hill	7.30
+at the back of the	6.80
+the side of the road	6.60
+in the middle of the	6.20
+at the beginning of the	7.00
+in front of the house	7.40
+the corner of the room	6.50
+a lot of people who	5.20
+a great deal of time	7.30
+on the basis of the	6.10
+in the case of the	5.30
+# --- 4-grams ---
+at the end of	10.20
+in front of the	9.10
+the rest of the	8.50
+a lot of people	7.20
+a lot of time	7.80
+a lot of money	7.30
+a lot of work	7.00
+a lot of things	6.50
+a lot of fun	7.40
+a couple of times	7.60
+a couple of weeks	7.50
+a couple of days	7.40
+a couple of hours	7.30
+a couple of years	7.00
+a couple of months	7.20
+a number of reasons	7.40
+a number of people	6.80
+a number of ways	6.50
+a number of things	6.30
+a number of studies	6.00
+a series of events	7.80
+a series of tests	7.20
+a series of meetings	6.90
+a great deal of	10.50
+on the other hand	11.20
+in the middle of	8.90
+at the same time	9.40
+in the end the	8.10
+on the part of	8.30
+in terms of the	7.80
+the fact that the	8.20
+in order to make	6.70
+in order to get	6.50
+in order to keep	6.40
+in order to avoid	6.30
+one of the most	7.80
+some of the most	7.10
+the beginning of the	8.40
+the top of the	8.20
+the bottom of the	8.00
+the edge of the	8.10
+the back of the	7.80
+the side of the	7.60
+the middle of the	7.50
+the corner of the	7.40
+the center of the	7.30
+the front of the	7.30
+the majority of the	7.20
+the idea of the	6.50
+the problem of the	6.30
+as a result of	9.80
+in the case of	8.70
+in the course of	8.40
+in the process of	8.10
+in the context of	7.80
+in the form of	7.60
+in the absence of	7.50
+in the face of	7.40
+in the event of	7.30
+in the wake of	7.10
+in the light of	6.90
+for the first time	8.80
+for the most part	9.10
+for the sake of	9.00
+for the purpose of	7.70
+as a matter of	9.30
+as well as the	7.80
+on the one hand	10.80
+on the basis of	8.20
+on the verge of	10.30
+out of the question	11.00
+out of the ordinary	9.20
+by the end of	9.20
+by the time the	8.10
+by the way the	6.80
+with respect to the	7.30
+with regard to the	7.20
+from the point of	8.00
+to the point of	7.30
+as part of the	7.50
+in addition to the	7.30
+in relation to the	7.10
+in response to the	7.00
+in contrast to the	6.80
+in comparison to the	6.60
+in connection with the	6.50
+# --- 3-grams ---
+a lot of	9.50
+a couple of	9.20
+a number of	8.50
+a series of	8.80
+a kind of	7.30
+a sort of	7.10
+a piece of	7.80
+a bit of	7.50
+a matter of	7.40
+a group of	7.20
+a sense of	7.10
+a lack of	7.00
+a result of	6.80
+a range of	6.50
+a variety of	6.30
+a total of	6.20
+as well as	9.80
+as soon as	9.60
+as long as	9.20
+as far as	9.00
+as much as	8.80
+as good as	8.50
+as many as	8.30
+as early as	7.80
+as late as	7.50
+as part of	7.40
+as a result	9.70
+in front of	10.50
+in terms of	9.80
+in spite of	10.30
+in favor of	9.60
+in charge of	9.40
+in need of	9.20
+in search of	9.00
+in case of	8.90
+in view of	8.70
+in light of	8.50
+in place of	8.30
+in support of	8.10
+in excess of	7.90
+in lieu of	7.70
+on top of	9.70
+on behalf of	9.40
+on account of	9.20
+on the verge	10.60
+on the edge	9.10
+on the brink	10.80
+out of the	8.90
+out of control	8.20
+out of sight	8.00
+out of town	7.60
+out of business	7.40
+out of reach	7.20
+out of bounds	7.00
+with regard to	8.60
+with respect to	8.40
+with exception of	8.00
+according to the	9.50
+because of the	9.40
+instead of the	8.80
+regardless of the	8.60
+apart from the	7.80
+away from the	7.50
+close to the	7.30
+next to the	7.20
+due to the	7.00
+prior to the	6.90
+thanks to the	6.80
+contrary to the	6.60
+relative to the	6.40
+the rest of	9.80
+the end of	9.70
+the beginning of	9.40
+the number of	8.80
+the amount of	8.60
+the idea of	8.40
+the problem of	8.20
+the issue of	8.00
+the nature of	7.80
+the importance of	7.60
+the role of	7.40
+the history of	7.20
+the concept of	7.00
+the possibility of	6.80
+the notion of	6.60
+the majority of	6.50
+one of the	8.90
+some of the	8.20
+most of the	8.50
+all of the	8.10
+part of the	7.80
+none of the	7.60
+each of the	7.40
+any of the	7.00
+half of the	6.80
+two of the	6.50
+both of the	6.30
+end up with	8.20
+come up with	8.80
+put up with	10.40
+keep up with	9.60
+deal with the	8.30
+cope with the	8.00
+put up a	7.60
+take care of	9.80
+take part in	9.20
+take place in	8.80
+take advantage of	9.00
+take account of	8.60
+make sure that	9.10
+make sense of	8.50
+make use of	8.20
+make fun of	7.80
+make the most	7.40
+get rid of	10.20
+get out of	9.50
+get hold of	8.80
+get back to	8.40
+get used to	8.20
+get away with	8.00
+look forward to	10.80
+look back on	9.00
+look down on	8.80
+look up to	8.50
+look out for	8.20
+look forward in	7.50
+in order to	10.50
+so as to	9.80
+in addition to	9.60
+in relation to	8.80
+in response to	8.40
+in contrast to	8.20
+in connection with	7.80
+in comparison with	7.50
+in accordance with	7.30
+in line with	7.20
+in keeping with	7.00
+for instance the	7.40
+for example the	7.20
+in other words	9.80
+in other parts	6.50
+on the other	9.90
+by the way	8.80
+on the contrary	9.40
+on the whole	8.60
+in general the	7.40
+in particular the	7.00
+at the same	8.50
+at the end	8.60
+at the beginning	8.40
+at the time	7.80
+at the moment	7.60
+at the top	7.50
+at the bottom	7.40
+at the expense	7.30
+at the cost	7.10
+by the time	9.10
+by the end	8.90
+during the course	7.40
+throughout the year	6.80
+with the exception	8.40
+with the intention	7.60
+with the aim	7.40
+under the influence	7.30
+under the control	7.10
+from the beginning	8.00
+from the start	7.80
+from the perspective	7.40
+# --- 2-grams (high MI only) ---
+prime minister	10.50
+vice president	10.20
+human rights	9.20
+climate change	9.00
+social media	8.80
+public opinion	8.30
+foreign policy	8.10
+health care	8.00
+high school	7.80
+real estate	7.70
+middle class	7.50
+natural resources	7.40
+law enforcement	7.30
+mental health	7.20
+civil rights	7.10
+death penalty	7.00
+birth control	6.90
+garbage collection	6.80
+bus stop	7.40
+bus driver	7.00
+train station	6.80
+fire truck	9.50
+police officer	7.80
+post office	8.90
+parking lot	7.20
+swimming pool	7.10
+living room	7.00
+dining room	6.80
+waiting room	6.60
+bathroom door	6.20
+best friend	8.20
+boy friend	7.80
+girl friend	7.60
+family member	7.40
+next door	8.10
+each other	10.60
+one another	10.40
+per cent	9.20
+even though	8.80
+rather than	8.60
+such as	8.40
+instead of	8.20
+because of	8.00
+apart from	7.80
+according to	7.60
+away from	7.40
+along with	7.20
+together with	7.00
+except for	6.80
+prior to	6.60
+due to	6.40
+thanks to	6.20
+regardless of	8.90
+no matter	8.60
+used to	8.40
+supposed to	8.20
+have to	8.00
+going to	7.80
+need to	7.60
+want to	7.40
+tend to	7.20
+seem to	7.00
+turn out	8.60
+end up	8.40
+pick up	8.20
+take off	8.00
+take on	7.80
+take over	7.60
+take out	7.40
+give up	8.20
+give away	7.60
+give off	6.80
+put on	7.80
+put off	7.60
+put out	7.40
+put down	7.20
+make up	7.80
+make out	7.40
+make off	6.80
+come back	7.80
+come out	7.60
+come up	7.40
+come down	7.20
+come in	7.00
+go on	8.10
+go out	7.80
+go back	7.60
+go down	7.40
+go up	7.20
+go off	7.00
+set up	8.00
+set out	7.60
+set off	7.40
+set down	7.00
+bring about	7.80
+bring back	7.40
+bring up	7.20
+bring in	7.00
+carry out	8.20
+carry on	7.60
+find out	7.80
+figure out	7.60
+point out	7.40
+work out	7.20
+turn up	7.60
+turn down	7.40
+turn off	7.20
+turn on	7.00
+hold on	7.80
+hold up	7.40
+hold back	7.20
+hold out	7.00
+break down	7.80
+break up	7.40
+break out	7.20
+break off	7.00
+call off	7.60
+call for	7.20
+call out	7.00
+call up	6.80
+shut down	7.80
+shut up	7.40
+cut off	7.40
+cut down	7.20
+cut out	7.00
+show up	7.40
+show off	7.20
+write down	7.40
+write off	6.80
+note down	6.60
+sort out	7.40
+deal with	7.80
+cope with	7.40
+depend on	7.20
+rely on	7.00
+consist of	6.80
+lead to	7.40
+result in	7.20
+refer to	7.00
+apply to	6.80
+relate to	6.60
+belong to	6.40
+amount to	6.20
+account for	7.20
+allow for	7.00
+call for	6.80
+care for	6.60
+stand for	6.40
+wait for	6.20
+look for	6.00
+search for	5.80
+hope for	5.60
+pay for	5.40
+first of all	9.20
+all of a sudden	11.00
+more or less	8.80
+once and for all	10.20
+by and large	10.60
+upside down	9.80
+inside out	9.40
+back and forth	9.00
+over and over	8.60
+on and on	8.40
+time and again	8.20
+sooner or later	8.00
+now and then	7.80
+here and there	7.60
+step by step	7.40
+little by little	7.20
+bit by bit	7.00
+piece by piece	6.80
+day by day	6.60

@@ -1,0 +1,60 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+# Golden diff output. On failure `matchesGoldenFile` writes master/test/diff
+# PNGs next to the *test file*, not next to the baseline — so this is
+# `test/failures/`, one level above `test/goldens/`. They are debugging aids
+# for one run and are what a reviewer looks at; they are never the baseline.
+/test/failures/
+/dist/
+.backend/
+# Local, uncommitted listen-gen release bundle (.pyz + .release.json) lives here.
+/.listen-gen/
+# Generator artifacts are never committed: they are produced locally from the
+# pinned source and bound by listen_gen.lock.json, not stored in the app.
+*.pyz
+*.release.json
+*.listenpkg
+/test/fixtures/smoke/generated/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release

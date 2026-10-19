@@ -1,0 +1,1323 @@
+mod asr_timing;
+mod chunk_detection;
+mod chunk_partition;
+mod connected_speech_rules;
+mod dependency_patterns;
+mod forced_align;
+mod learned_prosodic_provider;
+mod pause_refinement;
+mod phone_recognition;
+mod phonetic_alignment;
+mod phonetic_findings;
+mod rich_acoustic_evidence;
+mod sense_group_partition;
+mod shadowing_comparison;
+mod sound_analysis;
+mod text_chunk_detection;
+mod word_acoustics;
+
+pub mod audible_structure;
+pub mod chunking;
+pub mod phonetics;
+pub mod timing;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock, RwLock};
+
+use domain::{
+    Phoneme, PronunciationProviderInfo, PronunciationVariant, SentencePronunciation,
+    SpeechRuleFinding, SpeechRuleStatus, SubtitleSentence, SubtitleTokenKind, TimingSource,
+    WordPronunciation, WordTiming,
+};
+use learning_resource_runtime::{ResourceSignature, cmudict_resource_path};
+use serde::Serialize;
+
+pub const PROVIDER_ID: &str = "cmudict-deterministic";
+pub const PROVIDER_VERSION: &str = "74790861+fallback-v2";
+pub const ANALYZER_VERSION: &str = "en-us-rules-v1";
+static CMUDICT: OnceLock<CmudictProvider> = OnceLock::new();
+
+struct CmudictProvider {
+    path: PathBuf,
+    index: RwLock<CmudictCache>,
+}
+
+#[derive(Default)]
+struct CmudictCache {
+    signature: Option<ResourceSignature>,
+    index: Arc<HashMap<String, Vec<String>>>,
+}
+
+impl CmudictProvider {
+    fn new() -> Self {
+        Self::with_path(cmudict_resource_path())
+    }
+
+    fn with_path(path: PathBuf) -> Self {
+        Self {
+            path,
+            index: RwLock::new(CmudictCache::default()),
+        }
+    }
+
+    fn index(&self) -> Arc<HashMap<String, Vec<String>>> {
+        for _ in 0..2 {
+            let signature = match ResourceSignature::read(&self.path) {
+                Ok(Some(value)) => value,
+                Ok(None) | Err(_) => {
+                    let mut cached = self.index.write().expect("CMUdict index lock poisoned");
+                    cached.signature = None;
+                    cached.index = Arc::default();
+                    return cached.index.clone();
+                }
+            };
+            {
+                let cached = self.index.read().expect("CMUdict index lock poisoned");
+                if cached.signature.as_ref() == Some(&signature) {
+                    return cached.index.clone();
+                }
+            }
+
+            // File I/O and parsing are intentionally outside the write lock;
+            // the second signature check prevents publishing a torn version.
+            let parsed = read_cmudict_index(&self.path).unwrap_or_default();
+            if ResourceSignature::read(&self.path).ok().flatten().as_ref() != Some(&signature) {
+                continue;
+            }
+            let mut cached = self.index.write().expect("CMUdict index lock poisoned");
+            if cached.signature.as_ref() != Some(&signature) {
+                cached.index = Arc::new(parsed);
+                cached.signature = Some(signature);
+            }
+            return cached.index.clone();
+        }
+        Arc::default()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleDefinition {
+    pub rule_id: &'static str,
+    pub rule_family: &'static str,
+    pub description: &'static str,
+    pub condition: &'static str,
+    pub example: &'static str,
+    pub counterexample: &'static str,
+    pub canonical_phonemes: &'static [&'static str],
+    pub suggested_phonemes: &'static [&'static str],
+}
+
+pub fn rule_catalog() -> &'static [RuleDefinition] {
+    static RULES: OnceLock<Vec<RuleDefinition>> = OnceLock::new();
+    RULES.get_or_init(|| {
+        let mut values = [
+            ("a", "A cat", "A-frame"),
+            ("an", "An apple", "Annual report"),
+            ("and", "You and me", "Android phone"),
+            ("are", "We are ready", "Area code"),
+            ("can", "I can go", "Candy store"),
+            ("for", "For a while", "Forest trail"),
+            ("of", "A cup of tea", "Office chair"),
+            ("the", "The book", "Theme song"),
+            ("to", "Go to school", "Today"),
+            ("was", "It was good", "Wasp nest"),
+            ("were", "They were here", "Werewolf story"),
+        ]
+        .into_iter()
+        .map(|(word, example, counterexample)| RuleDefinition {
+            rule_id: Box::leak(format!("weak-{word}").into_boxed_str()),
+            rule_family: "weak_form",
+            description: "A function word may use its unstressed weak form.",
+            condition: "The complete lexical token is a common function word.",
+            example,
+            counterexample,
+            canonical_phonemes: &[],
+            suggested_phonemes: &[],
+        })
+        .collect::<Vec<_>>();
+        values.extend([
+            RuleDefinition {
+                rule_id: "informal-want-to",
+                rule_family: "contraction",
+                description: "Want to may reduce in informal speech.",
+                condition: "The adjacent lexical tokens are want + to.",
+                example: "I want to go",
+                counterexample: "I want tea",
+                canonical_phonemes: &["W AA N T", "T UW"],
+                suggested_phonemes: &["W AA N AH"],
+            },
+            RuleDefinition {
+                rule_id: "informal-going-to",
+                rule_family: "contraction",
+                description: "Going to may reduce in informal speech.",
+                condition: "The adjacent lexical tokens are going + to.",
+                example: "We are going to leave",
+                counterexample: "We are going home",
+                canonical_phonemes: &["G OW IH NG", "T UW"],
+                suggested_phonemes: &["G AH N AH"],
+            },
+            RuleDefinition {
+                rule_id: "assimilation-did-you",
+                rule_family: "assimilation",
+                description: "Did you may assimilate at the /d/ + /j/ boundary.",
+                condition: "The adjacent lexical tokens are did + you.",
+                example: "Did you see it",
+                counterexample: "Did they see it",
+                canonical_phonemes: &["D IH D", "Y UW"],
+                suggested_phonemes: &["D IH D ZH UW"],
+            },
+            RuleDefinition {
+                rule_id: "link-consonant-vowel",
+                rule_family: "linking",
+                description: "A final consonant may link into a following vowel.",
+                condition: "A word ending in a consonant phone precedes a vowel-initial phone.",
+                example: "Pick it up",
+                counterexample: "See it",
+                canonical_phonemes: &[],
+                suggested_phonemes: &[],
+            },
+            RuleDefinition {
+                rule_id: "link-same-consonant",
+                rule_family: "linking",
+                description: "Matching boundary consonants may be held as one boundary.",
+                condition: "Adjacent words share the same boundary consonant phone.",
+                example: "Big game",
+                counterexample: "Big house",
+                canonical_phonemes: &[],
+                suggested_phonemes: &[],
+            },
+            RuleDefinition {
+                rule_id: "possible-t-d-deletion",
+                rule_family: "deletion",
+                description: "Final /t/ or /d/ may weaken before a consonant.",
+                condition: "A /t/- or /d/-final word precedes a consonant-initial word.",
+                example: "Last call",
+                counterexample: "Last apple",
+                canonical_phonemes: &["T", "D"],
+                suggested_phonemes: &[],
+            },
+            RuleDefinition {
+                rule_id: "american-flap-t-d",
+                rule_family: "flapping",
+                description: "Intervocalic /t/ or /d/ may become an American English flap.",
+                condition: "A lexical token contains an intervocalic /t/ or /d/ phone.",
+                example: "Water",
+                counterexample: "Tree",
+                canonical_phonemes: &["T", "D"],
+                suggested_phonemes: &["DX"],
+            },
+        ]);
+        values
+    })
+}
+
+pub fn provider_info() -> PronunciationProviderInfo {
+    let cmudict_available = !cmudict().is_empty();
+    PronunciationProviderInfo {
+        id: PROVIDER_ID.into(),
+        display_name: "CMUdict + deterministic fallback".into(),
+        version: PROVIDER_VERSION.into(),
+        languages: vec!["en".into(), "en-us".into()],
+        accents: vec!["en-US".into()],
+        phoneme_sets: vec!["arpabet".into()],
+        supports_context: false,
+        supports_variants: true,
+        supports_stress: true,
+        supports_token_mapping: true,
+        available: true,
+        degraded: !cmudict_available,
+        diagnostic: (!cmudict_available).then_some(
+            "CMUdict is not installed; deterministic fallback pronunciations are in use.".into(),
+        ),
+    }
+}
+
+pub fn lookup(word: &str, token_index: u32) -> WordPronunciation {
+    lookup_with_provider(default_cmudict_provider(), word, token_index)
+}
+
+fn lookup_with_provider(
+    provider: &CmudictProvider,
+    word: &str,
+    token_index: u32,
+) -> WordPronunciation {
+    let normalized = normalize_word(word);
+    let index = provider.index();
+    let variants = index
+        .get(&normalized)
+        .map(|values| {
+            values
+                .iter()
+                .map(|value| variant(value, token_index, false))
+                .collect()
+        })
+        .or_else(|| {
+            builtin(&normalized).map(|values| {
+                values
+                    .iter()
+                    .map(|value| variant(value, token_index, false))
+                    .collect()
+            })
+        })
+        .unwrap_or_else(|| vec![variant(&fallback_arpabet(&normalized), token_index, true)]);
+    WordPronunciation {
+        token_index,
+        text: word.into(),
+        normalized,
+        variants,
+    }
+}
+
+fn cmudict() -> Arc<HashMap<String, Vec<String>>> {
+    default_cmudict_provider().index()
+}
+
+fn default_cmudict_provider() -> &'static CmudictProvider {
+    CMUDICT.get_or_init(CmudictProvider::new)
+}
+
+fn read_cmudict_index(path: &std::path::Path) -> Result<HashMap<String, Vec<String>>, String> {
+    let content = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let mut values: HashMap<String, Vec<String>> = HashMap::new();
+    for line in content.lines() {
+        if line.starts_with(";;;") || line.trim().is_empty() {
+            continue;
+        }
+        let Some((word, phonemes)) = line.split_once(char::is_whitespace) else {
+            continue;
+        };
+        let phonemes = phonemes.trim();
+        if phonemes.is_empty() {
+            continue;
+        }
+        let word = word
+            .split_once('(')
+            .map_or(word, |(base, _)| base)
+            .to_ascii_lowercase();
+        values.entry(word).or_default().push(phonemes.into());
+    }
+    if values.is_empty() {
+        return Err("CMUdict contains no valid entries".into());
+    }
+    Ok(values)
+}
+
+pub fn analyze_sentence(sentence: &SubtitleSentence) -> SentencePronunciation {
+    let words = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .map(|token| lookup(&token.text, token.index))
+        .collect::<Vec<_>>();
+    let phonemes = words
+        .iter()
+        .flat_map(|word| {
+            word.variants
+                .first()
+                .into_iter()
+                .flat_map(|value| value.phonemes.clone())
+        })
+        .collect::<Vec<_>>();
+    let display_ipa = words
+        .iter()
+        .filter_map(|word| word.variants.first())
+        .map(|value| value.display_ipa.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    SentencePronunciation {
+        sentence_id: sentence.id.clone(),
+        language: "en".into(),
+        accent: "en-US".into(),
+        provider_id: PROVIDER_ID.into(),
+        provider_version: PROVIDER_VERSION.into(),
+        phoneme_set: "arpabet".into(),
+        display_ipa,
+        words,
+        phonemes,
+        rules: analyze_rules(sentence),
+    }
+}
+
+pub fn estimate_word_timings(sentence: &SubtitleSentence) -> Vec<WordTiming> {
+    estimate_word_timings_with_rhythm(sentence, None)
+}
+
+pub fn estimate_word_timings_with_rhythm(
+    sentence: &SubtitleSentence,
+    rhythm_prosody: Option<&str>,
+) -> Vec<WordTiming> {
+    let words = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        return vec![];
+    }
+    let start = sentence.start.get();
+    let duration = sentence.end.get().saturating_sub(start);
+    let strategy = EstimationStrategy::from_rhythm(rhythm_prosody);
+    let weights = words
+        .iter()
+        .map(|token| strategy.weight(&token.text))
+        .collect::<Vec<_>>();
+    let total = weights.iter().sum::<u64>().max(1);
+    let mut cursor = start;
+    words
+        .iter()
+        .zip(weights)
+        .enumerate()
+        .map(|(index, (token, weight))| {
+            let end = if index + 1 == words.len() {
+                sentence.end.get()
+            } else {
+                cursor + duration.saturating_mul(weight) / total
+            };
+            let value = WordTiming {
+                sentence_id: sentence.id.clone(),
+                token_index: token.index,
+                text: token.text.clone(),
+                start_ms: cursor,
+                end_ms: end.max(cursor),
+                confidence: Some(strategy.confidence()),
+                timing_source: TimingSource::Estimated,
+                provider_id: "subtitle-weighted-estimator".into(),
+                provider_version: strategy.version().into(),
+            };
+            cursor = end;
+            value
+        })
+        .collect()
+}
+
+enum EstimationStrategy {
+    CharWeight,
+    SyllableEqual,
+    MoraCount,
+}
+
+impl EstimationStrategy {
+    fn from_rhythm(rhythm_prosody: Option<&str>) -> Self {
+        match rhythm_prosody {
+            Some(r) if r.contains("syllable") => Self::SyllableEqual,
+            Some(r) if r.contains("mora") => Self::MoraCount,
+            _ => Self::CharWeight,
+        }
+    }
+
+    fn weight(&self, text: &str) -> u64 {
+        match self {
+            Self::CharWeight => (text.chars().count() as u64).clamp(2, 12),
+            Self::SyllableEqual => {
+                // Each CJK character ≈ one syllable ≈ equal duration.
+                // For mixed text, non-CJK chars get char-weighted fallback.
+                let chars: Vec<char> = text.chars().collect();
+                if chars.iter().all(|c| is_cjk(*c)) {
+                    (chars.len() as u64).max(1)
+                } else {
+                    (chars.len() as u64).clamp(2, 12)
+                }
+            }
+            Self::MoraCount => {
+                // Japanese mora: each kana = 1 mora, kanji ≈ 2 mora (approximation),
+                // small kana (っ、ゃ、ゅ、ょ etc.) don't count as separate mora.
+                let count: u64 = text
+                    .chars()
+                    .map(|c| {
+                        if is_small_kana(c) {
+                            0
+                        } else if is_kana_char(c) {
+                            1
+                        } else if is_cjk(c) {
+                            2
+                        } else {
+                            1
+                        }
+                    })
+                    .sum();
+                count.max(1)
+            }
+        }
+    }
+
+    fn confidence(&self) -> f32 {
+        match self {
+            Self::CharWeight => 0.35,
+            Self::SyllableEqual => 0.40,
+            Self::MoraCount => 0.38,
+        }
+    }
+
+    fn version(&self) -> &'static str {
+        match self {
+            Self::CharWeight => "v1",
+            Self::SyllableEqual => "v2-syllable",
+            Self::MoraCount => "v2-mora",
+        }
+    }
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c,
+        '\u{4E00}'..='\u{9FFF}' |
+        '\u{3400}'..='\u{4DBF}' |
+        '\u{20000}'..='\u{2A6DF}' |
+        '\u{F900}'..='\u{FAFF}'
+    )
+}
+
+fn is_kana_char(c: char) -> bool {
+    matches!(c, '\u{3040}'..='\u{309F}' | '\u{30A0}'..='\u{30FF}')
+}
+
+fn is_small_kana(c: char) -> bool {
+    matches!(
+        c,
+        'っ' | 'ッ'
+            | 'ゃ'
+            | 'ャ'
+            | 'ゅ'
+            | 'ュ'
+            | 'ょ'
+            | 'ョ'
+            | 'ぁ'
+            | 'ァ'
+            | 'ぃ'
+            | 'ィ'
+            | 'ぅ'
+            | 'ゥ'
+            | 'ぇ'
+            | 'ェ'
+            | 'ぉ'
+            | 'ォ'
+    )
+}
+
+fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
+    let words = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .map(|token| {
+            let normalized = normalize_word(&token.text);
+            let (phones, _) = pronunciation_symbols(&token.text, token.index, None);
+            (token.index, normalized, phones)
+        })
+        .collect::<Vec<_>>();
+    let mut values = Vec::new();
+    for (index, (token_index, word, phones)) in words.iter().enumerate() {
+        if matches!(
+            word.as_str(),
+            "a" | "an" | "and" | "are" | "can" | "for" | "of" | "the" | "to" | "was" | "were"
+        ) {
+            values.push(rule(
+                format!("weak-{word}"),
+                "weak_form",
+                *token_index,
+                *token_index,
+                0.72,
+                "Function words are often reduced in unstressed connected speech.",
+                SpeechRuleStatus::LikelyByContext,
+            ));
+        }
+        if has_intervocalic_t_or_d(phones) {
+            values.push(rule(
+                "american-flap-t-d".into(),
+                "flapping",
+                *token_index,
+                *token_index,
+                0.58,
+                "Intervocalic /t/ or /d/ may be realized as an American English flap.",
+                SpeechRuleStatus::PossibleByRule,
+            ));
+        }
+        let Some((next_index, next, next_phones)) = words.get(index + 1) else {
+            continue;
+        };
+        if (word == "want" || word == "going") && next == "to" {
+            values.push(rule(
+                format!("informal-{word}-to"),
+                "contraction",
+                *token_index,
+                *next_index,
+                0.78,
+                "This common phrase may use an informal reduced pronunciation.",
+                SpeechRuleStatus::LikelyByContext,
+            ));
+        }
+        if word == "did" && next == "you" {
+            values.push(rule(
+                "assimilation-did-you".into(),
+                "assimilation",
+                *token_index,
+                *next_index,
+                0.75,
+                "/d/ followed by /j/ may assimilate in casual speech.",
+                SpeechRuleStatus::LikelyByContext,
+            ));
+        }
+        let last_phone = phones.last().map(String::as_str);
+        let next_first_phone = next_phones.first().map(String::as_str);
+        if last_phone.is_some_and(arpabet_is_consonant)
+            && next_first_phone.is_some_and(arpabet_is_vowel)
+        {
+            values.push(rule(
+                "link-consonant-vowel".into(),
+                "linking",
+                *token_index,
+                *next_index,
+                0.68,
+                "A final consonant may link smoothly into the following vowel.",
+                SpeechRuleStatus::PossibleByRule,
+            ));
+        }
+        if last_phone
+            .zip(next_first_phone)
+            .is_some_and(|(last, first)| {
+                last == first && arpabet_is_consonant(last) && arpabet_is_consonant(first)
+            })
+        {
+            values.push(rule(
+                "link-same-consonant".into(),
+                "linking",
+                *token_index,
+                *next_index,
+                0.66,
+                "Adjacent matching consonants may be held as one longer boundary.",
+                SpeechRuleStatus::PossibleByRule,
+            ));
+        }
+        if last_phone.is_some_and(|phone| matches!(phone, "T" | "D"))
+            && next_first_phone.is_some_and(arpabet_is_consonant)
+        {
+            values.push(rule(
+                "possible-t-d-deletion".into(),
+                "deletion",
+                *token_index,
+                *next_index,
+                0.42,
+                "Final /t/ or /d/ may be weakened or omitted before another consonant.",
+                SpeechRuleStatus::PossibleByRule,
+            ));
+        }
+    }
+    values
+}
+
+pub(crate) fn pronunciation_symbols(
+    word: &str,
+    token_index: u32,
+    preferred: Option<&[&str]>,
+) -> (Vec<String>, bool) {
+    let pronunciation = lookup(word, token_index);
+    let variants = pronunciation
+        .variants
+        .iter()
+        .map(|variant| {
+            (
+                variant
+                    .phonemes
+                    .iter()
+                    .map(|phone| strip_arpabet_stress(&phone.symbol))
+                    .collect::<Vec<_>>(),
+                variant.is_fallback,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(preferred) = preferred {
+        let preferred = normalize_arpabet_symbols(preferred);
+        if let Some((symbols, fallback)) = variants
+            .iter()
+            .find(|(symbols, _)| *symbols == preferred)
+            .cloned()
+        {
+            return (symbols, fallback);
+        }
+    }
+
+    variants
+        .iter()
+        .find(|(_, fallback)| !*fallback)
+        .or_else(|| variants.first())
+        .cloned()
+        .unwrap_or_default()
+}
+
+pub(crate) fn normalize_arpabet_symbols(symbols: &[&str]) -> Vec<String> {
+    symbols
+        .iter()
+        .map(|symbol| strip_arpabet_stress(symbol))
+        .collect()
+}
+
+pub(crate) fn strip_arpabet_stress(symbol: &str) -> String {
+    symbol
+        .trim()
+        .trim_end_matches(|value: char| value.is_ascii_digit())
+        .to_ascii_uppercase()
+}
+
+pub(crate) fn arpabet_is_vowel(symbol: &str) -> bool {
+    matches!(
+        strip_arpabet_stress(symbol).as_str(),
+        "AA" | "AE"
+            | "AH"
+            | "AO"
+            | "AW"
+            | "AX"
+            | "AY"
+            | "EH"
+            | "ER"
+            | "EY"
+            | "IH"
+            | "IY"
+            | "OW"
+            | "OY"
+            | "UH"
+            | "UW"
+    )
+}
+
+pub(crate) fn arpabet_is_consonant(symbol: &str) -> bool {
+    matches!(
+        strip_arpabet_stress(symbol).as_str(),
+        "B" | "CH"
+            | "D"
+            | "DH"
+            | "F"
+            | "G"
+            | "HH"
+            | "JH"
+            | "K"
+            | "L"
+            | "M"
+            | "N"
+            | "NG"
+            | "P"
+            | "R"
+            | "S"
+            | "SH"
+            | "T"
+            | "TH"
+            | "V"
+            | "W"
+            | "Y"
+            | "Z"
+            | "ZH"
+    )
+}
+
+pub(crate) fn has_intervocalic_t_or_d(symbols: &[String]) -> bool {
+    symbols.windows(3).any(|phones| {
+        arpabet_is_vowel(&phones[0])
+            && matches!(phones[1].as_str(), "T" | "D")
+            && arpabet_is_vowel(&phones[2])
+    })
+}
+
+fn rule(
+    rule_id: String,
+    family: &str,
+    start: u32,
+    end: u32,
+    confidence: f32,
+    reason: &str,
+    status: SpeechRuleStatus,
+) -> SpeechRuleFinding {
+    let definition = rule_catalog()
+        .iter()
+        .find(|definition| definition.rule_id == rule_id);
+    SpeechRuleFinding {
+        rule_id,
+        rule_family: family.into(),
+        affected_token_start: start,
+        affected_token_end: end,
+        canonical_phonemes: definition
+            .map(|value| {
+                value
+                    .canonical_phonemes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        suggested_phonemes: definition
+            .map(|value| {
+                value
+                    .suggested_phonemes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        confidence,
+        reason: reason.into(),
+        evidence_source: "deterministic_text_rule".into(),
+        status,
+    }
+}
+
+fn variant(value: &str, token_index: u32, fallback: bool) -> PronunciationVariant {
+    let phonemes = value
+        .split_whitespace()
+        .enumerate()
+        .map(|(index, raw)| {
+            let (symbol, stress) = split_stress(raw);
+            Phoneme {
+                symbol: symbol.clone(),
+                phoneme_set: "arpabet".into(),
+                display_ipa: arpabet_ipa(&symbol).into(),
+                stress,
+                syllable_index: Some(index as u32),
+                token_index: Some(token_index),
+                start_ms: None,
+                end_ms: None,
+                confidence: (!fallback).then_some(1.0),
+            }
+        })
+        .collect::<Vec<_>>();
+    PronunciationVariant {
+        phonemes: phonemes.clone(),
+        display_ipa: phonemes
+            .iter()
+            .map(|value| value.display_ipa.as_str())
+            .collect::<String>(),
+        is_fallback: fallback,
+    }
+}
+
+fn normalize_word(word: &str) -> String {
+    word.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '\'')
+        .to_ascii_lowercase()
+}
+
+fn builtin(word: &str) -> Option<&'static [&'static str]> {
+    match word {
+        "a" => Some(&["AH0", "EY1"]),
+        "and" => Some(&["AH0 N D", "AE1 N D"]),
+        "can" => Some(&["K AH0 N", "K AE1 N"]),
+        "did" => Some(&["D IH1 D"]),
+        "going" => Some(&["G OW1 IH0 NG"]),
+        "hello" => Some(&["HH AH0 L OW1"]),
+        "player" => Some(&["P L EY1 ER0"]),
+        "the" => Some(&["DH AH0", "DH IY0"]),
+        "to" => Some(&["T AH0", "T UW1"]),
+        "want" => Some(&["W AA1 N T"]),
+        "world" => Some(&["W ER1 L D"]),
+        "you" => Some(&["Y UW1"]),
+        _ => None,
+    }
+}
+
+fn fallback_arpabet(word: &str) -> String {
+    let mut saw_primary_vowel = false;
+    let mut values = Vec::new();
+    for symbol in fallback_base_phones(word) {
+        if fallback_vowel(symbol) {
+            if saw_primary_vowel {
+                values.push(format!("{symbol}0"));
+            } else {
+                values.push(format!("{symbol}1"));
+                saw_primary_vowel = true;
+            }
+        } else {
+            values.push(symbol.into());
+        }
+    }
+    if values.is_empty() {
+        "AH1".into()
+    } else {
+        values.join(" ")
+    }
+}
+
+fn fallback_base_phones(word: &str) -> Vec<&'static str> {
+    let chars = word.chars().collect::<Vec<_>>();
+    let mut values = Vec::new();
+    let mut index = 0;
+    while index < chars.len() {
+        let current = chars[index];
+        let next = chars.get(index + 1).copied();
+        if let Some(symbols) = fallback_digraph(current, next) {
+            values.extend(symbols);
+            index += 2;
+            continue;
+        }
+        match current {
+            'a' => values.push("AE"),
+            'e' => {
+                let final_silent_e =
+                    index + 1 == chars.len() && values.iter().any(|symbol| fallback_vowel(symbol));
+                if !final_silent_e {
+                    values.push("EH");
+                }
+            }
+            'i' | 'y' if index > 0 => values.push("IH"),
+            'i' => values.push("IH"),
+            'o' => values.push("OW"),
+            'u' => values.push("AH"),
+            'b' => values.push("B"),
+            'c' if next.is_some_and(|value| matches!(value, 'e' | 'i' | 'y')) => values.push("S"),
+            'c' | 'k' | 'q' => values.push("K"),
+            'd' => values.push("D"),
+            'f' => values.push("F"),
+            'g' if next.is_some_and(|value| matches!(value, 'e' | 'i' | 'y')) => values.push("JH"),
+            'g' => values.push("G"),
+            'h' => values.push("HH"),
+            'j' => values.push("JH"),
+            'l' => values.push("L"),
+            'm' => values.push("M"),
+            'n' => values.push("N"),
+            'p' => values.push("P"),
+            'r' => values.push("R"),
+            's' | 'z' => values.push("S"),
+            't' => values.push("T"),
+            'v' => values.push("V"),
+            'w' => values.push("W"),
+            'x' => values.extend(["K", "S"]),
+            _ => {}
+        }
+        index += 1;
+    }
+    values
+}
+
+fn fallback_digraph(current: char, next: Option<char>) -> Option<&'static [&'static str]> {
+    match (current, next?) {
+        ('c', 'h') => Some(&["CH"]),
+        ('s', 'h') => Some(&["SH"]),
+        ('t', 'h') => Some(&["TH"]),
+        ('p', 'h') => Some(&["F"]),
+        ('w', 'h') => Some(&["W"]),
+        ('n', 'g') => Some(&["NG"]),
+        ('q', 'u') => Some(&["K", "W"]),
+        ('c', 'k') => Some(&["K"]),
+        ('e', 'e') | ('e', 'a') => Some(&["IY"]),
+        ('o', 'o') => Some(&["UW"]),
+        ('o', 'u') | ('o', 'w') => Some(&["AW"]),
+        ('a', 'i') | ('a', 'y') => Some(&["EY"]),
+        ('o', 'i') | ('o', 'y') => Some(&["OY"]),
+        _ => None,
+    }
+}
+
+fn fallback_vowel(symbol: &str) -> bool {
+    matches!(
+        symbol,
+        "AA" | "AE"
+            | "AH"
+            | "AO"
+            | "AW"
+            | "AY"
+            | "EH"
+            | "ER"
+            | "EY"
+            | "IH"
+            | "IY"
+            | "OW"
+            | "OY"
+            | "UH"
+            | "UW"
+    )
+}
+
+fn split_stress(value: &str) -> (String, Option<u8>) {
+    let bytes = value.as_bytes();
+    match bytes.last().copied() {
+        Some(stress @ b'0'..=b'2') => (value_without_last(value, 1), Some(stress - b'0')),
+        _ => (value.into(), None),
+    }
+}
+
+fn value_without_last(value: &str, count: usize) -> String {
+    value[..value.len().saturating_sub(count)].into()
+}
+
+fn arpabet_ipa(value: &str) -> &'static str {
+    match value {
+        "AA" => "ɑ",
+        "AE" => "æ",
+        "AH" => "ə",
+        "AO" => "ɔ",
+        "AW" => "aʊ",
+        "AY" => "aɪ",
+        "B" => "b",
+        "CH" => "tʃ",
+        "D" => "d",
+        "DH" => "ð",
+        "EH" => "ɛ",
+        "ER" => "ɝ",
+        "EY" => "eɪ",
+        "F" => "f",
+        "G" => "ɡ",
+        "HH" => "h",
+        "IH" => "ɪ",
+        "IY" => "i",
+        "JH" => "dʒ",
+        "K" => "k",
+        "L" => "l",
+        "M" => "m",
+        "N" => "n",
+        "NG" => "ŋ",
+        "OW" => "oʊ",
+        "OY" => "ɔɪ",
+        "P" => "p",
+        "R" => "ɹ",
+        "S" => "s",
+        "SH" => "ʃ",
+        "T" => "t",
+        "TH" => "θ",
+        "UH" => "ʊ",
+        "UW" => "u",
+        "V" => "v",
+        "W" => "w",
+        "Y" => "j",
+        "Z" => "z",
+        "ZH" => "ʒ",
+        _ => "?",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::{SubtitleSentenceId, SubtitleToken, TimeMs};
+    use learning_resource_runtime::learning_resource_file_name;
+
+    fn sentence(text: &str) -> SubtitleSentence {
+        SubtitleSentence {
+            id: SubtitleSentenceId::parse("s").unwrap(),
+            index: 0,
+            start: TimeMs::new(100),
+            end: TimeMs::new(1100),
+            original_text: text.into(),
+            display_text: text.into(),
+            tokens: subtitle_core_for_test(text),
+        }
+    }
+
+    fn subtitle_core_for_test(text: &str) -> Vec<SubtitleToken> {
+        text.split_whitespace()
+            .enumerate()
+            .map(|(index, text)| SubtitleToken {
+                index: index as u32,
+                kind: SubtitleTokenKind::Word,
+                text: text.into(),
+                normalized: Some(normalize_word(text)),
+                start_char: 0,
+                end_char: text.len() as u32,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn maps_stress_and_ipa() {
+        let hello = lookup("hello", 3);
+        assert_eq!(hello.variants[0].phonemes[1].stress, Some(0));
+        assert!(hello.variants[0].display_ipa.contains("oʊ"));
+    }
+
+    #[test]
+    fn fallback_is_explicit() {
+        assert!(lookup("codex", 0).variants[0].is_fallback);
+    }
+
+    #[test]
+    fn cmudict_loads_after_startup_miss_from_custom_resource_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join(learning_resource_file_name("cmudict"));
+        let provider = CmudictProvider::with_path(path.clone());
+
+        assert!(lookup_with_provider(&provider, "quokka", 0).variants[0].is_fallback);
+        std::fs::write(&path, "quokka K W AA1 K AH0\n").unwrap();
+
+        let loaded = lookup_with_provider(&provider, "quokka", 0);
+        assert!(!loaded.variants[0].is_fallback);
+        assert_eq!(loaded.variants[0].phonemes[0].symbol, "K");
+    }
+
+    #[test]
+    fn cmudict_reloads_replacement_and_drops_deleted_or_invalid_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join(learning_resource_file_name("cmudict"));
+        std::fs::write(&path, "quokka K W AA1 K AH0\n").unwrap();
+        let provider = CmudictProvider::with_path(path.clone());
+
+        assert_eq!(
+            lookup_with_provider(&provider, "quokka", 0).variants[0].phonemes[0].symbol,
+            "K"
+        );
+
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(&path, "quokka Z IY1 B R AH0\n").unwrap();
+        let replaced = lookup_with_provider(&provider, "quokka", 0);
+        assert!(!replaced.variants[0].is_fallback);
+        assert_eq!(replaced.variants[0].phonemes[0].symbol, "Z");
+
+        std::fs::write(&path, "not-a-valid-cmudict-file").unwrap();
+        assert!(lookup_with_provider(&provider, "quokka", 0).variants[0].is_fallback);
+
+        std::fs::remove_file(&path).unwrap();
+        assert!(lookup_with_provider(&provider, "quokka", 0).variants[0].is_fallback);
+    }
+
+    #[test]
+    fn cmudict_supports_concurrent_lookups() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join(learning_resource_file_name("cmudict"));
+        std::fs::write(&path, "quokka K W AA1 K AH0\n").unwrap();
+        let provider = Arc::new(CmudictProvider::with_path(path));
+
+        let handles = (0..16)
+            .map(|_| {
+                let provider = provider.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..100 {
+                        let value = lookup_with_provider(&provider, "quokka", 0);
+                        assert!(!value.variants[0].is_fallback);
+                        assert_eq!(value.variants[0].phonemes[0].symbol, "K");
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn fallback_assigns_single_primary_stress() {
+        let codex = lookup("codex", 0);
+        let stresses = codex.variants[0]
+            .phonemes
+            .iter()
+            .filter_map(|phone| phone.stress)
+            .collect::<Vec<_>>();
+
+        assert!(codex.variants[0].is_fallback);
+        assert_eq!(stresses.iter().filter(|stress| **stress == 1).count(), 1);
+        assert!(stresses.contains(&0));
+    }
+
+    #[test]
+    fn estimates_monotonic_bounded_timings() {
+        let sentence = sentence("a much longer word");
+        let values = estimate_word_timings(&sentence);
+        assert_eq!(values.first().unwrap().start_ms, 100);
+        assert_eq!(values.last().unwrap().end_ms, 1100);
+        assert!(
+            values
+                .windows(2)
+                .all(|pair| pair[0].end_ms <= pair[1].start_ms)
+        );
+    }
+
+    #[test]
+    fn rule_hints_are_never_audio_detection() {
+        let values = analyze_rules(&sentence("did you want to go"));
+        assert!(
+            values
+                .iter()
+                .any(|value| value.rule_id == "assimilation-did-you")
+        );
+        assert!(
+            values
+                .iter()
+                .all(|value| value.evidence_source == "deterministic_text_rule")
+        );
+    }
+
+    #[test]
+    fn rule_catalog_has_fixed_examples_and_counterexamples() {
+        let catalog = rule_catalog();
+        assert!((15..=25).contains(&catalog.len()));
+        let ids = catalog
+            .iter()
+            .map(|definition| definition.rule_id)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(ids.len(), catalog.len());
+        for definition in catalog {
+            assert!(
+                analyze_rules(&sentence(definition.example))
+                    .iter()
+                    .any(|finding| finding.rule_id == definition.rule_id),
+                "example did not trigger {}",
+                definition.rule_id
+            );
+            assert!(
+                analyze_rules(&sentence(definition.counterexample))
+                    .iter()
+                    .all(|finding| finding.rule_id != definition.rule_id),
+                "counterexample triggered {}",
+                definition.rule_id
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_en_us_baseline_covers_one_hundred_sentences() {
+        let baseline = include_str!("../../../testdata/pronunciation/en-us-baseline.tsv");
+        let rows = baseline
+            .lines()
+            .map(|line| line.split_once('\t').expect("baseline row has category"))
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 100);
+        assert_eq!(
+            rows.iter()
+                .map(|(category, _)| category)
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            10
+        );
+        for (_, text) in rows {
+            let sentence = sentence(text);
+            let analysis = analyze_sentence(&sentence);
+            assert_eq!(analysis.words.len(), sentence.tokens.len());
+            let timings = estimate_word_timings(&sentence);
+            assert_eq!(timings.len(), sentence.tokens.len());
+            assert!(
+                timings
+                    .windows(2)
+                    .all(|pair| pair[0].end_ms <= pair[1].start_ms)
+            );
+        }
+    }
+
+    // ── Property-based tests ───────────────────────────────────────
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// estimate_word_timings: output count equals word token count.
+            #[test]
+            fn prop_estimate_output_count_matches_words(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let word_count = sent.tokens.iter()
+                    .filter(|t| t.kind == SubtitleTokenKind::Word)
+                    .count();
+                let timings = estimate_word_timings(&sent);
+                prop_assert_eq!(timings.len(), word_count);
+            }
+
+            /// estimate_word_timings: every timing has start ≤ end.
+            #[test]
+            fn prop_estimate_timings_start_le_end(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let timings = estimate_word_timings(&sent);
+                for t in &timings {
+                    prop_assert!(t.start_ms <= t.end_ms,
+                        "start_ms {} > end_ms {}", t.start_ms, t.end_ms);
+                }
+            }
+
+            /// estimate_word_timings: timings are within sentence boundaries.
+            #[test]
+            fn prop_estimate_timings_within_bounds(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let timings = estimate_word_timings(&sent);
+                if timings.is_empty() {
+                    return Ok(());
+                }
+                prop_assert!(timings[0].start_ms >= sent.start.get());
+                prop_assert!(timings.last().unwrap().end_ms <= sent.end.get());
+            }
+
+            /// estimate_word_timings: timings are monotonic.
+            #[test]
+            fn prop_estimate_timings_monotonic(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let timings = estimate_word_timings(&sent);
+                for pair in timings.windows(2) {
+                    prop_assert!(pair[0].end_ms <= pair[1].start_ms,
+                        "non-monotonic: {}..{} then {}..{}",
+                        pair[0].start_ms, pair[0].end_ms,
+                        pair[1].start_ms, pair[1].end_ms);
+                }
+            }
+        }
+    }
+
+    fn chinese_sentence(words: &[&str]) -> SubtitleSentence {
+        let full_text = words.join("");
+        let mut offset = 0u32;
+        SubtitleSentence {
+            id: SubtitleSentenceId::parse("s").unwrap(),
+            index: 0,
+            start: TimeMs::new(0),
+            end: TimeMs::new(6000),
+            original_text: full_text.clone(),
+            display_text: full_text,
+            tokens: words
+                .iter()
+                .enumerate()
+                .map(|(i, text)| {
+                    let start = offset;
+                    let len = text.chars().count() as u32;
+                    offset += len;
+                    SubtitleToken {
+                        index: i as u32,
+                        kind: SubtitleTokenKind::Word,
+                        text: text.to_string(),
+                        normalized: Some(text.to_string()),
+                        start_char: start,
+                        end_char: start + len,
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn syllable_timed_gives_equal_weight_to_cjk_chars() {
+        let sentence = chinese_sentence(&["因为", "我", "不", "知道"]);
+        let timings = estimate_word_timings_with_rhythm(&sentence, Some("zh.syllable_tone"));
+        assert_eq!(timings.len(), 4);
+        // "因为" (2 chars) should get 2x the duration of "我" (1 char)
+        let d0 = timings[0].end_ms - timings[0].start_ms;
+        let d1 = timings[1].end_ms - timings[1].start_ms;
+        assert_eq!(d0, d1 * 2);
+        assert_eq!(timings[0].provider_version, "v2-syllable");
+    }
+
+    #[test]
+    fn mora_timed_counts_kana() {
+        let strategy = EstimationStrategy::MoraCount;
+        assert_eq!(strategy.weight("たべる"), 3);
+        assert_eq!(strategy.weight("きょう"), 2); // ょ is small kana
+        assert_eq!(strategy.weight("がっこう"), 3); // っ is small kana
+    }
+
+    #[test]
+    fn default_rhythm_is_char_weight() {
+        let sentence = sentence("hello world");
+        let t1 = estimate_word_timings(&sentence);
+        let t2 = estimate_word_timings_with_rhythm(&sentence, None);
+        assert_eq!(t1.len(), t2.len());
+        for (a, b) in t1.iter().zip(t2.iter()) {
+            assert_eq!(a.start_ms, b.start_ms);
+            assert_eq!(a.end_ms, b.end_ms);
+            assert_eq!(a.provider_version, "v1");
+        }
+    }
+}

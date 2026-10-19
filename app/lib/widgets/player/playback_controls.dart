@@ -1,0 +1,1539 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import '../../localization.dart';
+import '../../models/api_failure.dart';
+import '../../models/task_status.dart';
+import '../../player_adapter.dart';
+import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
+import '../../theme/motion.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
+import '../../utils/format_duration.dart';
+import '../../utils/media_title.dart';
+import '../common/api_failure_disclosure.dart';
+import '../common/menu_rows.dart';
+
+/// One receded look for both transport progress bars (#30): a thin track that
+/// nearly sinks into the bar, where only the played portion and the handle
+/// carry the signal teal. Shared so the compact and full forms cannot drift.
+SliderThemeData _progressSliderTheme(
+  BuildContext context,
+  ColorScheme colors,
+) => SliderThemeData(
+  trackHeight: 3,
+  trackShape: const RectangularSliderTrackShape(),
+  thumbShape: _GlowThumbShape(
+    glowColor: colors.primary.withValues(alpha: 0.33),
+    glow: !MediaQuery.highContrastOf(context),
+  ),
+  overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+  activeTrackColor: colors.primary,
+  inactiveTrackColor: colors.outlineVariant.withValues(alpha: 0.4),
+  thumbColor: colors.primary,
+);
+
+/// The transport handle from the charter's dimmed room: a small solid dot
+/// with a soft static halo, so progress reads as the one lit thing on an
+/// otherwise receded bar. Legibility never depends on the halo — it is pure
+/// decoration and high-contrast mode drops it.
+class _GlowThumbShape extends RoundSliderThumbShape {
+  const _GlowThumbShape({required this.glowColor, required this.glow})
+    : super(enabledThumbRadius: 5);
+
+  final Color glowColor;
+  final bool glow;
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    if (glow) {
+      final halo = Paint()
+        ..color = glowColor
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+      context.canvas.drawCircle(center, 8, halo);
+    }
+    super.paint(
+      context,
+      center,
+      activationAnimation: activationAnimation,
+      enableAnimation: enableAnimation,
+      isDiscrete: isDiscrete,
+      labelPainter: labelPainter,
+      parentBox: parentBox,
+      sliderTheme: sliderTheme,
+      textDirection: textDirection,
+      value: value,
+      textScaleFactor: textScaleFactor,
+      sizeWithOverflow: sizeWithOverflow,
+    );
+  }
+}
+
+class PlaybackControls extends StatelessWidget {
+  const PlaybackControls({
+    super.key,
+    required this.adapter,
+    required this.position,
+    required this.duration,
+    required this.playing,
+    required this.loopCue,
+    this.sourceLoopStart,
+    this.sourceLoopLabel,
+    required this.statusStylesVisible,
+    required this.subtitlesVisible,
+    required this.secondarySubtitlesVisible,
+    required this.secondarySubtitlesAvailable,
+    required this.rate,
+    required this.volume,
+    required this.muted,
+    required this.audioTracks,
+    required this.selectedAudioId,
+    required this.embeddedSubtitleTracks,
+    required this.selectedEmbeddedSubtitleId,
+    required this.primarySubtitleOffset,
+    required this.secondarySubtitleOffset,
+    required this.status,
+    this.statusIsError = false,
+    this.statusFailure,
+    required this.taskStatuses,
+    this.spaceTargetsPractice = false,
+    required this.onSeek,
+    required this.onSeekToPreviousCue,
+    required this.onSeekToZero,
+    required this.onPlayPause,
+    required this.onStop,
+    required this.onSeekToNextCue,
+    required this.chunkControlsEnabled,
+    required this.chunkLoopActive,
+    required this.onSeekToPreviousChunk,
+    required this.onSeekToNextChunk,
+    required this.onLoopCurrentChunk,
+    required this.onLoopExpandedChunk,
+    required this.onLoopCueChanged,
+    required this.onStopSourceLoop,
+    required this.onStatusStylesChanged,
+    required this.onSubtitlesVisibleChanged,
+    required this.onSecondaryVisibleChanged,
+    required this.onRateChanged,
+    required this.onVolumeChanged,
+    required this.onMuteToggle,
+    required this.onAudioTrackChanged,
+    required this.onEmbeddedSubtitleTrackChanged,
+    required this.onPrimaryOffsetChanged,
+    required this.onSecondaryOffsetChanged,
+    this.abAnchor,
+    required this.onMarkAbPoint,
+    this.isCompact = false,
+    this.mediaTitle,
+    this.onExpand,
+    this.isFullscreen = false,
+    this.onToggleFullscreen,
+  });
+
+  final DesktopPlayerAdapter adapter;
+
+  /// Live playback position. Only the progress slider and the time labels
+  /// subscribe to it, so 10Hz ticks never rebuild the rest of the bar.
+  final ValueListenable<Duration> position;
+  final Duration duration;
+  final bool playing;
+  final bool loopCue;
+  final Duration? sourceLoopStart;
+  final String? sourceLoopLabel;
+  final bool statusStylesVisible;
+  final bool subtitlesVisible;
+  final bool secondarySubtitlesVisible;
+  final bool secondarySubtitlesAvailable;
+  final double rate;
+  final double volume;
+  final bool muted;
+  final List<PlayerTrack> audioTracks;
+  final String? selectedAudioId;
+  final List<PlayerTrack> embeddedSubtitleTracks;
+  final String? selectedEmbeddedSubtitleId;
+  final Duration primarySubtitleOffset;
+  final Duration secondarySubtitleOffset;
+  final String status;
+
+  /// Error statuses render in the error color with a leading icon.
+  final bool statusIsError;
+
+  /// The transport detail behind an error [status], when there is one.
+  ///
+  /// [status] is now the whole sentence, which leaves the reference id a bug
+  /// report needs with nowhere to go — this is where it goes. The row is one
+  /// ellipsized line with no room to expand in place, so the detail opens as a
+  /// dialog, and only when there is something to open. `ApiFailure.raw` is not
+  /// among the fields shown even then.
+  final ApiFailure? statusFailure;
+  final List<UserTaskStatus> taskStatuses;
+
+  /// Space drives the practice clip right now, not the main player (#25).
+  final bool spaceTargetsPractice;
+  final bool chunkControlsEnabled;
+  final bool chunkLoopActive;
+
+  final ValueChanged<Duration> onSeek;
+  final VoidCallback onSeekToPreviousCue;
+  final VoidCallback onSeekToZero;
+  final VoidCallback onPlayPause;
+  final VoidCallback onStop;
+  final VoidCallback onSeekToNextCue;
+  final VoidCallback onSeekToPreviousChunk;
+  final VoidCallback onSeekToNextChunk;
+  final VoidCallback onLoopCurrentChunk;
+  final VoidCallback onLoopExpandedChunk;
+  final ValueChanged<bool> onLoopCueChanged;
+  final VoidCallback onStopSourceLoop;
+  final ValueChanged<bool> onStatusStylesChanged;
+  final ValueChanged<bool> onSubtitlesVisibleChanged;
+  final ValueChanged<bool> onSecondaryVisibleChanged;
+  final ValueChanged<double> onRateChanged;
+  final ValueChanged<double> onVolumeChanged;
+  final VoidCallback onMuteToggle;
+  final ValueChanged<PlayerTrack> onAudioTrackChanged;
+  final ValueChanged<PlayerTrack> onEmbeddedSubtitleTrackChanged;
+  final ValueChanged<Duration> onPrimaryOffsetChanged;
+  final ValueChanged<Duration> onSecondaryOffsetChanged;
+
+  /// The A point of an A/B repeat that has been started but not closed. Null
+  /// both before A is set and once the loop is running — [sourceLoopStart] is
+  /// what says the loop exists.
+  final Duration? abAnchor;
+
+  /// Advances the A/B repeat: set A, then close it at B, then clear.
+  final VoidCallback onMarkAbPoint;
+  final bool isCompact;
+  final String? mediaTitle;
+  final VoidCallback? onExpand;
+
+  /// #25-A: fullscreen entry on the transport. A null [onToggleFullscreen]
+  /// hides the button (hosts with no fullscreen surface); [isFullscreen]
+  /// flips the icon and tooltip.
+  final bool isFullscreen;
+  final VoidCallback? onToggleFullscreen;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    if (isCompact) return _buildCompact(context, l, colors);
+    return _buildFull(context, l, colors);
+  }
+
+  Widget _buildCompact(
+    BuildContext context,
+    AppLocalizations l,
+    ColorScheme colors,
+  ) {
+    final maxMs = duration.inMilliseconds.clamp(1, 1 << 31).toDouble();
+    return Material(
+      color: colors.surfaceContainerLowest,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow =
+                constraints.maxWidth < ListenBreakpoints.playbackControlsNarrow;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 12,
+                  child: SliderTheme(
+                    data: _progressSliderTheme(context, colors),
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: position,
+                      builder: (context, positionValue, _) => Slider(
+                        padding: EdgeInsets.zero,
+                        value: positionValue.inMilliseconds
+                            .clamp(0, maxMs.toInt())
+                            .toDouble(),
+                        max: maxMs,
+                        onChanged: (value) =>
+                            onSeek(Duration(milliseconds: value.round())),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 76,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      narrow ? ListenSpacing.gap12 : ListenSpacing.gap16,
+                      ListenSpacing.gap4,
+                      ListenSpacing.gap8,
+                      ListenSpacing.gap8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            key: const Key('compact-player-media-info'),
+                            onTap: onExpand,
+                            behavior: HitTestBehavior.opaque,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.primaryContainer,
+                                  ),
+                                  child: Icon(
+                                    playing
+                                        ? Icons.equalizer_rounded
+                                        : Icons.music_note_rounded,
+                                    size: ListenIconSize.chrome,
+                                    color: colors.onPrimaryContainer,
+                                  ),
+                                ),
+                                const SizedBox(width: ListenSpacing.gap12),
+                                Flexible(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Same demotion as the workbench header
+                                      // (§3.7): the mini player shows the
+                                      // title, the tooltip keeps the file name.
+                                      Tooltip(
+                                        message: mediaTitle ?? '',
+                                        child: Text(
+                                          displayMediaTitle(mediaTitle ?? ''),
+                                          key: const Key(
+                                            'compact-player-media-title',
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ),
+                                      const SizedBox(
+                                        height: ListenSpacing.gap2,
+                                      ),
+                                      ValueListenableBuilder<Duration>(
+                                        valueListenable: position,
+                                        builder: (context, positionValue, _) =>
+                                            Text(
+                                              '${formatDuration(positionValue)} / ${formatDuration(duration)}',
+                                              maxLines: 1,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall
+                                                  ?.copyWith(
+                                                    color:
+                                                        colors.onSurfaceVariant,
+                                                  ),
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l.text('previousSentence'),
+                          onPressed: onSeekToPreviousCue,
+                          iconSize: ListenIconSize.chrome,
+                          color: colors.onSurfaceVariant,
+                          icon: const Icon(Icons.skip_previous_rounded),
+                        ),
+                        SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: IconButton.filled(
+                            key: const Key('compact-player-play-pause'),
+                            tooltip: l.text('playPause'),
+                            onPressed: onPlayPause,
+                            iconSize: ListenIconSize.chrome,
+                            padding: EdgeInsets.zero,
+                            icon: Icon(
+                              playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l.text('nextSentence'),
+                          onPressed: onSeekToNextCue,
+                          iconSize: ListenIconSize.chrome,
+                          color: colors.onSurfaceVariant,
+                          icon: const Icon(Icons.skip_next_rounded),
+                        ),
+                        if (!narrow) ...[
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${rate}x',
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: colors.onSurfaceVariant,
+                                      ),
+                                ),
+                                IconButton(
+                                  tooltip: muted ? 'Unmute' : 'Mute',
+                                  onPressed: onMuteToggle,
+                                  iconSize: ListenIconSize.chrome,
+                                  icon: Icon(
+                                    muted
+                                        ? Icons.volume_off_outlined
+                                        : Icons.volume_up_outlined,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: l.text('expandWorkbench'),
+                                  onPressed: onExpand,
+                                  iconSize: ListenIconSize.chrome,
+                                  icon: Icon(
+                                    Icons.keyboard_arrow_up_rounded,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if (narrow)
+                          IconButton(
+                            tooltip: l.text('expandWorkbench'),
+                            onPressed: onExpand,
+                            iconSize: ListenIconSize.chrome,
+                            icon: Icon(
+                              Icons.keyboard_arrow_up_rounded,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFull(
+    BuildContext context,
+    AppLocalizations l,
+    ColorScheme colors,
+  ) {
+    return Material(
+      color: colors.surfaceContainerLowest,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final roomy =
+                constraints.maxWidth >= ListenBreakpoints.playbackControlsRoomy;
+            final persistentMeta =
+                sourceLoopStart != null ||
+                taskStatuses.isNotEmpty ||
+                statusIsError;
+            final bar = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 38,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: ListenSpacing.gap16,
+                    ),
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: position,
+                      builder: (context, positionValue, _) => Row(
+                        children: [
+                          SizedBox(
+                            // Fits HH:MM:SS in the mono timecode face.
+                            width: 62,
+                            child: Text(
+                              formatDuration(positionValue),
+                              style: ListenType.timecode.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: SliderTheme(
+                              data: _progressSliderTheme(context, colors),
+                              child: Slider(
+                                value: positionValue.inMilliseconds
+                                    .clamp(
+                                      0,
+                                      duration.inMilliseconds.clamp(1, 1 << 31),
+                                    )
+                                    .toDouble(),
+                                max: duration.inMilliseconds
+                                    .clamp(1, 1 << 31)
+                                    .toDouble(),
+                                onChanged: (value) => onSeek(
+                                  Duration(milliseconds: value.round()),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            // Fits HH:MM:SS in the mono timecode face.
+                            width: 62,
+                            child: Text(
+                              formatDuration(duration),
+                              textAlign: TextAlign.end,
+                              style: ListenType.timecode.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 58,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: ListenSpacing.gap12,
+                    ),
+                    child: _fullControlRow(context, l, roomy),
+                  ),
+                ),
+                // The meta row belongs to signals that are still true when the
+                // user next looks: an active loop, running tasks, a failure
+                // waiting to be dealt with. A plain "Timeline resources
+                // refreshed" is not one of those, and it used to hold this
+                // whole row open under the transport for the rest of the
+                // session (§3.7 item 5).
+                if (persistentMeta)
+                  SizedBox(
+                    height: 28,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        ListenSpacing.gap16,
+                        0,
+                        ListenSpacing.gap16,
+                        ListenSpacing.gap6,
+                      ),
+                      child: Row(
+                        children: [
+                          if (sourceLoopStart != null)
+                            _SourceLoopChip(
+                              label: sourceLoopLabel != null
+                                  ? l.text(sourceLoopLabel!)
+                                  : l.text('loopRange'),
+                              onStop: onStopSourceLoop,
+                            ),
+                          const Spacer(),
+                          if (taskStatuses.isNotEmpty)
+                            Flexible(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final task in taskStatuses)
+                                    _TaskStatusChip(status: task),
+                                ],
+                              ),
+                            ),
+                          if (taskStatuses.isNotEmpty && statusIsError)
+                            const SizedBox(width: ListenSpacing.gap8),
+                          if (statusIsError)
+                            Flexible(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    size: ListenIconSize.inline,
+                                    color: colors.error,
+                                  ),
+                                  const SizedBox(width: ListenSpacing.gap4),
+                                  Flexible(
+                                    child: Text(
+                                      status,
+                                      key: const Key('playback-error-status'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.end,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(color: colors.error),
+                                    ),
+                                  ),
+                                  if (statusFailure != null)
+                                    ApiFailureDetailsButton(
+                                      key: const Key('playback-error-details'),
+                                      failure: statusFailure!,
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+
+            if (statusIsError || status.isEmpty) return bar;
+
+            // Info feedback rises briefly above the bar and takes no layout
+            // with it: the transport keeps exactly the height it had, so a
+            // one-off "done" never costs the transcript a row (§3.8's info
+            // tier, without touching how setStatus is called).
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                bar,
+                Positioned(
+                  left: 18,
+                  right: 18,
+                  top: -40,
+                  child: IgnorePointer(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [_TransientStatusToast(message: status)],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _fullControlRow(BuildContext context, AppLocalizations l, bool roomy) {
+    final colors = Theme.of(context).colorScheme;
+    // Shell recedes (#30): secondary transport steps drop to the variant
+    // shade; the play button is the one lit control on this bar.
+    return Row(
+      children: [
+        IconButton(
+          tooltip: l.text('previousSentence'),
+          onPressed: onSeekToPreviousCue,
+          color: colors.onSurfaceVariant,
+          icon: const Icon(Icons.skip_previous),
+        ),
+        if (roomy)
+          IconButton(
+            tooltip: l.text('restartMedia'),
+            onPressed: onSeekToZero,
+            color: colors.onSurfaceVariant,
+            icon: const Icon(Icons.restart_alt),
+          ),
+        IconButton.filled(
+          tooltip: l.text('playPause'),
+          onPressed: onPlayPause,
+          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+        ),
+        if (spaceTargetsPractice)
+          Padding(
+            padding: const EdgeInsets.only(left: ListenSpacing.gap8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.outlineVariant),
+                borderRadius: ListenRadii.tightBorder,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: ListenSpacing.gap6,
+                  vertical: ListenSpacing.gap2,
+                ),
+                child: Text(
+                  l.text('shortcutSpacePracticeHint'),
+                  style: ListenType.caption.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        IconButton(
+          tooltip: l.text('nextSentence'),
+          onPressed: onSeekToNextCue,
+          color: colors.onSurfaceVariant,
+          icon: const Icon(Icons.skip_next),
+        ),
+        const SizedBox(width: ListenSpacing.gap8),
+        _ToggleIcon(
+          tooltip: l.text('loopSentence'),
+          selected: loopCue,
+          onPressed: () => onLoopCueChanged(!loopCue),
+          icon: Icons.repeat_one,
+        ),
+        const SizedBox(width: ListenSpacing.gap8),
+        // A/B repeat, the one control this transport was missing and the one
+        // every intensive-listening player has. It is a three-step button, so
+        // it says which step it is on instead of relying on the user to
+        // remember: set A, close at B, clear.
+        _AbLoopButton(
+          anchor: abAnchor,
+          looping: sourceLoopStart != null,
+          onPressed: onMarkAbPoint,
+        ),
+        // Chunk navigation stays a menu: it is four related playback actions
+        // with no room for four more buttons, and unlike the listening session
+        // it does belong to the transport.
+        if (roomy)
+          _PlaybackMenuButton(
+            tooltip: l.text('chunkMode'),
+            label: l.text('chunkMode'),
+            icon: Icons.segment,
+            selected: chunkLoopActive,
+            enabled: chunkControlsEnabled,
+            onSelected: (value) {
+              if (value == 'previous-chunk') onSeekToPreviousChunk();
+              if (value == 'loop-chunk') onLoopCurrentChunk();
+              if (value == 'next-chunk') onSeekToNextChunk();
+              if (value == 'expand-chunk') onLoopExpandedChunk();
+              if (value == 'stop-source-loop') onStopSourceLoop();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'previous-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.keyboard_double_arrow_left,
+                  title: l.text('previousChunk'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'loop-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.segment,
+                  title: l.text('loopChunk'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'next-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.keyboard_double_arrow_right,
+                  title: l.text('nextChunk'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'expand-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.unfold_more,
+                  title: l.text('expandChunk'),
+                ),
+              ),
+              if (sourceLoopStart != null) ...[
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'stop-source-loop',
+                  child: ListenMenuRow(
+                    icon: Icons.stop_circle_outlined,
+                    title: l.text('stopSourceLoop'),
+                  ),
+                ),
+              ],
+            ],
+          )
+        else
+          PopupMenuButton<String>(
+            tooltip: l.text('chunkMode'),
+            icon: const Icon(Icons.segment),
+            enabled: chunkControlsEnabled,
+            onSelected: (value) {
+              switch (value) {
+                case 'previous-chunk':
+                  onSeekToPreviousChunk();
+                case 'loop-chunk':
+                  onLoopCurrentChunk();
+                case 'next-chunk':
+                  onSeekToNextChunk();
+                case 'expand-chunk':
+                  onLoopExpandedChunk();
+                case 'stop-source-loop':
+                  onStopSourceLoop();
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'previous-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.keyboard_double_arrow_left,
+                  title: l.text('previousChunk'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'loop-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.segment,
+                  title: l.text('loopChunk'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'next-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.keyboard_double_arrow_right,
+                  title: l.text('nextChunk'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'expand-chunk',
+                child: ListenMenuRow(
+                  icon: Icons.unfold_more,
+                  title: l.text('expandChunk'),
+                ),
+              ),
+              if (sourceLoopStart != null) ...[
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'stop-source-loop',
+                  child: ListenMenuRow(
+                    icon: Icons.stop_circle_outlined,
+                    title: l.text('stopSourceLoop'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        // One toggle for the subtitles drawn over the video. It was a menu of
+        // three checkboxes; the other two — the second track and the word
+        // status styling — are display preferences that live in playback
+        // settings, and the transcript's own two-track pairing moved to the
+        // session header where the transcript is.
+        _ToggleIcon(
+          tooltip: l.text('subtitles'),
+          selected: subtitlesVisible,
+          onPressed: () => onSubtitlesVisibleChanged(!subtitlesVisible),
+          icon: Icons.subtitles_outlined,
+        ),
+        // Middle media section (三段式中段, 对齐参考底栏): a thumbnail tile plus
+        // the reading title, so the transport says what is playing the way the
+        // reference bar does. No artwork source is threaded into this widget, so
+        // the tile is an honest icon rather than faked cover art. Falls back to
+        // a plain Spacer when there is no title (nothing loaded / tests).
+        if ((mediaTitle ?? '').trim().isNotEmpty)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ListenSpacing.gap12,
+              ),
+              child: Row(
+                children: [
+                  _MediaThumbnail(playing: playing),
+                  const SizedBox(width: ListenSpacing.gap8),
+                  Expanded(
+                    child: Tooltip(
+                      message: mediaTitle ?? '',
+                      child: Text(
+                        displayMediaTitle(mediaTitle ?? ''),
+                        key: const Key('playback-media-title'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          const Spacer(),
+        _SpeedButton(rate: rate, onRateChanged: onRateChanged),
+        IconButton(
+          tooltip: muted ? 'Unmute' : 'Mute',
+          onPressed: onMuteToggle,
+          icon: Icon(
+            muted ? Icons.volume_off_outlined : Icons.volume_up_outlined,
+          ),
+        ),
+        IconButton(
+          tooltip: l.text('playbackSettings'),
+          onPressed: () => _showPlaybackSettings(context),
+          icon: const Icon(Icons.tune),
+        ),
+        if (onToggleFullscreen != null)
+          IconButton(
+            key: const Key('playback-fullscreen-toggle'),
+            tooltip: isFullscreen
+                ? l.text('exitFullscreen')
+                : l.text('enterFullscreen'),
+            onPressed: onToggleFullscreen,
+            icon: Icon(
+              isFullscreen
+                  ? Icons.fullscreen_exit_outlined
+                  : Icons.fullscreen_outlined,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _showPlaybackSettings(BuildContext context) async {
+    final l = AppLocalizations.of(context);
+    var localWordStyles = statusStylesVisible;
+    var localSubtitles = subtitlesVisible;
+    var localSecondary = secondarySubtitlesVisible;
+    var localVolume = volume;
+    var localRate = rate;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(l.text('playbackSettings')),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: ListenBreakpoints.formColumnMax,
+              maxHeight: 620,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    value: localWordStyles,
+                    title: Text(l.text('wordStyles')),
+                    onChanged: (value) {
+                      setDialogState(() => localWordStyles = value);
+                      onStatusStylesChanged(value);
+                    },
+                  ),
+                  SwitchListTile(
+                    value: localSubtitles,
+                    title: Text(l.text('subtitles')),
+                    onChanged: (value) {
+                      setDialogState(() => localSubtitles = value);
+                      onSubtitlesVisibleChanged(value);
+                    },
+                  ),
+                  SwitchListTile(
+                    value: secondarySubtitlesAvailable && localSecondary,
+                    title: Text(l.text('secondarySubtitle')),
+                    onChanged: secondarySubtitlesAvailable
+                        ? (value) {
+                            setDialogState(() => localSecondary = value);
+                            onSecondaryVisibleChanged(value);
+                          }
+                        : null,
+                  ),
+                  ListTile(
+                    title: Text(l.text('rate')),
+                    trailing: DropdownButton<double>(
+                      value: localRate,
+                      items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text('${value}x'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() => localRate = value);
+                        onRateChanged(value);
+                      },
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      muted ? Icons.volume_off : Icons.volume_up_outlined,
+                    ),
+                    title: Slider(
+                      value: localVolume,
+                      max: 100,
+                      onChanged: (value) {
+                        setDialogState(() => localVolume = value);
+                        onVolumeChanged(value);
+                      },
+                    ),
+                  ),
+                  if (audioTracks.length > 1)
+                    _TrackSelector(
+                      label: l.text('audioTrack'),
+                      tracks: audioTracks,
+                      selectedId: selectedAudioId,
+                      onChanged: onAudioTrackChanged,
+                    ),
+                  if (embeddedSubtitleTracks.isNotEmpty)
+                    _TrackSelector(
+                      label: l.text('embeddedSubtitles'),
+                      tracks: embeddedSubtitleTracks,
+                      selectedId: selectedEmbeddedSubtitleId,
+                      onChanged: onEmbeddedSubtitleTrackChanged,
+                    ),
+                  _OffsetControl(
+                    label: l.text('primaryOffset'),
+                    value: primarySubtitleOffset,
+                    enabled: true,
+                    onChanged: onPrimaryOffsetChanged,
+                  ),
+                  _OffsetControl(
+                    label: l.text('secondaryOffset'),
+                    value: secondarySubtitleOffset,
+                    enabled: secondarySubtitlesAvailable,
+                    onChanged: onSecondaryOffsetChanged,
+                  ),
+                  if (sourceLoopStart != null)
+                    ListTile(
+                      leading: const Icon(Icons.stop_circle_outlined),
+                      title: Text(l.text('stopSourceLoop')),
+                      onTap: () {
+                        onStopSourceLoop();
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.stop),
+                    title: Text(l.text('stop')),
+                    onTap: () {
+                      onStop();
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l.text('close')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A/B repeat as a three-step button.
+///
+/// Every intensive-listening player has one and this transport did not: the
+/// only range loops available were the chunk ones, which loop what the timeline
+/// says rather than what the ear picked out. The three steps are labelled
+/// rather than implied — "A" while waiting for the start, "B" while waiting for
+/// the end, "AB" lit while the loop runs — because a two-tap control whose
+/// state is invisible is a control nobody trusts.
+class _AbLoopButton extends StatelessWidget {
+  const _AbLoopButton({
+    required this.anchor,
+    required this.looping,
+    required this.onPressed,
+  });
+
+  /// Set once A is marked and the button is waiting for B.
+  final Duration? anchor;
+  final bool looping;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final pending = anchor != null && !looping;
+    final active = looping || pending;
+    return Tooltip(
+      message: l.text(
+        looping
+            ? 'abLoopClear'
+            : pending
+            ? 'abLoopSetEnd'
+            : 'abLoopSetStart',
+      ),
+      child: TextButton(
+        key: const Key('playback-ab-loop'),
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: active ? colors.primary : colors.onSurfaceVariant,
+          padding: ListenPadding.tight,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          pending ? 'A•' : 'AB',
+          style: ListenType.emphasis.copyWith(
+            fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The transport's now-playing tile (三段式中段的方形缩略图).
+///
+/// The reference bar shows the episode's cover art here. No cover URL reaches
+/// this widget — workbench media are local files with no artwork — so rather
+/// than fake a picture, the tile carries the same music/equalizer glyph the
+/// compact mini-player uses, and flips to the equalizer while playing.
+class _MediaThumbnail extends StatelessWidget {
+  const _MediaThumbnail({required this.playing});
+
+  final bool playing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: ListenRadii.surfaceBorder,
+      ),
+      child: Icon(
+        playing ? Icons.equalizer_rounded : Icons.music_note_rounded,
+        size: ListenIconSize.control,
+        color: colors.onPrimaryContainer,
+      ),
+    );
+  }
+}
+
+/// Playback speed as a small pill that opens the rate menu (三段式右段的 `1x`).
+///
+/// Replaces the bare dropdown so the control reads like the reference bar's
+/// `1x` chip and lines up with the AB button beside it. The label drops a
+/// trailing `.0`, so 1.0 shows as `1x` rather than `1.0x`.
+class _SpeedButton extends StatelessWidget {
+  const _SpeedButton({required this.rate, required this.onRateChanged});
+
+  final double rate;
+  final ValueChanged<double> onRateChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return PopupMenuButton<double>(
+      tooltip: l.text('rate'),
+      initialValue: rate,
+      onSelected: onRateChanged,
+      itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+          .map(
+            (value) => CheckedPopupMenuItem<double>(
+              value: value,
+              checked: value == rate,
+              child: Text(_formatRate(value)),
+            ),
+          )
+          .toList(),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: ListenRadii.controlBorder,
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: ListenSpacing.gap8,
+            vertical: ListenSpacing.gap4,
+          ),
+          child: Text(
+            _formatRate(rate),
+            key: const Key('playback-speed-pill'),
+            style: ListenType.emphasis.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// `1.0 → 1x`, `1.25 → 1.25x`, `0.5 → 0.5x`.
+String _formatRate(double rate) {
+  final text = rate == rate.roundToDouble()
+      ? rate.toStringAsFixed(0)
+      : rate.toString();
+  return '${text}x';
+}
+
+class _PlaybackMenuButton extends StatelessWidget {
+  const _PlaybackMenuButton({
+    required this.tooltip,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onSelected,
+    required this.itemBuilder,
+    this.enabled = true,
+  });
+
+  final String tooltip;
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final PopupMenuItemSelected<String> onSelected;
+  final PopupMenuItemBuilder<String> itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // Unselected toggles sit with the shell (variant shade); only a selected
+    // state carries the signal teal (#30).
+    final foreground = enabled
+        ? selected
+              ? colors.primary
+              : colors.onSurfaceVariant
+        : colors.onSurfaceVariant.withValues(alpha: 0.55);
+    final iconWidget = Icon(
+      icon,
+      size: ListenIconSize.control,
+      color: foreground,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: ListenSpacing.gap6),
+      child: PopupMenuButton<String>(
+        tooltip: tooltip,
+        enabled: enabled,
+        onSelected: onSelected,
+        itemBuilder: itemBuilder,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: selected
+                ? colors.primaryContainer
+                : colors.surfaceContainerLow,
+            borderRadius: ListenRadii.controlBorder,
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          child: Padding(
+            padding: ListenPadding.row,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                iconWidget,
+                const SizedBox(width: ListenSpacing.gap6),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: foreground,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: ListenSpacing.gap2),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: ListenIconSize.control,
+                  color: foreground,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToggleIcon extends StatelessWidget {
+  const _ToggleIcon({
+    required this.tooltip,
+    required this.selected,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final String tooltip;
+  final bool selected;
+  final VoidCallback? onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    isSelected: selected,
+    onPressed: onPressed,
+    // Unselected toggles recede with the shell; selection is what lights up.
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
+    icon: Icon(icon),
+    selectedIcon: Icon(icon, color: Theme.of(context).colorScheme.primary),
+    style: selected
+        ? IconButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          )
+        : null,
+  );
+}
+
+class _TrackSelector extends StatelessWidget {
+  const _TrackSelector({
+    required this.label,
+    required this.tracks,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<PlayerTrack> tracks;
+  final String? selectedId;
+  final ValueChanged<PlayerTrack> onChanged;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    title: Text(label),
+    trailing: DropdownButton<String>(
+      value: tracks.any((track) => track.id == selectedId) ? selectedId : null,
+      items: tracks
+          .map(
+            (track) => DropdownMenuItem(
+              value: track.id,
+              child: Text(track.title ?? track.language ?? track.id),
+            ),
+          )
+          .toList(growable: false),
+      onChanged: (id) {
+        final matches = tracks.where((track) => track.id == id);
+        if (matches.isNotEmpty) onChanged(matches.first);
+      },
+    ),
+  );
+}
+
+class _OffsetControl extends StatelessWidget {
+  const _OffsetControl({
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String label;
+  final Duration value;
+  final bool enabled;
+  final ValueChanged<Duration> onChanged;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    title: Text(label),
+    subtitle: Text('${value.inMilliseconds} ms'),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          onPressed: enabled
+              ? () => onChanged(value - const Duration(milliseconds: 100))
+              : null,
+          icon: const Icon(Icons.remove),
+        ),
+        IconButton(
+          onPressed: enabled
+              ? () => onChanged(value + const Duration(milliseconds: 100))
+              : null,
+          icon: const Icon(Icons.add),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SourceLoopChip extends StatelessWidget {
+  const _SourceLoopChip({required this.label, required this.onStop});
+
+  final String label;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15),
+        borderRadius: ListenRadii.controlBorder,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: ListenSpacing.gap6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.loop,
+              size: ListenIconSize.inline,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
+            const SizedBox(width: ListenSpacing.gap4),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.secondary,
+              ),
+            ),
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: IconButton(
+                onPressed: onStop,
+                padding: EdgeInsets.zero,
+                iconSize: ListenIconSize.inline,
+                icon: Icon(
+                  Icons.close,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+                tooltip: AppLocalizations.of(context).text('stopSourceLoop'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Info-level feedback, shown just above the transport and gone on its own.
+///
+/// The bar used to hand every `setStatus` string the same permanent row, so
+/// "Timeline resources refreshed" sat under the transport until something else
+/// replaced it — a sentence about a moment that had passed, holding layout
+/// open (§3.7 item 5). This is only the info tier of §3.8: errors keep the
+/// persistent row above, and how `setStatus` is called is left alone (that
+/// split is S5's).
+///
+/// It floats rather than reserving a row on purpose. Reserving one would mean
+/// the transcript above loses 28px every time the app says "done" and gets it
+/// back 2.4s later, which is more disruptive than the message is worth.
+class _TransientStatusToast extends StatefulWidget {
+  const _TransientStatusToast({required this.message});
+
+  final String message;
+
+  /// Long enough to read one line, short enough that nobody waits for it.
+  static const visibleFor = Duration(milliseconds: 2400);
+
+  @override
+  State<_TransientStatusToast> createState() => _TransientStatusToastState();
+}
+
+class _TransientStatusToastState extends State<_TransientStatusToast> {
+  Timer? _timer;
+  bool _visible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TransientStatusToast oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A new message is a new event, even if the previous one had already
+    // faded: the countdown starts again rather than inheriting the old one.
+    if (oldWidget.message != widget.message) _restart();
+  }
+
+  void _restart() {
+    _timer?.cancel();
+    _visible = true;
+    _timer = Timer(_TransientStatusToast.visibleFor, () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AnimatedOpacity(
+      opacity: _visible ? 1 : 0,
+      duration: ListenMotion.base,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: ListenRadii.controlBorder,
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        child: Padding(
+          padding: ListenPadding.tight,
+          child: Text(
+            widget.message,
+            key: const Key('playback-info-status'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskStatusChip extends StatelessWidget {
+  const _TaskStatusChip({required this.status});
+
+  final UserTaskStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final color = _stateColor(Theme.of(context).colorScheme, status.state);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: ListenRadii.controlBorder,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: ListenSpacing.gap6,
+          vertical: ListenSpacing.gap2,
+        ),
+        child: Text(
+          '${l.text(status.titleKey)} · ${status.progress.clamp(0, 100)}%',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+        ),
+      ),
+    );
+  }
+
+  Color _stateColor(ColorScheme colors, UserTaskState state) => switch (state) {
+    UserTaskState.working => colors.tertiary,
+    UserTaskState.success => colors.primary,
+    UserTaskState.warning => colors.secondary,
+    UserTaskState.error => colors.error,
+    UserTaskState.cancelled => colors.onSurfaceVariant,
+    UserTaskState.unknown => colors.onSurfaceVariant,
+  };
+}

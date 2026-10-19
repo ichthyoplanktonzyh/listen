@@ -1,0 +1,207 @@
+# Acoustic Forced Alignment vs DTW Token Timing
+
+## Background
+
+LLPlayerNext currently uses whisper.cpp DTW (Dynamic Time Warping) v2 timestamps
+for word-level subtitle highlighting. While this works correctly in most cases,
+occasional timing drift has been observed in real-video testing. This prompted
+an exploration of whether direct acoustic analysis could yield more reliable
+time alignment.
+
+## Current Approach: DTW Token Timing
+
+DTW timestamps are derived from whisper's internal cross-attention weights:
+
+```
+whisper encoder hidden states → cross-attention to audio frames → DTW smoothing → word timings
+```
+
+**What it measures**: where the model *attended* in the audio when producing each
+output token.
+
+**Strengths**:
+- Zero additional cost (built into whisper.cpp `-dtw` output)
+- Accurate in the majority of cases
+- Requires no additional models, dependencies, or inference
+
+**Weaknesses**:
+- Attention position ≠ physical sound position. The model may attend semantically
+  (e.g., context before the word) rather than acoustically to the exact phoneme
+- Drift occurs with fast speech, minimal pauses, or overlapping speakers
+- Single-point failure: if encoder attention is imprecise for a token, no
+  downstream correction exists
+
+## Proposed Approach: Acoustic Forced Alignment
+
+Forced alignment directly processes the audio waveform to locate phoneme boundaries:
+
+```
+audio waveform → frame segmentation → MFCC/filterbank features → acoustic model
+→ per-frame phoneme probabilities → Viterbi/CTC decoding constrained by known text
+→ phone-level timestamps
+```
+
+**What it measures**: where each phoneme *physically occurs* in the audio signal,
+based on spectral features (formants, energy, transitions).
+
+**Strengths**:
+- Higher precision: phone-level accuracy typically within 10–20 ms
+- Works independently of any ASR model's internal state
+- Well-established in linguistics (Montreal Forced Aligner, Kaldi, CTC-based aligners)
+- Can produce time-aligned IPA phone timelines that track connected-speech phenomena
+
+**Weaknesses**:
+- Requires additional model inference (compute cost)
+- Sensitive to background noise and non-standard pronunciation
+- Adds a dependency on an alignment model/runtime
+- Phone-level alignment is more expensive than word-level (more tokens to align)
+
+## Key Insight: Physical vs Representational Time
+
+| | DTW (current) | Forced Alignment (proposed) |
+|---|---|---|
+| **Input** | Cross-attention weight matrix (model-internal) | Raw audio samples → acoustic features (physical) |
+| **Space** | Model representation space (e.g., 768-dim vectors) | Acoustic space (spectrum, formants, energy) |
+| **Analogy** | Watching where eyes land on a page to infer reading position | Listening to the sounds coming out of the mouth |
+| **Nature** | Indirect inference from model state | Direct measurement from physical signal |
+
+The core argument: acoustic forced alignment operates at the physical layer. Audio
+waveforms are the closest representation to the actual speech event — they capture
+the air vibrations that constitute speech. DTW operates in a representational
+layer that is optimized for semantic understanding, not temporal precision.
+
+## Architecture Alignment
+
+The codebase already has the data model foundation for this direction:
+
+- `crates/speech-analysis/src/phonetic_alignment.rs` — phone alignment structures
+  (already exists alongside DTW's `asr_timing.rs`)
+- `crates/speech-analysis/src/phonetic_findings.rs` — detected-phone findings
+  with start/end timestamps
+- `DetectedPhone` — per-phone `start_ms` / `end_ms` / `phone_set` / `stress`
+
+This means the database already stores phone-level timestamps. The gap is in
+the *source* of those timestamps (currently estimated, could be replaced by
+forced alignment output).
+
+## Phone-Level Visual Highlighting
+
+A related goal: IPA phone displays should highlight synchronously with audio
+playback, at phone-level granularity rather than word-level.
+
+**Current state**: phones are rendered as a static string per sentence.
+
+**Target state**: each phone is an individual widget; the active phone (matching
+playback position) is visually distinct.
+
+**What's already in place**:
+1. `subtitle_controller.currentDetectedPhone` / `currentDetectedPhoneAt(ms)` —
+   binary search over phone timeline to find the active phone at a given
+   playback position
+2. `player` emits `currentPosition` events — the same stream that drives
+   word-level subtitle highlighting
+3. `DetectedPhone` has `start_ms` / `end_ms` fields
+
+**What needs to change**:
+1. UI layer: split the phone display string into individual phone widgets
+   (one per `DetectedPhone`), rather than rendering as a single text span
+2. Highlight logic: apply active/inactive styling based on the current
+   phone index, using the same `currentDetectedPhoneAt(ms)` lookup that
+   already exists
+3. This is architecturally identical to word-level highlighting, just at
+   phone granularity
+
+## Recommended Path
+
+1. **Keep DTW as the default** — covers 90%+ of cases at zero cost
+2. **Integrate a lightweight forced aligner** — options include:
+   - CTC-based: reuse whisper encoder hidden states + CTC decoding with text constraint
+   - Dedicated: `ctc-forced-aligner`, `torchaudio` forced alignment, or whisper's
+     own cross-attention outputs reinterpreted through a CTC lens
+   - Traditional: Montreal Forced Aligner (MFA) via subprocess
+3. **Trigger selectively** — re-align only sentences where DTW confidence is low,
+   or offer user-initiated "precise timing" mode
+4. **Combine sources** — DTW provides a prior distribution; forced alignment
+   refines boundaries; phone-level timestamps from either source feed the
+   same `DetectedPhone` structure
+
+## Research-Mode Implementation
+
+The first implementation has landed as a Python sidecar rather than a bundled
+product dependency. `scripts/forced-align/setup-venv.sh` prepares an isolated
+torchaudio environment under
+`~/Library/Caches/LLPlayerNext/research/forced-align/`, and
+`scripts/forced-align/align-cli.py` runs torchaudio's MMS_FA CTC aligner through
+a JSON stdin/stdout protocol.
+
+The transcription coordinator auto-detects this sidecar after Whisper DTW word
+timing extraction and before local pause refinement. Missing venv, missing
+script, Python failure, malformed JSON, or implausible aligned spans all degrade
+back to the original DTW timing. Valid aligned words are merged per word and
+stored with `timing_source = forced_aligned`.
+
+This keeps the app bundle pure native while allowing real-video validation of
+the core acoustic hypothesis. If the sidecar proves consistently better for
+word highlighting and chunk boundaries, the production follow-up should replace
+the Python/torch prototype with a license-cleared native or ONNX-based aligner.
+
+Follow-up resource-system discussion lives in
+[`word-phone-timeline-resource-system.md`](word-phone-timeline-resource-system.md).
+The corresponding implementation plan is
+[`../planning/milestone-timeline-resource-evaluation.md`](../planning/milestone-timeline-resource-evaluation.md).
+
+## Downstream Impact: Chunk Partitioning Accuracy
+
+Imprecise word timestamps cascade into the chunk partitioning pipeline.
+`chunk_partition.rs` determines chunk boundaries primarily through inter-word
+gap detection:
+
+```rust
+let gap_ms = effective_timings[next].start_ms.saturating_sub(effective_timings[current].end_ms);
+```
+
+The default `asr_reported_gap_threshold_ms` is 250 ms. If the gap between two
+words exceeds this threshold, the position is scored as a candidate boundary
+and may become a chunk split point.
+
+### Error Propagation
+
+Word-level timestamp errors from DTW propagate into gap calculations via two
+sources of uncertainty:
+
+- `current_word.end_ms` — DTW may place the end of a word too early or too late
+- `next_word.start_ms` — DTW may place the start of the next word correspondingly off
+
+The gap is `next.start - current.end`. Both components carry error, so the
+gap estimate suffers from *compounded* uncertainty. A ~50 ms jitter per boundary
+can easily push a real 280 ms pause below 250 ms (missed boundary) or inflate a
+real 200 ms gap to 250+ ms (false boundary).
+
+### Concrete Failure Modes
+
+| DTW error pattern | Gap effect | Chunk consequence |
+|---|---|---|
+| `current.end_ms` too late + `next.start_ms` too early | Gap shrinks | Real pause missed → two chunks incorrectly merged |
+| `current.end_ms` too early + `next.start_ms` too late | Gap widens | False boundary → sentence split mid-phrase |
+| Cumulative drift across sentence | All gaps distorted | Chunk boundaries shift toward sentence end |
+
+### Implications
+
+The chunk listening comprehension feature (`worktree-feature+chunk-listening-comprehension`)
+depends on these boundaries for capsule-based display and playback. Inaccurate
+boundaries degrade the user experience: chunks that are too long overwhelm the
+learner, while chunks cut mid-phrase break syntactic units.
+
+Improving the underlying word timing source (moving from DTW to forced alignment)
+would address both the word-level highlighting inaccuracy AND the chunk boundary
+inaccuracy — since both derive from the same timestamp source.
+
+## References
+
+- McAuliffe et al., "Montreal Forced Aligner: Trainable Text-Speech Alignment
+  Using Kaldi" (Interspeech 2017)
+- Kürzinger et al., "CTC-Segmentation of Large Corpora for German End-to-End
+  Speech Recognition" (SPECOM 2020)
+- The current `phonetic_alignment.rs` and `phonetic_findings.rs` modules in
+  `crates/speech-analysis/src/`
+- DTW v2 discussion in `docs/features/asr-word-timestamps.md`

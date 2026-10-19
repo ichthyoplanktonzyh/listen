@@ -1,0 +1,10 @@
+[package]
+name = "semantic-embedding-spike"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+fastembed = { version = "=5.17.3", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries-rustls-tls"] }
+

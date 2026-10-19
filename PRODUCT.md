@@ -1,265 +1,296 @@
 # Listen Product Semantics
 
-> Status: owner-approved semantic baseline, revision 4, 2026-08-11.
+> Status: owner-approved semantic baseline, revision 7, 2026-09-08.
 
-This document defines what Listen is, why it exists, and the durable principles
-that shape the product. It does not describe current implementation status,
-repository structure, release versions, or roadmap commitments.
+This document defines what Listen is, why it exists, and the durable product
+principles that follow from the project model. The theoretical structure and
+learning boundary are authoritative in [MODEL.md](MODEL.md). This document does
+not claim current implementation completeness or define executable contracts.
 
 ## Purpose
 
-Listen helps people improve language ability through language-bearing material
-they genuinely want to understand and reuse.
+Listen helps people turn authentic language they care about into language
+capability they can actually use.
 
-Its primary interaction is listening, but it also supports reading and leaves
-speaking, writing, and future learning experiences open. Audio is not required:
-a Learner can open a document immediately and later enrich it with speech or
-other resources.
+It does this by compiling arbitrary Sources into Complete Learning Materials,
+supporting meaningful interaction with those materials, retaining re-enterable
+Language Slices and learning history in a Personal Corpus, and using those
+experiences to develop independent reading, listening, speaking, and writing
+capabilities.
+
+Listening is the product's strongest current emphasis. Listen remains a
+four-dimensional language-learning system rather than a listening-only player.
 
 ## Product statement
 
-Listen is a multilingual, material-centered, self-directed language-learning
-ecosystem. Learners can study their own documents, audio, and video immediately,
-or use reusable Content Packages produced by other people. As retained
-materials accumulate, Listen turns them into a searchable Personal Corpus in
-which real language contexts can be rediscovered and learned repeatedly.
+Listen is an authentic-material language-capability acquisition system. It
+starts from real articles, books, podcasts, recordings, audio, and video;
+compiles them into complete, interactive language experiences; and helps the
+Learner build a Personal Corpus that can be revisited for perception,
+understanding, retrieval, production, and transfer.
 
-> Turn language content you care about into a personal corpus you can search,
-> revisit, and keep learning from.
+> Turn authentic language into experiences you can re-enter, learn from, and
+> make part of your own L2 world.
 
-The Personal Corpus is the compounding mechanism; improved language ability is
-the learner outcome.
+Authentic Experience and Personal Corpus are the product's two distinctive
+ideas. The first keeps learning grounded in real language. The second prevents
+useful experience from disappearing when one session ends.
 
 ## Product principles
 
-### Material-centered
+### Authentic material, not a mandatory curriculum
 
-Learning begins with Language Materials rather than a mandatory curriculum.
-Listen may offer structure and suggestions, but it does not require one course
-or one sequence of activities.
+Learning is grounded in language-bearing material chosen or accepted by the
+Learner. Listen may offer activities, review, and next experiences, but it does
+not require one course, one deck, or one fixed sequence.
 
-### Listening-first, not listening-only
+### Separate Source from formal Learning Material
 
-Listening is the primary emphasis. Reading is a complete entry path, and
-speaking, writing, pronunciation, and other activities may build on the same
-materials and resources.
+A file, URL, feed item, article, document, podcast, recording, audio file, or
+video first enters the language world as a Raw Source. Source acquisition,
+preview, recovery, and compilation are production concerns.
 
-### Immediate use, optional enrichment
+Formal learning begins from a Complete Learning Material qualified under the
+modality-aware contract in [MODEL.md](MODEL.md). Text-only materials support
+normal text-based learning without TTS. Existing audio requires the full
+sound-processing scope, not a minimum tier with separately requested speech
+enhancements. Sentence Translation remains required for the declared Support
+Language; unrelated optional explanations may be added later.
 
-A supported Document or Media Rendition is usable before generation.
-Structured extraction, transcription, alignment, translation, explanation,
-pronunciation analysis, text-to-speech, and future resources are independent
-capabilities rather than admission gates.
+This distinction prevents the learning system from treating every missing
+foundation as an ordinary UI fallback. A failed or incomplete compilation is
+reported as production state; it is not disguised as a complete learning
+experience.
 
-### Documents are first-class renditions
+### One aligned language experience
 
-Text is a content modality; plain text, Markdown, HTML, EPUB, and PDF are
-document formats. Each supported input is preserved or bound as a Document
-Rendition instead of being silently flattened into one string. Typing or
-pasting text is a convenience intake adapter that creates a plain-text
-Document Rendition, not a separate product category or the boundary of Listen's
-document model.
+Canonical audio and canonical text are aligned representations of one Material
+Revision when audio exists, not separate learner-owned materials. Text Sources
+gain faithful audio only on Learner request; that audio then receives the same
+full processing as source audio. Sources with audio gain verified text through
+transcription or another qualified path. Source video is retained when present.
 
-Direct document viewing and structured reading are distinct capabilities. A
-renderer may show an original rendition before Listen has chapter, paragraph,
-language, or text-span structure. A Structured Reading Resource provides that
-logical structure and stable Reading Anchors for resume, annotation, corpus,
-and dependent Learning Resources. Missing or failed extraction, including OCR
-for a scanned document, is reported honestly without invalidating a viewable
-rendition.
+Structured Reading and stable Text Anchors support reading, lookup, translation,
+and Language Slices independently of sound. Sense Groups support meaning-group
+reading and focus without audio or TTS. When audio exists, Structured Timed Text
+adds exact audio mappings for synchronized highlighting, replay, loops, and
+speech learning; Sense Groups do not substitute for Prosodic Chunks.
 
-### Multimodal by composition
+### Listening-first, four-dimensional
 
-A Material is valid with any supported set of modalities. A text-only Material
-is not a broken multimodal object: it offers Read while Listen may be derivable,
-generating, or unavailable. A failed enrichment attempt is reported separately
-and may remain retryable. Capability presentation answers what the Learner can
-do now or request next; it does not redefine Material identity or rank one
-modality as universally complete.
+Listen gives special depth to the path from acoustic signal through perception,
+segmentation, form, and meaning. Reading, listening, speaking, and writing
+remain independent learner capabilities. Success in one never silently proves
+another.
 
-The active learner-facing composition belongs to the Learning Material. A
-producer publishes a coherent reusable composition as a Learning Edition.
-Individual artifacts remain independently identified and replaceable. A richer
-composition may combine a Document Rendition, audio or video Renditions,
-Structured Reading and timed-text Base Resources, alignment, and Assistance
-Resources without collapsing them into one monolithic resource.
+The product may deepen listening first while preserving acquisition experience
+spaces for reading, speaking, and writing.
 
-Text-to-speech adds a provenance-bearing Derived Media Rendition; it does not
-replace or mutate the source document. Synchronized Read-and-Listen additionally
-requires an exact mapping between Reading Anchors and media-time Rendition
-Locators. A translation, abridgement, or other semantic rewrite cannot silently
-claim to be a faithful rendition of the same Material Revision.
+### Speech analysis must become perceptual guidance
 
-### Self-directed learning
+Speech Learning Representation connects Signal Facts, Speech Structure, and
+Perceptual Guidance. It distinguishes observed acoustic evidence from text
+priors, predictions, and estimates; keeps semantic Sense Groups distinct from
+Prosodic Chunks; and records provenance for replaceable analyses.
 
-The Learner chooses how to use a material. Listen exposes capabilities and
-preserves meaningful state without pretending the current set of Learning
-Activities is complete.
+The learner-facing purpose is not to display phonetic terminology. It is to
+guide attention and produce a better second act of listening. Material-side
+speech truth can be shared; what the Learner should focus on now is
+learner-relative.
 
-### Multilingual core, language-aware capabilities
+Full processing does not require every sound phenomenon to exist. Unsupported
+analysis, insufficient evidence, failure, and a qualified absence remain
+distinct; missing evidence is not filled with an unlabeled prediction. The
+Learner can choose which analyses to view. Minimum Sufficient Scaffold governs
+that presentation, not which required material analyses are performed.
 
-Materials, resources, corpus occurrences, and learning records use shared
-semantics across languages. Tokenization, lexical identity, writing systems,
-pronunciation, tone, stress, mora, rhythm, and morphology are language-aware
-capabilities that may vary or be unavailable without breaking basic use.
+### Gen compiles language; the learning system compiles experience
 
-### Accumulation with intent
+Gen produces reusable material-side truth and structure. Core preserves the
+canonical material, episode, evidence, and learner-state semantics. App presents
+the activity, attention, support, re-entry, and navigation experience.
 
-Opening a material temporarily does not add it to the Personal Library. The
-Learner explicitly retains a material before it is durably indexed and synced.
-Personal Library membership is independent of file location. By default,
-Listen may keep a verified device-local copy in its Managed Asset Store while
-leaving the original untouched; learners may instead reference an asset in
-place. Either storage choice preserves the same learner-owned material and
-learning records.
+Provider workflows, model choices, and derivation recipes do not cross the
+formal learning boundary. The learning system consumes a declared Complete
+Learning Material contract.
+
+### One Workbench across materials and activities
+
+The [unified Workbench](MODEL.md#unified-workbench-consumption) consumes
+Core-provided materials and learning semantics. Reading and Sense Groups,
+audio/video interaction, later TTS enrichment, and Corpus-selected learning or
+review share this workspace rather than separate consumption systems. Views
+and Activity modes can differ without changing material ownership or exposing
+Gen's production workflow; the Workbench hosts Activities rather than defining
+one universal Activity or fixed layout.
+
+### Learning Activity describes cognition, not UI
+
+A Learning Activity names what the Learner is trying to do with language:
+listen for meaning, perceive a difficult form, read, dictate, reconstruct,
+shadow, retrieve, speak, or write. Buttons, pages, subtitle toggles, and replay
+controls are support actions unless they participate in such an operation.
+
+The set of activities stays open. Listen does not build a large universal
+taxonomy before product evidence requires it.
+
+### Language Slices preserve re-entry and context
+
+When a bounded piece of a material becomes meaningful to the Learner, Listen
+can retain it as a Language Slice. A Slice points to the exact Material
+Revision, text span, exact audio rendition/range when available, and compatible
+resources. A text-only Slice is valid. It normally does not copy a new audio
+file or become a new material.
+
+The Learner can reopen the Slice, recover surrounding context, and replay it
+when its referenced audio is available. Later TTS adds a new listening
+possibility without turning previous reading history into listening evidence.
+
+### Personal Corpus stores meaningful relationships
+
+The Personal Corpus is not merely the Personal Library, a search index, a
+bookmark list, or a vocabulary deck. It preserves Language Slices together
+with Learner Relations and Meaningful Learning Episodes.
+
+It acts as memory, an evidence base, and an experience reservoir. Repeated
+authentic occurrences of one language object become a personalized set for
+review and transfer.
+
+Initially, it is a freely browsable personal language space: inspect entries,
+context, and history; choose entries to add to learning or review; then enter
+the corresponding Activity. An explicit save can begin the history without a
+completed exercise. Browsing alone is not an attempt, and automatic scheduling
+or next-experience selection is not a prerequisite.
+
+### Preserve fact history; replace interpretation
+
+Exposure, attention, learning, and acquisition are distinct. Raw clickstream
+does not silently become learner state. Meaningful Episodes preserve outcomes,
+conditions, assistance, source context, and provenance.
+
+Personal Corpus answers what happened. Personal L2 World and Learner State are
+versioned interpretations of that history. New projection logic may reinterpret
+the evidence but never rewrite the underlying facts. Explicit Learner authority
+remains distinct from model inference.
+
+### Simple durable state, rich episode evidence
+
+Listen does not prematurely persist a giant tensor of every possible subskill.
+A simple long-lived capability state may be backed by rich evidence about
+context, speaker, rate, assistance, perception, production, and transfer. Real
+usage determines which additional projections deserve durable product status.
+
+### Review means reactivation, re-perception, and transfer
+
+Scheduling decides when a learner-language relation returns. Acquisition
+Experience decides what the Learner should do when it returns. These are
+different concerns.
+
+Listening review begins by re-entering the original Slice audio-first. Failure
+reveals only the minimum sufficient scaffold: focused replay, a perceptual or
+rhythmic cue, speech explanation, timed text, then translation. Support must
+lead back to listening.
+
+Same-recording success may reflect acoustic memorization. Robustness is tested
+through new sentences, speakers, rates, prosody, realizations, or contexts.
+
+### Policy follows evidence
+
+Listen does not need a large configurable policy framework today. It needs to
+identify the difficulty that occurred, offer the most direct useful help,
+decide which meaningful experience enters the Personal Corpus, and choose how
+that authentic experience should be re-entered later.
+
+More complex adaptation follows validated behavior rather than theoretical
+completeness.
 
 ### Replaceable production, reusable results
 
-Listen Gen lets producers choose models and tools suited to their hardware,
-budget, language, and privacy needs. Consumers reuse the resulting package
-without needing the producer's models. The project intends an open production
-ecosystem; repository licensing remains an explicit, separate decision.
+Models, tools, and providers remain replaceable. Qualified material-side
+results carry provenance, compatibility, and version identity so another
+Learner can reuse a compiled Learning Material without needing the producer's
+runtime or credentials.
 
-Capability Completion begins with a Material Capability, not a provider
-workflow. Given the exact current Renditions and Resources, Listen first reuses
-a compatible installed or community result; when production is needed, Gen
-derives only the missing artifacts, records provenance and compatibility, and
-returns a reusable Content Package.
+A Content Package is a distribution mechanism for a coherent Complete Learning
+Material composition. It is not a course, a learner backup, or the central
+learning object.
 
-### Public content, private learning
+### Public material, private learning
 
-Content Packages, editions, and community metadata can be public. Personal
-progress, notes, saved items, and Learning Facts belong to the Learner and are
-never part of a community package.
+Compiled materials, editions, and community metadata may be shared when rights
+permit. Personal Corpus entries, learning episodes, attempts, notes, learner
+state, and explicit decisions belong to the Learner and are never embedded in a
+public package.
 
-### Account-enhanced, offline-capable
+### Multilingual core, language-aware representation
 
-An account is not required to open local material or use basic learning
-capabilities. Accounts enable future synchronization, subscriptions, and
-publishing. Downloaded or local material remains usable offline.
+The two-world model, Language Slice, episode history, four capability
+dimensions, and evidence boundaries are language-general. Tokenization,
+lexical identity, writing systems, pronunciation, tone, stress, mora, rhythm,
+prosody, morphology, and perceptual guidance are language-aware capabilities.
 
-### Replaceable external providers
+Unsupported language-specific analysis degrades honestly during material
+production; the product must not silently substitute an English-shaped model.
 
-Model vendors, media sources, and external context providers may enrich the
-experience but are never the sole authority for a core Listen concept. Their
-results remain attributed and follow provider usage constraints.
+### Account-enhanced and offline-capable
 
-### Simple journeys, deep internals
-
-Listen may use sophisticated material identity, package, resource, acquisition,
-and synchronization architecture internally, but ordinary learner journeys
-remain about materials, assistance, the Personal Library, and corpus search.
-Technical package concepts are progressive detail, never chores required before
-learning.
+An account may support synchronization, subscriptions, publishing, and
+cross-device recovery. Compiled or locally produced Learning Materials and
+private learning history should remain usable offline within their rights and
+storage constraints.
 
 ## Durable learner journey
 
 ```text
-import or discover material
-  -> read, listen, or watch it immediately
-  -> add a capability or assistance when useful
-  -> retain it intentionally
-  -> rediscover its contexts through the corpus
+bring or discover a Raw Source
+    -> compile and qualify a Complete Learning Material
+    -> enter a Learning Activity
+    -> focus or retain a Language Slice
+    -> form a Meaningful Learning Episode
+    -> grow the Personal Corpus
+    -> re-enter experience for repair, production, or transfer
 ```
 
-Acquisition, package matching, local generation, validation, installation, and
-edition adoption may run behind one learner intent. Direct document viewing or
-media playback starts as soon as a supported source asset is available;
-structured reading starts when a compatible Structured Reading Resource is
-available.
+Acquisition, source binding, provider execution, qualification, packaging,
+installation, and adoption may run behind the material-production journey.
+They do not become learning activities merely because they are technically
+complex.
 
-## Material entry paths
+## Personal data boundary
 
-1. Open a supported document, audio, or video; use its available capabilities
-   immediately; optionally enrich or retain it. Typing or pasting creates one
-   plain-text Document Rendition through the same path.
-2. Discover a community Learning Edition; resolve its source assets; install a
-   compatible Package Release.
-3. Subscribe to a Content Source such as a blog, podcast, or channel; choose a
-   Discovery Item; acquire it; reuse community resources or generate missing
-   enrichment in the background.
+Listen preserves and synchronizes data the Learner cannot safely recreate:
+Personal Corpus entries, explicit retention, Language Slices, meaningful
+episodes, attempts, judgments, decisions, capability history, notes, and
+progress.
 
-All three paths produce a Learning Material. A Content Package is a distribution
-mechanism, not the product's central learning object or a prerequisite.
-
-## Content discovery and acquisition
-
-- A Content Subscription produces Discovery Items, not Personal Library
-  membership.
-- Discovery does not imply that source assets are downloadable, playable, or
-  licensed for redistribution.
-- Acquisition may use an authorized feed enclosure, source page, local asset
-  binding, or another source-specific option.
-- **Start learning** may combine acquisition, retention, Package Installation,
-  and Learning Edition Adoption without exposing the technical steps.
-- Listen prefers compatible community resources; local production is a fallback
-  or explicit alternative, not mandatory duplicate work.
-- A modality is presented as available, derivable, generating, or unavailable
-  according to evidence; a failed attempt is explicit and may remain retryable.
-  None is collapsed into a generic missing flag or automatic generation
-  command.
-- Missing enrichment degrades honestly while usable source assets remain usable.
-
-## Corpus search
-
-Listen uses one Corpus Occurrence model across Current Material, Personal
-Corpus, and Community Corpus. Text occurrences anchor to Reading Anchors and
-text spans in an exact Base Resource; they may also map to Rendition Locators.
-Timed occurrences may additionally anchor to media ranges. External context
-providers such as YouGlish may supplement these scopes with attributed,
-ephemeral references but do not silently enter a Listen corpus.
-
-## Content Package ecosystem
-
-- One Language Material can have multiple Material Revisions.
-- One Material Revision can have multiple Source and Derived Document or Media
-  Renditions. Read, Listen, Watch, and synchronized Read-and-Listen are
-  capabilities of one material rather than separate ownership objects.
-- One Material Revision can have multiple Learning Editions.
-- A Learning Edition is a coherent reusable composition for one or multiple
-  modalities; the Learning Material owns the active learner-facing composition,
-  and no single Rendition or Learning Resource represents universal
-  completeness.
-- One Learning Edition can have multiple immutable Package Releases.
-- Base Resources can be reused across Support Languages; Assistance Resources
-  may target a support language or audience.
-- A package may embed resources, reference them externally, or mix both.
-- Package Installation verifies and exposes candidates. Learning Edition
-  Adoption is the separate Learner decision to use a coherent selection.
-- Package changes never own or erase progress, Lexical Capability Profiles,
-  Personal Expressions, or completed activity records.
-- New releases are offered as updates and never silently replace an adopted
-  release.
-- Publisher Status, Review Status, and License Status remain independent.
-
-## Personal data
-
-Listen synchronizes durable data that the Learner cannot safely recreate:
-subscriptions, library membership, progress, notes, saved items, explicit
-outcomes, and meaningful Learning Facts. Public package bytes are
-re-downloadable; indexes, caches, and Learning Inferences are rebuildable. Raw
-media and large sensitive assets are not assumed to synchronize automatically.
+Compiled public artifacts, caches, indexes, and Learner Inferences may be
+recreated or downloaded again. Their lifecycle must not erase durable learner
+facts.
 
 ## Non-goals
 
 Listen does not currently aim to:
 
-- prescribe a universal curriculum or mandatory learning sequence;
-- require generation or a Content Package before basic learning;
-- force every Material to become multimodal or treat an absent modality as a
-  defect;
-- enumerate every future Learning Activity;
-- model every language with English-specific concepts;
-- bind production to one provider or model generation;
-- make a full community correction editor part of the learner application;
-- copy external-provider content into the corpus without ordinary material
-  intake.
+- accept an incomplete Raw Source as if it already satisfied the formal
+  learning contract;
+- prescribe a universal curriculum or mandatory activity sequence;
+- treat a file, player screen, subtitle track, package, or exercise as the
+  product's central learning object;
+- infer acquisition from clicks or exposure alone;
+- collapse Personal Corpus facts and Learner State projections;
+- infer listening, speaking, or writing capability from reading success;
+- expose raw phonetic analysis without converting it into useful perception;
+- encode every conceivable listening subskill as permanent state;
+- bind material compilation to one provider or model;
+- couple Listen to Sensa before cross-product behavior is validated;
+- make every optional explanation a validity requirement.
 
 ## Deliberately deferred decisions
 
-- how Learning Inferences and Training Candidates are produced;
-- how mastery or overall language ability is calculated;
-- the complete set of Learning Activities;
+- exact provider and qualification gates for every required material resource;
+- the complete set of Learning Activities and acquisition experiences;
+- projection algorithms and state vocabularies for every Language Object;
+- adaptive policy decomposition beyond the minimum product questions;
 - community moderation, reputation, and business models;
-- cloud implementation technology and deployment topology;
-- optional synchronization of large private media and recordings.
+- hosted synchronization topology and large private-asset policy;
+- long-term shared identity or corpus integration with Sensa.

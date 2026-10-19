@@ -1,0 +1,19 @@
+{
+  "authority": {
+    "path": "core/contracts/content-package/v3",
+    "repository": "ichthyoplanktonzyh/listen"
+  },
+  "package_schema": "listen.content-package.release.v3",
+  "release_schema_id": "listen.content-package.release.v3",
+  "schema_version": 3,
+  "v3": {
+    "authority": {
+      "path": "core/contracts/content-package/v3",
+      "repository": "ichthyoplanktonzyh/listen"
+    },
+    "package_schema": "listen.content-package.release.v3",
+    "release_schema_id": "listen.content-package.release.v3",
+    "plan_schema_id": "listen.content-package.plan.v3",
+    "schema_version": 3
+  }
+}

@@ -1,0 +1,643 @@
+//! Phase 3.12 provider surface HTTP tests. The default in-memory secret store
+//! stands in for the OS keychain; a local fake server stands in for the model
+//! endpoint, so the whole path runs offline.
+
+use super::*;
+use application::{
+    LlmChatAdapter, LlmProviderDescriptor, SemanticLlmRuntime, SemanticLlmRuntimeFactory,
+    StructuredChatRequest, StructuredChatResponse,
+};
+use async_trait::async_trait;
+use axum::routing::post;
+use domain::{CapabilityClaim, LlmAdapterKind, LlmProviderProfile};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::net::TcpListener;
+
+async fn fake_ok(State(body): State<serde_json::Value>) -> Json<serde_json::Value> {
+    Json(body)
+}
+
+/// Spawns a fake OpenAI-compatible endpoint returning `body` for chat calls.
+async fn spawn_fake_openai(body: serde_json::Value) -> String {
+    let router = Router::new()
+        .route("/chat/completions", post(fake_ok))
+        .with_state(body);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    format!("http://{addr}")
+}
+
+#[derive(Clone)]
+struct ConcurrentFake {
+    body: serde_json::Value,
+    active: Arc<AtomicUsize>,
+    max_active: Arc<AtomicUsize>,
+    request_count: Arc<AtomicUsize>,
+}
+
+async fn fake_concurrent(State(state): State<ConcurrentFake>) -> Json<serde_json::Value> {
+    state.request_count.fetch_add(1, Ordering::SeqCst);
+    let active = state.active.fetch_add(1, Ordering::SeqCst) + 1;
+    state.max_active.fetch_max(active, Ordering::SeqCst);
+    tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    state.active.fetch_sub(1, Ordering::SeqCst);
+    Json(state.body)
+}
+
+async fn spawn_concurrent_fake_openai(
+    body: serde_json::Value,
+) -> (String, Arc<AtomicUsize>, Arc<AtomicUsize>) {
+    let max_active = Arc::new(AtomicUsize::new(0));
+    let request_count = Arc::new(AtomicUsize::new(0));
+    let state = ConcurrentFake {
+        body,
+        active: Arc::new(AtomicUsize::new(0)),
+        max_active: max_active.clone(),
+        request_count: request_count.clone(),
+    };
+    let router = Router::new()
+        .route("/chat/completions", post(fake_concurrent))
+        .with_state(state);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    (format!("http://{addr}"), max_active, request_count)
+}
+
+fn openai_content_envelope(content: &str) -> serde_json::Value {
+    serde_json::json!({
+        "model": "fake",
+        "choices": [ { "finish_reason": "stop", "message": { "content": content, "refusal": null } } ]
+    })
+}
+
+async fn post_json(
+    app: &Router,
+    uri: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(uri)
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json = if bytes.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| {
+            serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string())
+        })
+    };
+    (status, json)
+}
+
+fn register_body(base_url: &str, secret: Option<&str>) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "display_name": "Test Provider",
+        "adapter_kind": "openai_chat_completions",
+        "base_url": base_url,
+        "model_id": "m",
+        "retention": "unknown",
+        "allowed_uses": ["semantic_judgment"]
+    });
+    if let Some(secret) = secret {
+        body["secret"] = serde_json::json!(secret);
+    }
+    body
+}
+
+async fn setup_sense_group_track(
+    app: &Router,
+    base_url: &str,
+    batch_policy: serde_json::Value,
+) -> (String, String) {
+    let mut provider_body = register_body(base_url, Some("sk-x"));
+    provider_body["allowed_uses"] = serde_json::json!(["sense_group_partition"]);
+    provider_body["batch_policy"] = batch_policy;
+    let (status, provider) = post_json(app, "/v1/llm/providers", provider_body).await;
+    assert_eq!(status, StatusCode::OK, "provider registration failed");
+
+    let (status, media) = post_json(
+        app,
+        "/v1/media",
+        serde_json::json!({
+            "path": "/tmp/llm-batch-governor.mp4",
+            "fingerprint": "llm-batch-governor-media",
+            "title": "LLM Batch Governor",
+            "kind": "video"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "media registration failed");
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/subtitles/timeline.srt"
+    );
+    let (status, track) = post_json(
+        app,
+        &format!("/v1/media/{}/subtitles", media["id"].as_str().unwrap()),
+        serde_json::json!({ "path": fixture, "language": "en" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "subtitle import failed");
+    (
+        provider["id"].as_str().unwrap().to_string(),
+        track["id"].as_str().unwrap().to_string(),
+    )
+}
+
+#[tokio::test]
+async fn register_lists_and_probes_provider_without_leaking_secret() {
+    let base = spawn_fake_openai(openai_content_envelope("{\"ok\": true}")).await;
+    let app = test_app();
+
+    // Register with a credential.
+    let (status, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-secret-777")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "register failed: {view}");
+    assert_eq!(view["has_credential"], true);
+    // The response is a view with no auth_ref and no secret anywhere.
+    assert!(view.get("auth_ref").is_none());
+    assert!(!view.to_string().contains("sk-secret-777"));
+    let id = view["id"].as_str().unwrap().to_string();
+
+    // It shows up in the list, still without the secret.
+    let list = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/llm/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list.status(), StatusCode::OK);
+    let list_body: serde_json::Value =
+        serde_json::from_slice(&to_bytes(list.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(list_body.as_array().unwrap().len(), 1);
+    assert!(!list_body.to_string().contains("sk-secret-777"));
+
+    // Probe actually measures structured-output support against the endpoint.
+    let (status, probe) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{id}/probe"),
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(probe["structured_output"]["state"], "probed");
+    assert_eq!(probe["structured_output"]["supported"], true);
+}
+
+struct InjectedProbeAdapter {
+    descriptor: LlmProviderDescriptor,
+}
+
+#[async_trait]
+impl LlmChatAdapter for InjectedProbeAdapter {
+    fn adapter_kind(&self) -> LlmAdapterKind {
+        self.descriptor.adapter_kind
+    }
+
+    fn descriptor(&self) -> LlmProviderDescriptor {
+        self.descriptor.clone()
+    }
+
+    async fn complete_structured(
+        &self,
+        _request: &StructuredChatRequest,
+    ) -> Result<StructuredChatResponse, domain::LlmProviderError> {
+        Err(domain::LlmProviderError::Offline)
+    }
+
+    async fn probe_structured_output(&self) -> Result<CapabilityClaim, domain::LlmProviderError> {
+        Ok(CapabilityClaim::Probed {
+            supported: false,
+            probed_at_ms: 42,
+        })
+    }
+}
+
+struct InjectedRuntimeFactory {
+    resolved_secret: Arc<Mutex<Option<String>>>,
+}
+
+impl SemanticLlmRuntimeFactory for InjectedRuntimeFactory {
+    fn build(
+        &self,
+        profile: &LlmProviderProfile,
+        secret: Option<String>,
+    ) -> Result<Box<dyn SemanticLlmRuntime>, domain::LlmProviderError> {
+        *self.resolved_secret.lock().unwrap() = secret;
+        Ok(Box::new(llm_provider::LlmSemanticProvider::new(
+            InjectedProbeAdapter {
+                descriptor: LlmProviderDescriptor {
+                    adapter_kind: profile.adapter_kind,
+                    model_id: profile.model_id.clone(),
+                    capability: profile.capability,
+                },
+            },
+        )))
+    }
+}
+
+#[tokio::test]
+async fn probe_dispatches_through_the_injected_application_factory_seam() {
+    let resolved_secret = Arc::new(Mutex::new(None));
+    let app = router(
+        test_state().with_llm_runtime_factory(Arc::new(InjectedRuntimeFactory {
+            resolved_secret: resolved_secret.clone(),
+        })),
+    );
+    let (status, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body("http://127.0.0.1:1", Some("seam-secret")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{view}");
+
+    let (status, probe) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{}/probe", view["id"].as_str().unwrap()),
+        serde_json::Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{probe}");
+    assert_eq!(probe["structured_output"]["supported"], false);
+    assert_eq!(probe["structured_output"]["probed_at_ms"], 42);
+    assert_eq!(
+        resolved_secret.lock().unwrap().as_deref(),
+        Some("seam-secret")
+    );
+}
+
+#[tokio::test]
+async fn delete_removes_provider() {
+    let base = spawn_fake_openai(openai_content_envelope("{\"ok\": true}")).await;
+    let app = test_app();
+    let (_, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-x")),
+    )
+    .await;
+    let id = view["id"].as_str().unwrap().to_string();
+
+    let deleted = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/v1/llm/providers/{id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+
+    let missing = app
+        .oneshot(
+            Request::get(format!("/v1/llm/providers/{id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn generate_rubric_returns_a_draft_without_persisting() {
+    let rubric_json = serde_json::json!({
+        "points": [
+            {
+                "importance": "required",
+                "statement": "A quake happened.",
+                "accepted_paraphrase_notes": null
+            },
+            {
+                "importance": "optional",
+                "statement": "It was near the coast.",
+                "accepted_paraphrase_notes": "coast/shore"
+            }
+        ]
+    })
+    .to_string();
+    let base = spawn_fake_openai(openai_content_envelope(&rubric_json)).await;
+    let app = test_app();
+    let mut provider_body = register_body(&base, Some("sk-x"));
+    provider_body["allowed_uses"] = serde_json::json!(["rubric_generation"]);
+    let (_, view) = post_json(&app, "/v1/llm/providers", provider_body).await;
+    let id = view["id"].as_str().unwrap().to_string();
+
+    let (status, draft) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{id}/rubric"),
+        serde_json::json!({
+            "purpose": "reading_comprehension",
+            "source_language": "en",
+            "response_language": "zh",
+            "transcript_snapshot": "The quake struck at dawn near the coast."
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "generate failed: {draft}");
+    let points = draft["points"].as_array().unwrap();
+    assert_eq!(points.len(), 2);
+    assert_eq!(points[0]["importance"], "required");
+    assert_eq!(points[0]["statement"], "A quake happened.");
+    assert_eq!(points[1]["accepted_paraphrase_notes"], "coast/shore");
+    // Draft only: no rubric identity/version/source is minted by the provider.
+    assert!(draft.get("id").is_none());
+    assert!(draft.get("version").is_none());
+}
+
+#[tokio::test]
+async fn rubric_dispatch_rejects_a_profile_without_the_allowed_use() {
+    let app = test_app();
+    let (_, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body("http://127.0.0.1:1", None),
+    )
+    .await;
+    let (status, body) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{}/rubric", view["id"].as_str().unwrap()),
+        serde_json::json!({
+            "purpose": "reading_comprehension",
+            "source_language": "en",
+            "response_language": "zh",
+            "transcript_snapshot": "Source"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_input");
+}
+
+#[tokio::test]
+async fn judge_via_unknown_provider_is_not_found() {
+    let app = test_app();
+    let (status, _) = post_json(
+        &app,
+        "/v1/llm/providers/deadbeef/judge",
+        serde_json::json!({ "attempt_id": "whatever", "response_revision": 1 }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn sense_group_provider_generates_a_valid_persisted_analysis() {
+    let (base, max_active, request_count) = spawn_concurrent_fake_openai(openai_content_envelope(
+        "{\"boundary_after_token_indices\": []}",
+    ))
+    .await;
+    let app = test_app();
+    let mut provider_body = register_body(&base, Some("sk-x"));
+    provider_body["allowed_uses"] = serde_json::json!(["sense_group_partition"]);
+    provider_body["max_retries"] = serde_json::json!(1);
+    let (status, provider) = post_json(&app, "/v1/llm/providers", provider_body).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "provider registration failed: {provider}"
+    );
+
+    let (status, media) = post_json(
+        &app,
+        "/v1/media",
+        serde_json::json!({
+            "path": "/tmp/llm-sense-groups.mp4",
+            "fingerprint": "llm-sense-groups-media",
+            "title": "LLM Sense Groups",
+            "kind": "video"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "media registration failed: {media}");
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/subtitles/timeline.srt"
+    );
+    let (status, track) = post_json(
+        &app,
+        &format!("/v1/media/{}/subtitles", media["id"].as_str().unwrap()),
+        serde_json::json!({ "path": fixture, "language": "en" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "subtitle import failed: {track}");
+
+    let (status, analysis) = post_json(
+        &app,
+        &format!(
+            "/v1/llm/providers/{}/sense-groups",
+            provider["id"].as_str().unwrap()
+        ),
+        serde_json::json!({
+            "batch_id": "sense-group-success",
+            "track_id": track["id"],
+            "status": "candidate"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "generation failed: {analysis}");
+    assert_eq!(analysis["provider_id"], "llm-sense-group");
+    assert_eq!(analysis["algorithm"], "hybrid_rule_llm_partition_v1");
+    assert_eq!(analysis["metrics_json"]["llm_sentence_count"], 4);
+    assert_eq!(analysis["metrics_json"]["fallback_sentence_count"], 0);
+    assert_eq!(analysis["metrics_json"]["batch_sentence_count"], 4);
+    assert_eq!(analysis["metrics_json"]["task_concurrency"], 4);
+    assert!(
+        max_active.load(Ordering::SeqCst) >= 2,
+        "track sentences should be analyzed concurrently"
+    );
+    assert!(
+        analysis["groups"]
+            .as_array()
+            .is_some_and(|groups| !groups.is_empty())
+    );
+    assert!(analysis["groups"].as_array().unwrap().iter().all(|group| {
+        group["sources"]
+            .as_array()
+            .is_some_and(|sources| sources.iter().any(|source| source == "language_model"))
+    }));
+
+    let calls_after_first_run = request_count.load(Ordering::SeqCst);
+    let (status, resumed) = post_json(
+        &app,
+        &format!(
+            "/v1/llm/providers/{}/sense-groups",
+            provider["id"].as_str().unwrap()
+        ),
+        serde_json::json!({
+            "batch_id": "sense-group-resume",
+            "track_id": track["id"]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "resume failed: {resumed}");
+    assert_eq!(
+        request_count.load(Ordering::SeqCst),
+        calls_after_first_run,
+        "a completed sentence checkpoint should not be requested again"
+    );
+    assert_eq!(resumed["metrics_json"]["governor"]["cache"]["hits"], 4);
+
+    // A syntactically valid JSON response with impossible token indices is
+    // retried once per sentence, then safely replaced by rule output.
+    let invalid_base = spawn_fake_openai(openai_content_envelope(
+        "{\"boundary_after_token_indices\": [999]}",
+    ))
+    .await;
+    let mut invalid_provider_body = register_body(&invalid_base, None);
+    invalid_provider_body["allowed_uses"] = serde_json::json!(["sense_group_partition"]);
+    invalid_provider_body["max_retries"] = serde_json::json!(1);
+    let (_, invalid_provider) = post_json(&app, "/v1/llm/providers", invalid_provider_body).await;
+    let (status, fallback) = post_json(
+        &app,
+        &format!(
+            "/v1/llm/providers/{}/sense-groups",
+            invalid_provider["id"].as_str().unwrap()
+        ),
+        serde_json::json!({
+            "batch_id": "sense-group-fallback",
+            "track_id": track["id"]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "fallback failed: {fallback}");
+    assert_eq!(fallback["metrics_json"]["llm_sentence_count"], 0);
+    assert_eq!(fallback["metrics_json"]["fallback_sentence_count"], 4);
+    assert_eq!(fallback["metrics_json"]["retry_count"], 4);
+    assert!(fallback["groups"].as_array().unwrap().iter().all(|group| {
+        group["sources"]
+            .as_array()
+            .is_some_and(|sources| sources.iter().all(|source| source != "language_model"))
+    }));
+}
+
+#[tokio::test]
+async fn concurrent_media_batches_share_the_profile_limit() {
+    let (base, max_active, _) = spawn_concurrent_fake_openai(openai_content_envelope(
+        "{\"boundary_after_token_indices\": []}",
+    ))
+    .await;
+    let app = test_app();
+    let (provider_id, track_id) = setup_sense_group_track(
+        &app,
+        &base,
+        serde_json::json!({
+            "max_in_flight": 2,
+            "start_rate_per_second": null,
+            "max_idle_connections_per_host": 2
+        }),
+    )
+    .await;
+    let uri = format!("/v1/llm/providers/{provider_id}/sense-groups");
+    let first = post_json(
+        &app,
+        &uri,
+        serde_json::json!({ "batch_id": "shared-a", "track_id": track_id }),
+    );
+    let second = post_json(
+        &app,
+        &uri,
+        serde_json::json!({ "batch_id": "shared-b", "track_id": track_id }),
+    );
+    let ((first_status, first_body), (second_status, second_body)) = tokio::join!(first, second);
+    assert_eq!(first_status, StatusCode::OK, "{first_body}");
+    assert_eq!(second_status, StatusCode::OK, "{second_body}");
+    assert!(
+        max_active.load(Ordering::SeqCst) <= 2,
+        "account-scoped in-flight limit was exceeded"
+    );
+}
+
+#[tokio::test]
+async fn cancellation_stops_queued_sentence_dispatch_and_retains_progress() {
+    let (base, max_active, _) = spawn_concurrent_fake_openai(openai_content_envelope(
+        "{\"boundary_after_token_indices\": []}",
+    ))
+    .await;
+    let app = test_app();
+    let (provider_id, track_id) = setup_sense_group_track(
+        &app,
+        &base,
+        serde_json::json!({
+            "max_in_flight": 1,
+            "start_rate_per_second": 1,
+            "max_idle_connections_per_host": 1
+        }),
+    )
+    .await;
+    let generation_app = app.clone();
+    let generation = tokio::spawn(async move {
+        post_json(
+            &generation_app,
+            &format!("/v1/llm/providers/{provider_id}/sense-groups"),
+            serde_json::json!({
+                "batch_id": "cancel-me",
+                "track_id": track_id
+            }),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    let (cancel_status, cancelling) = post_json(
+        &app,
+        "/v1/llm/batches/cancel-me/cancel",
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(cancel_status, StatusCode::OK, "{cancelling}");
+    assert_eq!(cancelling["state"], "cancelling");
+
+    let (generation_status, generation_body) = generation.await.unwrap();
+    assert_eq!(generation_status, StatusCode::CONFLICT, "{generation_body}");
+    assert_eq!(generation_body["code"], "batch_cancelled");
+    let status_response = app
+        .oneshot(
+            Request::get("/v1/llm/batches/cancel-me")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let final_status: serde_json::Value = serde_json::from_slice(
+        &to_bytes(status_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(final_status["state"], "cancelled");
+    assert!(
+        max_active.load(Ordering::SeqCst) <= 1,
+        "cancelled batch exceeded its configured in-flight limit"
+    );
+}

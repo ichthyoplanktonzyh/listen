@@ -1,0 +1,419 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/download_controller.dart';
+import 'package:llplayer_next/controllers/learning_controller.dart';
+import 'package:llplayer_next/controllers/media_import_flow_controller.dart';
+import 'package:llplayer_next/controllers/media_session_coordinator.dart';
+import 'package:llplayer_next/controllers/player_controller.dart';
+import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
+import 'package:llplayer_next/controllers/settings_controller.dart';
+import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
+import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/speech_enhancement_repository.dart';
+import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
+import 'package:llplayer_next/data/repositories/resource_repository.dart';
+import 'package:llplayer_next/data/repositories/media_session_repository.dart';
+import 'package:llplayer_next/data/repositories/media_import_repository.dart';
+import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
+import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/api_failure.dart';
+import 'package:llplayer_next/models/learning_material.dart';
+import 'package:llplayer_next/models/media_download.dart';
+import 'package:llplayer_next/player_adapter.dart';
+import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/services/external_tools.dart';
+import 'package:llplayer_next/services/managed_asset_store.dart';
+import 'package:llplayer_next/services/media_import_file_service.dart';
+import 'package:llplayer_next/widgets/flows/media_import_flows.dart';
+
+/// Import flows, driven by failures that really happen.
+///
+/// These sites all read `'${l.text('statusX')}: $error'` and handed the
+/// result to `playerController.setStatus`, so the status line printed either a
+/// whole `HttpException` (with the sidecar's loopback URI) or an external
+/// tool's own error text — including the executable's path.
+///
+/// `openOnlineMediaFlow`'s own `statusOnlineMediaFailed` site is **not**
+/// asserted here, and it is worth saying why rather than implying coverage:
+/// that flow opens a modal before it reaches the call that fails, and a widget
+/// test cannot both drive a modal on the fake clock and let a real subprocess
+/// finish in the same await. It changed the same way the two below did, and the
+/// source gate holds it; it has no scenario of its own.
+///
+/// Nothing here is a hand-written failure string:
+///
+/// - the embedded-import flow points `ExternalTools` at `/usr/bin/false`, so
+///   the real `_run` really starts a real process, it really exits 1, and the
+///   real `ExternalToolError` really carries
+///   `'/usr/bin/false exited with status 1.'`. Offline and deterministic,
+///   unlike letting a real ffprobe or yt-dlp loose;
+void main() {
+  /// Transport and tool detail. A status line is not a place for any of it.
+  const leaks = [
+    'HttpException',
+    'Exception',
+    'correlation_id',
+    'api-853',
+    '127.0.0.1',
+    '62645',
+    'validation_error',
+    'recording metadata must not be empty',
+    'uri =',
+    'retryable',
+    '/v1/',
+    '/usr/bin/false',
+    'exited with status',
+    'No such file or directory',
+  ];
+
+  void expectNoLeak(String text, {required String from}) {
+    for (final leak in leaks) {
+      expect(
+        text,
+        isNot(contains(leak)),
+        reason:
+            '"$leak" is diagnostics; $from is not a place to print it. '
+            'It said:\n$text',
+      );
+    }
+  }
+
+  String enText(String key) => const AppLocalizations(Locale('en')).text(key);
+
+  LocalApi api({
+    ({int statusCode, String body})? Function(String method, String path)? fail,
+    Map<String, String> ok = const {},
+  }) => LocalApi.withTransport(
+    baseUrl: 'http://127.0.0.1:62645',
+    token: 'token',
+    transport: (method, path, body) async {
+      final failure = fail?.call(method, path);
+      if (failure != null) return failure;
+      for (final entry in ok.entries) {
+        if (path.contains(entry.key)) {
+          return (statusCode: 200, body: entry.value);
+        }
+      }
+      return (statusCode: 200, body: '{}');
+    },
+  );
+
+  /// Pumps a host and hands back a real `BuildContext` with real
+  /// localizations.
+  ///
+  /// The flows are started but *not* awaited under the fake clock: they touch
+  /// real processes, so the pending future is handed to
+  /// [WidgetTester.runAsync], which runs it in the real zone.
+  Future<BuildContext> host(WidgetTester tester) async {
+    late BuildContext hostContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Builder(
+          builder: (context) {
+            hostContext = context;
+            return const Scaffold(body: SizedBox());
+          },
+        ),
+      ),
+    );
+    return hostContext;
+  }
+
+  testWidgets('an embedded-subtitle probe that fails says so, without quoting '
+      'ffprobe', (tester) async {
+    final harness = _harness(api());
+    harness.player.setMedia(
+      id: 'media-1',
+      path: '/tmp/a.mkv',
+      title: 'a',
+      fingerprint: 'fp',
+    );
+
+    final context = await host(tester);
+    final controller = MediaImportFlowController(
+      LocalMediaImportRepository(
+        ExternalTools(ffprobePath: '/usr/bin/false'),
+        const LocalMediaImportFileService(),
+        describeApiFailure,
+      ),
+      harness.adapter,
+      harness.mediaSession,
+      () => true,
+      (_) => true,
+      playerController: harness.player,
+      subtitleController: harness.subtitle,
+      downloadController: DownloadController(),
+    );
+    await tester.runAsync(
+      () =>
+          importEmbeddedSubtitleFlow(context: context, controller: controller),
+    );
+
+    expectNoLeak(harness.player.status, from: 'the status line');
+    expect(harness.player.status, enText('statusEmbeddedImportFailed'));
+    expect(harness.player.statusIsError, isTrue);
+    expect(harness.player.statusFailure?.raw, contains('/usr/bin/false'));
+    expect(controller.state.phase, MediaImportPhase.failed);
+    expect(controller.state.failure?.raw, contains('/usr/bin/false'));
+  });
+
+  test(
+    'media import ignores stale and post-dispose probe completions',
+    () async {
+      final harness = _harness(api());
+      harness.player.setMedia(
+        id: 'media-1',
+        path: '/tmp/a.mkv',
+        title: 'a',
+        fingerprint: 'fp',
+      );
+      final repository = _DelayedMediaImportRepository();
+      final controller = MediaImportFlowController(
+        repository,
+        harness.adapter,
+        harness.mediaSession,
+        () => true,
+        (_) => true,
+        playerController: harness.player,
+        subtitleController: harness.subtitle,
+        downloadController: DownloadController(),
+      );
+
+      final first = controller.inspectEmbedded();
+      final second = controller.inspectEmbedded();
+      repository.probeRequests[1].complete(const [_embeddedSubtitle]);
+      expect(await second, isA<EmbeddedSubtitleChoices>());
+      repository.probeRequests[0].complete(const []);
+      expect(await first, isA<MediaImportCancelled>());
+      expect(controller.state.phase, MediaImportPhase.idle);
+
+      final afterDispose = controller.inspectEmbedded();
+      final frozenState = controller.state;
+      controller.dispose();
+      repository.probeRequests[2].complete(const [_embeddedSubtitle]);
+      expect(await afterDispose, isA<MediaImportCancelled>());
+      expect(controller.state, same(frozenState));
+    },
+  );
+}
+
+const _embeddedSubtitle = EmbeddedSubtitle(
+  ordinal: 0,
+  codec: 'srt',
+  title: 'English',
+  language: 'en',
+  isText: true,
+);
+
+final class _DelayedMediaImportRepository implements MediaImportRepository {
+  final probeRequests = <Completer<List<EmbeddedSubtitle>>>[];
+
+  @override
+  Future<MediaDownloadHandle> downloadOnlineMedia(
+    String pageUrl,
+    String directory,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MediaDownloadHandle> downloadEnclosure(
+    String mediaUrl,
+    String directory, {
+    int? expectedBytes,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<String?> downloadArticle(String articleUrl, String directory) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> extractTextSubtitle(
+    String mediaPath,
+    EmbeddedSubtitle subtitle,
+  ) => throw UnimplementedError();
+
+  @override
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: error.toString());
+
+  @override
+  Future<String?> pickDownloadDirectory({required String confirmButtonText}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<EmbeddedSubtitle>> probeSubtitles(String mediaPath) {
+    final request = Completer<List<EmbeddedSubtitle>>();
+    probeRequests.add(request);
+    return request.future;
+  }
+
+  @override
+  Future<int?> probeMediaDurationMs(String mediaPath) async => null;
+
+  @override
+  Future<String> resolveOnlineMedia(String pageUrl) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ResolvedChannelDetails> resolveChannelDetails(String channelUrl) =>
+      throw UnimplementedError();
+}
+
+({
+  LocalApi api,
+  DesktopPlayerAdapter adapter,
+  PlayerController player,
+  SubtitleController subtitle,
+  ResourceActionsCoordinator resourceActions,
+  MediaSessionCoordinator mediaSession,
+})
+_harness(LocalApi service) {
+  final adapter = DesktopPlayerAdapter();
+  final player = PlayerController();
+  final subtitle = SubtitleController();
+  final learning = LearningController();
+  final settings = SettingsController();
+  final speech = SpeechEnhancementWorkflowController(
+    repository: LocalSpeechEnhancementRepository(() => service),
+  );
+  final resourceActions =
+      ResourceActionsCoordinator(
+        player: player,
+        subtitle: subtitle,
+        speechEnhancement: speech,
+        repository: LocalResourceRepository(() => service),
+      )..bind(
+        isMounted: () => true,
+        text: (key) => const AppLocalizations(Locale('en')).text(key),
+        reloadSpeechEnhancements: (_) async {},
+        activatePrimaryTrack: (_, {required nextStatus}) async {},
+        reloadLearningEntries: () async {},
+      );
+  final mediaSession =
+      MediaSessionCoordinator(
+        adapter: adapter,
+        player: player,
+        subtitle: subtitle,
+        learning: learning,
+        settings: settings,
+        speechEnhancement: speech,
+        resourceActions: resourceActions,
+        repository: LocalMediaSessionRepository(() => service),
+        subtitleAnalysis: LocalSubtitleAnalysisRepository(() => service),
+        managedStore: _UnavailableManagedStore(),
+        materialRepository: _NoopLearningMaterialRepository(),
+      )..bind(
+        isMounted: () => true,
+        text: (key) => const AppLocalizations(Locale('en')).text(key),
+        confirmLLTimelineMismatch:
+            ({
+              required String resourceFingerprint,
+              required String currentFingerprint,
+            }) async => true,
+        onMediaSwitched: () {},
+        reloadLearningEntries: () async {},
+        loadPhraseCandidates: (_) async {},
+      );
+  return (
+    api: service,
+    adapter: adapter,
+    player: player,
+    subtitle: subtitle,
+    resourceActions: resourceActions,
+    mediaSession: mediaSession,
+  );
+}
+
+/// A store that can never be reached — this suite drives real failures at the
+/// transport level, so the store stays a wall rather than a promise.
+final class _UnavailableManagedStore implements ManagedAssetStoreService {
+  @override
+  Future<ManagedAssetCopy> copyIntoStore({
+    required String sourcePath,
+    String? mediaKind,
+  }) => throw const ManagedStoreUnavailable();
+  @override
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  }) => throw const ManagedStoreUnavailable();
+  @override
+  Future<List<int>?> readBytes(String path) async => null;
+  @override
+  bool contains(String path) => false;
+
+  @override
+  Future<void> deleteStoreCopy(String path) async {}
+}
+
+/// The leak suite never reaches the learning-material boundary; this wall
+/// keeps the coordinator constructible and provably inert.
+final class _NoopLearningMaterialRepository
+    implements LearningMaterialRepository {
+  @override
+  bool get isAvailable => false;
+
+  @override
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: '$error');
+
+  @override
+  Future<List<MaterialDetails>> listLearningMaterials() async => const [];
+
+  @override
+  Future<MaterialDetails> createLearningMaterial(
+    CreateLearningMaterialInput input, {
+    MaterialRetainDirective retain = const MaterialRetainOmitted(),
+  }) => throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> readLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> appendMaterialRevision(
+    String materialId,
+    AppendMaterialRevisionInput input,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MaterialRevision> readMaterialRevision(
+    String materialId,
+    String revisionId,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> retainLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> unretainLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> resolveMaterialForMedia(String mediaId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
+    String materialId,
+  ) => throw UnimplementedError();
+}

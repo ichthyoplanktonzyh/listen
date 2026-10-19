@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llplayer.next/contracts/events/v1.schema.json",
+  "title": "LLPlayerNext Event Envelope v1",
+  "type": "object",
+  "required": ["version", "event", "payload"],
+  "properties": {
+    "version": { "const": 1 },
+    "event": {
+      "enum": [
+        "service-started",
+        "service-stopping",
+        "lexical-entry-changed",
+        "lexical-observation-created",
+        "lexical-observation-cleared",
+        "vocabulary-assets-imported",
+        "media-availability-changed",
+        "transcription-model-changed",
+        "pronunciation-analysis-progress",
+        "pronunciation-analysis-completed",
+        "word-timings-progress",
+        "word-timings-completed",
+        "sound-line-changed",
+        "sound-line-completed",
+        "speech-cache-invalidated",
+        "pronunciation-provider-unavailable",
+        "pronunciation-provider-degraded",
+        "phonetic-analysis-model-changed",
+        "phonetic-analysis-job-changed",
+        "phonetic-analysis-completed",
+        "phonetic-analysis-feedback-changed",
+        "lexical-capability-changed"
+      ]
+    },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}

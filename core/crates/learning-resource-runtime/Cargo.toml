@@ -1,0 +1,9 @@
+[package]
+name = "learning-resource-runtime"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domain = { path = "../domain" }

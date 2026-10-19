@@ -1,0 +1,57 @@
+{
+  "manifest_version": 2,
+  "audited_at": "2026-07-13T20:10:00+08:00",
+  "status": "qualified_optional_product_capability",
+  "platform": "macOS arm64, CPython 3.11",
+  "provider": {
+    "provider_id": "spacy",
+    "provider_version": "jsonl-v1",
+    "sidecar_sha256": "2eea0bb6d9f436672aac2f1c7b189f500a292eeff1d77b07f6b095ffc861c059"
+  },
+  "runtime": {
+    "id": "python-spacy",
+    "version": "3.8.13",
+    "source": "https://pypi.org/project/spacy/3.8.13/",
+    "license": "MIT",
+    "requirements_lock_sha256": "5f3e9d9a3d2db5e021a301e26e06b0cc3809512bbdb0d5c7a77c012db3f24831",
+    "installation": "explicit opt-in download into versioned Application Support directory; never bundled or required by the base product"
+  },
+  "model": {
+    "id": "en_core_web_sm",
+    "version": "3.8.0",
+    "wheel_url": "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "wheel_sha256": "1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85",
+    "stable_content_sha256": "adda6df4860f555a57e6e31635f233359ab471dafa177d58d96a8d4198450a7c",
+    "installed_model_bytes": 15242399,
+    "license": "MIT",
+    "training_data": [
+      {
+        "id": "OntoNotes 5",
+        "source": "https://catalog.ldc.upenn.edu/LDC2013T19",
+        "license": "commercial; exact model metadata states licensed by Explosion"
+      },
+      {
+        "id": "ClearNLP constituent-to-dependency conversion",
+        "source": "https://github.com/clir/clearnlp-guidelines/blob/master/md/components/dependency_conversion.md",
+        "license": "citation only; no ClearNLP code is packaged in the model"
+      },
+      {
+        "id": "WordNet 3.0",
+        "source": "https://wordnet.princeton.edu/",
+        "license": "WordNet 3.0 License"
+      }
+    ],
+    "vectors": "none"
+  },
+  "measured_clean_install_bytes": 162250752,
+  "measured_peak_rss_bytes": 328433664,
+  "consumer_bundle_increment_bytes": 0,
+  "lifecycle": {
+    "install": "scripts/syntactic-analysis/setup-spacy-product.sh",
+    "activate": "set LLPLAYERNEXT_SYNTAX_PYTHON and LLPLAYERNEXT_SYNTAX_SIDECAR to the verified installation paths",
+    "refresh": "install a newly audited version into a new versioned directory; never mutate a qualified identity in place",
+    "disable": "remove both activation environment variables",
+    "uninstall": "disable first, then remove only that versioned installation directory"
+  },
+  "decision": "spaCy is qualified as an optional local shared syntax artifact provider. B future/used-to/have-to, SenseGroup, and dependency candidate matching may consume validated artifacts. B want-to remains fallback-only. No runtime/model redistribution is added to the base app."
+}

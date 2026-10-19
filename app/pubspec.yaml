@@ -1,0 +1,120 @@
+name: llplayer_next
+description: "macOS-first listening comprehension player."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 0.7.0+8
+
+environment:
+  sdk: ^3.12.1
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  file_selector: ^1.0.3
+  crypto: ^3.0.6
+  desktop_drop: ^0.7.1
+  csv: ^6.0.0
+  video_player: ^2.11.1
+  fvp:
+    path: third_party/fvp
+  xml: ^7.0.1
+  archive: ^4.0.9
+  pdfrx: ^2.4.7
+  html: ^0.15.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # Version is pinned by flutter_test (transitive); `any` defers to that pin.
+  # Used by the controller-leak regression test (#27).
+  leak_tracker_flutter_testing: any
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+  config:
+    enable-swift-package-manager: false
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # The pinned listen-gen release lock. It is the only thing the app trusts to
+  # decide which generator bundle may run; it ships as an asset so the release
+  # verifier can read the committed bytes at runtime.
+  # Bundled sample catalog for the discovery-home preflight. The channel and
+  # lesson copy is content data, not UI copy, so it lives outside lib/ and
+  # stays invisible to the CJK literal gate (lib/localization.dart is the only
+  # place Chinese UI copy may live).
+  assets:
+    - listen_gen.lock.json
+    - assets/discovery_fixtures.json
+    - assets/starter_feeds.json
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+# Bundled fonts (#32): owner-picked super-family so every machine renders the
+  # same face. Licenses live next to the assets (fonts/OFL-*.txt), all OFL.
+  #   IBM Plex Sans  — UI + Latin body/subtitle
+  #   IBM Plex Mono  — timecodes / counters
+  #   IBM Plex Sans SC — Chinese UI (fallback after Plex Sans)
+  #   Charis SIL     — IPA phonetics (phoneme ribbon / phonetic analysis)
+  fonts:
+    - family: IBM Plex Sans
+      fonts:
+        - asset: fonts/IBMPlexSans-Regular.ttf
+        - asset: fonts/IBMPlexSans-Medium.ttf
+          weight: 500
+        - asset: fonts/IBMPlexSans-SemiBold.ttf
+          weight: 600
+    - family: IBM Plex Mono
+      fonts:
+        - asset: fonts/IBMPlexMono-Regular.ttf
+    - family: IBM Plex Sans SC
+      fonts:
+        - asset: fonts/IBMPlexSansSC-Regular.ttf
+        - asset: fonts/IBMPlexSansSC-Medium.ttf
+          weight: 500
+    - family: Charis SIL
+      fonts:
+        - asset: fonts/CharisSIL-Regular.ttf

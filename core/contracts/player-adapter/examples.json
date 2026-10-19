@@ -1,0 +1,7 @@
+[
+  { "version": 1, "command": "open", "uri": "file:///tmp/sample.mp4" },
+  { "version": 1, "command": "seek", "positionMs": 1500 },
+  { "version": 1, "command": "setLoopRange", "startMs": 1000, "endMs": 2500 },
+  { "version": 1, "event": "stateChanged", "state": "playing" },
+  { "version": 1, "event": "positionChanged", "positionMs": 1750 }
+]

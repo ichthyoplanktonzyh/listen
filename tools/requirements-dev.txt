@@ -1,0 +1,2 @@
+# Lightweight Core contract validation used by ./dev check.
+jieba>=0.42.1

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v3/resource.schema.json",
+  "title": "Listen Content Package v3 Resource and Rendition Descriptors",
+  "description": "Resource and rendition descriptors embedded in release.json. A descriptor is canonical JSON; resource_id / rendition_id are the SHA-256 of the descriptor's canonical serialization. The release-level `required` policy lives on the release resource entry, never inside the identity-bearing descriptor.",
+  "$defs": {
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material_revision_id", "rendition_ids", "anchor_resource_ids"],
+      "properties": {
+        "material_revision_id": { "type": "string", "minLength": 1 },
+        "rendition_ids": {
+          "type": "array",
+          "items": { "$ref": "definitions.schema.json#/$defs/sha256" },
+          "uniqueItems": true
+        },
+        "anchor_resource_ids": {
+          "type": "array",
+          "items": { "$ref": "definitions.schema.json#/$defs/sha256" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id"],
+      "properties": {
+        "resource_id": { "$ref": "definitions.schema.json#/$defs/sha256" }
+      }
+    },
+    "releaseResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "required", "descriptor"],
+      "properties": {
+        "resource_id": { "$ref": "definitions.schema.json#/$defs/sha256" },
+        "required": { "type": "boolean" },
+        "descriptor": { "$ref": "#/$defs/resourceDescriptor" }
+      }
+    },
+    "resourceDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "kind",
+        "role",
+        "subject",
+        "dependencies",
+        "provenance",
+        "quality",
+        "payload_blob",
+        "extensions"
+      ],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "enum": ["base", "assistance"] },
+        "content_language": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/languageTag" }, { "type": "null" }] },
+        "support_languages": {
+          "type": "array",
+          "items": { "$ref": "definitions.schema.json#/$defs/languageTag" },
+          "uniqueItems": true
+        },
+        "subject": { "$ref": "#/$defs/subject" },
+        "dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dependency" },
+          "uniqueItems": true
+        },
+        "provenance": { "$ref": "definitions.schema.json#/$defs/provenanceV3" },
+        "quality": { "$ref": "definitions.schema.json#/$defs/quality" },
+        "producer": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/producer" }, { "type": "null" }] },
+        "compatibility": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/compatibility" }, { "type": "null" }] },
+        "payload_blob": { "$ref": "definitions.schema.json#/$defs/blobDeclaration" },
+        "extensions": { "$ref": "definitions.schema.json#/$defs/extensions" }
+      }
+    },
+    "documentRenditionDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rendition_id",
+        "origin",
+        "media_type",
+        "text_blob",
+        "extensions"
+      ],
+      "properties": {
+        "rendition_id": { "$ref": "definitions.schema.json#/$defs/sha256" },
+        "origin": { "type": "string", "enum": ["source", "derived"] },
+        "media_type": { "type": "string", "minLength": 1 },
+        "language": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/languageTag" }, { "type": "null" }] },
+        "text_blob": { "$ref": "definitions.schema.json#/$defs/blobDeclaration" },
+        "source_asset_id": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/sha256" }, { "type": "null" }] },
+        "producer": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/producer" }, { "type": "null" }] },
+        "compatibility": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/compatibility" }, { "type": "null" }] },
+        "extensions": { "$ref": "definitions.schema.json#/$defs/extensions" }
+      }
+    },
+    "mediaRenditionDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rendition_id",
+        "origin",
+        "kind",
+        "media_type",
+        "media_blob",
+        "media_id",
+        "fingerprint",
+        "extensions"
+      ],
+      "properties": {
+        "rendition_id": { "$ref": "definitions.schema.json#/$defs/sha256" },
+        "origin": { "type": "string", "enum": ["source", "derived"] },
+        "kind": { "type": "string", "enum": ["audio", "video"] },
+        "media_type": { "type": "string", "minLength": 1 },
+        "media_blob": { "$ref": "definitions.schema.json#/$defs/blobDeclaration" },
+        "media_id": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "fingerprint": { "type": "string", "minLength": 1 },
+        "producer": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/producer" }, { "type": "null" }] },
+        "compatibility": { "anyOf": [{ "$ref": "definitions.schema.json#/$defs/compatibility" }, { "type": "null" }] },
+        "extensions": { "$ref": "definitions.schema.json#/$defs/extensions" }
+      }
+    }
+  }
+}

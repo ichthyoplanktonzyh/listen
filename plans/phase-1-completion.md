@@ -1,10 +1,28 @@
+> Historical plan: predates the current Complete Learning Material model and
+> monorepo workflow. Use root STATE.md/ROADMAP.md and DEVELOPMENT.md; do not
+> execute this plan as current work without explicit reconciliation.
+
 # Phase 1 Completion Plan
 
-> Status: active Supervisor plan, 2026-08-11.
+> Status: historical as of 2026-08-24. This plan was written for the
+> superseded partial-material/capability-completion model. Do not execute it as
+> the active project plan without replacing or explicitly reconciling it with
+> [MODEL.md](../MODEL.md) and Roadmap Phase 1: Complete Learning Material Alpha.
 >
-> Scope: all work remaining before the first accepted Phase 1 stack release.
-> `ROADMAP.md` owns the outcome and exit conditions; this file owns the current
-> execution order and may be archived when Phase 1 closes.
+> Former scope: all work remaining before the first accepted Phase 1 stack
+> release.
+> `ROADMAP.md` owned the outcome and exit conditions at the time; this file
+> records the former execution order and may inform its replacement.
+
+> Validation update, 2026-08-14: Slices 0–7 have produced an unreleased
+> integration candidate, but Phase 1 is not accepted. Do not begin with another
+> exhaustive cross-repository diff audit or treat implementation-agent test
+> reports as product acceptance. Current validation proceeds outside-in from
+> real App use and Information Architecture observation under
+> [phase-1-product-validation-and-ia.md](phase-1-product-validation-and-ia.md).
+> Findings from that session determine any corrective implementation slices;
+> release and closeout remain blocked until the same learner journeys pass on
+> the installed, pinned stack.
 
 ## Objective
 
@@ -238,6 +256,16 @@ leaking database layout, renderer types, provider choices, or Gen workflows.
   Structured Reading, timed text, anchor-to-time alignment, Assistance
   Resources, dependencies, compatibility, material/revision/edition identity,
   and embedded or referenced blob declarations.
+- Remove the inline `document_text` resource from the active path: raw document
+  bytes live on the Document Rendition, and exact logical reading content lives
+  in the Structured Reading payload. No dual `document_text` +
+  `structured_reading` model is kept.
+- The Structured Reading payload is self-contained exact UTF-8 logical text;
+  every anchor/span range is byte-validated against that text (in bounds,
+  character-boundary-safe, monotonic); the block hierarchy has a deterministic
+  kind, order, and parent/child structure; document mappings point at exact
+  Document Renditions with format-related locators; provenance records input
+  rendition and resource ids plus tool/provider/model/config facts.
 - Keep packages data-only and allowlisted: no local paths, credentials, raw
   provider payloads, executable code, or learner records.
 - Validation is total and deterministic. Invalid identity, hash, dependency,
@@ -246,6 +274,10 @@ leaking database layout, renderer types, provider choices, or Gen workflows.
 - Installation is idempotent and candidate-only. Adoption is an explicit,
   atomic intent that either selects one coherent composition or changes
   nothing.
+- Contract validation performs real JSON Schema validation of the examples and
+  package bodies, and schema changes change the published contract artifact
+  digest; the release-artifact inventory names exactly the live v3 tree and
+  rejects v1/v2 paths in the active Phase 1 artifact.
 
 **HTTP/application interface**
 
