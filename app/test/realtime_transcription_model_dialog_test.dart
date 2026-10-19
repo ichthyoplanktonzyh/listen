@@ -124,6 +124,83 @@ void main() {
     expect(repository.cancelCalls, 0);
   });
 
+  testWidgets('two Download activations pop only the dialog route', (
+    tester,
+  ) async {
+    final repository = _Repository(
+      onInstall: (_) async => [model(state: 'installed')],
+    );
+    final controller = RealtimeTranscriptionModelController(
+      repository,
+      pollInterval: Duration.zero,
+      maxPollAttempts: 3,
+    );
+    addTearDown(controller.dispose);
+    final offered = await controller.selectForLanguage('zh-CN');
+    final candidate =
+        (offered as RealtimeTranscriptionModelNeedsDownload).model;
+    final observer = _CountingNavigatorObserver();
+    RealtimeTranscriptionModelSelected? selected;
+
+    await tester.pumpWidget(
+      _App(
+        observer: observer,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (context) => Scaffold(
+                    body: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('next route sentinel'),
+                          TextButton(
+                            onPressed: () async {
+                              selected =
+                                  await showRealtimeTranscriptionModelDialog(
+                                    context: context,
+                                    controller: controller,
+                                    model: candidate,
+                                  );
+                            },
+                            child: const Text('Open dialog'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              child: const Text('Push next route'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Push next route'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open dialog'));
+    await tester.pumpAndSettle();
+
+    final downloadButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Download'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    downloadButton.onPressed!();
+    downloadButton.onPressed!();
+    await tester.pumpAndSettle();
+
+    expect(selected?.modelId, _baseId);
+    expect(observer.popCount, 1);
+    expect(find.text('next route sentinel'), findsOneWidget);
+    expect(find.text('Open dialog'), findsOneWidget);
+    expect(repository.installCalls, 1);
+  });
+
   testWidgets(
     'catalog Installing to Downloadable transition still requires consent',
     (tester) async {
@@ -330,10 +407,15 @@ final class _Repository implements TranscriptionRepository {
 }
 
 class _App extends StatelessWidget {
-  const _App({required this.home, this.locale = const Locale('en')});
+  const _App({
+    required this.home,
+    this.locale = const Locale('en'),
+    this.observer,
+  });
 
   final Widget home;
   final Locale locale;
+  final NavigatorObserver? observer;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -345,6 +427,17 @@ class _App extends StatelessWidget {
       GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: AppLocalizations.supportedLocales,
+    navigatorObservers: [?observer],
     home: home,
   );
+}
+
+final class _CountingNavigatorObserver extends NavigatorObserver {
+  int popCount = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    popCount++;
+    super.didPop(route, previousRoute);
+  }
 }

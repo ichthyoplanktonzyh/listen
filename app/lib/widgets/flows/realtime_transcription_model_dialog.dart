@@ -43,6 +43,7 @@ class _RealtimeTranscriptionModelDialogState
   bool _closing = false;
   bool _allowPop = false;
   bool _unavailable = false;
+  bool _downloadInFlight = false;
 
   bool get _busy => switch (widget.controller.installState.status) {
     RealtimeTranscriptionModelInstallStatus.starting ||
@@ -52,12 +53,18 @@ class _RealtimeTranscriptionModelDialogState
   };
 
   Future<void> _download() async {
-    final outcome = await widget.controller.installOfferedModel();
-    if (!mounted) return;
-    if (outcome case final RealtimeTranscriptionModelSelected selected) {
-      Navigator.of(context).pop(selected);
-    } else if (outcome is RealtimeTranscriptionModelUnavailable) {
-      setState(() => _unavailable = true);
+    if (_downloadInFlight || _busy || _closing) return;
+    _downloadInFlight = true;
+    try {
+      final outcome = await widget.controller.installOfferedModel();
+      if (!mounted) return;
+      if (outcome case final RealtimeTranscriptionModelSelected selected) {
+        Navigator.of(context).pop(selected);
+      } else if (outcome is RealtimeTranscriptionModelUnavailable) {
+        setState(() => _unavailable = true);
+      }
+    } finally {
+      _downloadInFlight = false;
     }
   }
 
