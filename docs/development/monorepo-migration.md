@@ -37,6 +37,11 @@ remain historical authorities for those releases.
 Immediately after history import, every tracked file was compared byte-for-byte
 against its original checkout: App 809, Core 1,232, Gen 81; all 2,122 matched.
 Subsequent migration changes are separate from those three import commits.
+The active tree drops one inherited Git link at
+`core/.claude/worktrees/refactor+flutter-frontend`: it was a historical agent
+checkout pointer, not a runtime dependency, and had no `.gitmodules` entry.
+The import history and original checkout remain intact. There are no Git links
+in the resulting active product tree.
 
 ## Migration scope
 
@@ -50,9 +55,47 @@ or database schema changes with source-topology migration.
 
 ## Validation
 
-Validation is being recorded as checks complete. Compilation, automated
-integration and packaged desktop smoke are distinct evidence; no unchecked
-stage is treated as passing. No live model calls are part of this migration.
+All validation ran locally on macOS Apple Silicon, without live model calls.
+There is no configured GitHub Actions workflow.
+
+| Command / check | Result |
+|---|---|
+| `./dev setup` | Python 3.11 environment, minimal Gen/Core test dependencies and Flutter packages prepared |
+| `./dev check` | Exit 0; Flutter analysis clean; App 1,686 passed / 12 conditional integration skips; App tool suite 37 passed; Rust formatting/Clippy clean and workspace 1,300 passed; full contracts gate passed; Gen 346 passed |
+| `python3 -m unittest tools.test_dev -v` | 7 passed, including ignored-file exclusion, exact committed export and probe-environment isolation |
+| Core `python3 -m unittest scripts/test_release_artifacts.py` | 7 passed, including matching/mismatched runtime manifest handling |
+| `./dev test integration` | 10 passed; all five required named journey assertions confirmed from structured Flutter reports |
+| App release-service focused suite | 28 passed; 2 opt-in environment/compiled-define tests skipped in the ordinary focused invocation |
+| Generated release-lock compiled-define test | 1 passed with a real generated lock and manifest, production loader mode, and invalid debug override |
+| `./dev run` with isolated DB/support paths | Native debug App and Core started, SQLite schema 63 with 102 tables created; Flutter debugger connected; `q` closed the app and sidecar, exit 0 |
+| `./dev release` from clean `849acf40083eb425cb4ab3afb96e45a99222f004` | Exit 0; isolated committed export, Core/Gen artifact verification, macOS assembly/signing, extracted-app compiled-lock check, video/audio/DB smoke all passed |
+
+The final release configuration uses a single-line base64 Dart define carrying
+the exact generated lock bytes. This was verified by the compiled production
+loader and then by the actual extracted application, not only by Python hash
+checks. The packaged probe reported source commit
+`849acf40083eb425cb4ab3afb96e45a99222f004` and Gen artifact digest
+`sha256:bd6e9a19ebf7edb6c3db1f55a6de7317b089eb755445c7e9ae7c37d3c99ff1fb`.
+The product ZIP SHA-256 is
+`41923a4ad86bb7bd0ae95e4bc4c63a39db55347f38428280290a0842a4b51439`.
+
+Ordinary App skips are explicit opt-in journeys, not claimed integration
+passes; the dedicated fixture integration and compiled release probes supply
+that evidence. Paid/credentialed model tests remained excluded. The native
+build emits existing third-party SDK warnings, but the build, signature and
+packaged smoke all succeeded.
+
+Independent GPT-6 Luna Max review verified import path/mode/blob equality,
+main-ancestry and legacy-tag mapping, then reviewed source snapshot privacy,
+release provenance, artifact/lock integration and packaged startup. Findings
+were fixed and re-reviewed; final code review and actual package verification
+are separate checks. The original repositories and working-tree edits were
+retained throughout.
+
+`git diff --check` passes for migration changes since the three import commits.
+The full diff against the documentation-only old main also contains preserved
+upstream whitespace/CRLF in imported historical documents, license files and
+assets; those byte-preserved baseline files were not normalized gratuitously.
 
 ## Cutover
 
