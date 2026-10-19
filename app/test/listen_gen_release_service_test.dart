@@ -14,6 +14,7 @@ const _genCommit = 'c3564c357ecd46c3a52326f1362b78874379a56f';
 const _otherCommit = 'b980a20666f746685db1fd06bfa425d762d7a678';
 const _contractSha =
     'sha256:3a0c67c2e4498dbbe5ad5556bac41eff01e50c06c7d020bd5af1fdcbe46c5dc5';
+const _embeddedGenLockBase64 = String.fromEnvironment('LISTEN_GEN_LOCK_BASE64');
 
 Map<String, dynamic> _runtimeIdentityTemplate() => {
   'schema': 'listen_gen.runtime-identity.v1',
@@ -216,6 +217,30 @@ Matcher _failsWith(String code) => throwsA(
 );
 
 void main() {
+  test(
+    'verifies a generated release lock embedded by a Dart define',
+    () async {
+      final manifestPath = Platform.environment['LISTEN_GEN_RELEASE_MANIFEST']!;
+      final service = LocalListenGenReleaseService(
+        environment: {
+          'LISTEN_GEN_RELEASE_MANIFEST': manifestPath,
+          'LISTEN_GEN_LOCK_PATH': '/missing/development-lock.json',
+        },
+        debugMode: false,
+      );
+
+      final verified = await service.verify();
+      expect(verified.toolVersion, isNotEmpty);
+      expect(verified.artifactSha256, startsWith('sha256:'));
+    },
+    skip:
+        _embeddedGenLockBase64.isNotEmpty &&
+            Platform.environment['LISTEN_GEN_RELEASE_MANIFEST']?.isNotEmpty ==
+                true
+        ? false
+        : 'Pass the generated base64 lock define and manifest path to exercise release loading',
+  );
+
   test(
     'verifies the generated development lock and manifest from the environment',
     () async {
@@ -561,7 +586,9 @@ void main() {
   });
 
   test('debug lock path overrides the committed lock asset', () async {
-    final parent = await Directory.systemTemp.createTemp('listen-gen-debug-lock-');
+    final parent = await Directory.systemTemp.createTemp(
+      'listen-gen-debug-lock-',
+    );
     addTearDown(() => parent.delete(recursive: true));
     final built = await _build(
       Directory('${parent.path}/bundle')..createSync(),

@@ -76,8 +76,8 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
   static const _manifestEnvironmentKey = 'LISTEN_GEN_RELEASE_MANIFEST';
   static const _lockEnvironmentKey = 'LISTEN_GEN_LOCK_PATH';
   static const _lockAssetKey = 'listen_gen.lock.json';
-  static const _embeddedLockJson = String.fromEnvironment(
-    'LISTEN_GEN_LOCK_JSON',
+  static const _embeddedLockBase64 = String.fromEnvironment(
+    'LISTEN_GEN_LOCK_BASE64',
   );
 
   /// Current releases are built from Gen in the Listen monorepo. The legacy
@@ -168,10 +168,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
 
     if (!debugMode) return null;
 
-    final developmentLock = _readDevelopmentLock(
-      workingDirectory,
-      environment,
-    );
+    final developmentLock = _readDevelopmentLock(workingDirectory, environment);
     if (developmentLock == null) return null;
     final monorepoRoot = _findMonorepoRoot(workingDirectory);
     if (monorepoRoot == null) return null;
@@ -189,23 +186,21 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       final gitMarker = File('${candidate.path}${Platform.pathSeparator}.git');
       final isGitRoot =
           gitMarker.existsSync() ||
-          Directory('${candidate.path}${Platform.pathSeparator}.git')
-              .existsSync();
-      final hasApp =
-          File(
-            '${candidate.path}${Platform.pathSeparator}app'
-            '${Platform.pathSeparator}pubspec.yaml',
+          Directory(
+            '${candidate.path}${Platform.pathSeparator}.git',
           ).existsSync();
-      final hasCore =
-          File(
-            '${candidate.path}${Platform.pathSeparator}core'
-            '${Platform.pathSeparator}Cargo.toml',
-          ).existsSync();
-      final hasGen =
-          File(
-            '${candidate.path}${Platform.pathSeparator}gen'
-            '${Platform.pathSeparator}pyproject.toml',
-          ).existsSync();
+      final hasApp = File(
+        '${candidate.path}${Platform.pathSeparator}app'
+        '${Platform.pathSeparator}pubspec.yaml',
+      ).existsSync();
+      final hasCore = File(
+        '${candidate.path}${Platform.pathSeparator}core'
+        '${Platform.pathSeparator}Cargo.toml',
+      ).existsSync();
+      final hasGen = File(
+        '${candidate.path}${Platform.pathSeparator}gen'
+        '${Platform.pathSeparator}pyproject.toml',
+      ).existsSync();
       if (isGitRoot && hasApp && hasCore && hasGen) return candidate;
       final parent = candidate.parent;
       if (parent.path == candidate.path) return null;
@@ -299,8 +294,8 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
         if (configured != null && configured.isNotEmpty) {
           return File(configured).readAsBytes();
         }
-      } else if (_embeddedLockJson.isNotEmpty) {
-        return utf8.encode(_embeddedLockJson);
+      } else if (_embeddedLockBase64.isNotEmpty) {
+        return base64.decode(_embeddedLockBase64);
       }
       final data = await rootBundle.load(_lockAssetKey);
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);

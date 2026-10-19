@@ -34,13 +34,17 @@ trap cleanup EXIT
 dart_defines="$build_inputs/dart-defines.json"
 python3 - "$gen_lock" "$dart_defines" <<'PY'
 import json
+import base64
 import sys
 from pathlib import Path
 
-lock_bytes = Path(sys.argv[1]).read_text(encoding="utf-8")
-json.loads(lock_bytes)
+lock_bytes = Path(sys.argv[1]).read_bytes()
+json.loads(lock_bytes.decode("utf-8"))
 Path(sys.argv[2]).write_text(
-    json.dumps({"LISTEN_GEN_LOCK_JSON": lock_bytes}), encoding="utf-8"
+    json.dumps(
+        {"LISTEN_GEN_LOCK_BASE64": base64.b64encode(lock_bytes).decode("ascii")}
+    ),
+    encoding="utf-8",
 )
 PY
 
