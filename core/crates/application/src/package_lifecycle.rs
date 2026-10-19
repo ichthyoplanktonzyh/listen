@@ -466,13 +466,12 @@ impl PackageLifecycleUseCases {
             .materials
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
-        let adoption = self.package_lifecycle.get_adoption(material_id)?;
-        if let Some(adopted) = adoption {
-            if adopted.release_id == *release_id {
-                return Err(ApplicationError::Conflict(
-                    "cannot delete currently adopted package release; switch adoption first".into(),
-                ));
-            }
+        if let Some(adopted) = self.package_lifecycle.get_adoption(material_id)?
+            && adopted.release_id == *release_id
+        {
+            return Err(ApplicationError::Conflict(
+                "cannot delete currently adopted package release; switch adoption first",
+            ));
         }
         let deleted = self
             .package_lifecycle
@@ -1586,12 +1585,12 @@ mod tests {
             release_id: &PackageReleaseId,
         ) -> Result<bool, ApplicationError> {
             let mut state = self.state.lock().unwrap();
-            if let Some(adoption) = state.adoptions.get(material_id.as_str()) {
-                if adoption.release_id == *release_id {
-                    return Err(ApplicationError::Conflict(
-                        "cannot delete currently adopted package release; switch adoption first".into(),
-                    ));
-                }
+            if let Some(adoption) = state.adoptions.get(material_id.as_str())
+                && adoption.release_id == *release_id
+            {
+                return Err(ApplicationError::Conflict(
+                    "cannot delete currently adopted package release; switch adoption first",
+                ));
             }
             let key = (
                 material_id.as_str().to_owned(),

@@ -280,8 +280,7 @@ pub(crate) async fn delete_learning_edition(
     Path((material_id, release_id)): Path<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
     let material_id = LearningMaterialId::parse(material_id).map_err(ApplicationError::from)?;
-    let release_id =
-        domain::PackageReleaseId::parse(release_id).map_err(ApplicationError::from)?;
+    let release_id = domain::PackageReleaseId::parse(release_id).map_err(ApplicationError::from)?;
     state
         .application
         .execute("package_lifecycle.delete", move |services| {

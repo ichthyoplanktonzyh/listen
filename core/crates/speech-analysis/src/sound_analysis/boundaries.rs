@@ -33,8 +33,12 @@ pub(super) fn corroborate_boundaries_with_activity(
         return boundaries;
     };
     for boundary in &mut boundaries {
-        let low = boundary.at_ms.saturating_sub(SILENCE_CORROBORATION_TOLERANCE_MS);
-        let high = boundary.at_ms.saturating_add(SILENCE_CORROBORATION_TOLERANCE_MS);
+        let low = boundary
+            .at_ms
+            .saturating_sub(SILENCE_CORROBORATION_TOLERANCE_MS);
+        let high = boundary
+            .at_ms
+            .saturating_add(SILENCE_CORROBORATION_TOLERANCE_MS);
         let backed = spans
             .iter()
             .any(|span| span.silence && span.start_ms <= high && low < span.end_ms);

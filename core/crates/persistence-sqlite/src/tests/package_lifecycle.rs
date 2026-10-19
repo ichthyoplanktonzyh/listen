@@ -1710,21 +1710,15 @@ fn delete_installation_deletes_facts_payloads_and_rejects_adopted() {
     let release_b_id = PackageReleaseId::parse("sha256:release-b").unwrap();
 
     // Deleting adopted release fails closed with Conflict.
-    let err = PackageLifecycleRepository::delete_installation(
-        repo.as_ref(),
-        &material.id,
-        &release_a_id,
-    )
-    .unwrap_err();
+    let err =
+        PackageLifecycleRepository::delete_installation(repo.as_ref(), &material.id, &release_a_id)
+            .unwrap_err();
     assert!(matches!(err, ApplicationError::Conflict(_)));
 
     // Deleting unadopted candidate release succeeds and removes payloads too.
-    let deleted = PackageLifecycleRepository::delete_installation(
-        repo.as_ref(),
-        &material.id,
-        &release_b_id,
-    )
-    .unwrap();
+    let deleted =
+        PackageLifecycleRepository::delete_installation(repo.as_ref(), &material.id, &release_b_id)
+            .unwrap();
     assert!(deleted);
 
     let listed =
@@ -1742,12 +1736,8 @@ fn delete_installation_deletes_facts_payloads_and_rejects_adopted() {
     assert_eq!(payload, None);
 
     // Deleting already deleted release returns false.
-    let deleted_again = PackageLifecycleRepository::delete_installation(
-        repo.as_ref(),
-        &material.id,
-        &release_b_id,
-    )
-    .unwrap();
+    let deleted_again =
+        PackageLifecycleRepository::delete_installation(repo.as_ref(), &material.id, &release_b_id)
+            .unwrap();
     assert!(!deleted_again);
 }
-

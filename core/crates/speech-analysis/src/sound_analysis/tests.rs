@@ -457,8 +457,14 @@ fn short_timed_content_sound_can_be_audible_anchor() {
     ]);
     let word_timings = word_timings(&sentence, &[(0, "go", 0, 80), (1, "now", 100, 260)]);
 
-    let frame =
-        build_rhythm_frame_from_word_timeline(&sentence, &canonical, &word_timings, None, None, None);
+    let frame = build_rhythm_frame_from_word_timeline(
+        &sentence,
+        &canonical,
+        &word_timings,
+        None,
+        None,
+        None,
+    );
     let go_anchor = frame
         .stress_anchors
         .iter()
@@ -744,15 +750,35 @@ fn explains_single_phone_deletion_as_low_confidence_hint() {
 #[test]
 fn frames_derive_word_cues_when_gen_cues_absent_and_gen_wins_when_present() {
     let sentence = sentence(&["go", "now"]);
-    let canonical =
-        canonical_with_stress(&[(0, "G", None), (0, "OW", None), (1, "N", None), (1, "AW", Some(1))]);
+    let canonical = canonical_with_stress(&[
+        (0, "G", None),
+        (0, "OW", None),
+        (1, "N", None),
+        (1, "AW", Some(1)),
+    ]);
     let word_timings = word_timings(&sentence, &[(0, "go", 0, 80), (1, "now", 100, 260)]);
     // "go" is the loud/high word, "now" is the quiet/low word.
     let frames = vec![
-        AcousticFrameSample { time_ms: 0, energy_rel_db: Some(6.0), f0_rel_st: Some(2.0) },
-        AcousticFrameSample { time_ms: 40, energy_rel_db: Some(6.0), f0_rel_st: Some(2.0) },
-        AcousticFrameSample { time_ms: 120, energy_rel_db: Some(-6.0), f0_rel_st: Some(-2.0) },
-        AcousticFrameSample { time_ms: 200, energy_rel_db: Some(-6.0), f0_rel_st: Some(-2.0) },
+        AcousticFrameSample {
+            time_ms: 0,
+            energy_rel_db: Some(6.0),
+            f0_rel_st: Some(2.0),
+        },
+        AcousticFrameSample {
+            time_ms: 40,
+            energy_rel_db: Some(6.0),
+            f0_rel_st: Some(2.0),
+        },
+        AcousticFrameSample {
+            time_ms: 120,
+            energy_rel_db: Some(-6.0),
+            f0_rel_st: Some(-2.0),
+        },
+        AcousticFrameSample {
+            time_ms: 200,
+            energy_rel_db: Some(-6.0),
+            f0_rel_st: Some(-2.0),
+        },
     ];
     // No Gen cues → Core derives energy prominence from the frames, so the frame
     // records an Energy prominence source it would not have from timing alone.
@@ -798,13 +824,23 @@ fn frames_derive_word_cues_when_gen_cues_absent_and_gen_wins_when_present() {
 #[test]
 fn measured_silence_corroborates_a_detected_boundary_without_inventing_one() {
     let sentence = sentence(&["go", "now"]);
-    let canonical =
-        canonical_with_stress(&[(0, "G", None), (0, "OW", None), (1, "N", None), (1, "AW", Some(1))]);
+    let canonical = canonical_with_stress(&[
+        (0, "G", None),
+        (0, "OW", None),
+        (1, "N", None),
+        (1, "AW", Some(1)),
+    ]);
     // A 120 ms gap between the aligned words yields one pause boundary at 200 ms.
     let word_timings = word_timings(&sentence, &[(0, "go", 0, 80), (1, "now", 200, 360)]);
 
-    let without =
-        build_rhythm_frame_from_word_timeline(&sentence, &canonical, &word_timings, None, None, None);
+    let without = build_rhythm_frame_from_word_timeline(
+        &sentence,
+        &canonical,
+        &word_timings,
+        None,
+        None,
+        None,
+    );
     assert_eq!(without.phrase_boundaries.len(), 1);
     assert!(
         !without.phrase_boundaries[0]
@@ -813,7 +849,11 @@ fn measured_silence_corroborates_a_detected_boundary_without_inventing_one() {
             .any(|cue| cue == "measured_silence")
     );
 
-    let spans = vec![SpeechActivitySpan { start_ms: 80, end_ms: 200, silence: true }];
+    let spans = vec![SpeechActivitySpan {
+        start_ms: 80,
+        end_ms: 200,
+        silence: true,
+    }];
     let with = build_rhythm_frame_from_word_timeline(
         &sentence,
         &canonical,
@@ -823,7 +863,10 @@ fn measured_silence_corroborates_a_detected_boundary_without_inventing_one() {
         Some(&spans),
     );
     // The same single boundary, only its provenance enriched: nothing invented.
-    assert_eq!(with.phrase_boundaries.len(), without.phrase_boundaries.len());
+    assert_eq!(
+        with.phrase_boundaries.len(),
+        without.phrase_boundaries.len()
+    );
     assert!(
         with.phrase_boundaries[0]
             .cues

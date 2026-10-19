@@ -213,8 +213,9 @@ pub(crate) fn decode_known(
 
 #[cfg(test)]
 mod acoustic_evidence_tests {
-    use super::{ACOUSTIC_TRACK_SCHEMA_V1, KnownPayload, SPEECH_ACTIVITY_SCHEMA_V1, decode_known,
-        is_known};
+    use super::{
+        ACOUSTIC_TRACK_SCHEMA_V1, KnownPayload, SPEECH_ACTIVITY_SCHEMA_V1, decode_known, is_known,
+    };
 
     #[test]
     fn recognizes_and_decodes_acoustic_track() {

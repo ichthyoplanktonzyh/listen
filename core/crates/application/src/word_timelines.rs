@@ -24,6 +24,16 @@ const RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND: &str = "rhythm_word_acoustic_cues
 const RHYTHM_ACOUSTIC_TRACK_ARTIFACT_KIND: &str = "rhythm_acoustic_track";
 const RHYTHM_SPEECH_ACTIVITY_ARTIFACT_KIND: &str = "rhythm_speech_activity";
 
+struct RhythmFrameEvidence<'a> {
+    word_acoustic_cues:
+        &'a HashMap<SubtitleSentenceId, Vec<speech_analysis::audible_structure::RhythmWordAcousticCue>>,
+    acoustic_frames:
+        &'a HashMap<SubtitleSentenceId, Vec<speech_analysis::audible_structure::AcousticFrameSample>>,
+    speech_activity:
+        &'a HashMap<SubtitleSentenceId, Vec<speech_analysis::audible_structure::SpeechActivitySpan>>,
+    observed_phones: &'a HashMap<SubtitleSentenceId, Vec<DetectedPhone>>,
+}
+
 fn rhythm_word_acoustic_cues_by_sentence(
     artifacts: &[LLTimelineArtifact],
     word_timeline_id: Option<&WordTimelineId>,
@@ -995,15 +1005,18 @@ impl MediaAnalysisUseCases {
         let speech_activity = speech_activity_spans_by_sentence(&artifacts);
         let observed_phones =
             observed_arpabet_phones_by_sentence(&phone_timelines, &track.sentences);
+        let rhythm_evidence = RhythmFrameEvidence {
+            word_acoustic_cues: &word_acoustic_cues,
+            acoustic_frames: &acoustic_frames,
+            speech_activity: &speech_activity,
+            observed_phones: &observed_phones,
+        };
         let rhythm_frames = self.rhythm_frames_from_word_timeline(
             &track,
             &word_timelines,
             rhythm_source_word_timeline_id.as_ref(),
             active_word_timeline_id.as_ref(),
-            &word_acoustic_cues,
-            &acoustic_frames,
-            &speech_activity,
-            &observed_phones,
+            &rhythm_evidence,
         )?;
         let sense_group_analyses = self.sense_groups.list_sense_group_analyses(track_id)?;
         let active_sense_group_analysis_id = sense_group_analyses
@@ -1129,15 +1142,18 @@ impl MediaAnalysisUseCases {
         let speech_activity = speech_activity_spans_by_sentence(&document.artifacts);
         let observed_phones =
             observed_arpabet_phones_by_sentence(&document.phone_timelines, &track.sentences);
+        let rhythm_evidence = RhythmFrameEvidence {
+            word_acoustic_cues: &word_acoustic_cues,
+            acoustic_frames: &acoustic_frames,
+            speech_activity: &speech_activity,
+            observed_phones: &observed_phones,
+        };
         let canonical_rhythm_frames = self.rhythm_frames_from_word_timeline(
             &track,
             &effective_word_timelines,
             rhythm_source_word_timeline_id.as_ref(),
             document.active_word_timeline_id.as_ref(),
-            &word_acoustic_cues,
-            &acoustic_frames,
-            &speech_activity,
-            &observed_phones,
+            &rhythm_evidence,
         )?;
         let prosody_chunks = prosody_chunk_projections_from_document(&document);
         let corpus_occurrences = self.build_subtitle_corpus_occurrences_from_resources(
@@ -1248,19 +1264,7 @@ impl MediaAnalysisUseCases {
         word_timelines: &[WordTimeline],
         word_timeline_id: Option<&WordTimelineId>,
         active_word_timeline_id: Option<&WordTimelineId>,
-        word_acoustic_cues: &HashMap<
-            SubtitleSentenceId,
-            Vec<speech_analysis::audible_structure::RhythmWordAcousticCue>,
-        >,
-        acoustic_frames: &HashMap<
-            SubtitleSentenceId,
-            Vec<speech_analysis::audible_structure::AcousticFrameSample>,
-        >,
-        speech_activity: &HashMap<
-            SubtitleSentenceId,
-            Vec<speech_analysis::audible_structure::SpeechActivitySpan>,
-        >,
-        observed_phones: &HashMap<SubtitleSentenceId, Vec<DetectedPhone>>,
+        evidence: &RhythmFrameEvidence,
     ) -> Result<Vec<LLTimelineRhythmFrame>, ApplicationError> {
         let Some(word_timeline_id) = word_timeline_id else {
             return Ok(Vec::new());
@@ -1323,21 +1327,25 @@ impl MediaAnalysisUseCases {
             } else {
                 Vec::new()
             };
-            let sentence_cues = word_acoustic_cues
+            let sentence_cues = evidence
+                .word_acoustic_cues
                 .get(&sentence.id)
                 .map(|cues| cues.as_slice());
             // Frame-level and speech/silence evidence sliced to this sentence.
             // When Gen ships no cues, Core derives them from these frames; the
             // silence spans corroborate detected boundaries. Absent ⇒ prior path.
-            let sentence_frames = acoustic_frames
+            let sentence_frames = evidence
+                .acoustic_frames
                 .get(&sentence.id)
                 .map(Vec::as_slice)
                 .filter(|frames| !frames.is_empty());
-            let sentence_activity = speech_activity
+            let sentence_activity = evidence
+                .speech_activity
                 .get(&sentence.id)
                 .map(Vec::as_slice)
                 .filter(|spans| !spans.is_empty());
-            let sentence_observed = observed_phones
+            let sentence_observed = evidence
+                .observed_phones
                 .get(&sentence.id)
                 .map(Vec::as_slice)
                 .filter(|phones| !phones.is_empty());
@@ -1403,7 +1411,8 @@ impl MediaAnalysisUseCases {
                 metrics_json: TimelineMetrics::from_value(serde_json::json!({
                     "source": source,
                     "word_count": words.len(),
-                    "energy_cue_count": word_acoustic_cues
+                    "energy_cue_count": evidence
+                        .word_acoustic_cues
                         .get(&sentence.id)
                         .map(|cues| cues.len())
                         .unwrap_or(0),
@@ -1481,7 +1490,7 @@ mod tests {
 
     #[test]
     fn best_overlap_sentence_picks_max_overlap_and_none_when_outside() {
-        let sentences = vec![sentence("a", 0, 0, 1000), sentence("b", 1, 1000, 2000)];
+        let sentences = [sentence("a", 0, 0, 1000), sentence("b", 1, 1000, 2000)];
         assert_eq!(
             best_overlap_sentence(200, 900, &sentences),
             Some(sentences[0].id.clone())
@@ -1496,7 +1505,7 @@ mod tests {
 
     #[test]
     fn observed_phones_normalize_to_arpabet_group_by_overlap_and_keep_cross_word() {
-        let sentences = vec![sentence("a", 0, 0, 1000), sentence("b", 1, 1000, 2000)];
+        let sentences = [sentence("a", 0, 0, 1000), sentence("b", 1, 1000, 2000)];
         let timelines = vec![
             phone_timeline(
                 Some("a"),
@@ -1525,7 +1534,7 @@ mod tests {
     #[test]
     fn acoustic_track_artifact_parses_frames_per_sentence() {
         // Mirrors the payload `package_candidates::project_acoustic_track` emits.
-        let sentences = vec![sentence("a", 0, 0, 1000), sentence("b", 1, 1000, 2000)];
+        let sentences = [sentence("a", 0, 0, 1000), sentence("b", 1, 1000, 2000)];
         let artifact = LLTimelineArtifact {
             kind: RHYTHM_ACOUSTIC_TRACK_ARTIFACT_KIND.into(),
             provider_id: Some("p".into()),
@@ -1553,7 +1562,7 @@ mod tests {
 
     #[test]
     fn speech_activity_artifact_parses_spans_and_silence_flag() {
-        let sentences = vec![sentence("a", 0, 0, 1000)];
+        let sentences = [sentence("a", 0, 0, 1000)];
         let artifact = LLTimelineArtifact {
             kind: RHYTHM_SPEECH_ACTIVITY_ARTIFACT_KIND.into(),
             provider_id: Some("p".into()),

@@ -438,7 +438,10 @@ fn project_phone_timelines(
                     "{}:{}:{}",
                     track.id.as_str(),
                     fact.resource_id,
-                    sentence_id.as_ref().map(|id| id.as_str()).unwrap_or("unassigned"),
+                    sentence_id
+                        .as_ref()
+                        .map(|id| id.as_str())
+                        .unwrap_or("unassigned"),
                 ),
             ),
             track_id: track.id.clone(),

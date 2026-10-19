@@ -201,7 +201,10 @@ mod tests {
     #[test]
     fn pitch_reset_scores_a_fall_into_the_next_word() {
         // Word 0 high pitch (+3 st), word 1 low pitch (-3 st): a 6 st fall = 1.0.
-        let frames = vec![frame(0, Some(0.0), Some(3.0)), frame(100, Some(0.0), Some(-3.0))];
+        let frames = vec![
+            frame(0, Some(0.0), Some(3.0)),
+            frame(100, Some(0.0), Some(-3.0)),
+        ];
         let words = vec![word(0, 0, 100), word(1, 100, 200)];
         let cues = derive_word_acoustic_cues_from_frames(&frames, &words);
         assert_eq!(cues[0].pitch_reset_after, Some(1.0));
@@ -224,6 +227,8 @@ mod tests {
     #[test]
     fn empty_inputs_degrade_to_no_cues() {
         assert!(derive_word_acoustic_cues_from_frames(&[], &[word(0, 0, 100)]).is_empty());
-        assert!(derive_word_acoustic_cues_from_frames(&[frame(0, Some(1.0), None)], &[]).is_empty());
+        assert!(
+            derive_word_acoustic_cues_from_frames(&[frame(0, Some(1.0), None)], &[]).is_empty()
+        );
     }
 }

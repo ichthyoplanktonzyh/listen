@@ -9,10 +9,10 @@ use crate::phonetic_alignment::CanonicalPhone;
 use super::anchors::{build_information_anchors, detect_stress_anchors};
 use super::boundaries::{corroborate_boundaries_with_activity, detect_phrase_boundaries};
 use super::config::{RhythmWordAcousticCue, SoundAnalysisConfig};
+use super::connected::{connected_speech_with_default, explain_connected_speech};
 use super::frame_cues::{
     AcousticFrameSample, SpeechActivitySpan, derive_word_acoustic_cues_from_frames,
 };
-use super::connected::{connected_speech_with_default, explain_connected_speech};
 use super::grouping::{detect_compression_spans, detect_weak_groups};
 use super::hotspots::build_listening_hotspots;
 use super::nuclei::{mark_anchor_nuclei, select_nuclei};

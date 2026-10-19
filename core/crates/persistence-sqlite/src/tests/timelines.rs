@@ -407,8 +407,8 @@ fn export_lltimeline_lights_audible_structure_evidence_from_ingested_package() {
     };
     repo.save_track(&track).unwrap();
 
-    let word_timing = |sentence: &str, token_index: u32, text: &str, start_ms: u64, end_ms: u64| {
-        WordTiming {
+    let word_timing =
+        |sentence: &str, token_index: u32, text: &str, start_ms: u64, end_ms: u64| WordTiming {
             sentence_id: SubtitleSentenceId::parse(sentence).unwrap(),
             token_index,
             text: text.into(),
@@ -418,8 +418,7 @@ fn export_lltimeline_lights_audible_structure_evidence_from_ingested_package() {
             timing_source: TimingSource::ForcedAligned,
             provider_id: "forced-aligner".into(),
             provider_version: "v1".into(),
-        }
-    };
+        };
     let word_timeline = WordTimeline {
         id: WordTimelineId::parse("word-timeline-1").unwrap(),
         track_id: track.id.clone(),

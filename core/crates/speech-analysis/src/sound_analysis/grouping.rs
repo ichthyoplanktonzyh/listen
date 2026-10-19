@@ -47,9 +47,9 @@ pub(super) fn detect_weak_groups(
                 Some(group.last().unwrap().index),
             )
         });
-        let low_energy = group.iter().any(|token| {
-            token.energy_prominence_score().is_some_and(|e| e <= 0.2)
-        });
+        let low_energy = group
+            .iter()
+            .any(|token| token.energy_prominence_score().is_some_and(|e| e <= 0.2));
         let confidence = clamp01(
             0.52 + score_flag(short_duration) * 0.14
                 + score_flag(has_connected_speech) * 0.12

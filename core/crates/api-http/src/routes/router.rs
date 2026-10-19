@@ -32,7 +32,8 @@ use super::media::{
     update_track_language,
 };
 use super::package_lifecycle::{
-    adopt_learning_edition, delete_learning_edition, install_material_package, list_learning_editions,
+    adopt_learning_edition, delete_learning_edition, install_material_package,
+    list_learning_editions,
 };
 use super::personal_expression::{
     create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
