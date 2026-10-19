@@ -2053,6 +2053,7 @@ dependencies = [
  "application",
  "async-trait",
  "domain",
+ "fs2",
  "hex",
  "learning-resource-runtime",
  "libc",

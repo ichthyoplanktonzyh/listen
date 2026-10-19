@@ -10,6 +10,7 @@ api-events = { path = "../api-events" }
 application = { path = "../application" }
 async-trait.workspace = true
 domain = { path = "../domain" }
+fs2.workspace = true
 hex.workspace = true
 learning-resource-runtime = { path = "../learning-resource-runtime" }
 reqwest.workspace = true
