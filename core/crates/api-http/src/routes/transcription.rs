@@ -57,10 +57,17 @@ pub(crate) async fn install_transcription_model(
     let id =
         domain::TranscriptionModelId::parse(request.model_id).map_err(ApplicationError::from)?;
     let coordinator = state.analysis.transcription.clone();
-    tokio::spawn(async move {
-        let _ = coordinator.install_model(id).await;
-    });
-    Ok(Json(serde_json::json!({"installation_started": true})))
+    let start = coordinator
+        .start_model_install(id)
+        .map_err(ApiError::from)?;
+    if let Some(install) = start.future {
+        tokio::spawn(async move {
+            let _ = install.await;
+        });
+    }
+    Ok(Json(
+        serde_json::json!({"installation_started": start.installation_started}),
+    ))
 }
 
 #[derive(Debug, Deserialize)]

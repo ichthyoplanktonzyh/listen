@@ -75,6 +75,7 @@ import 'widgets/navigation/shell_tools_menu.dart';
 import 'widgets/layout/session_subtitle_menu.dart';
 import 'widgets/home/home_pane.dart';
 import 'widgets/flows/shell_learning_routes.dart';
+import 'widgets/flows/realtime_transcription_model_dialog.dart';
 import 'data/repositories/core_session_repository.dart';
 import 'data/repositories/media_import_repository.dart';
 import 'localization.dart';
@@ -761,6 +762,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   String get status => playerController.status;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool _workbenchExpanded = false;
+  bool _openingRealtimeConversation = false;
   DocumentSessionController? _documentSession;
   VoidCallback? _documentSessionListener;
   String? _projectedDocumentReleaseId;
@@ -1662,105 +1664,136 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openRealtimeConversation([
     ContentSegmentSelection? selection,
   ]) async {
-    // Unavailable State (CONTEXT.md): the sidebar conversation entry is a
-    // user click — a silent return left it as a dead button, so name the
-    // reason instead.
-    if (!widget.platformCapabilities.isMacOS) {
-      playerController.setStatus(l.text('conversationMacOsOnly'));
-      return;
-    }
-    if (!coreSessionController.state.isConnected) {
-      playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-      return;
-    }
-    final language =
-        selection?.language ??
-        settingsController.resolveLearningLanguage(
-          subtitleController.primaryTrack?.language,
-        );
-    final modelOutcome = await RealtimeTranscriptionModelController(
-      coreRepositories.transcription,
-    ).selectForLanguage(language);
-    if (!mounted) return;
-    if (modelOutcome is RealtimeTranscriptionModelFailure) {
-      playerController.setStatus(
-        l.text('statusCoreUnavailable'),
-        error: true,
-        failure: modelOutcome.failure,
+    if (_openingRealtimeConversation) return;
+    _openingRealtimeConversation = true;
+    try {
+      // Unavailable State (CONTEXT.md): the sidebar conversation entry is a
+      // user click — a silent return left it as a dead button, so name the
+      // reason instead.
+      if (!widget.platformCapabilities.isMacOS) {
+        playerController.setStatus(l.text('conversationMacOsOnly'));
+        return;
+      }
+      if (!coreSessionController.state.isConnected) {
+        playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+        return;
+      }
+      final language =
+          selection?.language ??
+          settingsController.resolveLearningLanguage(
+            subtitleController.primaryTrack?.language,
+          );
+      final modelController = RealtimeTranscriptionModelController(
+        coreRepositories.transcription,
       );
-      return;
-    }
-    if (modelOutcome is! RealtimeTranscriptionModelSelected) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(l.text('modelRequired')),
-          content: Text(l.text('installModelFirst')),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l.text('close')),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-    // A returning user must land on the lobby, not a stale debrief: the
-    // controller is a singleton that outlives the route, so its terminal
-    // state (done/failed + items) would re-render the old debrief on re-entry.
-    realtimeConversationController.resetToIdle();
-    await Navigator.push<void>(
-      context,
-      // The stage powers on instead of sliding in like a page of chrome
-      // (#83). It stays a window-sized dark room: F and macOS fullscreen
-      // remain the player's (#25 boundary untouched).
-      conversationStageRoute<void>(
-        reduceMotion: MediaQuery.disableAnimationsOf(context),
-        builder: (routeContext) => RealtimeConversationPanel(
-          controller: realtimeConversationController,
-          launch: selection == null
-              ? RealtimeConversationLaunch.free(
-                  language: language,
-                  modelId: modelOutcome.modelId,
-                )
-              : RealtimeConversationLaunch.topic(
-                  anchor: RealtimeConversationAnchor(
-                    language: selection.language,
-                    text: selection.transcriptSnapshot,
-                    mediaId: selection.mediaId,
-                    startMs: selection.startMs,
-                    endMs: selection.endMs,
-                  ),
-                  modelId: modelOutcome.modelId,
+      try {
+        RealtimeTranscriptionModelOutcome modelOutcome = await modelController
+            .selectForLanguage(language);
+        if (!mounted) return;
+        if (modelOutcome case RealtimeTranscriptionModelNeedsDownload(
+          :final model,
+        )) {
+          modelOutcome =
+              await showRealtimeTranscriptionModelDialog(
+                context: context,
+                controller: modelController,
+                model: model,
+              ) ??
+              const RealtimeTranscriptionModelUnavailable();
+        } else if (modelOutcome is RealtimeTranscriptionModelUnavailable) {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(l.text('modelRequired')),
+              content: Text(l.text('installModelFirst')),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(l.text('close')),
                 ),
-          acquireAudioFocus: speakingActions.acquireRecordingFocus,
-          onClose: () => Navigator.pop(routeContext),
-          // Realtime provider configuration lives in settings (#87); the
-          // conversation route covers the app bar, so it hands the learner
-          // back there instead of hosting the form itself.
-          onManageVoices: _openSettings,
-          // The lobby's caption switch is a habit, so it is remembered
-          // across conversations and restarts (#85 · S8).
-          captionEnabled: settingsController.realtimeCaptionVisible,
-          onCaptionEnabledChanged: (value) =>
-              unawaited(settingsController.setRealtimeCaptionVisible(value)),
-          // The debrief's 回流 is a door, not a claim (#86 · S9): the words
-          // this conversation handed to the speaking channel are in the
-          // vocabulary book, and an amber target goes straight into 我的表达.
-          // The stage still covers the shell, so this door keeps the pushed
-          // dictionary on top instead of swapping the route underneath.
-          onOpenVocabulary: () => _showVocabulary(),
-          // `manual`, not a conversation source kind: the turn never became
-          // learner output, so what the learner keeps here is something they
-          // are writing down — the backend's production evidence is not
-          // allowed to gain a row from a turn the loop never closed.
-          onSaveExpression: (text) => _openPersonalExpression(
-            source: PersonalExpressionSourceView(kind: 'manual', text: text),
+              ],
+            ),
+          );
+        }
+        // A dismissed consent sheet, or a shell disposed while it was open,
+        // must never continue into the conversation route.
+        if (!mounted) return;
+        if (modelOutcome is RealtimeTranscriptionModelFailure) {
+          playerController.setStatus(
+            l.text('statusCoreUnavailable'),
+            error: true,
+            failure: modelOutcome.failure,
+          );
+          return;
+        }
+        final selectedModel = modelOutcome;
+        if (selectedModel is! RealtimeTranscriptionModelSelected) return;
+
+        // A returning user must land on the lobby, not a stale debrief: the
+        // controller is a singleton that outlives the route, so its terminal
+        // state (done/failed + items) would re-render the old debrief on re-entry.
+        realtimeConversationController.resetToIdle();
+        await Navigator.push<void>(
+          context,
+          // The stage powers on instead of sliding in like a page of chrome
+          // (#83). It stays a window-sized dark room: F and macOS fullscreen
+          // remain the player's (#25 boundary untouched).
+          conversationStageRoute<void>(
+            reduceMotion: MediaQuery.disableAnimationsOf(context),
+            builder: (routeContext) => RealtimeConversationPanel(
+              controller: realtimeConversationController,
+              launch: selection == null
+                  ? RealtimeConversationLaunch.free(
+                      language: language,
+                      modelId: selectedModel.modelId,
+                    )
+                  : RealtimeConversationLaunch.topic(
+                      anchor: RealtimeConversationAnchor(
+                        language: selection.language,
+                        text: selection.transcriptSnapshot,
+                        mediaId: selection.mediaId,
+                        startMs: selection.startMs,
+                        endMs: selection.endMs,
+                      ),
+                      modelId: selectedModel.modelId,
+                    ),
+              acquireAudioFocus: speakingActions.acquireRecordingFocus,
+              onClose: () => Navigator.pop(routeContext),
+              // Realtime provider configuration lives in settings (#87); the
+              // conversation route covers the app bar, so it hands the learner
+              // back there instead of hosting the form itself.
+              onManageVoices: _openSettings,
+              // The lobby's caption switch is a habit, so it is remembered
+              // across conversations and restarts (#85 · S8).
+              captionEnabled: settingsController.realtimeCaptionVisible,
+              onCaptionEnabledChanged: (value) => unawaited(
+                settingsController.setRealtimeCaptionVisible(value),
+              ),
+              // The debrief's 回流 is a door, not a claim (#86 · S9): the words
+              // this conversation handed to the speaking channel are in the
+              // vocabulary book, and an amber target goes straight into 我的表达.
+              // The stage still covers the shell, so this door keeps the pushed
+              // dictionary on top instead of swapping the route underneath.
+              onOpenVocabulary: () => _showVocabulary(),
+              // `manual`, not a conversation source kind: the turn never became
+              // learner output, so what the learner keeps here is something they
+              // are writing down — the backend's production evidence is not
+              // allowed to gain a row from a turn the loop never closed.
+              onSaveExpression: (text) => _openPersonalExpression(
+                source: PersonalExpressionSourceView(
+                  kind: 'manual',
+                  text: text,
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        );
+      } finally {
+        modelController.dispose();
+      }
+    } finally {
+      _openingRealtimeConversation = false;
+    }
   }
 
   Future<void> _openLearningAssets() {

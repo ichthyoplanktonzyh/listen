@@ -1734,6 +1734,24 @@ class AppLocalizations {
       'modelRequired': 'A transcription model is required',
       'conversationMacOsOnly': 'Conversation is currently macOS-only',
       'installModelFirst': 'No compatible transcription model is installed.',
+      'transcriptionModelDownloadTitle': 'Download a Whisper model?',
+      'transcriptionModelDownloadExplainer':
+          'Realtime conversation needs a speech-to-text model to transcribe '
+          'your voice. This is separate from the AI conversation provider, '
+          'which may need its own setup.',
+      'transcriptionModelDownloadOffer': 'Whisper {name} · {size} MB',
+      'transcriptionModelDownloadAction': 'Download',
+      'transcriptionModelDownloadVerify':
+          'The download will be checked for integrity before the model is used.',
+      'transcriptionModelDownloading':
+          'Downloading Whisper {name} · {downloaded} / {total} MB',
+      'transcriptionModelStarting': 'Starting model download…',
+      'transcriptionModelCancelling': 'Cancelling model download…',
+      'transcriptionModelCancelDownload': 'Cancel download',
+      'transcriptionModelInstallFailed':
+          'The transcription model could not be installed. You can retry.',
+      'transcriptionModelInstallUnavailable':
+          'This model is no longer available. Close this prompt and try again.',
       'automatic': 'Automatic detection',
       'syntaxCapabilityTitle': 'Local syntax enhancement',
       'syntaxCapabilityDescription':
@@ -3887,6 +3905,20 @@ class AppLocalizations {
       'modelRequired': '需要转录模型',
       'conversationMacOsOnly': '对话功能目前仅支持 macOS',
       'installModelFirst': '尚未安装兼容的转录模型。',
+      'transcriptionModelDownloadTitle': '下载 Whisper 语音转文字模型？',
+      'transcriptionModelDownloadExplainer':
+          '实时对话需要语音转文字模型来转录你的语音。它与 AI 对话服务提供方分开；'
+          '该服务可能还需要单独设置。',
+      'transcriptionModelDownloadOffer': 'Whisper {name} · {size} MB',
+      'transcriptionModelDownloadAction': '下载',
+      'transcriptionModelDownloadVerify': '下载完成后会校验模型完整性，再用于转录。',
+      'transcriptionModelDownloading':
+          '正在下载 Whisper {name} · {downloaded} / {total} MB',
+      'transcriptionModelStarting': '正在开始下载模型…',
+      'transcriptionModelCancelling': '正在取消模型下载…',
+      'transcriptionModelCancelDownload': '取消下载',
+      'transcriptionModelInstallFailed': '无法安装转录模型。你可以重试。',
+      'transcriptionModelInstallUnavailable': '该模型已不可用。关闭此提示后重试。',
       'automatic': '自动检测',
       'syntaxCapabilityTitle': '本地句法增强',
       'syntaxCapabilityDescription': '可选的本地语法分析可增强部分语流与语义分组提示。播放和字幕始终不依赖此能力。',

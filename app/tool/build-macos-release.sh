@@ -7,8 +7,40 @@ backend_lock="${BACKEND_LOCK:?set BACKEND_LOCK to the generated Core lock}"
 gen_lock="${LISTEN_GEN_LOCK_PATH:?set LISTEN_GEN_LOCK_PATH to the generated Gen lock}"
 gen_manifest="${LISTEN_GEN_RELEASE_MANIFEST:?set LISTEN_GEN_RELEASE_MANIFEST to the generated Gen manifest}"
 release_output="${LISTEN_RELEASE_OUTPUT_DIR:-$root/dist}"
+release_version="${LISTEN_RELEASE_VERSION:-}"
+release_channel="${LISTEN_RELEASE_CHANNEL:-}"
+source_commit="${LISTEN_SOURCE_COMMIT:-}"
+minimum_macos="${LISTEN_RELEASE_MINIMUM_MACOS_VERSION:-}"
+release_build_number="${LISTEN_RELEASE_BUILD_NUMBER:-}"
 source_root="$(git -C "$root" rev-parse --show-toplevel)"
 source_status="$(git -C "$source_root" status --porcelain --untracked-files=all)"
+
+if [[ -n "$release_version$release_channel$source_commit$minimum_macos$release_build_number" ]]; then
+  [[ -n "$release_version" && -n "$release_channel" && -n "$source_commit" && -n "$minimum_macos" && -n "$release_build_number" ]] || {
+    echo "Set all LISTEN_RELEASE_* metadata and LISTEN_SOURCE_COMMIT together." >&2
+    exit 2
+  }
+  [[ "$release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-dev\.[1-9][0-9]*$ ]] || {
+    echo "Unsupported development preview version: $release_version" >&2
+    exit 2
+  }
+  [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "LISTEN_SOURCE_COMMIT must be a full lowercase Git commit SHA." >&2
+    exit 2
+  }
+  [[ "$release_channel" =~ ^[a-z0-9-]+$ ]] || {
+    echo "LISTEN_RELEASE_CHANNEL must contain lowercase letters, digits, or hyphens." >&2
+    exit 2
+  }
+  [[ "$minimum_macos" =~ ^[0-9]+\.[0-9]+$ ]] || {
+    echo "LISTEN_RELEASE_MINIMUM_MACOS_VERSION must have the form 26.0." >&2
+    exit 2
+  }
+  [[ "$release_build_number" =~ ^[0-9]+$ ]] || {
+    echo "LISTEN_RELEASE_BUILD_NUMBER must be numeric." >&2
+    exit 2
+  }
+fi
 
 absolute_file() {
   local path="$1"
@@ -66,6 +98,21 @@ LISTEN_GEN_LOCK_PATH="$gen_lock" \
 LISTEN_GEN_RELEASE_MANIFEST="$gen_manifest" \
   "$root/tool/stage-macos-runtime.sh" "$app"
 "$root/tool/sanitize-macos-player-framework.sh" "$app"
+
+if [[ -n "$release_version" ]]; then
+  plist="$app/Contents/Info.plist"
+  app_bundle_version="${release_version%%-dev.*}"
+  actual_bundle_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+  actual_build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
+  [[ "$actual_bundle_version" == "$app_bundle_version" && "$actual_build_number" == "$release_build_number" ]] || {
+    echo "Built App has version $actual_bundle_version ($actual_build_number), expected $app_bundle_version ($release_build_number)." >&2
+    exit 1
+  }
+  /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $minimum_macos" "$plist"
+  /usr/libexec/PlistBuddy -c "Add :ListenReleaseVersion string $release_version" "$plist"
+  /usr/libexec/PlistBuddy -c "Add :ListenReleaseChannel string $release_channel" "$plist"
+  /usr/libexec/PlistBuddy -c "Add :ListenSourceCommit string $source_commit" "$plist"
+fi
 
 xattr -cr "$app"
 codesign --force --deep --sign - \

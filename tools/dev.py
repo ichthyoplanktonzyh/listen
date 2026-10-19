@@ -10,6 +10,8 @@ import os
 import posixpath
 from pathlib import Path
 from pathlib import PurePosixPath
+import plistlib
+import platform as host_platform
 import re
 import shutil
 import shlex
@@ -37,6 +39,7 @@ SNAPSHOT_EMAIL = "listen-dev-snapshot@invalid"
 SNAPSHOT_DATE = "2000-01-01T00:00:00Z"
 GENERATOR_REPOSITORY = "ichthyoplanktonzyh/listen"
 GENERATOR_REPOSITORY_URL = "https://github.com/ichthyoplanktonzyh/listen"
+PREVIEW_METADATA_PATH = Path("tools/dev-preview.json")
 
 
 class DevError(Exception):
@@ -776,6 +779,49 @@ def _release_lock_paths(output: Path) -> Tuple[Path, Path]:
     return lock_dir / "backend.lock.json", lock_dir / "listen_gen.lock.json"
 
 
+def _load_preview_metadata(root: Path) -> Dict[str, str]:
+    metadata_path = root / PREVIEW_METADATA_PATH
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise DevError(f"Could not read preview release metadata {metadata_path}: {error}") from error
+    if not isinstance(metadata, dict):
+        raise DevError(f"{metadata_path} must contain a JSON object.")
+    version = metadata.get("version")
+    match = re.fullmatch(r"(?P<bundle>\d+\.\d+\.\d+)-dev\.(?P<iteration>[1-9]\d*)", str(version))
+    if (
+        metadata.get("schema_version") != 1
+        or metadata.get("channel") != "development-preview"
+        or metadata.get("platform") != "macos-arm64"
+        or not match
+        or metadata.get("tag") != f"v{version}"
+    ):
+        raise DevError(
+            f"{metadata_path} must describe a development preview with a numeric app version and v-prefixed tag."
+        )
+    minimum_macos = metadata.get("minimum_macos")
+    if not isinstance(minimum_macos, str) or not re.fullmatch(r"\d+\.\d+", minimum_macos):
+        raise DevError(f"{metadata_path} has an invalid minimum_macos value.")
+    pubspec_path = root / "app" / "pubspec.yaml"
+    try:
+        pubspec = pubspec_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise DevError(f"Could not read {pubspec_path}: {error}") from error
+    pubspec_match = re.search(r"(?m)^version:\s*([^\s#]+)", pubspec)
+    if not pubspec_match:
+        raise DevError(f"Could not resolve the application version from {pubspec_path}.")
+    version_match = re.fullmatch(r"(?P<bundle>\d+\.\d+\.\d+)\+(?P<build>\d+)", pubspec_match.group(1))
+    if not version_match or version_match.group("bundle") != match.group("bundle"):
+        raise DevError(
+            f"{pubspec_path} must use numeric bundle version {match.group('bundle')}+BUILD for preview {version}."
+        )
+    metadata["bundle_version"] = version_match.group("bundle")
+    metadata["build_number"] = version_match.group("build")
+    metadata["archive_name"] = f"Listen-{metadata['tag']}-{metadata['platform']}.zip"
+    metadata["manifest_name"] = metadata["archive_name"].removesuffix(".zip") + ".release.json"
+    return metadata
+
+
 def _write_backend_lock(
     contract_manifest: Path,
     contract_archive: Path,
@@ -829,6 +875,259 @@ def _ensure_external_output(root: Path, requested: Optional[str], source_sha: st
         raise DevError(f"Release output directory is not empty: {output}")
     output.mkdir(parents=True, exist_ok=True)
     return output
+
+
+def _parse_macos_minimums(load_commands: str) -> List[Tuple[int, int]]:
+    """Read macOS minimums from the arm64 slice's otool -l output."""
+    command = None
+    platform_id = None
+    minimums: List[Tuple[int, int]] = []
+    for line in load_commands.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("cmd "):
+            command = stripped[4:]
+            platform_id = None
+            continue
+        if command == "LC_BUILD_VERSION":
+            platform_match = re.fullmatch(r"platform\s+(\d+)", stripped)
+            if platform_match:
+                platform_id = platform_match.group(1)
+            minimum_match = re.fullmatch(r"minos\s+(\d+)\.(\d+)(?:\.\d+)?(?:\s+.*)?", stripped)
+            if minimum_match and platform_id == "1":
+                minimums.append((int(minimum_match.group(1)), int(minimum_match.group(2))))
+        elif command == "LC_VERSION_MIN_MACOSX":
+            version_match = re.fullmatch(r"version\s+(\d+)\.(\d+)(?:\.\d+)?", stripped)
+            if version_match:
+                minimums.append((int(version_match.group(1)), int(version_match.group(2))))
+    return minimums
+
+
+def _format_macos_version(version: Tuple[int, int]) -> str:
+    return f"{version[0]}.{version[1]}"
+
+
+def _validate_macos_arm64_target(
+    host_architecture: str,
+    macho_architectures: Dict[str, List[str]],
+    required_binaries: Iterable[str],
+) -> None:
+    if host_architecture not in ("arm64", "aarch64"):
+        raise DevError(
+            f"The macOS arm64 release must be built and smoke-tested on Apple Silicon, not {host_architecture}."
+        )
+    missing = sorted(set(required_binaries) - set(macho_architectures))
+    if missing:
+        raise DevError("The macOS arm64 bundle is missing required Mach-O executables: " + ", ".join(missing))
+    unsupported = sorted(
+        name for name, architectures in macho_architectures.items() if "arm64" not in architectures
+    )
+    if unsupported:
+        raise DevError(
+            "Every Mach-O in this macOS arm64 bundle must include an arm64 slice; unsupported: "
+            + ", ".join(unsupported)
+        )
+
+
+def _macos_bundle_facts(app: Path, metadata: Dict[str, str]) -> Dict[str, object]:
+    if sys.platform != "darwin":
+        raise DevError("The macOS release bundle audit requires macOS tooling (file, lipo, otool).")
+    host_architecture = host_platform.machine()
+    if host_architecture not in ("arm64", "aarch64"):
+        raise DevError(
+            f"The macOS arm64 release must be built and smoke-tested on Apple Silicon, not {host_architecture}."
+        )
+    info_path = app / "Contents" / "Info.plist"
+    try:
+        info = plistlib.loads(info_path.read_bytes())
+    except (OSError, ValueError) as error:
+        raise DevError(f"Could not read the built App metadata at {info_path}: {error}") from error
+    expected_info = {
+        "CFBundleIdentifier": "com.shadow.listen.desktop",
+        "CFBundleShortVersionString": metadata["bundle_version"],
+        "CFBundleVersion": metadata["build_number"],
+        "ListenReleaseVersion": metadata["version"],
+        "ListenReleaseChannel": metadata["channel"],
+        "ListenSourceCommit": metadata["source_commit"],
+        "LSMinimumSystemVersion": metadata["minimum_macos"],
+    }
+    for key, expected in expected_info.items():
+        if str(info.get(key, "")) != expected:
+            raise DevError(
+                f"Built App Info.plist has {key}={info.get(key)!r}; expected {expected!r}."
+            )
+
+    minimums = []
+    arm64_macho_count = 0
+    macho_count = 0
+    macho_architectures: Dict[str, List[str]] = {}
+    for path in app.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        file_result = subprocess.run(
+            ["file", "-b", str(path)], check=False, capture_output=True, text=True
+        )
+        if file_result.returncode:
+            raise DevError(f"Could not inspect packaged file {path}.")
+        if "Mach-O" not in file_result.stdout:
+            continue
+        macho_count += 1
+        architectures = subprocess.run(
+            ["lipo", "-archs", str(path)], check=False, capture_output=True, text=True
+        )
+        if architectures.returncode:
+            raise DevError(f"Could not inspect Mach-O architectures in {path}.")
+        architecture_list = architectures.stdout.split()
+        macho_architectures[path.relative_to(app).as_posix()] = architecture_list
+        if "arm64" not in architecture_list:
+            continue
+        arm64_macho_count += 1
+        load_commands = subprocess.run(
+            ["otool", "-arch", "arm64", "-l", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if load_commands.returncode:
+            raise DevError(f"Could not inspect arm64 deployment target in {path}.")
+        file_minimums = _parse_macos_minimums(load_commands.stdout)
+        if not file_minimums:
+            raise DevError(f"No macOS deployment target was found in arm64 Mach-O {path}.")
+        minimums.extend(file_minimums)
+
+    _validate_macos_arm64_target(
+        host_architecture,
+        macho_architectures,
+        (
+            "Contents/MacOS/listen",
+            "Contents/MacOS/api-http",
+            "Contents/Resources/runtime/whisper-cli",
+            "Contents/Resources/runtime/ffmpeg",
+            "Contents/Resources/runtime/ffprobe",
+        ),
+    )
+    if not arm64_macho_count or not minimums:
+        raise DevError(f"No arm64 macOS binaries were found in {app}.")
+    effective_minimum = max(minimums)
+    declared_minimum = tuple(int(part) for part in metadata["minimum_macos"].split("."))
+    if effective_minimum != declared_minimum:
+        raise DevError(
+            "The release minimum macOS version does not match the bundled arm64 Mach-O inputs: "
+            f"Info.plist says {metadata['minimum_macos']}, but the bundle requires "
+            f"{_format_macos_version(effective_minimum)}. Update tools/dev-preview.json only after reviewing the new runtime requirements."
+        )
+    model_names = [
+        path.name
+        for path in app.rglob("*")
+        if path.is_file() and re.fullmatch(r"ggml-.*\.(?:bin|gguf)", path.name, re.IGNORECASE)
+    ]
+    if model_names:
+        raise DevError("A Whisper model was unexpectedly included in the app bundle: " + ", ".join(model_names))
+    host_version = subprocess.run(
+        ["sw_vers", "-productVersion"], check=False, capture_output=True, text=True
+    )
+    if host_version.returncode or not host_version.stdout.strip():
+        raise DevError("Could not determine the macOS version used for packaged release verification.")
+    return {
+        "bundle_id": info["CFBundleIdentifier"],
+        "bundle_version": info["CFBundleShortVersionString"],
+        "build_number": info["CFBundleVersion"],
+        "minimum_macos": _format_macos_version(effective_minimum),
+        "mach_o_files": macho_count,
+        "arm64_mach_o_files": arm64_macho_count,
+        "tested_macos": host_version.stdout.strip(),
+        "tested_architecture": host_architecture,
+    }
+
+
+def _assemble_preview_distribution(
+    output: Path,
+    archive: Path,
+    source_sha: str,
+    metadata: Dict[str, str],
+    bundle_facts: Dict[str, object],
+) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+        raise DevError("The preview source identity must be a full lowercase Git SHA.")
+    if not archive.is_file():
+        raise DevError(f"The verified app archive is missing: {archive}")
+    distribution = output / "distribution"
+    distribution.mkdir(parents=True, exist_ok=True)
+    asset = distribution / metadata["archive_name"]
+    release_manifest = distribution / metadata["manifest_name"]
+    if any(distribution.iterdir()):
+        raise DevError(f"Preview distribution assets already exist: {distribution}")
+    shutil.copy2(str(archive), str(asset))
+    artifact_sha = hashlib.sha256(asset.read_bytes()).hexdigest()
+    release = {
+        "schema_version": 1,
+        "release": {
+            "product": "Listen",
+            "channel": metadata["channel"],
+            "version": metadata["version"],
+            "tag": metadata["tag"],
+            "prerelease": True,
+        },
+        "source": {
+            "repository": GENERATOR_REPOSITORY_URL,
+            "commit": source_sha,
+        },
+        "application": {
+            "bundle_id": bundle_facts["bundle_id"],
+            "bundle_version": bundle_facts["bundle_version"],
+            "build_number": bundle_facts["build_number"],
+            "platform": metadata["platform"],
+            "minimum_macos": bundle_facts["minimum_macos"],
+        },
+        "verification": {
+            "packaged_smoke": "passed",
+            "tested_macos": bundle_facts["tested_macos"],
+            "tested_architecture": bundle_facts["tested_architecture"],
+            "mach_o_files": bundle_facts["mach_o_files"],
+            "arm64_mach_o_files": bundle_facts["arm64_mach_o_files"],
+            "launch_environment": {
+                "home": "isolated temporary directory",
+                "path": "/usr/bin:/bin:/usr/sbin:/sbin",
+                "source_checkout_available_to_app": False,
+            },
+        },
+        "signing": {
+            "type": "ad-hoc",
+            "developer_id_signed": False,
+            "notarized": False,
+        },
+        "whisper_model": {
+            "bundled": False,
+            "id": "whisper.cpp:base@main",
+            "display_name": "base",
+            "size_bytes": 147951465,
+            "source_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+            "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+            "download_requires_explicit_user_confirmation": True,
+            "download_trigger": "starting a realtime conversation when no compatible model is installed",
+        },
+        "gen_runtime": {
+            "zipapp_bundled": True,
+            "interpreter_bundled": False,
+            "python_requires": ">=3.11",
+            "required_dependencies": ["pypdf>=5.0,<7"],
+            "optional_extras": ["tts", "ocr", "align", "asr-qwen", "asr-sensevoice"],
+        },
+        "artifact": {
+            "filename": asset.name,
+            "size_bytes": asset.stat().st_size,
+            "sha256": artifact_sha,
+        },
+    }
+    release_manifest.write_text(
+        json.dumps(release, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    checksum_lines = []
+    for path in (asset, release_manifest):
+        checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+        checksum_lines.append(f"{checksum}  {path.name}")
+    (distribution / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="ascii")
+    return distribution
 
 
 def _extract_git_archive(archive_path: Path, destination: Path) -> set:
@@ -974,6 +1273,7 @@ def command_release(args: argparse.Namespace) -> None:
     python = _require_setup(ROOT)
     source_sha = _git(ROOT, "rev-parse", "HEAD")
     _assert_clean_head(ROOT, source_sha, "before release export")
+    metadata = _load_preview_metadata(ROOT)
     output = _ensure_external_output(ROOT, args.output_dir, source_sha)
     runtime = _runtime_dir(ROOT)
     export_root, export_git_sha = _create_committed_source_export(ROOT, source_sha)
@@ -985,11 +1285,12 @@ def command_release(args: argparse.Namespace) -> None:
             output,
             runtime,
             python,
+            metadata,
         )
     finally:
         shutil.rmtree(export_root, ignore_errors=True)
     _assert_clean_head(ROOT, source_sha, "after release verification")
-    print(f"Release bundle and manifests verified in {output}.")
+    print(f"Development preview verified: {output / 'distribution'}")
 
 
 def _app_release_environment(
@@ -1000,6 +1301,8 @@ def _app_release_environment(
     gen_lock: Path,
     gen_manifest: Path,
     output: Path,
+    metadata: Dict[str, str],
+    source_commit: str,
 ) -> Dict[str, str]:
     environment = dict(base_environment)
     # The release verifier scopes this flag to its own probe process. Do not
@@ -1012,6 +1315,11 @@ def _app_release_environment(
             "LISTEN_GEN_LOCK_PATH": str(gen_lock),
             "LISTEN_GEN_RELEASE_MANIFEST": str(gen_manifest),
             "LISTEN_RELEASE_OUTPUT_DIR": str(output),
+            "LISTEN_RELEASE_VERSION": metadata["version"],
+            "LISTEN_RELEASE_CHANNEL": metadata["channel"],
+            "LISTEN_RELEASE_MINIMUM_MACOS_VERSION": metadata["minimum_macos"],
+            "LISTEN_RELEASE_BUILD_NUMBER": metadata["build_number"],
+            "LISTEN_SOURCE_COMMIT": source_commit,
         }
     )
     return environment
@@ -1024,9 +1332,11 @@ def _release_from_export(
     output: Path,
     runtime: Path,
     python: Path,
+    metadata: Dict[str, str],
 ) -> None:
     core = source_root / "core"
     app = source_root / "app"
+    _check_app_release_script_syntax(app)
     _run(
         [str(core / "scripts" / "verify-asr-runtime.sh"), str(runtime)],
         core,
@@ -1126,12 +1436,41 @@ def _release_from_export(
         gen_lock=gen_lock,
         gen_manifest=gen_manifest,
         output=output / "app",
+        metadata=metadata,
+        source_commit=source_sha,
     )
+    _build_verify_and_assemble_preview(app, release_env, output, source_sha, metadata)
+    _assert_clean_head(source_root, export_git_sha, "after release verification")
+
+
+def _check_app_release_script_syntax(app: Path) -> None:
+    for name in ("build-macos-release.sh", "verify-macos-release.sh"):
+        script = app / "tool" / name
+        _run(["bash", "-n", str(script)], app)
+
+
+def _build_verify_and_assemble_preview(
+    app: Path,
+    release_env: Dict[str, str],
+    output: Path,
+    source_sha: str,
+    metadata: Dict[str, str],
+) -> None:
     build_script = app / "tool" / "build-macos-release.sh"
     verify_script = app / "tool" / "verify-macos-release.sh"
     _run([str(build_script)], app, release_env)
     _run([str(verify_script)], app, release_env)
-    _assert_clean_head(source_root, export_git_sha, "after release verification")
+    app_bundle = app / "build" / "macos" / "Build" / "Products" / "Release" / "listen.app"
+    bundle_metadata = dict(metadata)
+    bundle_metadata["source_commit"] = source_sha
+    bundle_facts = _macos_bundle_facts(app_bundle, bundle_metadata)
+    _assemble_preview_distribution(
+        output,
+        output / "app" / "listen-macos-arm64.zip",
+        source_sha,
+        metadata,
+        bundle_facts,
+    )
 
 
 def command_status(args: argparse.Namespace) -> None:
@@ -1181,7 +1520,7 @@ def command_status(args: argparse.Namespace) -> None:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="./dev",
-        description="Set up, run, check, test, and release the Listen monorepo.",
+        description="Set up, run, check, test, and build the Listen development preview.",
     )
     commands = result.add_subparsers(dest="command", required=True)
 
@@ -1207,8 +1546,11 @@ def parser() -> argparse.ArgumentParser:
     test.add_argument("suite", nargs="?", choices=("unit", "integration"), default="unit")
     test.set_defaults(func=command_test)
 
-    release = commands.add_parser("release", help="build and verify a clean committed macOS release")
-    release.add_argument("--output-dir", help="external, empty directory for release outputs")
+    release = commands.add_parser("release", help="build and verify a clean committed macOS development preview")
+    release.add_argument(
+        "--output-dir",
+        help="external, empty directory; upload-ready assets are in its distribution/ subdirectory",
+    )
     release.set_defaults(func=command_release)
 
     status = commands.add_parser("status", help="show source and local toolchain status")

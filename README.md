@@ -17,6 +17,14 @@ The former `listen-app`, `listen-core`, and `listen-gen` histories are imported
 under their module directories. Their old releases and repository links remain
 historical references. See [decision 0005](decisions/0005-single-repository-development.md).
 
+## Development preview
+
+Development previews are distributed through [GitHub Releases](https://github.com/ichthyoplanktonzyh/listen/releases).
+The current package targets Apple Silicon with macOS 26 or newer, uses ad-hoc
+signing, and is not notarized. Read the
+[installation and runtime requirements](docs/development/dev-preview-distribution.md)
+before downloading. Transcription models are downloaded only after confirmation.
+
 ## Development
 
 Start with [DEVELOPMENT.md](DEVELOPMENT.md). From this repository root:
