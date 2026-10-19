@@ -1,0 +1,53 @@
+{
+  "_comment": [
+    "Starter podcast feeds for discovery. Content data, not UI copy — it lives",
+    "outside lib/ so the CJK literal gate does not see it.",
+    "",
+    "The feed URL is the source id: for a podcast the feed address is the",
+    "stable thing to point at, and it is what entriesFor fetches.",
+    "",
+    "Name, description and language are our curation, shown as such. They are",
+    "not read back from the feed, so keep them accurate by hand.",
+    "",
+    "Every URL here was verified to answer 200 with a parseable RSS channel on",
+    "2026-08-04. Re-check before adding: a starter feed that 404s is the first",
+    "thing a new user sees."
+  ],
+  "feeds": [
+    {
+      "url": "https://podcasts.files.bbci.co.uk/p02pc9tn.rss",
+      "name": "6 Minute English",
+      "language": "en",
+      "description": "BBC Learning English. Six-minute conversations built for learners, with the vocabulary spelled out.",
+      "cover": "amber"
+    },
+    {
+      "url": "https://podcasts.files.bbci.co.uk/p02pc9zn.rss",
+      "name": "Learning English Conversations",
+      "language": "en",
+      "description": "BBC Learning English. Everyday dialogues at a measured pace, explained line by line.",
+      "cover": "green"
+    },
+    {
+      "url": "https://feeds.npr.org/510318/podcast.xml",
+      "name": "Up First",
+      "language": "en",
+      "description": "NPR's morning news briefing. Native pace, roughly fifteen minutes, published every weekday.",
+      "cover": "blue"
+    },
+    {
+      "url": "https://feeds.npr.org/510289/podcast.xml",
+      "name": "Planet Money",
+      "language": "en",
+      "description": "NPR. Economics told as stories, with two or three speakers and a lot of natural interruption.",
+      "cover": "slate"
+    },
+    {
+      "url": "https://feeds.simplecast.com/54nAGcIl",
+      "name": "The Daily",
+      "language": "en",
+      "description": "The New York Times. One reported story a day, interview-led, at unhurried native pace.",
+      "cover": "rose"
+    }
+  ]
+}

@@ -1,0 +1,342 @@
+import '../data/repositories/playback_repository.dart';
+import '../models/timeline.dart';
+import '../models/types.dart';
+import '../player_adapter.dart';
+import '../services/vocabulary_transfer_file_service.dart';
+import 'occurrence_media_resolver.dart';
+import 'player_controller.dart';
+import 'subtitle_controller.dart';
+
+/// A chunk resolved against its owning cue and partition, used by the
+/// chunk-navigation playback actions.
+class ChunkRef {
+  const ChunkRef(this.cue, this.chunk, this.partition);
+
+  final Cue cue;
+  final DisplayChunk chunk;
+  final SentenceChunkPartition partition;
+
+  Duration get start => chunk.start;
+}
+
+/// Owns playback-centric actions: chunk navigation/looping, source-loop
+/// ranges, playing a vocabulary occurrence from its source media (resolving
+/// the media by fingerprint), phonetic finding feedback, vocabulary
+/// export/import, and archiving the current media record. Context-free;
+/// dialogs stay with the host.
+class PlaybackActionsCoordinator {
+  PlaybackActionsCoordinator({
+    required this.adapter,
+    required this.player,
+    required this.subtitle,
+    this.repository = const UnavailablePlaybackRepository(),
+    this.transferFiles = const LocalVocabularyTransferFileService(),
+  });
+
+  final DesktopPlayerAdapter adapter;
+  final PlayerController player;
+  final SubtitleController subtitle;
+  final PlaybackRepository repository;
+  final VocabularyTransferFileService transferFiles;
+
+  late bool Function() isMounted;
+  String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
+  late Future<void> Function() reloadLearningEntries;
+
+  void bind({
+    required bool Function() isMounted,
+    String Function(String key)? text,
+    required Future<void> Function() reloadLearningEntries,
+  }) {
+    this.isMounted = isMounted;
+    this.text = text;
+    this.reloadLearningEntries = reloadLearningEntries;
+  }
+
+  // ── Chunk navigation ──
+
+  ChunkRef? currentChunkRef() {
+    final cue = subtitle.currentPrimaryCue;
+    if (cue == null) return null;
+    final partition = subtitle.chunkPartitionsBySentence[cue.id];
+    if (partition == null || partition.chunks.isEmpty) return null;
+    final index =
+        subtitle.currentChunkIndex ??
+        currentChunkAtPosition(
+          partition,
+          player.position,
+          offset: subtitle.primarySubtitleOffset,
+        );
+    if (index == null) return null;
+    for (final chunk in partition.chunks) {
+      if (chunk.index == index) return ChunkRef(cue, chunk, partition);
+    }
+    return null;
+  }
+
+  ChunkRef? chunkRefAt(Cue cue, int chunkIndex) {
+    final partition = subtitle.chunkPartitionsBySentence[cue.id];
+    if (partition == null || partition.chunks.isEmpty) return null;
+    if (chunkIndex < 0 || chunkIndex >= partition.chunks.length) return null;
+    return ChunkRef(cue, partition.chunks[chunkIndex], partition);
+  }
+
+  Future<void> seekChunk(DisplayChunk chunk) async {
+    final start = mediaTime(chunk.start);
+    await adapter.seek(start);
+    player.setPosition(start);
+  }
+
+  Future<void> seekAdjacentChunk(int delta) async {
+    final current = currentChunkRef();
+    final cue = current?.cue ?? subtitle.currentPrimaryCue;
+    if (cue == null) return;
+    final localIndex = current == null
+        ? 0
+        : current.partition.chunks.indexWhere(
+            (chunk) => chunk.index == current.chunk.index,
+          );
+    var target = chunkRefAt(cue, localIndex + delta);
+    if (target == null && delta < 0) {
+      final previousCue = subtitle.primaryCursor.previous(cue);
+      final previousPartition = previousCue == null
+          ? null
+          : subtitle.chunkPartitionsBySentence[previousCue.id];
+      if (previousCue != null &&
+          previousPartition != null &&
+          previousPartition.chunks.isNotEmpty) {
+        target = ChunkRef(
+          previousCue,
+          previousPartition.chunks.last,
+          previousPartition,
+        );
+      }
+    }
+    if (target == null && delta > 0) {
+      final nextCue = subtitle.primaryCursor.next(cue);
+      target = nextCue == null ? null : chunkRefAt(nextCue, 0);
+    }
+    if (target == null) return;
+    await seekChunk(target.chunk);
+  }
+
+  // ── Transport basics (#25: keyboard seek / volume / mute / rate) ──
+
+  /// One keyboard seek step; ←/→ move by this much.
+  static const seekStep = Duration(seconds: 5);
+
+  /// Rate bounds match the presets the transport menu offers.
+  static const minRate = 0.5;
+  static const maxRate = 2.0;
+
+  Future<void> seekBy(Duration delta) async {
+    final duration = player.duration;
+    var target = player.position + delta;
+    if (target < Duration.zero) target = Duration.zero;
+    if (duration > Duration.zero && target > duration) target = duration;
+    await adapter.seek(target);
+    player.setPosition(target);
+  }
+
+  /// Adjusts volume by [delta] percentage points. While muted only the stored
+  /// level moves — matching the transport slider's behavior.
+  Future<void> volumeBy(double delta) async {
+    final volume = (player.volume + delta).clamp(0.0, 100.0);
+    player.setVolume(volume);
+    if (!player.muted) await adapter.setVolume(volume);
+  }
+
+  Future<void> toggleMute() async {
+    final muted = !player.muted;
+    player.setMuted(muted);
+    await adapter.setVolume(muted ? 0 : player.volume);
+  }
+
+  Future<void> rateBy(double delta) async {
+    final rate = (player.rate + delta).clamp(minRate, maxRate);
+    player.setRate(rate);
+    await adapter.setRate(rate);
+  }
+
+  Future<void> loopCurrentChunk() async {
+    final current = currentChunkRef();
+    if (current == null) return;
+    final start = mediaTime(current.chunk.start);
+    final end = mediaTime(current.chunk.end);
+    if (end <= start) return;
+    player.setSourceLoop(start, end, label: 'loopChunk');
+    subtitle.setLoopCue(false);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Future<void> loopExpandedChunk() async {
+    final current = currentChunkRef();
+    if (current == null) return;
+    final localIndex = current.partition.chunks.indexWhere(
+      (chunk) => chunk.index == current.chunk.index,
+    );
+    final next =
+        localIndex >= 0 && localIndex + 1 < current.partition.chunks.length
+        ? current.partition.chunks[localIndex + 1]
+        : null;
+    final start = mediaTime(current.chunk.start);
+    final end = mediaTime(next?.end ?? current.cue.end);
+    if (end <= start) return;
+    player.setSourceLoop(start, end, label: 'expandChunk');
+    subtitle.setLoopCue(false);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  /// Subtitle time shifted by the primary offset, clamped at zero.
+  Duration mediaTime(Duration subtitleTime) {
+    final value = subtitleTime + subtitle.primarySubtitleOffset;
+    return value.isNegative ? Duration.zero : value;
+  }
+
+  int mediaTimeMs(Duration subtitleTime) =>
+      mediaTime(subtitleTime).inMilliseconds;
+
+  /// The chunk under the playback cursor for the current primary cue, used to
+  /// seed chunk-based practice.
+  DisplayChunk? currentPracticeChunk() {
+    final cue = subtitle.currentPrimaryCue;
+    if (cue == null) return null;
+    final current = currentChunkRef();
+    if (current?.cue.id == cue.id) return current!.chunk;
+    final partition = subtitle.chunkPartitionsBySentence[cue.id];
+    if (partition == null || partition.chunks.isEmpty) return null;
+    final currentIndex = subtitle.currentChunkIndex;
+    if (currentIndex != null) {
+      for (final chunk in partition.chunks) {
+        if (chunk.index == currentIndex) return chunk;
+      }
+    }
+    return partition.chunks.first;
+  }
+
+  List<DisplayChunk> currentPracticeChunks() {
+    final cue = subtitle.currentPrimaryCue;
+    if (cue == null) return const [];
+    return subtitle.chunkPartitionsBySentence[cue.id]?.chunks ?? const [];
+  }
+
+  // ── Source-loop ranges ──
+
+  /// [label] is the transient status text (may carry dynamic detail such as a
+  /// phoneme or hotspot name). [labelKey] is a localization key naming the loop
+  /// scenario for the persistent source-loop chip; it defaults to the generic
+  /// `loopRange` when a caller has no more specific category.
+  Future<void> loopRange(
+    int startMs,
+    int endMs,
+    String label, {
+    String labelKey = 'loopRange',
+  }) async {
+    final start = Duration(milliseconds: startMs);
+    final end = Duration(milliseconds: endMs);
+    if (start >= end) return;
+    player.setSourceLoop(start, end, label: labelKey);
+    subtitle.setLoopCue(false);
+    if (isMounted()) player.setStatus(label);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Future<void> pauseReviewRange() async {
+    await adapter.pause();
+    if (player.sourceLoopLabel == 'loopReview') {
+      player.setSourceLoop(null, null);
+    }
+  }
+
+  // ── Occurrence playback ──
+
+  /// Resolves a durable occurrence snapshot without changing the primary
+  /// player. Slice playback and any later occurrence consumer must use this
+  /// one path for linked-media lookup and user-assisted file recovery.
+  Future<OccurrenceMediaResolution> resolveOccurrenceMedia(
+    Map<String, dynamic> occurrence, {
+    bool filterMediaExtensions = false,
+  }) async {
+    if (!repository.isAvailable) {
+      return const UnresolvedOccurrenceMedia(
+        OccurrenceMediaResolutionFailure.coreUnavailable,
+      );
+    }
+    return OccurrenceMediaResolver(repository: repository).resolve(
+      occurrence,
+      currentMediaFingerprint: player.mediaFingerprint,
+      currentMediaPath: player.mediaPath,
+      filterMediaExtensions: filterMediaExtensions,
+    );
+  }
+
+  // ── Feedback / vocabulary / media record ──
+
+  Future<void> savePhoneticFindingFeedback(
+    PhoneticFinding finding,
+    String value,
+  ) async {
+    if (!repository.isAvailable) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
+    try {
+      await repository.updatePhoneticFindingFeedback(
+        findingId: finding.id,
+        value: value,
+      );
+      if (isMounted()) {
+        player.setStatus(
+          _t('statusAudioFindingFeedbackSaved').replaceAll('{value}', value),
+        );
+      }
+    } catch (error) {
+      if (isMounted()) {
+        player.setStatus(
+          _t('statusAudioFindingFeedbackFailed'),
+          error: true,
+          failure: repository.failureDetail(error),
+        );
+      }
+    }
+  }
+
+  Future<void> exportVocabulary() async {
+    if (!repository.isAvailable) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
+    final bundle = await repository.exportVocabulary();
+    if (!await transferFiles.exportDocument(bundle.toJson())) return;
+    player.setStatus(_t('statusVocabularyExported'));
+  }
+
+  Future<void> importVocabulary() async {
+    if (!repository.isAvailable) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
+    final bundle = await transferFiles.importDocument();
+    if (bundle == null) return;
+    await repository.importVocabulary(bundle);
+    await reloadLearningEntries();
+    player.setStatus(_t('statusVocabularyImported'));
+  }
+
+  Future<void> archiveCurrentMedia() async {
+    if (!repository.isAvailable || player.mediaId == null) {
+      // Unavailable State (CONTEXT.md): name the cause and the recovery
+      // action instead of silently doing nothing (#24). The menu item is
+      // disabled in this state, but other entry paths still land here.
+      player.setStatus(_t('statusOpenMediaAndCoreFirst'));
+      return;
+    }
+    await repository.archiveMedia(player.mediaId!);
+    player.setStatus(_t('statusMediaArchived'));
+  }
+}
