@@ -1,12 +1,13 @@
 # Listen Context Map
 
 This map assigns authority across the language world and learning world defined
-in [MODEL.md](MODEL.md). It describes durable seams, not source directories,
+in [MODEL.md](MODEL.md). All current modules live in one Git repository (see [decision 0005](decisions/0005-single-repository-development.md)).
+It describes durable seams, not detailed source directories,
 transport shapes, or current implementation completeness.
 
 ## Contexts
 
-### Learning Experience — `listen-app`
+### Learning Experience — `app/`
 
 Owns the learner-facing learning world:
 
@@ -30,7 +31,7 @@ App does not define canonical material validity, Speech Structure truth,
 Personal Corpus facts, capability projection semantics, provider execution, or
 community registry truth.
 
-### Semantic Runtime — `listen-core`
+### Semantic Runtime — `core/`
 
 Owns the executable semantics and persistence boundaries for:
 
@@ -50,7 +51,7 @@ Owns the executable semantics and persistence boundaries for:
 Core does not own provider implementations, learner-facing navigation, fixed
 activity choreography, or hosted community infrastructure.
 
-### Learning Material Production — `listen-gen`
+### Learning Material Production — `gen/`
 
 Owns the language-world compiler that turns Raw Sources into qualified,
 reusable Complete Learning Materials:
@@ -74,12 +75,12 @@ into an optional enhancement. Gen does not own Perceptual Guidance, Learner
 State, Meaningful Learning Episodes, Personal Corpus, review scheduling, or
 activity selection.
 
-### Project Governance — `listen`
+### Project Governance — root documentation
 
 Owns the project model, product semantics, ubiquitous language,
-cross-repository boundaries, learner journeys, roadmap, durable cross-repository
-decisions, and current project state. It owns no executable contract or runtime
-fact.
+cross-module responsibilities, learner journeys, roadmap, durable project
+decisions, and current project state. Root prose does not override executable contracts or runtime
+facts owned by the modules.
 
 ### Community and Sync — required future context
 
@@ -110,22 +111,22 @@ protocol, service, and deployment boundaries remain undecided.
 Material Sources
       │ Raw Source
       ▼
-listen-app acquisition / preview
+App acquisition / preview
       │ production request and exact authorized inputs
       ▼
-listen-gen  -- qualified Complete Learning Material package --> listen-core
+Gen  -- qualified Complete Learning Material package --> Core
                                                                │
                                                                │ canonical model,
                                                                │ episodes, corpus,
                                                                │ learner state
                                                                ▼
-                                                     listen-app Workbench
+                                                     App Workbench
                                                                │
                                                                ▼
                                                        Learning Experience
 
-listen-app  <---- discovery / publishing / sync ----> Community and Sync
-listen-core <---- private merge semantics ----------> Community and Sync
+App  <---- discovery / publishing / sync ----> Community and Sync
+Core <---- private merge semantics ----------> Community and Sync
 
 listen -----> project meaning and governance links
 ```
@@ -136,19 +137,19 @@ listen -----> project meaning and governance links
 |---|---|
 | Project theoretical model and durable invariants | `listen` |
 | Product principles and ubiquitous language | `listen` |
-| Detailed learner-facing Activity and scaffold UX | `listen-app` |
-| Unified Workbench and its material/Activity views | `listen-app` using Core semantics |
-| Source discovery, acquisition, preview, and production progress UX | `listen-app` |
-| Complete Learning Material executable contract | `listen-core` |
-| Structured Timed Text, anchors, locators, and compatibility | `listen-core` |
-| Language Slice, episode, Personal Corpus, and learner facts | `listen-core` |
-| Evidence, Learner State, and capability projection semantics | `listen-core` |
-| Raw Source derivation and provider execution | `listen-gen` |
-| Canonical audio/text production and alignment | `listen-gen` |
-| Sentence Translation production | `listen-gen` |
-| Signal Facts and Speech Structure production | `listen-gen` |
+| Detailed learner-facing Activity and scaffold UX | `app/` |
+| Unified Workbench and its material/Activity views | `app/` using Core semantics |
+| Source discovery, acquisition, preview, and production progress UX | `app/` |
+| Complete Learning Material executable contract | `core/` |
+| Structured Timed Text, anchors, locators, and compatibility | `core/` |
+| Language Slice, episode, Personal Corpus, and learner facts | `core/` |
+| Evidence, Learner State, and capability projection semantics | `core/` |
+| Raw Source derivation and provider execution | `gen/` |
+| Canonical audio/text production and alignment | `gen/` |
+| Sentence Translation production | `gen/` |
+| Signal Facts and Speech Structure production | `gen/` |
 | Perceptual Guidance selection and presentation | Core semantics + App experience |
-| Package validation, installation, and adoption | `listen-core` |
+| Package validation, installation, and adoption | `core/` |
 | Public package discovery and distribution | Community and Sync |
 | Private-state replication | Community and Sync using Core merge semantics |
 | External context results | External provider with attribution and limits |

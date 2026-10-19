@@ -1,16 +1,15 @@
-# Listen Ecosystem Reference
+# Listen project navigation
 
-This file is retained for existing links. It does not duplicate the shared
-product model.
+All product source and project documents now live in this repository.
 
-Canonical ecosystem documentation is owned by
-[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen),
-including product purpose, shared language, context ownership, learner journeys,
-development policy, and the project roadmap.
+- [Project overview](../README.md)
+- [Theoretical model](../MODEL.md)
+- [Product](../PRODUCT.md)
+- [Shared domain language](../DOMAIN.md)
+- [Module responsibilities](../CONTEXT-MAP.md)
+- [Learner journeys](../JOURNEYS.md)
+- [Development and releases](../DEVELOPMENT.md)
+- [Roadmap](../ROADMAP.md)
+- [Current state](../STATE.md)
 
-The App-specific glossary is [CONTEXT.md](CONTEXT.md). `backend.lock.json`
-continues to pin runtime behavior; it is not a product-semantics version.
-
-Current App behavior, setup, and validation belong in this repository's code,
-tests, README, and `docs/development/`; they must not be copied into the shared
-semantic documents.
+This page is a compatibility navigation entry, not a second project authority.

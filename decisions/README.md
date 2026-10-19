@@ -1,10 +1,10 @@
-# Cross-Repository Decisions
+# Project Decisions
 
 This directory contains only durable decisions whose consequences cross more
-than one code repository or change project-level product semantics, ownership,
+than one module or change project-level product semantics, ownership,
 compatibility, or delivery policy.
 
-Implementation-local decisions remain in the owning repository. Tasks, meeting
+Implementation-local decisions remain in the owning module. Tasks, meeting
 notes, rejected sketches, and temporary plans do not become decision records.
 Existing decisions are not rewritten to match later preferences; a new record
 may explicitly supersede an older one.
@@ -21,3 +21,6 @@ may explicitly supersede an older one.
 - [0004 — Allow text learning without TTS; require full processing when audio exists](0004-text-learning-and-full-sound-processing.md)
   — current modality-aware material decision, including audio-independent Sense
   Groups and learner-selected Personal Corpus re-entry.
+
+- [0005 — Develop Listen in one repository](0005-single-repository-development.md)
+  — current source topology and shared development/release workflow.

@@ -2,7 +2,7 @@
 
 > Status: owner-approved model-aligned roadmap, revised 2026-09-08.
 
-This is the cross-repository outcome roadmap. It follows the project model in
+This is the project-wide outcome roadmap. It follows the project model in
 [MODEL.md](MODEL.md) and does not preserve implementation sequencing from the
 superseded partial-material model. Repository tasks and temporary execution
 plans belong in issues or replacement Supervisor plans.

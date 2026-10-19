@@ -1,47 +1,14 @@
-# listen-core
+# Listen Core
 
-`listen-core` is Listen's semantic runtime and canonical contract authority. It
-implements language-material, learning-resource, personal-state, corpus, and
-provider-neutral application behavior behind a loopback HTTP runtime.
+Rust semantic runtime and canonical executable-contract authority in the
+Listen monorepo. It implements learning semantics, persistence, package
+validation and provider-neutral application behavior behind local HTTP.
 
-Project semantics, shared language, learner journeys, development policy, and
-the cross-repository roadmap are canonical in the
-[`listen`](https://github.com/ichthyoplanktonzyh/listen) documentation
-repository. The root compatibility pages in this repository point there for
-older links.
-
-[ECOSYSTEM.md](ECOSYSTEM.md) is only a compatibility navigation page for older
-links. Planning files and historical decisions do not override the semantic
-baseline above.
-
-## Repository Role
-
-This repository owns:
-
-- the Rust domain, application behavior, persistence adapters, and loopback
-  runtime;
-- canonical OpenAPI, event, timeline, and Content Package contracts under
-  `contracts/`;
-- Content Package validation and candidate installation semantics;
-- Personal Library, Personal Corpus, Learning Record, and language-capability
-  semantics;
-- immutable Core contract and runtime release artifacts.
-
-It does not own Flutter experience design, reusable offline content-production
-implementations, project governance, or the future multi-tenant Community And
-Sync infrastructure. See the project
-[context map](https://github.com/ichthyoplanktonzyh/listen/blob/main/CONTEXT-MAP.md)
-for the complete authority map.
-
-## Consumer Contract
-
-`listen-app` consumes versioned HTTP and resource contracts plus immutable
-runtime artifacts. It pins an exact Core commit and release; it does not depend
-on this repository's moving `main` branch or a sibling checkout in production.
-
-`listen-gen` consumes the canonical Content Package schema and produces
-data-only package artifacts. Core validates those artifacts without depending
-on Gen's provider implementations.
+The complete product workflow is [DEVELOPMENT.md](../DEVELOPMENT.md). Project
+model, shared language, journeys, active status and roadmap live at the root.
+App and Gen integrate the current Core source in the same feature branch.
+Formal releases build all modules from one clean commit with generated artifact
+manifests. Published formats and user-data migrations remain explicit.
 
 ## Repository Layout
 
@@ -55,7 +22,7 @@ on Gen's provider implementations.
 - `contracts/` — canonical wire and resource contracts;
 - `scripts/` — validation, packaging, release, and retained production tooling;
 - `docs/decisions/` — historical architectural decisions;
-- `.planning/` — current repository-specific status and implementation plans.
+- `.planning/` — local implementation context and historical plans.
 
 ## Development
 

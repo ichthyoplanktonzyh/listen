@@ -1,0 +1,20 @@
+[
+  {
+    "module": "app",
+    "repository": "listen-app",
+    "original_head": "c5b106385719966773af985cec8577e194329e98",
+    "imported_head": "bcf0754521eb81b82fbaf0d79704dc5491e954bd"
+  },
+  {
+    "module": "core",
+    "repository": "listen-core",
+    "original_head": "a59538aa7c181cfb324100b14e818dac2f2720b8",
+    "imported_head": "a67722c3aa9406c853cee250f4350685f1d86b22"
+  },
+  {
+    "module": "gen",
+    "repository": "listen-gen",
+    "original_head": "e55fb1257640c3d169470405ee7312c66c9bd637",
+    "imported_head": "ebbacf1a7931c3b743e56abc7ac8cb7ce4422641"
+  }
+]

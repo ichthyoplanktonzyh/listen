@@ -1,71 +1,13 @@
-# listen-app
+# Listen App
 
-Formal macOS Apple Silicon desktop client using Flutter and fvp/libmdk.
+Flutter desktop learning experience in the Listen monorepo. Start the complete
+current-source product with `./dev setup` and `./dev run` from the repository
+root. See [DEVELOPMENT.md](../DEVELOPMENT.md) for checks and product releases.
 
-Listen's canonical product semantics, shared language, context map, learner
-journeys, development policy, and project roadmap are maintained in
-[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
-This repository's [CONTEXT.md](CONTEXT.md) defines only App-owned interaction
-terms; [JOURNEYS.md](JOURNEYS.md) is retained as a compatibility pointer.
-Project documentation is independent of the runtime behavior and compatibility
-pinned by `backend.lock.json`.
-
-The UI repository is independently versioned from `listen-core`. Its exact API
-contract and backend runtime are pinned in `backend.lock.json`; no sibling
-checkout or moving backend branch is read during build.
-
-## Run the complete app locally
-
-The complete setup, local-core workflow, smoke checklist, logs, and
-troubleshooting guide lives in
-[`docs/development/full-app-local-testing.md`](docs/development/full-app-local-testing.md).
-
-Run from the `listen-app` repository root so the app can find the pinned
-sidecar under `.backend/`.
-
-First setup, or after `backend.lock.json` changes:
-
-```sh
-flutter pub get
-GITHUB_TOKEN="$(gh auth token)" python3 tool/backend_artifacts.py install
-python3 tool/backend_artifacts.py verify
-```
-
-The token is passed only to the installer process. Then start the complete
-desktop app:
-
-```sh
-flutter run -d macos
-```
-
-The Flutter client automatically starts the installed `api-http` sidecar,
-reads its loopback address and one-time token from the startup handshake, and
-stops it when the app closes. Backend logs are written to
-`~/Library/Logs/listen/core.log`.
-
-For later runs, verify and start:
-
-```sh
-python3 tool/backend_artifacts.py verify
-flutter run -d macos
-```
-
-To test current, unreleased local backend code instead of the pinned release:
-
-```sh
-cd /Users/shadow/listen-core
-cargo build -p api-http
-cd /Users/shadow/listen-app
-LLPLAYERNEXT_API_BINARY=/Users/shadow/listen-core/target/debug/api-http \
-  flutter run -d macos
-```
-
-For private core releases, provide a read token as `GITHUB_TOKEN`, or pass
-explicit local archives with `--contract-archive` and `--runtime-archive`.
-
-The player adapter, position events, subtitle cursor, seeking, offset, and
-sentence loop all run locally in the client. The loopback sidecar owns subtitle
-import, persistence, progress, word state, dictionary, and diagnosis services.
+[CONTEXT.md](CONTEXT.md) adds App interaction terms. Root documents own shared
+product semantics, active status and roadmap. App keeps its native Flutter
+project and local HTTP sidecar lifecycle; Core and Gen source changes can be
+integrated in the same branch without component release/pin handoffs.
 
 ## Enhanced desktop workflow
 

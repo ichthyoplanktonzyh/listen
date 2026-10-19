@@ -5,7 +5,7 @@ qualification, packaging, installation, and adoption internally. The Learner
 experiences one coherent path from Raw Source to authentic Learning Experience
 and Personal Corpus.
 
-This document owns cross-repository journey intent. The theoretical boundary is
+This document owns project-wide journey intent. The theoretical boundary is
 defined in [MODEL.md](MODEL.md); executable code and tests remain the authority
 for what a current build already supports.
 

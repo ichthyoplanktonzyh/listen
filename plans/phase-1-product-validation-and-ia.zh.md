@@ -1,3 +1,7 @@
+> Historical plan: predates the current Complete Learning Material model and
+> monorepo workflow. Use root STATE.md/ROADMAP.md and DEVELOPMENT.md; do not
+> execute this plan as current work without explicit reconciliation.
+
 # Phase 1 产品验证与信息架构评审
 
 > 状态：自 2026-08-24 起作为历史资料保留。其中的学习者研究证据仍可复用，但基于“部分

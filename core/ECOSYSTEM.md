@@ -1,14 +1,15 @@
-# Listen Ecosystem Documentation
+# Listen project navigation
 
-This file is retained for existing links. Canonical project documentation now
-lives in [`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen):
+All product source and project documents now live in this repository.
 
-- [product semantics](https://github.com/ichthyoplanktonzyh/listen/blob/main/PRODUCT.md);
-- [ubiquitous language](https://github.com/ichthyoplanktonzyh/listen/blob/main/DOMAIN.md);
-- [context map](https://github.com/ichthyoplanktonzyh/listen/blob/main/CONTEXT-MAP.md);
-- [learner journeys](https://github.com/ichthyoplanktonzyh/listen/blob/main/JOURNEYS.md);
-- [development policy](https://github.com/ichthyoplanktonzyh/listen/blob/main/DEVELOPMENT.md);
-- [roadmap](https://github.com/ichthyoplanktonzyh/listen/blob/main/ROADMAP.md).
+- [Project overview](../README.md)
+- [Theoretical model](../MODEL.md)
+- [Product](../PRODUCT.md)
+- [Shared domain language](../DOMAIN.md)
+- [Module responsibilities](../CONTEXT-MAP.md)
+- [Learner journeys](../JOURNEYS.md)
+- [Development and releases](../DEVELOPMENT.md)
+- [Roadmap](../ROADMAP.md)
+- [Current state](../STATE.md)
 
-This repository keeps only Core code facts, executable contracts, local
-planning, and release history.
+This page is a compatibility navigation entry, not a second project authority.

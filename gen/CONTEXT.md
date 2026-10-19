@@ -2,9 +2,9 @@
 
 Canonical Listen product purpose, shared language, context ownership, learner
 journeys, development policy, and the project roadmap live in
-[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
-`contracts.lock.json` identifies the canonical Content Package contract consumed
-by this repository.
+[the repository root](../README.md).
+The canonical Content Package contract is in
+`../core/contracts/content-package/v3/` in this same source snapshot.
 
 This glossary adds only concepts owned by content production.
 

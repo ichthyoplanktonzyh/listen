@@ -1,3 +1,7 @@
+> Historical plan: predates the current Complete Learning Material model and
+> monorepo workflow. Use root STATE.md/ROADMAP.md and DEVELOPMENT.md; do not
+> execute this plan as current work without explicit reconciliation.
+
 # Phase 1 Product Validation and Information Architecture Review
 
 > Status: historical as of 2026-08-24. Its learner-research evidence may be

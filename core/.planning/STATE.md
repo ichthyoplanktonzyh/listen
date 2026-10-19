@@ -1,3 +1,9 @@
+> Monorepo transition (2026-10-19): root [STATE.md](../../STATE.md),
+> [ROADMAP.md](../../ROADMAP.md), and [DEVELOPMENT.md](../../DEVELOPMENT.md)
+> own current project coordination. This module record retains local/history
+> evidence; split-repository handoff and pin prerequisites are superseded by
+> [decision 0005](../../decisions/0005-single-repository-development.md).
+
 # State
 
 > Updated: 2026-08-12 CST
@@ -16,7 +22,7 @@
 ## Current Work
 
 The Phase 1 completion roadmap
-([`plans/phase-1-completion.md`](../plans/phase-1-completion.md)) is active.
+([`plans/phase-1-completion.md`](../../plans/phase-1-completion.md)) is active.
 **Slice 1 — Establish the canonical Core Phase 1 contract — is complete and
 committed locally (not pushed):**
 

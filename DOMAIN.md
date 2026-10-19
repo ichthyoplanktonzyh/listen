@@ -1,6 +1,6 @@
 # Listen Ubiquitous Language
 
-This glossary is the canonical cross-repository product language. It specializes
+This glossary is the canonical project-wide product language. It specializes
 the model in [MODEL.md](MODEL.md) without redefining it and does not describe
 endpoints, tables, screens, releases, or current implementation status.
 

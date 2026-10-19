@@ -1,6 +1,14 @@
 # Project State
 
-> Updated: 2026-09-08 CST.
+> Updated: 2026-10-19 CST.
+
+## Repository transition
+
+The owner accepted [decision 0005](decisions/0005-single-repository-development.md):
+App, Core, Gen, and project documentation now share this repository. The
+migration changes source topology and development/release workflow; it does
+not implement the product model below. Validation and import evidence are in
+[the migration record](docs/development/monorepo-migration.md).
 
 ## Current position
 
@@ -79,7 +87,7 @@ defines the formal learning boundary.
 
 ## Next transition
 
-Create a replacement cross-repository execution plan for **Phase 1: Complete
+Create a replacement project execution plan for **Phase 1: Complete
 Learning Material Alpha**. Before implementation, audit:
 
 1. App Source/preview versus formal-learning journeys;

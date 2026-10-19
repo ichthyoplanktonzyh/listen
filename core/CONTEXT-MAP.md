@@ -1,7 +1,4 @@
-# Listen Context Map
+# Project document navigation
 
-The canonical context and repository ownership map is maintained at:
-
-- <https://github.com/ichthyoplanktonzyh/listen/blob/main/CONTEXT-MAP.md>
-
-This compatibility page intentionally does not duplicate it.
+The canonical document is [the root CONTEXT-MAP.md](../CONTEXT-MAP.md).
+Module implementation evidence does not override the current project model.

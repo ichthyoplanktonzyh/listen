@@ -2,8 +2,10 @@
 
 Canonical product purpose, shared language, context ownership, and learner
 journeys live in
-[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
-`backend.lock.json` independently pins runtime behavior and compatibility.
+[the repository root](../README.md).
+Runtime behavior and compatibility are executable facts; formal releases
+use generated product locks, while committed component locks retain the
+historical split-release baseline.
 
 This glossary adds only concepts owned by the learner-facing application.
 

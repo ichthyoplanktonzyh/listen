@@ -1,3 +1,9 @@
+> Monorepo transition (2026-10-19): root [STATE.md](../../STATE.md),
+> [ROADMAP.md](../../ROADMAP.md), and [DEVELOPMENT.md](../../DEVELOPMENT.md)
+> own current project coordination. This module record retains local/history
+> evidence; split-repository handoff and pin prerequisites are superseded by
+> [decision 0005](../../decisions/0005-single-repository-development.md).
+
 # 跨仓请求模板
 
 真正的工作项是**目标仓库的 GitHub issue**。这份文件不是需要遵守的流程，

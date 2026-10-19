@@ -6,7 +6,7 @@ This document is the project-level authority for Listen's theoretical model.
 It defines the relationship among the language world, the learning world,
 Complete Learning Materials, Personal Corpus, learner state, and capability
 acquisition. Product principles in [PRODUCT.md](PRODUCT.md), domain terms in
-[DOMAIN.md](DOMAIN.md), and repository boundaries in
+[DOMAIN.md](DOMAIN.md), and module responsibilities in
 [CONTEXT-MAP.md](CONTEXT-MAP.md) must remain consistent with this model.
 
 This is a product and domain model, not an executable schema. App, Core, and Gen

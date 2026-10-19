@@ -1,4 +1,8 @@
-# listen-gen
+# Listen Gen
+
+Python production module in the Listen monorepo. Use root `./dev setup`,
+`./dev run`, and `./dev test integration` for the complete product workflow;
+see [DEVELOPMENT.md](../DEVELOPMENT.md). The independent CLI remains available.
 
 `listen-gen` is Listen's replaceable content-production toolkit and is intended
 to become the ecosystem's open producer. Its stable output is a Content
@@ -13,7 +17,8 @@ Shared product semantics, language, context ownership, learner journeys,
 development policy, and the project roadmap are canonical in
 [`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
 This repository's [CONTEXT.md](CONTEXT.md) defines only production-specific
-terms, while `contracts.lock.json` identifies the package contract it consumes.
+terms, while `content-package-contract.json` identifies the repository-local package
+contract it consumes.
 
 ## Capability production
 
@@ -157,33 +162,23 @@ python -m unittest tests.test_gui -v
 
 ## Deterministic release bundle
 
-A deterministic, verifiable release bundle can be built from a clean
-checkout:
+The complete product release is built from one clean commit with root
+`./dev release`. It builds a fresh Core contract manifest and the matching Gen
+bundle, generates the App locks, and verifies the assembled product.
 
-```bash
-python tools/release_bundle.py build \
-  --source-commit "$(git rev-parse HEAD)" \
-  --output-parent dist
-```
-
-The bundle is written to `dist/listen-gen-<version>/` and consists of a
-runnable `.pyz` zipapp plus a `.release.json` manifest; both files must be
-published together. Verify it before distribution:
-
-```bash
-python tools/release_bundle.py verify \
-  dist/listen-gen-0.5.0/listen-gen-0.5.0.release.json
-```
-
-The `.pyz` requires Python 3.11 or newer. See
-[docs/release-bundle-v1.md](docs/release-bundle-v1.md) for the full bundle
-contract and distribution rules.
+Gen's independent builder and verifier remain in `tools/release_bundle.py`.
+Both consume the fresh Core contract manifest through
+`--core-contract-manifest`; `build` also takes the common `--source-commit`.
+Output is `dist/listen-gen-<version>/` with a runnable `.pyz` and matching
+`.release.json`. Publish both files together. The zipapp requires Python 3.11+.
+See [the bundle contract](docs/release-bundle-v1.md) for manifest and runtime
+semantics.
 
 ## Contract authority
 
-The canonical schema is owned by `listen-core` at
-`contracts/content-package/v3`. `contracts.lock.json` records that dependency.
-This repository does not carry a schema copy.
+The canonical schema is owned by Core at
+`../core/contracts/content-package/v3`. `content-package-contract.json` records its local schema identity.
+Gen does not carry a schema copy; it uses the same source snapshot as Core.
 
 ## Development
 
@@ -191,11 +186,10 @@ This repository does not carry a schema copy.
 python -m unittest discover -s tests -v
 ```
 
-No model credentials or live services are used by these tests. To also send
-the generated fixture package through Core's Rust inspector, explicitly point
-the suite at a checkout:
+No model credentials or live services are used by these tests. Core integration uses the sibling `../core/` module automatically. An explicit
+checkout override remains available for isolated tests:
 
 ```bash
-LISTEN_CORE_CHECKOUT=/path/to/listen-core \
+LISTEN_CORE_CHECKOUT=/path/to/listen/core \
   python -m unittest discover -s tests -v
 ```

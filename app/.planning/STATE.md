@@ -1,3 +1,9 @@
+> Monorepo transition (2026-10-19): root [STATE.md](../../STATE.md),
+> [ROADMAP.md](../../ROADMAP.md), and [DEVELOPMENT.md](../../DEVELOPMENT.md)
+> own current project coordination. This module record retains local/history
+> evidence; split-repository handoff and pin prerequisites are superseded by
+> [decision 0005](../../decisions/0005-single-repository-development.md).
+
 # State
 
 > 只写「现在在做什么、下一步是什么」。

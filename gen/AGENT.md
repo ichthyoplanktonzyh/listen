@@ -1,57 +1,36 @@
-# listen-gen Agent Guide
+# Gen implementation guide
 
-## Development roles
+Read [the root guide](../AGENT.md) and [DEVELOPMENT.md](../DEVELOPMENT.md).
+`gen/` is Listen's independently runnable Python material-production module.
+It shares one repository and feature branch with `app/` and `core/`.
 
-- The owner decides product direction and scope.
-- The Supervisor owns architecture, decomposition, Worker selection, review,
-  independent validation, documentation, and authorized Git/release delivery.
-- Source, test, schema, script, and runtime-configuration changes belong to the
-  configured implementation Worker. Worker is a replaceable role; a current
-  OpenCode or model choice is execution configuration rather than project
-  semantics.
-- The cross-repository operating model is canonical in
-  `ichthyoplanktonzyh/listen/DEVELOPMENT.md`.
+## Responsibilities
 
-## First read
+- Produce reusable learning resources and deterministic Content Package v3.
+- Keep provider/model implementations replaceable, qualified, and separate from
+  learner state and experience policy.
+- Canonical schemas live only in `../core/contracts/content-package/v3/`.
+  Read that authority in the same source snapshot; do not copy its schema tree.
+- Build/release commands use the fresh Core contract manifest for the same
+  source commit. Schema/protocol versions and artifact hashes still matter;
+  separate repository releases/pin handoffs are not a development prerequisite.
+- Preserve independent CLI, zipapp packaging, Python environment and optional
+  heavy provider dependencies. Normal setup does not download models or enable
+  paid providers.
 
-- Read `CONTEXT.md` for content-production terminology.
-- Shared product semantics, context ownership, learner journeys, development
-  policy, and the project roadmap are canonical in
-  `ichthyoplanktonzyh/listen`.
-- `contracts.lock.json` identifies the Content Package contract consumed here;
-  shared schemas are never copied into this repository.
+## Safety and verification
 
-## Mission
+- Packages contain only declared typed resources and content-addressed blobs;
+  exclude local paths, secrets, raw provider responses and learner facts.
+- Tests use deterministic fixture/fake providers, never paid/live model calls.
+- Preserve honest abstention, provenance, cancellation, process reaping,
+  timeouts, bounded output and deterministic packaging.
+- Run `python -m unittest discover -s tests -v` from this directory in the
+  configured Python >=3.11 environment. Core package compatibility and App
+  consumption are exercised by root `./dev test integration`.
+- Do not commit virtualenvs, model weights, generated packages, provider
+  credentials or local task history. Source availability grants no license.
 
-Provide the content-production path intended to become Listen's open producer:
-generate expensive, reusable language-learning resources and package them for
-`listen-core`. Keep model/provider implementations replaceable and keep the
-exchange contract stable. Do not describe the repository as open source until
-the owner has added an explicit license grant.
-
-## Contract ownership
-
-- `listen-core/contracts/content-package/v3` is the only package schema
-  authority.
-- Do not copy its schema generation into this repository.
-- Update `contracts.lock.json` when a pinned schema identity/version changes.
-- Package output must be Content Package v3 only and contain only typed,
-  allowlisted resources and declared content-addressed blobs.
-
-## Safety and privacy
-
-- Never include local filesystem paths, secrets, raw provider responses, or
-  learner facts in a package.
-- Tests must be deterministic and must not use paid/live model calls.
-
-## Scope discipline
-
-The compatibility converter is not the production pipeline. Do not copy the
-old `timeline-production` tree here. Move generation capabilities in coherent
-later slices behind the package contract.
-
-## Git
-
-- Preserve unrelated work.
-- Use focused changes and Conventional Commit subjects when asked to commit.
-- Do not commit, push, or publish unless explicitly requested.
+`CONTEXT.md` adds production-specific terms; root documents own shared product
+semantics and active status/roadmap. Do not restore superseded split-repository
+workflow rules from historical documents. Preserve unrelated work.
