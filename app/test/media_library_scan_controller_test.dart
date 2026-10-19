@@ -300,8 +300,17 @@ void main() {
         registeredPaths: () => const <String>[],
       );
 
+      final firstRegistration = Completer<void>();
+      void completeOnFirstRegistration() {
+        if (scan.state.registered > 0 && !firstRegistration.isCompleted) {
+          firstRegistration.complete();
+        }
+      }
+
+      scan.addListener(completeOnFirstRegistration);
       final running = scan.enterLibrary();
-      await Future<void>.delayed(const Duration(milliseconds: 12));
+      await firstRegistration.future.timeout(const Duration(seconds: 2));
+      scan.removeListener(completeOnFirstRegistration);
       scan.leaveLibrary();
       final registeredAtCancel = library.registerCalls;
       await running;
