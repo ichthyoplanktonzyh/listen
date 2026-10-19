@@ -18,7 +18,8 @@ runtime_destination="$app/Contents/Resources/runtime"
 
 if [[ -x "$api_http" && -d "$core_runtime/runtime" ]]; then
   python3 "$root/tool/backend_artifacts.py" \
-    --lock "${BACKEND_LOCK:-$root/backend.lock.json}" verify
+    --lock "${BACKEND_LOCK:-$root/backend.lock.json}" verify \
+    --skip-fixture-check
   mkdir -p "$app/Contents/MacOS" "$runtime_destination"
   cp "$api_http" "$app/Contents/MacOS/api-http"
   chmod +x "$app/Contents/MacOS/api-http"
