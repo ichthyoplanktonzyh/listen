@@ -10,6 +10,16 @@ migration changes source topology and development/release workflow; it does
 not implement the product model below. Validation and import evidence are in
 [the migration record](docs/development/monorepo-migration.md).
 
+## Development preview distribution
+
+Development previews target GitHub Releases.
+The current bundled native tools require macOS 26 or newer on Apple Silicon.
+Whisper transcription weights are not bundled: a missing compatible model is
+offered for download only after the Learner confirms, with progress,
+cancellation, and retry. AI response providers and the optional full local
+speech environment remain separately configured capabilities. Preview
+distribution does not advance the product-model realignment stage below.
+
 ## Current position
 
 Listen's project-level theoretical model has converged. The authority is now

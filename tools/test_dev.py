@@ -188,6 +188,132 @@ class ReleaseSourceExportTests(unittest.TestCase):
             self.assertEqual(dev._git(export, "status", "--porcelain"), "")
 
 
+class PreviewDistributionTests(unittest.TestCase):
+    def test_preview_metadata_requires_numeric_bundle_version_and_build_number(self):
+        metadata = dev._load_preview_metadata(ROOT)
+
+        self.assertEqual(metadata["version"], "0.7.0-dev.1")
+        self.assertEqual(metadata["tag"], "v0.7.0-dev.1")
+        self.assertEqual(metadata["bundle_version"], "0.7.0")
+        self.assertEqual(metadata["build_number"], "9")
+        self.assertEqual(metadata["archive_name"], "Listen-v0.7.0-dev.1-macos-arm64.zip")
+
+    def test_arm64_release_audit_rejects_intel_build_host(self):
+        with self.assertRaisesRegex(dev.DevError, "Apple Silicon"):
+            dev._validate_macos_arm64_target("x86_64", {}, ())
+
+    def test_arm64_release_audit_rejects_any_x86_only_macho(self):
+        binaries = {
+            "Contents/MacOS/listen": ["arm64", "x86_64"],
+            "Contents/MacOS/api-http": ["arm64"],
+            "Contents/Resources/runtime/whisper-cli": ["arm64"],
+            "Contents/Resources/runtime/ffmpeg": ["arm64"],
+            "Contents/Resources/runtime/ffprobe": ["arm64"],
+            "Contents/Frameworks/Unexpected.framework/Unexpected": ["x86_64"],
+        }
+
+        with self.assertRaisesRegex(dev.DevError, "Unexpected.framework"):
+            dev._validate_macos_arm64_target(
+                "arm64",
+                binaries,
+                (
+                    "Contents/MacOS/listen",
+                    "Contents/MacOS/api-http",
+                    "Contents/Resources/runtime/whisper-cli",
+                    "Contents/Resources/runtime/ffmpeg",
+                    "Contents/Resources/runtime/ffprobe",
+                ),
+            )
+
+    def test_arm64_release_audit_requires_critical_executables(self):
+        with self.assertRaisesRegex(dev.DevError, "api-http"):
+            dev._validate_macos_arm64_target(
+                "arm64",
+                {"Contents/MacOS/listen": ["arm64"]},
+                ("Contents/MacOS/listen", "Contents/MacOS/api-http"),
+            )
+
+    def test_otool_minimum_parser_ignores_non_macos_platform(self):
+        output = """Load command 1
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 2
+    minos 99.0
+       sdk 99.1
+Load command 2
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 13.0
+       sdk 26.2
+Load command 3
+      cmd LC_VERSION_MIN_MACOSX
+  cmdsize 16
+   version 10.15
+      sdk 26.2
+"""
+
+        self.assertEqual(dev._parse_macos_minimums(output), [(13, 0), (10, 15)])
+
+    def test_distribution_writes_consistent_manifest_and_checksum_list(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            archive = output / "app" / "listen-macos-arm64.zip"
+            archive.parent.mkdir()
+            archive.write_bytes(b"test app archive")
+            metadata = {
+                "version": "0.7.0-dev.1",
+                "tag": "v0.7.0-dev.1",
+                "channel": "development-preview",
+                "platform": "macos-arm64",
+                "archive_name": "Listen-v0.7.0-dev.1-macos-arm64.zip",
+                "manifest_name": "Listen-v0.7.0-dev.1-macos-arm64.release.json",
+            }
+            facts = {
+                "bundle_id": "com.shadow.listen.desktop",
+                "bundle_version": "0.7.0",
+                "build_number": "9",
+                "minimum_macos": "26.0",
+                "mach_o_files": 5,
+                "arm64_mach_o_files": 5,
+                "tested_macos": "26.6.2",
+                "tested_architecture": "arm64",
+            }
+
+            distribution = dev._assemble_preview_distribution(
+                output,
+                archive,
+                "a" * 40,
+                metadata,
+                facts,
+            )
+
+            asset = distribution / metadata["archive_name"]
+            manifest_path = distribution / metadata["manifest_name"]
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            checksums = (distribution / "SHA256SUMS").read_text(encoding="ascii")
+            self.assertEqual(manifest["source"]["commit"], "a" * 40)
+            self.assertEqual(manifest["application"]["minimum_macos"], "26.0")
+            self.assertEqual(manifest["application"]["build_number"], "9")
+            self.assertTrue(manifest["gen_runtime"]["zipapp_bundled"])
+            self.assertFalse(manifest["gen_runtime"]["interpreter_bundled"])
+            self.assertEqual(manifest["gen_runtime"]["required_dependencies"], ["pypdf>=5.0,<7"])
+            self.assertFalse(
+                manifest["verification"]["launch_environment"][
+                    "source_checkout_available_to_app"
+                ]
+            )
+            self.assertFalse(manifest["whisper_model"]["bundled"])
+            self.assertEqual(manifest["whisper_model"]["id"], "whisper.cpp:base@main")
+            self.assertEqual(manifest["whisper_model"]["size_bytes"], 147951465)
+            self.assertEqual(
+                manifest["whisper_model"]["sha256"],
+                "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+            )
+            self.assertIn(hashlib.sha256(asset.read_bytes()).hexdigest(), checksums)
+            self.assertIn(hashlib.sha256(manifest_path.read_bytes()).hexdigest(), checksums)
+
+
 class GeneratedLockTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -292,6 +418,13 @@ class GeneratedLockTests(unittest.TestCase):
             gen_lock=Path("/release/listen_gen.lock.json"),
             gen_manifest=Path("/release/listen-gen.release.json"),
             output=Path("/release/app"),
+            metadata={
+                "version": "0.7.0-dev.1",
+                "channel": "development-preview",
+                "minimum_macos": "26.0",
+                "build_number": "9",
+            },
+            source_commit="a" * 40,
         )
 
         self.assertNotIn("LLPLAYERNEXT_VERIFY_GEN_BUNDLE", environment)
@@ -300,6 +433,9 @@ class GeneratedLockTests(unittest.TestCase):
             "/release/listen-gen.release.json",
         )
         self.assertEqual(environment["PATH"], "/bin")
+        self.assertEqual(environment["LISTEN_SOURCE_COMMIT"], "a" * 40)
+        self.assertEqual(environment["LISTEN_RELEASE_MINIMUM_MACOS_VERSION"], "26.0")
+        self.assertEqual(environment["LISTEN_RELEASE_BUILD_NUMBER"], "9")
 
 
 if __name__ == "__main__":

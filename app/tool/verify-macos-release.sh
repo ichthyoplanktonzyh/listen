@@ -2,14 +2,23 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixtures="$root/test/fixtures/smoke"
+fixture_source="$root/test/fixtures/smoke"
 tmp="$(mktemp -d)"
+fixtures="$tmp/fixtures"
 release_output="${LISTEN_RELEASE_OUTPUT_DIR:-$root/dist}"
 archive="$release_output/listen-macos-arm64.zip"
 backend_lock="${BACKEND_LOCK:?set BACKEND_LOCK to the generated Core lock}"
 gen_lock="${LISTEN_GEN_LOCK_PATH:?set LISTEN_GEN_LOCK_PATH to the generated Gen lock}"
 gen_manifest="${LISTEN_GEN_RELEASE_MANIFEST:?set LISTEN_GEN_RELEASE_MANIFEST to the generated Gen manifest}"
+release_version="${LISTEN_RELEASE_VERSION:-}"
+release_channel="${LISTEN_RELEASE_CHANNEL:-}"
+source_commit="${LISTEN_SOURCE_COMMIT:-}"
+minimum_macos="${LISTEN_RELEASE_MINIMUM_MACOS_VERSION:-}"
+release_build_number="${LISTEN_RELEASE_BUILD_NUMBER:-}"
 app="$tmp/package/listen.app"
+isolated_home="$tmp/home"
+isolated_support="$tmp/support"
+minimal_path="/usr/bin:/bin:/usr/sbin:/sbin"
 pid=""
 
 cleanup() {
@@ -21,6 +30,7 @@ cleanup() {
   rm -rf "$tmp"
 }
 trap cleanup EXIT
+mkdir -p "$isolated_home" "$isolated_support"
 
 python3 "$root/tool/backend_artifacts.py" --lock "$backend_lock" verify \
   --skip-fixture-check
@@ -66,9 +76,20 @@ assert_sqlite_value() {
     fail "$description: expected $expected, got $actual"
 }
 
-if [[ ! -f "$fixtures/generated/sample-video.mp4" ]]; then
-  "$fixtures/generate.sh"
+launch_packaged_app() (
+  unset LISTEN_SOURCE_ROOT LISTEN_CORE_RUNTIME_DIR LISTEN_GEN_RELEASE_MANIFEST
+  unset LISTEN_GEN_LOCK_PATH LLPLAYERNEXT_API_BINARY LLPLAYERNEXT_WHISPER_CLI
+  unset LLPLAYERNEXT_FFMPEG LLPLAYERNEXT_FFPROBE LLPLAYERNEXT_VERIFY_GEN_BUNDLE
+  export HOME="$isolated_home"
+  export PATH="$minimal_path"
+  export LLPLAYERNEXT_SUPPORT_DIR="$isolated_support"
+  exec "$app/Contents/MacOS/listen"
+)
+
+if [[ ! -f "$fixture_source/generated/sample-video.mp4" ]]; then
+  "$fixture_source/generate.sh"
 fi
+cp -R "$fixture_source" "$fixtures"
 if [[ ! -f "$archive" ]]; then
   "$root/tool/build-macos-release.sh"
 fi
@@ -81,16 +102,60 @@ cd "$tmp/package"
 [[ -x "$app/Contents/MacOS/api-http" ]] ||
   fail "release archive does not contain the API sidecar"
 
+if [[ -n "$release_version$release_channel$source_commit$minimum_macos$release_build_number" ]]; then
+  [[ -n "$release_version" && -n "$release_channel" && -n "$source_commit" && -n "$minimum_macos" && -n "$release_build_number" ]] ||
+    fail "release metadata environment is incomplete"
+  python3 - "$app/Contents/Info.plist" "$backend_lock" "$gen_lock" \
+    "$release_version" "$release_channel" "$source_commit" "$minimum_macos" \
+    "$release_build_number" <<'PY' ||
+    fail "release bundle version, minimum OS, or source metadata is inconsistent"
+import json
+import plistlib
+import sys
+from pathlib import Path
+
+plist_path, backend_path, gen_path = map(Path, sys.argv[1:4])
+version, channel, source_commit, minimum_macos, build_number = sys.argv[4:9]
+info = plistlib.loads(plist_path.read_bytes())
+backend = json.loads(backend_path.read_text(encoding="utf-8"))
+gen = json.loads(gen_path.read_text(encoding="utf-8"))
+if (
+    info.get("ListenReleaseVersion") != version
+    or info.get("ListenReleaseChannel") != channel
+    or info.get("ListenSourceCommit") != source_commit
+    or info.get("LSMinimumSystemVersion") != minimum_macos
+    or info.get("CFBundleShortVersionString") != version.split("-", 1)[0]
+    or info.get("CFBundleVersion") != build_number
+    or backend.get("core_git_sha") != source_commit
+    or gen.get("source_git_sha") != source_commit
+):
+    raise SystemExit(1)
+print(
+    "Release identity verified:",
+    version,
+    "build",
+    info["CFBundleVersion"],
+    source_commit,
+    "minimum macOS",
+    minimum_macos,
+)
+PY
+fi
+
 # Exercise the exact Dart define embedded into the release. A deliberately
 # invalid debug lock path proves the packaged app ignores development inputs;
 # the manifest is resolved only from the released app bundle.
 invalid_dev_lock="$tmp/invalid-development-lock.json"
 printf '{"not":"a Listen lock"}\n' > "$invalid_dev_lock"
 if ! (
-  unset LISTEN_GEN_RELEASE_MANIFEST
+  unset LISTEN_SOURCE_ROOT LISTEN_CORE_RUNTIME_DIR LISTEN_GEN_RELEASE_MANIFEST
+  unset LLPLAYERNEXT_API_BINARY LLPLAYERNEXT_WHISPER_CLI LLPLAYERNEXT_FFMPEG LLPLAYERNEXT_FFPROBE
+  export HOME="$isolated_home"
+  export PATH="$minimal_path"
+  export LLPLAYERNEXT_SUPPORT_DIR="$isolated_support"
   LLPLAYERNEXT_VERIFY_GEN_BUNDLE=1 \
   LISTEN_GEN_LOCK_PATH="$invalid_dev_lock" \
-    "$app/Contents/MacOS/listen"
+    exec "$app/Contents/MacOS/listen"
 ) >"$tmp/gen-verification.log" 2>&1; then
   cat "$tmp/gen-verification.log" >&2
   fail "the packaged app rejected its compiled Gen lock"
@@ -131,7 +196,7 @@ LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-video.mp4" \
 LLPLAYERNEXT_SMOKE_SUBTITLE="$fixtures/generated/long-timeline.srt" \
 LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE="$fixtures/subtitles/timeline.vtt" \
-  "$app/Contents/MacOS/listen" >"$tmp/desktop.log" 2>&1 &
+  launch_packaged_app >"$tmp/desktop.log" 2>&1 &
 pid=$!
 
 for _ in $(seq 1 100); do
@@ -157,7 +222,7 @@ LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-video.mp4" \
 LLPLAYERNEXT_SMOKE_SUBTITLE="$fixtures/generated/long-timeline.srt" \
 LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE="$fixtures/subtitles/timeline.vtt" \
-  "$app/Contents/MacOS/listen" >>"$tmp/desktop.log" 2>&1 &
+  launch_packaged_app >>"$tmp/desktop.log" 2>&1 &
 pid=$!
 sleep 3
 assert_app_running
@@ -167,7 +232,7 @@ stop_app
 
 LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-audio.m4a" \
-  "$app/Contents/MacOS/listen" >>"$tmp/desktop.log" 2>&1 &
+  launch_packaged_app >>"$tmp/desktop.log" 2>&1 &
 pid=$!
 sleep 3
 assert_app_running

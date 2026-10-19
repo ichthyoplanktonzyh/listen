@@ -2,6 +2,22 @@
 
 All notable changes to the listen desktop app.
 
+## 0.7.0-dev.1 — 2026-10-19
+
+- Ship the first development preview from the unified App/Core/Gen repository,
+  with source identity, generated product locks, and SHA-256 release assets.
+- Offer a compatible Whisper transcription model when starting a conversation
+  without one. Downloads require explicit confirmation and expose progress,
+  cancellation, and retry before continuing the original conversation.
+- Preserve installed model choices and recognize English language subtags such
+  as `en-US`. Model weights remain outside the application bundle.
+- Serialize model installation ownership so cancelled or superseded downloads
+  cannot overwrite a retry or publish late progress.
+- Reject oversized or incomplete transcription model downloads before use,
+  alongside the pinned SHA-256 integrity check.
+- Identify the macOS preview as ad-hoc signed and unnotarized. The current
+  native runtime requires macOS 26 or newer on Apple Silicon.
+
 ## 2026-07-28 16:59 CST — Frontend Governance
 
 - Added an independent frontend planning system derived from the current
