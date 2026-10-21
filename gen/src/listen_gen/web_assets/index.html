@@ -1071,75 +1071,13 @@
           </div>
         </div>
 
-        <!-- 4. TTS Adapter -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">🔊 语音合成 (TTS) — 朗读生成</h3>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">TTS Provider</label>
-              <select class="form-select" id="tts-provider">
-                <option value="kokoro">Kokoro-82M (高音质神经网络 TTS)</option>
-                <option value="say">macOS say (系统原生)</option>
-                <option value="fake">Fake (测试用虚拟生成器)</option>
-                <option value="none">None (禁用)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">发音人 / Voice</label>
-              <input type="text" class="form-input" id="tts-voice" placeholder="Kokoro: af_bella, af_sarah, am_adam | say: Samantha">
-            </div>
-            <div class="form-group">
-              <label class="form-label">语速倍率 (Speed)</label>
-              <input type="number" step="0.1" min="0.5" max="2.0" class="form-input" id="tts-speed" value="1.0">
-            </div>
-          </div>
-          <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
-            <button class="btn btn-secondary btn-sm" id="btn-test-tts">🔍 测试 TTS 引擎状态</button>
-            <div id="tts-test-feedback" class="test-feedback" style="display:none; margin: 0;"></div>
-          </div>
-        </div>
-
-        <!-- 5. OCR Provider -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">📄 文档识别与版面重构 (OCR)</h3>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">OCR Provider</label>
-              <select class="form-select" id="ocr-provider">
-                <option value="none">None (禁用/诚实弃权)</option>
-                <option value="surya">Surya OCR (版面分析与阅读顺序重构)</option>
-                <option value="rapidocr">RapidOCR (极速 PP-OCR ONNX)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">识别语言 (Languages)</label>
-              <input type="text" class="form-input" id="ocr-langs" value="en,zh" placeholder="e.g. en,zh,ja">
-            </div>
-            <div class="form-group">
-              <label class="form-label">计算设备 (Device)</label>
-              <select class="form-select" id="ocr-device">
-                <option value="mps">MPS (Apple Silicon GPU加速)</option>
-                <option value="cpu">CPU</option>
-                <option value="cuda">CUDA (Nvidia GPU)</option>
-              </select>
-            </div>
-          </div>
-          <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
-            <button class="btn btn-secondary btn-sm" id="btn-test-ocr">🔍 测试 OCR 环境就绪状态</button>
-            <div id="ocr-test-feedback" class="test-feedback" style="display:none; margin: 0;"></div>
-          </div>
-        </div>
       </section>
 
       <!-- TAB 2: Generation Workbench -->
       <section id="tab-workbench" class="tab-pane">
         <div class="section-header">
           <h2 class="section-title">🚀 内容生成流水线工作台</h2>
-          <p class="section-desc">选择或输入原材料（文档、音视频、字幕）并选定目标能力，一键生成符合 Content Package v3 规范的学习资源包。</p>
+          <p class="section-desc">选择音视频与可选字幕，生成符合 Content Package v3 规范的结构化听力材料。</p>
         </div>
 
         <!-- Material Metadata -->
@@ -1163,49 +1101,10 @@
           </div>
         </div>
 
-        <!-- Document Input -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">2. 文档素材 (Document Input)</h3>
-            <div class="pill-tabs" style="margin-bottom: 0; padding: 0.2rem;">
-              <button class="pill-tab active" id="doc-tab-file" onclick="switchDocMode('file')">📂 选择本机文件</button>
-              <button class="pill-tab" id="doc-tab-text" onclick="switchDocMode('text')">✍️ 手动编辑文本</button>
-            </div>
-          </div>
-
-          <!-- File Upload Mode -->
-          <div id="doc-file-section">
-            <div class="dropzone" id="doc-dropzone" onclick="document.getElementById('doc-file-input').click()">
-              <div class="dropzone-icon">📄</div>
-              <div class="dropzone-title">点击选择或拖拽本机文档文件</div>
-              <div class="dropzone-desc">支持格式: Markdown (.md), 纯文本 (.txt), PDF (.pdf), EPUB (.epub), HTML (.html)</div>
-              <input type="file" id="doc-file-input" style="display: none;" accept=".md,.markdown,.txt,.pdf,.epub,.html,.htm">
-            </div>
-
-            <div class="upload-progress"><div class="upload-progress-bar" id="doc-upload-bar"></div></div>
-
-            <div id="doc-file-card" class="file-card" style="display: none;">
-              <div class="file-card-left">
-                <span class="file-card-icon">📄</span>
-                <div>
-                  <div class="file-card-title" id="doc-file-name">filename.md</div>
-                  <div class="file-card-meta" id="doc-file-meta">12.5 KB · text/markdown</div>
-                </div>
-              </div>
-              <button class="btn-danger-link" onclick="removeDocFile()">✕ 移除</button>
-            </div>
-          </div>
-
-          <!-- Direct Text Mode -->
-          <div id="doc-text-section" style="display: none;">
-            <textarea class="form-textarea" id="work-doc-text" rows="6" placeholder="# Heading&#10;&#10;Climate change is one of the most pressing challenges of our time. Scientists use mathematical models to predict future trends."></textarea>
-          </div>
-        </div>
-
         <!-- Media & Subtitle Input -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">3. 音视频与字幕素材 (Media & Subtitles)</h3>
+            <h3 class="card-title">2. 音视频与字幕素材 (Media & Subtitles)</h3>
           </div>
 
           <div class="form-group">
@@ -1252,15 +1151,15 @@
         <!-- Capability & Stages -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">4. 目标能力与分析阶段 (Capability & Stages)</h3>
+            <h3 class="card-title">3. 目标能力与分析阶段 (Capability & Stages)</h3>
           </div>
 
           <div class="form-group">
             <label class="form-label">请求能力 (Requested Material Capability)</label>
             <select class="form-select" id="work-capability">
-              <option value="read">read — 纯阅读 (提取排版与段落句子锚点)</option>
-              <option value="listen">listen — 朗读音频 (TTS 合成与句子时长对齐)</option>
-              <option value="synchronized_read_listen">synchronized_read_listen — 视听同步阅读</option>
+              <option value="read">read — 转写媒体并生成结构化文本</option>
+              <option value="listen">listen — 使用原始音视频作为听力材料</option>
+              <option value="synchronized_read_listen">synchronized_read_listen — 生成转写与时间对齐</option>
             </select>
           </div>
 
@@ -1318,7 +1217,7 @@
       <section id="tab-toolchain" class="tab-pane">
         <div class="section-header">
           <h2 class="section-title">🩺 系统工具链与环境诊断</h2>
-          <p class="section-desc">检测音视频处理 (FFmpeg)、系统朗读 (macOS say) 以及 Python 依赖状态。</p>
+          <p class="section-desc">检测音视频处理 (FFmpeg) 以及 Python 分析依赖状态。</p>
         </div>
 
         <div id="toolchain-grid" class="form-row">
@@ -1376,8 +1275,6 @@
       config: null,
       currentLlmTab: 'deepseek',
       activeTab: 'providers',
-      docMode: 'file', // 'file' | 'text'
-      selectedDoc: null, // { path, filename, size_bytes, media_type, preview_text }
       selectedMedia: null, // { path, filename, size_bytes, media_type }
       selectedSubtitle: null, // { path, filename }
       tasks: [],
@@ -1771,15 +1668,6 @@
       document.documentElement.setAttribute('data-theme', next);
     });
 
-    // Document Mode Switching
-    function switchDocMode(mode) {
-      state.docMode = mode;
-      document.getElementById('doc-tab-file').classList.toggle('active', mode === 'file');
-      document.getElementById('doc-tab-text').classList.toggle('active', mode === 'text');
-      document.getElementById('doc-file-section').style.display = mode === 'file' ? 'block' : 'none';
-      document.getElementById('doc-text-section').style.display = mode === 'text' ? 'block' : 'none';
-    }
-
     // Task history tab controls
     document.getElementById('btn-refresh-tasks').addEventListener('click', () => loadTasks());
     document.getElementById('btn-close-task-detail').addEventListener('click', () => {
@@ -1813,55 +1701,6 @@
         btn.textContent = '↻ 一键重跑';
       }
     });
-
-    // Document File Handling
-    document.getElementById('doc-file-input').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try {
-        showToast(`正在载入文档: ${file.name}...`);
-        const info = await uploadFile(file, document.getElementById('doc-upload-bar'));
-        state.selectedDoc = info;
-        renderDocCard();
-        
-        // Auto-fill material id and title if empty
-        const titleInput = document.getElementById('work-title');
-        const idInput = document.getElementById('work-material-id');
-        if (titleInput.value === 'Climate Scientists Predictions' || !titleInput.value) {
-          const baseName = file.name.replace(/\.[^/.]+$/, "");
-          titleInput.value = baseName;
-          idInput.value = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        }
-
-        // If preview text available, populate text area as well
-        if (info.preview_text) {
-          document.getElementById('work-doc-text').value = info.preview_text;
-        }
-        showToast(`✅ 文档 ${file.name} 就绪`);
-      } catch (err) {
-        showToast('❌ 加载文档失败: ' + err.message);
-      }
-    });
-
-    function renderDocCard() {
-      const card = document.getElementById('doc-file-card');
-      const dropzone = document.getElementById('doc-dropzone');
-      if (state.selectedDoc) {
-        document.getElementById('doc-file-name').textContent = state.selectedDoc.filename;
-        document.getElementById('doc-file-meta').textContent = `${formatBytes(state.selectedDoc.size_bytes)} · ${state.selectedDoc.media_type}`;
-        card.style.display = 'flex';
-        dropzone.style.display = 'none';
-      } else {
-        card.style.display = 'none';
-        dropzone.style.display = 'block';
-      }
-    }
-
-    function removeDocFile() {
-      state.selectedDoc = null;
-      document.getElementById('doc-file-input').value = '';
-      renderDocCard();
-    }
 
     // Media File Handling
     document.getElementById('media-file-input').addEventListener('change', async (e) => {
@@ -1932,28 +1771,23 @@
       document.getElementById('btn-remove-sub').style.display = 'none';
     }
 
-    // Drag & drop listeners for dropzones
-    ['doc-dropzone', 'media-dropzone'].forEach(id => {
-      const el = document.getElementById(id);
-      el.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        el.classList.add('dragover');
-      });
-      el.addEventListener('dragleave', () => el.classList.remove('dragover'));
-      el.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        el.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        if (file) {
-          const inputId = id === 'doc-dropzone' ? 'doc-file-input' : 'media-file-input';
-          const input = document.getElementById(inputId);
-          // Trigger change manually
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          input.files = dt.files;
-          input.dispatchEvent(new Event('change'));
-        }
-      });
+    // Drag & drop listener for the media drop zone.
+    const mediaDropzone = document.getElementById('media-dropzone');
+    mediaDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      mediaDropzone.classList.add('dragover');
+    });
+    mediaDropzone.addEventListener('dragleave', () => mediaDropzone.classList.remove('dragover'));
+    mediaDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      mediaDropzone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const input = document.getElementById('media-file-input');
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change'));
     });
 
     // Load initial config
@@ -2008,15 +1842,6 @@
       document.getElementById('aligner-provider').value = aligner.provider || 'none';
       document.getElementById('aligner-device').value = aligner.device || 'auto';
 
-      const tts = state.config.tts || {};
-      document.getElementById('tts-provider').value = tts.provider || 'kokoro';
-      document.getElementById('tts-voice').value = tts.voice || 'af_bella';
-      document.getElementById('tts-speed').value = tts.speed || 1.0;
-
-      const ocr = state.config.ocr || {};
-      document.getElementById('ocr-provider').value = ocr.provider || 'none';
-      document.getElementById('ocr-langs').value = ocr.langs || 'en,zh';
-      document.getElementById('ocr-device').value = ocr.device || 'mps';
     }
 
     function renderLlmForm(key) {
@@ -2115,20 +1940,6 @@
         device: document.getElementById('aligner-device').value,
       };
 
-      state.config.tts = {
-        ...(state.config.tts || {}),
-        provider: document.getElementById('tts-provider').value,
-        voice: document.getElementById('tts-voice').value,
-        speed: parseFloat(document.getElementById('tts-speed').value) || 1.0,
-      };
-
-      state.config.ocr = {
-        ...(state.config.ocr || {}),
-        provider: document.getElementById('ocr-provider').value,
-        langs: document.getElementById('ocr-langs').value,
-        device: document.getElementById('ocr-device').value,
-      };
-
       try {
         const res = await fetch('/api/config', {
           method: 'POST',
@@ -2147,67 +1958,6 @@
         }
       } catch (err) {
         showToast('保存出错: ' + err.message);
-      }
-    });
-
-    document.getElementById('btn-test-tts').addEventListener('click', async () => {
-      const payload = {
-        provider: document.getElementById('tts-provider').value,
-        voice: document.getElementById('tts-voice').value,
-      };
-      const fb = document.getElementById('tts-test-feedback');
-      fb.className = 'test-feedback active';
-      fb.style.display = 'block';
-      fb.textContent = '正在检测 TTS 运行环境...';
-
-      try {
-        const res = await fetch('/api/test/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const result = await res.json();
-        if (result.ok) {
-          fb.className = 'test-feedback active success';
-          fb.textContent = `✅ ${result.message}`;
-        } else {
-          fb.className = 'test-feedback active error';
-          fb.textContent = `⚠️ ${result.message}`;
-        }
-      } catch (err) {
-        fb.className = 'test-feedback active error';
-        fb.textContent = `❌ 请求错误: ${err.message}`;
-      }
-    });
-
-    document.getElementById('btn-test-ocr').addEventListener('click', async () => {
-      const payload = {
-        provider: document.getElementById('ocr-provider').value,
-        langs: document.getElementById('ocr-langs').value,
-        device: document.getElementById('ocr-device').value,
-      };
-      const fb = document.getElementById('ocr-test-feedback');
-      fb.className = 'test-feedback active';
-      fb.style.display = 'block';
-      fb.textContent = '正在检测 OCR 运行环境...';
-
-      try {
-        const res = await fetch('/api/test/ocr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const result = await res.json();
-        if (result.ok) {
-          fb.className = 'test-feedback active success';
-          fb.textContent = `✅ ${result.message}`;
-        } else {
-          fb.className = 'test-feedback active error';
-          fb.textContent = `⚠️ ${result.message}`;
-        }
-      } catch (err) {
-        fb.className = 'test-feedback active error';
-        fb.textContent = `❌ 请求错误: ${err.message}`;
       }
     });
 
@@ -2337,22 +2087,14 @@
       const title = document.getElementById('work-title').value.trim();
       const lang = document.getElementById('work-target-lang').value.trim();
       const cap = document.getElementById('work-capability').value;
-      const docText = document.getElementById('work-doc-text').value.trim();
       const mediaPath = document.getElementById('work-media-path').value.trim();
 
-      if (!id) { errors.push({ field: 'work-material-id', msg: '素材唯一 ID 不能为空' }); }
-      if (!title) { errors.push({ field: 'work-title', msg: '素材标题不能为空' }); }
-      if (!lang) { errors.push({ field: 'work-target-lang', msg: '目标语言不能为空' }); }
-      if (!SUPPORTED_CAPS.includes(cap)) { errors.push({ field: 'work-capability', msg: '不支持的能力: ' + cap }); }
-
-      const hasDoc = state.docMode === 'text' ? !!docText : !!state.selectedDoc;
-      const hasMedia = !!state.selectedMedia || !!mediaPath;
-      if (!hasDoc && !hasMedia) {
-        errors.push({ field: 'work-media-path', msg: '需要至少一份文档素材或音视频素材' });
-        errors.push({ field: 'work-doc-text', msg: '需要至少一份文档素材或音视频素材' });
-      }
-      if (cap === 'listen' && !hasDoc) {
-        errors.push({ field: 'work-doc-text', msg: 'listen 能力需要文档输入（文本或文件）' });
+      if (!id) errors.push({ field: 'work-material-id', msg: '素材唯一 ID 不能为空' });
+      if (!title) errors.push({ field: 'work-title', msg: '素材标题不能为空' });
+      if (!lang) errors.push({ field: 'work-target-lang', msg: '目标语言不能为空' });
+      if (!SUPPORTED_CAPS.includes(cap)) errors.push({ field: 'work-capability', msg: '不支持的能力: ' + cap });
+      if (!state.selectedMedia && !mediaPath) {
+        errors.push({ field: 'work-media-path', msg: '请选择音频或视频素材' });
       }
 
       if (errors.length) {
@@ -2386,7 +2128,6 @@
       const materialId = document.getElementById('work-material-id').value.trim() || 'demo-material';
       const title = document.getElementById('work-title').value.trim() || 'Untitled Material';
       const targetLang = document.getElementById('work-target-lang').value.trim() || 'en-US';
-      const docText = document.getElementById('work-doc-text').value;
       const mediaPath = document.getElementById('work-media-path').value.trim();
       const capability = document.getElementById('work-capability').value;
 
@@ -2419,14 +2160,10 @@
         target_language: targetLang,
         support_languages: [],
         requested_capability: capability,
-        available_resources: [],
       };
 
       const payload = {
         request: requestDoc,
-        document_path: state.selectedDoc ? state.selectedDoc.path : null,
-        document_text: (state.docMode === 'text' || !state.selectedDoc) ? docText : null,
-        document_media_type: state.selectedDoc ? state.selectedDoc.media_type : 'text/markdown',
         media_path: state.selectedMedia ? state.selectedMedia.path : (mediaPath || null),
         subtitle_path: state.selectedSubtitle ? state.selectedSubtitle.path : null,
         config: {

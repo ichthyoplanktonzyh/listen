@@ -13,8 +13,26 @@ from listen_gen.capability import CapabilityRequest
 from listen_gen.package import ConversionError
 
 
-def valid_request(**overrides) -> dict:
-    document = {
+def media_rendition(**overrides) -> dict[str, object]:
+    rendition: dict[str, object] = {
+        "kind": "media",
+        "rendition_id": "sha256:" + "1" * 64,
+        "media_kind": "audio",
+        "media_type": "audio/wav",
+        "media_id": "media-1",
+        "fingerprint": "fixture-fingerprint",
+        "blob": {
+            "digest": "sha256:" + "2" * 64,
+            "size_bytes": 12,
+            "path": "/tmp/media.wav",
+        },
+    }
+    rendition.update(overrides)
+    return rendition
+
+
+def valid_request(**overrides) -> dict[str, object]:
+    document: dict[str, object] = {
         "schema": "listen_gen.capability-request.v2",
         "version": 2,
         "created_at_ms": 1,
@@ -22,122 +40,79 @@ def valid_request(**overrides) -> dict:
         "material": {
             "material_id": "material-1",
             "material_revision_id": "revision-1",
-            "title": "Material",
+            "title": "Test Material",
         },
         "edition": {
             "edition_id": "edition-1",
-            "title": "Edition",
-            "target_language": "en",
-            "support_languages": [],
+            "title": "Test Edition",
+            "target_language": "en-US",
+            "support_languages": ["zh-Hans"],
         },
         "requested_capability": "read",
-        "available_renditions": [
-            {
-                "kind": "document",
-                "rendition_id": "sha256:" + "a" * 64,
-                "media_type": "text/plain",
-                "language": "en",
-                "source_asset_id": "sha256:" + "b" * 64,
-                "blob": {"digest": "sha256:" + "c" * 64, "size_bytes": 10, "path": "/tmp/x.txt"},
-            }
-        ],
-        "available_resources": [],
+        "available_renditions": [media_rendition()],
+        "extensions": {},
     }
     document.update(overrides)
     return document
 
 
 class CapabilityRequestTests(unittest.TestCase):
-    def test_valid_request_parses(self) -> None:
+    def test_from_document_builds_media_only_request(self) -> None:
         request = CapabilityRequest.from_document(valid_request())
-        self.assertEqual(request.schema, "listen_gen.capability-request.v2")
-        self.assertEqual(request.version, 2)
         self.assertEqual(request.requested_capability, "read")
+        self.assertEqual(len(request.media_renditions), 1)
+        self.assertEqual(request.media_renditions[0].media_kind, "audio")
+        self.assertEqual(request.edition.target_language, "en-US")
         self.assertEqual(request.attempt_id, "attempt-1")
-        self.assertEqual(len(request.document_renditions), 1)
-        self.assertEqual(request.media_renditions, ())
-        self.assertEqual(request.resources, ())
 
-    def test_media_rendition_requires_media_kind(self) -> None:
-        document = valid_request(available_renditions=[
-            {
-                "kind": "media",
-                "rendition_id": "sha256:" + "a" * 64,
-                "media_type": "audio/wav",
-                "media_id": "media-1",
-                "fingerprint": "fp",
-                "blob": {"digest": "sha256:" + "c" * 64, "size_bytes": 10, "path": "/tmp/x.wav"},
-            }
-        ])
-        with self.assertRaises(ConversionError):
-            CapabilityRequest.from_document(document)
+    def test_document_material_is_rejected_with_actionable_error(self) -> None:
+        request = valid_request(available_renditions=[{"kind": "document"}])
+        with self.assertRaisesRegex(
+            ConversionError,
+            "document material input is not supported; provide audio or video media",
+        ):
+            CapabilityRequest.from_document(request)
 
-    def test_media_kind_must_agree_with_media_type(self) -> None:
-        document = valid_request(available_renditions=[
-            {
-                "kind": "media",
-                "media_kind": "audio",
-                "rendition_id": "sha256:" + "a" * 64,
-                "media_type": "video/mp4",
-                "media_id": "media-1",
-                "fingerprint": "fp",
-                "blob": {"digest": "sha256:" + "c" * 64, "size_bytes": 10, "path": "/tmp/x.mp4"},
-            }
-        ])
-        with self.assertRaises(ConversionError):
-            CapabilityRequest.from_document(document)
-
-    def test_unknown_schema_rejected(self) -> None:
-        with self.assertRaises(ConversionError):
+    def test_invalid_schema_and_capability_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ConversionError, "unsupported capability request schema"):
             CapabilityRequest.from_document(valid_request(schema="listen_gen.capability-request.v1"))
+        with self.assertRaisesRegex(ConversionError, "unsupported requested capability"):
+            CapabilityRequest.from_document(valid_request(requested_capability="speak"))
 
-    def test_unsupported_capability_rejected(self) -> None:
-        with self.assertRaises(ConversionError):
-            CapabilityRequest.from_document(valid_request(requested_capability="fly"))
-
-    def test_duplicate_rendition_ids_rejected(self) -> None:
-        rendition = {
-            "kind": "document",
-            "rendition_id": "sha256:" + "a" * 64,
-            "media_type": "text/plain",
-            "language": "en",
-            "source_asset_id": "sha256:" + "b" * 64,
-            "blob": {"digest": "sha256:" + "c" * 64, "size_bytes": 10, "path": "/tmp/x.txt"},
-        }
-        with self.assertRaises(ConversionError):
+    def test_invalid_media_shape_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ConversionError, "media_type must agree"):
             CapabilityRequest.from_document(
-                valid_request(available_renditions=[rendition, rendition])
+                valid_request(available_renditions=[media_rendition(media_type="video/mp4")])
+            )
+        with self.assertRaisesRegex(ConversionError, "blob path must be absolute"):
+            CapabilityRequest.from_document(
+                valid_request(
+                    available_renditions=[
+                        media_rendition(
+                            blob={
+                                "digest": "sha256:" + "2" * 64,
+                                "size_bytes": 12,
+                                "path": "media.wav",
+                            }
+                        )
+                    ]
+                )
             )
 
-    def test_non_absolute_blob_path_rejected(self) -> None:
-        document = valid_request()
-        document["available_renditions"][0]["blob"]["path"] = "relative.txt"
-        with self.assertRaises(ConversionError):
-            CapabilityRequest.from_document(document)
-
-    def test_support_languages_must_be_unique(self) -> None:
-        with self.assertRaises(ConversionError):
+    def test_duplicate_media_ids_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ConversionError, "rendition ids must be unique"):
             CapabilityRequest.from_document(
-                valid_request(**{
-                    "edition": {
-                        "edition_id": "e",
-                        "title": "E",
-                        "target_language": "en",
-                        "support_languages": ["zh-Hans", "zh-Hans"],
-                    }
-                })
+                valid_request(available_renditions=[media_rendition(), media_rendition()])
             )
 
-    def test_attempt_id_optional(self) -> None:
-        request = CapabilityRequest.from_document(valid_request(**{"attempt_id": None}))
-        self.assertIsNone(request.attempt_id)
-
-    def test_from_json_file_reads_typed_document(self) -> None:
+    def test_from_json_file_reads_typed_media_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "request.json"
             path.write_text(json.dumps(valid_request()), encoding="utf-8")
-            request = CapabilityRequest.from_json_file(path)
-            self.assertEqual(request.requested_capability, "read")
+            self.assertEqual(
+                CapabilityRequest.from_json_file(path).material.material_id,
+                "material-1",
+            )
 
 
 if __name__ == "__main__":

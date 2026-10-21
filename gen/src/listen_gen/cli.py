@@ -25,7 +25,6 @@ from .asr import (
     PreprocessingAsrAdapter,
 )
 from .capability import CapabilityRequest
-from .document import FixtureOcrProvider
 from .media import FfmpegAudioPreprocessor
 from .package import ConversionError
 from .plan import UnsupportedCapability
@@ -34,8 +33,6 @@ from .protocol_v2 import (
     MachineEventV2Emitter,
     protocol_capabilities_v2,
 )
-from .document import FixtureOcrProvider, RapidOcrProvider, SuryaOcrProvider
-from .tts import FakeTtsAdapter, FixtureTtsAdapter, KokoroTtsAdapter, SayTtsAdapter
 from .whisper_cpp import WhisperCppAsrAdapter
 
 
@@ -118,38 +115,6 @@ def parser(
     )
     produce.add_argument("request", type=Path, help="capability request JSON document")
     produce.add_argument("--output", required=True, type=Path)
-    produce.add_argument(
-        "--tts-provider",
-        default="none",
-        choices=["none", "fixture", "say", "fake", "kokoro", "edge-tts"],
-        help="TTS provider for document-to-listen derivations (say is macOS local adapter, kokoro is neural TTS)",
-    )
-    produce.add_argument("--tts-fixture", type=Path, help="audio fixture for the fixture TTS provider")
-    produce.add_argument(
-        "--tts-alignment-fixture",
-        type=Path,
-        help="committed anchor alignment JSON for the fixture TTS provider",
-    )
-    produce.add_argument("--tts-voice", help="macOS say voice name for the say TTS provider")
-    produce.add_argument("--tts-say-executable", default="say", help="say executable for the say TTS provider")
-    produce.add_argument("--tts-afconvert-executable", default="afconvert", help="afconvert executable for the say TTS provider")
-    produce.add_argument("--tts-timeout-seconds", type=float, default=600.0)
-    produce.add_argument("--tts-kokoro-voice", default="af_bella", help="Kokoro voice model (e.g. af_bella, af_sarah, am_adam)")
-    produce.add_argument("--tts-kokoro-speed", type=float, default=1.0, help="Kokoro speech speed multiplier")
-    produce.add_argument("--tts-kokoro-lang", default="a", help="Kokoro language code (e.g. 'a' for American English, 'b' for British, 'z' for Chinese)")
-    produce.add_argument("--tts-edge-voice", default="en-US-AvaNeural", help="Microsoft Edge TTS voice (e.g. en-US-AvaNeural, en-US-JennyNeural, zh-CN-XiaoxiaoNeural)")
-    produce.add_argument("--tts-edge-rate", default="+0%", help="Edge TTS speech rate (e.g. +0%%, +20%%, -10%%)")
-    produce.add_argument("--tts-edge-volume", default="+0%", help="Edge TTS speech volume (e.g. +0%%, +10%%)")
-    produce.add_argument("--tts-edge-pitch", default="+0Hz", help="Edge TTS speech pitch (e.g. +0Hz, +5Hz)")
-    produce.add_argument(
-        "--ocr-provider",
-        default="none",
-        choices=["none", "fixture", "surya", "rapidocr", "docling"],
-        help="optional OCR path for scanned PDFs; absence is an honest capability result",
-    )
-    produce.add_argument("--ocr-fixture", type=Path, help="committed OCR text for the fixture OCR provider")
-    produce.add_argument("--ocr-langs", default="en,zh", help="comma-separated language codes for OCR (default: en,zh)")
-    produce.add_argument("--ocr-device", default=None, help="hardware device for OCR (e.g. mps, cpu, cuda)")
     produce.add_argument(
         "--provider",
         default="none",
@@ -305,12 +270,6 @@ def parser(
         produce.add_argument(f"--{stage}-command-arg", action="append", default=[], help=f"one argv item for the {stage} command provider")
         produce.add_argument(f"--{stage}-command-timeout-seconds", type=float, default=600.0)
     produce.add_argument(
-        "--tts-aligner",
-        default="none",
-        choices=["none", "fixture", "command", "whisper-cpp"],
-        help="ASR provider that transcribes derived TTS audio into word timings",
-    )
-    produce.add_argument(
         "--machine-events",
         action="store_true",
         help="write the machine-event protocol as NDJSON to stdout",
@@ -322,8 +281,7 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     """Resolve the optional ASR adapter for capability derivations.
 
     Returns ``(adapter, preprocessor)``; the preprocessor is the shared
-    ffmpeg/ffprobe normalization pipeline the adapter uses and that the
-    ``tts_aligner`` path reuses on derived audio.
+    ffmpeg/ffprobe normalization pipeline used by the adapter.
     """
     if getattr(args, "provider", "none") == "none":
         return None, None
@@ -421,61 +379,6 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     )
 
 
-def _build_tts(args: argparse.Namespace) -> Any | None:
-    selected = args.tts_provider
-    if selected == "none":
-        return None
-    if selected == "fake":
-        return FakeTtsAdapter()
-    if selected == "kokoro":
-        return KokoroTtsAdapter(
-            voice=args.tts_kokoro_voice,
-            speed=args.tts_kokoro_speed,
-            lang_code=args.tts_kokoro_lang,
-            afconvert_executable=args.tts_afconvert_executable,
-            timeout_seconds=args.tts_timeout_seconds,
-        )
-    if selected == "edge-tts":
-        from .tts import EdgeTtsAdapter
-        return EdgeTtsAdapter(
-            voice=args.tts_edge_voice,
-            rate=args.tts_edge_rate,
-            volume=args.tts_edge_volume,
-            pitch=args.tts_edge_pitch,
-            afconvert_executable=args.tts_afconvert_executable,
-            timeout_seconds=args.tts_timeout_seconds,
-        )
-    if selected == "say":
-        return SayTtsAdapter(
-            voice=args.tts_voice,
-            say_executable=args.tts_say_executable,
-            afconvert_executable=args.tts_afconvert_executable,
-            timeout_seconds=args.tts_timeout_seconds,
-        )
-    if args.tts_fixture is None:
-        raise ConversionError("--tts-fixture is required for the fixture TTS provider")
-    return FixtureTtsAdapter(args.tts_fixture, args.tts_alignment_fixture)
-
-
-def _build_ocr(args: argparse.Namespace) -> Any | None:
-    if args.ocr_provider == "none":
-        return None
-    if args.ocr_provider == "surya":
-        langs = [item.strip() for item in args.ocr_langs.split(",") if item.strip()]
-        return SuryaOcrProvider(langs=langs, device=args.ocr_device)
-    if args.ocr_provider == "rapidocr":
-        return RapidOcrProvider()
-    if args.ocr_provider == "docling":
-        from .document import DoclingOcrProvider
-        return DoclingOcrProvider()
-    if args.ocr_fixture is None:
-        raise ConversionError("--ocr-fixture is required for the fixture OCR provider")
-    if not args.ocr_fixture.is_file():
-        raise ConversionError("the OCR fixture must be a regular file")
-    return FixtureOcrProvider(args.ocr_fixture)
-
-
-
 def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
     """Resolve the optional rich stage adapters for capability derivations."""
     from .rich import (
@@ -515,8 +418,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
     speech_activity = None
     prosody = None
     phone = None
-    tts_aligner = None
-
     def stage_adapter(selector: str, stage: str, fixture, command, command_args, timeout):
         if selector == "fixture":
             if fixture is None:
@@ -658,10 +559,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
             padding_ms=args.aligner_padding_ms,
         )
 
-    aligner_selector = args.tts_aligner
-    if aligner_selector != "none":
-        tts_aligner = _build_asr_for_aligner(args, aligner_selector, progress)
-
     if (
         sense_groups is None
         and acoustics is None
@@ -670,7 +567,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         and prosody is None
         and phone is None
         and aligner is None
-        and tts_aligner is None
     ):
         return None
     # The acoustics, acoustic-track, and speech-activity stages all consume the
@@ -696,36 +592,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         prosody=prosody,
         phone=phone,
         aligner=aligner,
-        tts_aligner=tts_aligner,
-    )
-
-
-def _build_asr_for_aligner(args, selector: str, progress) -> Any:
-    """Resolve the ASR adapter that transcribes derived TTS audio."""
-    from .asr import FixtureAsrAdapter
-    from .whisper_cpp import WhisperCppAsrAdapter
-    if selector == "fixture":
-        if args.fixture is None:
-            raise ConversionError("--fixture is required for the fixture tts-aligner")
-        return FixtureAsrAdapter(args.fixture, progress=progress)
-    if selector == "command":
-        if args.command is None:
-            raise ConversionError("--command is required for the command tts-aligner")
-        return CommandAsrAdapter(
-            args.command, args.command_arg, args.command_timeout_seconds,
-            progress=progress,
-        )
-    if args.whisper_model is None or args.whisper_model_id is None:
-        raise ConversionError(
-            "--whisper-model and --whisper-model-id are required for the whisper-cpp tts-aligner"
-        )
-    return WhisperCppAsrAdapter(
-        args.whisper_cli,
-        args.whisper_model,
-        args.whisper_model_id,
-        args.whisper_language,
-        args.whisper_translate_to_english,
-        args.whisper_timeout_seconds,
     )
 
 
@@ -767,8 +633,6 @@ def _run(
         progress = None
     asr_adapter, asr_preprocessor = _build_asr(args, progress=progress)
     config = ProduceConfig(
-        tts=_build_tts(args),
-        ocr=_build_ocr(args),
         asr=asr_adapter,
         asr_preprocessor=asr_preprocessor,
         rich=_build_rich(args, progress=progress),

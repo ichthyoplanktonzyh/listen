@@ -73,12 +73,9 @@ def env_with_src() -> dict[str, str]:
 
 
 def _capability_request_path(directory: Path) -> Path:
-    import hashlib
-
-    text = b"Release bundle sample text.\nSecond sentence."
-    digest = "sha256:" + hashlib.sha256(text).hexdigest()
-    document_path = directory / "sample.txt"
-    document_path.write_bytes(text)
+    media_path = ROOT / "tests" / "fixtures" / "sample-media.wav"
+    media = media_path.read_bytes()
+    digest = "sha256:" + hashlib.sha256(media).hexdigest()
     request = {
         "schema": "listen_gen.capability-request.v2",
         "version": 2,
@@ -98,19 +95,19 @@ def _capability_request_path(directory: Path) -> Path:
         "requested_capability": "read",
         "available_renditions": [
             {
-                "kind": "document",
-                "rendition_id": "sha256:" + "1" * 64,
-                "media_type": "text/plain",
-                "language": "en",
-                "source_asset_id": "sha256:" + "2" * 64,
+                "kind": "media",
+                "rendition_id": digest,
+                "media_kind": "audio",
+                "media_type": "audio/wav",
+                "media_id": "release-bundle-fixture",
+                "fingerprint": digest,
                 "blob": {
                     "digest": digest,
-                    "size_bytes": len(text),
-                    "path": str(document_path),
+                    "size_bytes": len(media),
+                    "path": str(media_path),
                 },
             }
         ],
-        "available_resources": [],
     }
     request_path = directory / "request.json"
     request_path.write_text(json.dumps(request), encoding="utf-8")
@@ -122,6 +119,8 @@ def fixture_argv(output: Path, *, machine: bool) -> list[str]:
         "package", "from-capability",
         str(_capability_request_path(output.parent)),
         "--output", str(output),
+        "--provider", "fixture",
+        "--fixture", str(ROOT / "tests" / "fixtures" / "sample.asr.json"),
     ]
     if machine:
         argv.append("--machine-events")

@@ -14,7 +14,6 @@ from listen_gen.rich_stages import (  # noqa: E402
     _words_from_transcript,
     build_word_timeline_resource,
 )
-from listen_gen.produce import _transcript_matches_reading  # noqa: E402
 from listen_gen.sentence_assembly import (  # noqa: E402
     ASSEMBLY_CONFIG_SHA256,
     MAX_ASSEMBLED_CHARS,
@@ -201,59 +200,6 @@ class SentenceAssemblyRegressionTests(unittest.TestCase):
         )
         with self.assertRaises(ConversionError):
             _words_from_transcript(transcript, ("sentence-0",))
-
-    def test_tts_retranscription_must_match_assembled_source_sentence_identity(self) -> None:
-        reading_payload = {
-            "text": "Hello world.\nSecond line!",
-            "anchors": [
-                {"anchor_id": "sentence-0", "kind": "sentence", "start_offset": 0, "end_offset": 13},
-                {"anchor_id": "sentence-1", "kind": "sentence", "start_offset": 13, "end_offset": 25},
-            ],
-        }
-        fragmented_match = AsrTranscript(
-            language="en",
-            segments=(
-                AsrSegment(0, 100, "Hello", "Hello", ()),
-                AsrSegment(100, 200, "world.", "world.", ()),
-                AsrSegment(200, 300, "Second line!", "Second line!", ()),
-            ),
-            provider_id="fixture",
-            provider_version="1",
-        )
-        mismatch = AsrTranscript(
-            language="en",
-            segments=(
-                AsrSegment(0, 100, "Hello", "Hello", ()),
-                AsrSegment(100, 200, "earth.", "earth.", ()),
-                AsrSegment(200, 300, "Second line!", "Second line!", ()),
-            ),
-            provider_id="fixture",
-            provider_version="1",
-        )
-        count_mismatch = AsrTranscript(
-            language="en",
-            segments=(
-                AsrSegment(0, 100, "Hello world.", "Hello world.", ()),
-            ),
-            provider_id="fixture",
-            provider_version="1",
-        )
-
-        self.assertTrue(
-            _transcript_matches_reading(
-                assemble_asr_transcript(fragmented_match), reading_payload
-            )
-        )
-        self.assertFalse(
-            _transcript_matches_reading(
-                assemble_asr_transcript(mismatch), reading_payload
-            )
-        )
-        self.assertFalse(
-            _transcript_matches_reading(
-                assemble_asr_transcript(count_mismatch), reading_payload
-            )
-        )
 
     def test_subtitle_blocks_use_same_merge_policy_without_internal_split(self) -> None:
         blocks = (
