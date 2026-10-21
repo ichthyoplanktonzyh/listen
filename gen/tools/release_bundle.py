@@ -35,6 +35,13 @@ PROVIDER_REQUIREMENTS = {
     "command": ["ffprobe", "ffmpeg", "asr-wrapper"],
     "whisper-cpp": ["ffprobe", "ffmpeg", "whisper-cli", "whisper-model"],
 }
+# These wrappers live under the source checkout's external ``tools/`` tree,
+# while the released zipapp intentionally packages only ``src/``. They are not
+# released providers and must not appear in runtime/toolchain identity.
+SOURCE_CHECKOUT_ONLY_PROVIDERS = {
+    "qwen3": "tools/qwen3_asr_wrapper.py",
+    "sensevoice": "tools/sensevoice_asr_wrapper.py",
+}
 CONTRACT_DESCRIPTOR_NAME = "content-package-contract.json"
 EXPECTED_CONTRACT_DESCRIPTOR = {
     "authority": {
@@ -59,8 +66,9 @@ EXPECTED_CONTRACT_DESCRIPTOR = {
 # The release binds to an explicit runtime/toolchain identity that the
 # verifier checks strictly and consumers record immutably. The runtime is the
 # interpreter family and version requirement; the toolchain is every external
-# tool the released bundle may bind to, with the Gen stage families that
-# require it. A manifest cannot silently add, drop, or re-role a tool: the
+# tool the released bundle's supported providers may bind to, with the Gen
+# stage families that require it. A manifest cannot silently add, drop, or
+# re-role a tool: the
 # verifier recomputes the canonical identity from these constants and from the
 # union of ``PROVIDER_REQUIREMENTS``.
 #

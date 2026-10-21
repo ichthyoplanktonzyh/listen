@@ -62,7 +62,7 @@ from .rich_stages import (
     build_word_timeline_resource,
     run_rich_stages,
 )
-from .subtitle import parse_subtitle
+from .subtitle import parse_subtitle_bytes, read_subtitle_source
 from .sentence_assembly import (
     ASSEMBLY_CONFIG_SHA256,
     AssembledSentence,
@@ -128,6 +128,7 @@ class ProduceConfig:
     asr_preprocessor: FfmpegAudioPreprocessor | None = None
     rich: "RichStages | None" = None
     subtitle: Path | None = None
+    subtitle_sha256: str | None = None
 
 
 def _blob_source_bytes(blob) -> bytes:
@@ -324,9 +325,25 @@ def _run_subtitle_derivation(
     if progress:
         progress("parsing the subtitle track")
     try:
-        blocks = parse_subtitle(config.subtitle)
+        subtitle_bytes = read_subtitle_source(config.subtitle)
+        subtitle_sha256 = sha256_of_bytes(subtitle_bytes)
+        if subtitle_sha256 != derivation.subtitle_sha256:
+            raise ProductionFailure(
+                "input_changed", "the subtitle input changed after planning"
+            )
+        blocks = parse_subtitle_bytes(subtitle_bytes)
+    except ProductionFailure:
+        raise
     except ConversionError as error:
         raise ProductionFailure("subtitle_unavailable", str(error)) from error
+    subtitle_config_sha256 = sha256_of_bytes(
+        canonical_json(
+            {
+                "assembly_config_sha256": ASSEMBLY_CONFIG_SHA256,
+                "subtitle_sha256": subtitle_sha256,
+            }
+        )
+    )
     assembled = assemble_subtitle_blocks(blocks)
     decoded = _subtitle_reading(assembled)
     language = _language_for(request)
@@ -341,7 +358,7 @@ def _run_subtitle_derivation(
         provenance_document=provenance(
             created_at_ms,
             input_rendition_ids=[package_rendition_id],
-            config_sha256=ASSEMBLY_CONFIG_SHA256,
+            config_sha256=subtitle_config_sha256,
         ),
     )
     alignment = tuple(
@@ -352,7 +369,7 @@ def _run_subtitle_derivation(
     # Keep the subtitle blocks argument shape for rich-stage duration
     # calculation, but return assembled sentence windows so no downstream
     # consumer can accidentally recover the old block/sentence identity.
-    return derived, alignment, {"config_sha256": ASSEMBLY_CONFIG_SHA256}, assembled, raw
+    return derived, alignment, {"config_sha256": subtitle_config_sha256}, assembled, raw
 
 
 def _transcript_reading(transcript: AsrTranscript) -> StructuredText:
@@ -743,7 +760,27 @@ def produce(
         entry.rendition_id: package.rendition_id
         for entry, package in zip(request.media_renditions, source_media_renditions)
     }
-    production_plan: ProductionPlan = plan(request)
+    subtitle_sha256 = config.subtitle_sha256
+    if config.subtitle is None:
+        if subtitle_sha256 is not None:
+            raise ProductionFailure(
+                "invalid_request", "subtitle_sha256 requires a subtitle input"
+            )
+    else:
+        try:
+            current_subtitle_sha256 = sha256_of_bytes(
+                read_subtitle_source(config.subtitle)
+            )
+        except ConversionError as error:
+            raise ProductionFailure("subtitle_unavailable", str(error)) from error
+        if subtitle_sha256 is not None and current_subtitle_sha256 != subtitle_sha256:
+            raise ProductionFailure(
+                "input_changed", "the subtitle input changed after planning"
+            )
+        subtitle_sha256 = current_subtitle_sha256
+    production_plan: ProductionPlan = plan(
+        request, subtitle_sha256=subtitle_sha256
+    )
     if check_cancelled:
         check_cancelled()
     if production_plan.empty:

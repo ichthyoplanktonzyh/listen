@@ -41,6 +41,8 @@ class TestGui(unittest.TestCase):
         _, content = _read_static_asset("/")
         self.assertIn(b"media-dropzone", content)
         self.assertIn(b"sub-file-input", content)
+        self.assertIn("Qwen3 与 SenseVoice 仅在完整源码仓库中可用".encode(), content)
+        self.assertIn("发行版不可用".encode(), content)
         for removed in (b"doc-file-input", b"work-doc-text", b"tts-provider", b"ocr-provider"):
             self.assertNotIn(removed, content)
 
@@ -89,6 +91,8 @@ class TestGui(unittest.TestCase):
         self.assertIn("ffmpeg", tools)
         self.assertIn("python", tools)
         self.assertTrue(tools["python"]["available"])
+        for provider in ("qwen3", "sensevoice"):
+            self.assertIn(f"{provider}_asr_sidecar", tools)
 
     def test_task_manager(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -373,7 +377,8 @@ class TestProduceWorkerEvents(unittest.TestCase):
             store = Path(tmpdir) / "tasks.json"
             output = Path(tmpdir) / "out.zip"
             mock_plan.return_value = SimpleNamespace(
-                describe=lambda: {"derivations": ["media_to_structured_reading"]}
+                derivations=(),
+                describe=lambda: {"derivations": ["media_to_structured_reading"]},
             )
             release = SimpleNamespace(
                 manifest_document={},
@@ -404,7 +409,9 @@ class TestProduceWorkerEvents(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = Path(tmpdir) / "tasks.json"
             output = Path(tmpdir) / "out.zip"
-            mock_plan.return_value = SimpleNamespace(describe=lambda: {"derivations": []})
+            mock_plan.return_value = SimpleNamespace(
+                derivations=(), describe=lambda: {"derivations": []}
+            )
             mgr = TaskManager(store_path=store)
             mgr.create_task("t1", {"material_id": "m1"}, output)
 
@@ -434,7 +441,9 @@ class TestProduceWorkerEvents(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = Path(tmpdir) / "tasks.json"
             output = Path(tmpdir) / "out.zip"
-            mock_plan.return_value = SimpleNamespace(describe=lambda: {"derivations": []})
+            mock_plan.return_value = SimpleNamespace(
+                derivations=(), describe=lambda: {"derivations": []}
+            )
             mock_produce.side_effect = RuntimeError("boom")
 
             mgr = self._run("t1", store, output)
@@ -449,6 +458,28 @@ class TestProduceWorkerEvents(unittest.TestCase):
             self.assertEqual(failed["code"], "internal_error")
             self.assertIn("boom", failed["message"])
             self.assertEqual(task.error, "boom")
+
+    def test_missing_source_only_provider_fails_clearly_without_package(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = Path(tmpdir) / "tasks.json"
+            output = Path(tmpdir) / "out.zip"
+            mgr = TaskManager(store_path=store)
+            mgr.create_task("source-only", {"material_id": "m1"}, output)
+            config = {
+                **self.FAKE_CONFIG,
+                "asr": {"provider": "qwen3", "qwen3": {"sidecar": ""}},
+            }
+            with patch("listen_gen.gui._GLOBAL_TASK_MANAGER", mgr):
+                _run_produce_worker(
+                    "source-only", self._make_request(), config, output
+                )
+
+            task = mgr.get_task("source-only")
+            failed = next(e for e in task.events if e.get("event") == "failed")
+            self.assertEqual(failed["code"], "invalid_request")
+            self.assertIn("source-checkout-only", failed["message"])
+            self.assertIn("does not include", failed["message"])
+            self.assertFalse(output.exists())
 
 
 class _FakeHandler:

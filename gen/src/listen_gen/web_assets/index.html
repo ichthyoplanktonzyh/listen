@@ -905,14 +905,14 @@
             <span class="badge badge-warning" id="asr-status-badge"><span class="badge-dot"></span> 待检测</span>
           </div>
 
-          <p class="hint" style="margin-bottom: 1rem;">ASR 负责识别文本与带时间的片段；最终词级时间轴由强制对齐 (Forced Aligner) 生成。</p>
+          <p class="hint" style="margin-bottom: 1rem;">ASR 负责识别文本与带时间的片段；最终词级时间轴由强制对齐 (Forced Aligner) 生成。Qwen3 与 SenseVoice 仅在完整源码仓库中可用，发行版 zipapp 不包含其 sidecar。</p>
 
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">ASR 提供者 (Provider)</label>
               <select class="form-select" id="asr-provider">
-                <option value="qwen3">Qwen3-ASR-0.6B（默认 / 本地）</option>
-                <option value="sensevoice">SenseVoiceSmall（快速 / CPU）</option>
+                <option value="qwen3">Qwen3-ASR-0.6B（仅源码仓库）</option>
+                <option value="sensevoice">SenseVoiceSmall（仅源码仓库）</option>
                 <option value="whisper-cpp">Whisper.cpp large-v3-turbo（兼容 / 多语言）</option>
                 <option value="none">关闭 (None)</option>
               </select>
@@ -1280,6 +1280,7 @@
       tasks: [],
       activeTaskId: null,
       streams: [], // active EventSource handles
+      sourceProviderAvailability: null,
     };
 
     const SUPPORTED_CAPS = ['read', 'listen', 'watch', 'synchronized_read_listen'];
@@ -1814,7 +1815,11 @@
       const qwen3 = asr.qwen3 || {};
       const sensevoice = asr.sensevoice || {};
       const whisperCpp = asr.whisper_cpp || {};
-      document.getElementById('asr-provider').value = asr.provider || 'qwen3';
+      const requestedProvider = asr.provider || 'whisper-cpp';
+      const unavailableInRelease = state.sourceProviderAvailability &&
+        state.sourceProviderAvailability[requestedProvider] === false;
+      document.getElementById('asr-provider').value =
+        unavailableInRelease ? 'whisper-cpp' : requestedProvider;
       document.getElementById('asr-qwen3-python').value = qwen3.python || '';
       document.getElementById('asr-qwen3-sidecar').value = qwen3.sidecar || '';
       document.getElementById('asr-qwen3-model').value = qwen3.model_id || 'Qwen/Qwen3-ASR-0.6B';
@@ -1996,6 +2001,32 @@
     }
     document.getElementById('asr-provider').addEventListener('change', updateAsrGroups);
 
+    function updateSourceOnlyProviderOptions(tools) {
+      const providers = {
+        qwen3: 'qwen3_asr_sidecar',
+        sensevoice: 'sensevoice_asr_sidecar',
+      };
+      state.sourceProviderAvailability = {};
+      for (const [provider, toolName] of Object.entries(providers)) {
+        const available = !!(tools[toolName] && tools[toolName].available);
+        state.sourceProviderAvailability[provider] = available;
+        const option = document.querySelector(`#asr-provider option[value="${provider}"]`);
+        if (option) {
+          option.disabled = !available;
+          const label = provider === 'qwen3' ? 'Qwen3-ASR-0.6B' : 'SenseVoiceSmall';
+          option.textContent = available
+            ? `${label}（源码仓库可用）`
+            : `${label}（发行版不可用；仅源码仓库）`;
+        }
+      }
+      const select = document.getElementById('asr-provider');
+      if (select.options[select.selectedIndex]?.disabled) {
+        select.value = 'whisper-cpp';
+        updateAsrGroups();
+        showToast('当前发行版不包含所选 ASR sidecar，已切换到 Whisper.cpp。');
+      }
+    }
+
     document.getElementById('btn-test-whisper').addEventListener('click', async () => {
       const payload = {
         whisper_cli: document.getElementById('asr-whisper-cli').value,
@@ -2033,6 +2064,7 @@
       try {
         const res = await fetch('/api/toolchain/status');
         const tools = await res.json();
+        updateSourceOnlyProviderOptions(tools);
         const grid = document.getElementById('toolchain-grid');
         grid.innerHTML = '';
 
@@ -2049,6 +2081,7 @@
             <div style="font-size: 0.85rem; color: var(--text-muted);">
               <div>路径: ${info.path || '未找到'}</div>
               ${info.version ? `<div>版本: ${info.version}</div>` : ''}
+              ${info.message ? `<div>${escapeHtml(info.message)}</div>` : ''}
               ${info.voices ? `<div>检测到声音数: ${info.voices.length} 个</div>` : ''}
               ${info.installed_models ? `<div>已装模型: ${info.installed_models.join(', ') || '无'}</div>` : ''}
             </div>

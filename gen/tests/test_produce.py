@@ -9,11 +9,14 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from listen_gen.package_v3 import sha256_of_bytes
+from listen_gen.cli import _build_asr, parser
+from listen_gen.package import ConversionError
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
@@ -154,6 +157,21 @@ class ProduceCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("--tts-", result.stdout)
         self.assertNotIn("--ocr-", result.stdout)
+
+    def test_source_only_asr_providers_explain_missing_released_sidecars(self) -> None:
+        for provider, flag in (
+            ("qwen3", "--qwen3-sidecar"),
+            ("sensevoice", "--sensevoice-sidecar"),
+        ):
+            with self.subTest(provider=provider):
+                with patch("listen_gen.cli._source_checkout_sidecar", return_value=None):
+                    args = parser().parse_args([
+                        "package", "from-capability", "request.json",
+                        "--output", "out.zip", "--provider", provider,
+                    ])
+                self.assertIsNone(getattr(args, flag.removeprefix("--").replace("-", "_")))
+                with self.assertRaisesRegex(ConversionError, "source-checkout-only"):
+                    _build_asr(args)
 
     def test_listen_is_already_satisfied_by_source_media(self) -> None:
         request_path = self.write_request(request_media("listen"))

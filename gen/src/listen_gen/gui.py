@@ -44,6 +44,7 @@ from .llm_client import (
     create_llm_client,
 )
 from .package_v3 import sha256_of_bytes
+from .package import ConversionError
 from .plan import plan as plan_request
 from .produce import ProduceConfig, produce
 from .protocol_v2 import (
@@ -52,6 +53,7 @@ from .protocol_v2 import (
     protocol_capabilities_v2,
 )
 from .rich_stages import RichStages
+from .subtitle import read_subtitle_source
 
 DEFAULT_CONFIG_DIR = Path.home() / ".listen-gen"
 # One truth for where provider configuration lives; llm_client reads it too.
@@ -66,9 +68,9 @@ MAX_CONCURRENT_RUNS = max(1, int(os.environ.get("LISTEN_GEN_MAX_CONCURRENT_RUNS"
 
 SUPPORTED_CAPABILITIES = ("read", "listen", "watch", "synchronized_read_listen")
 
-# The ASR sidecars ship in the repo's ``tools/`` directory (one level above the
-# installed package).  This resolves their path for the GUI defaults; an
-# installed wheel without ``tools/`` simply leaves the field blank.
+# Qwen3 and SenseVoice wrappers are supported from a full source checkout only.
+# The released zipapp packages ``src/`` and intentionally does not carry these
+# external ``tools/`` sidecars.
 _TOOLS_DIR = Path(__file__).resolve().parents[2] / "tools"
 
 
@@ -734,6 +736,22 @@ def check_toolchain() -> dict[str, Any]:
         "path": sys.executable,
         "version": f"Python {sys.version.split()[0]}",
     }
+
+    for provider, filename in (
+        ("qwen3", "qwen3_asr_wrapper.py"),
+        ("sensevoice", "sensevoice_asr_wrapper.py"),
+    ):
+        sidecar = _TOOLS_DIR / filename
+        available = sidecar.is_file()
+        tools[f"{provider}_asr_sidecar"] = {
+            "available": available,
+            "path": str(sidecar) if available else None,
+            "message": (
+                "Available in this source checkout."
+                if available
+                else f"{provider} is source-checkout-only; this release does not include tools/{filename}."
+            ),
+        }
 
     spacy_avail = False
     spacy_models = []
@@ -1575,7 +1593,10 @@ def _run_produce_worker(
 
     try:
         emitter.accepted(request.attempt_id or _default_attempt_id(request))
-        production_plan = plan_request(request)
+        subtitle_sha256 = None
+        if subtitle_path is not None:
+            subtitle_sha256 = sha256_of_bytes(read_subtitle_source(subtitle_path))
+        production_plan = plan_request(request, subtitle_sha256=subtitle_sha256)
         emitter.planned(production_plan.describe())
 
         # ASR runs for media derivations only. Each provider runs
@@ -1586,6 +1607,10 @@ def _run_produce_worker(
         asr_cfg = config_dict.get("asr", {})
         asr_provider = asr_cfg.get("provider", "whisper-cpp")
         asr_timeout = float(asr_cfg.get("timeout_seconds", 3600.0))
+        asr_required = any(
+            derivation.provider == "asr"
+            for derivation in production_plan.derivations
+        )
 
         def _wrap_asr(inner):
             from .media import FfmpegAudioPreprocessor
@@ -1602,6 +1627,12 @@ def _run_produce_worker(
         if asr_provider == "qwen3":
             q = asr_cfg.get("qwen3", {})
             sidecar = q.get("sidecar")
+            if asr_required and not (sidecar and Path(sidecar).is_file()):
+                raise ConversionError(
+                    "qwen3 is source-checkout-only; this release does not include "
+                    "tools/qwen3_asr_wrapper.py. Run from a full source checkout "
+                    "or select whisper-cpp, command, or fixture."
+                )
             if sidecar and Path(sidecar).is_file():
                 from .asr import Qwen3AsrAdapter
 
@@ -1623,6 +1654,12 @@ def _run_produce_worker(
         elif asr_provider == "sensevoice":
             s = asr_cfg.get("sensevoice", {})
             sidecar = s.get("sidecar")
+            if asr_required and not (sidecar and Path(sidecar).is_file()):
+                raise ConversionError(
+                    "sensevoice is source-checkout-only; this release does not include "
+                    "tools/sensevoice_asr_wrapper.py. Run from a full source checkout "
+                    "or select whisper-cpp, command, or fixture."
+                )
             if sidecar and Path(sidecar).is_file():
                 from .asr import SenseVoiceAsrAdapter
 
@@ -1727,6 +1764,7 @@ def _run_produce_worker(
             asr_preprocessor=asr_preprocessor,
             rich=rich,
             subtitle=subtitle_path,
+            subtitle_sha256=subtitle_sha256,
         )
 
         outcome = produce(

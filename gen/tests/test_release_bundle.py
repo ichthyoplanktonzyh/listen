@@ -486,6 +486,28 @@ class ZipappRuntimeTests(ReleaseBundleTestBase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("listen-gen", completed.stdout)
 
+    def test_zipapp_gui_marks_source_only_asr_sidecars_unavailable(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(self.artifact)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import json; from listen_gen.gui import check_toolchain; "
+                "print(json.dumps(check_toolchain()))",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        tools = json.loads(completed.stdout)
+        for provider in ("qwen3", "sensevoice"):
+            sidecar = tools[f"{provider}_asr_sidecar"]
+            self.assertFalse(sidecar["available"])
+            self.assertIn("source-checkout-only", sidecar["message"])
+
     def test_zipapp_package_bytes_match_source_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source_output = Path(tmp) / "source.listenpkg"
@@ -540,6 +562,40 @@ class ZipappRuntimeTests(ReleaseBundleTestBase):
                 terminal["package_sha256"],
                 "sha256:" + hashlib.sha256(output.read_bytes()).hexdigest(),
             )
+
+    def test_zipapp_reports_source_only_asr_sidecars_as_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            request = _capability_request_path(Path(tmp))
+            for provider in ("qwen3", "sensevoice"):
+                output = Path(tmp) / f"{provider}.listenpkg"
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        str(self.artifact),
+                        "package",
+                        "from-capability",
+                        str(request),
+                        "--output",
+                        str(output),
+                        "--provider",
+                        provider,
+                        "--machine-events",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertEqual(completed.returncode, 2, completed.stderr)
+                events = [
+                    json.loads(line)
+                    for line in completed.stdout.splitlines()
+                    if line
+                ]
+                failed = next(event for event in events if event["event"] == "failed")
+                self.assertEqual(failed["code"], "invalid_request")
+                self.assertIn("source-checkout-only", failed["message"])
+                self.assertIn("does not include", failed["message"])
+                self.assertFalse(output.exists())
 
     def test_zipapp_help_runs_without_executable_bit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1091,6 +1147,12 @@ class RuntimeIdentityVerifierTests(ReleaseBundleTestBase):
             for tools in rb.PROVIDER_REQUIREMENTS.values()
             for tool in tools
         }
+        self.assertEqual(
+            set(rb.SOURCE_CHECKOUT_ONLY_PROVIDERS), {"qwen3", "sensevoice"}
+        )
+        self.assertTrue(set(rb.SOURCE_CHECKOUT_ONLY_PROVIDERS).isdisjoint(
+            rb.PROVIDER_REQUIREMENTS
+        ))
         self.assertEqual(set(rb.TOOLCHAIN_ROLES), required)
         known_roles = set(rb.RUNTIME_ROLE_NAMES)
         for tool_id, roles in rb.TOOLCHAIN_ROLES.items():

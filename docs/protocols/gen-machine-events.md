@@ -10,7 +10,9 @@ Listen Gen, produced by `listen-gen package from-capability`. It is the supporte
 
 ## Request
 
-One request document names the exact inputs of one Generation Run:
+One request document names the media inputs and caller-owned identities of one
+Generation Run. An optional `--subtitle` file supplies a separate explicit
+SRT/VTT input, identified by its byte digest in the plan:
 
 - `material`: exact Material and Material Revision identity.
 - `edition`: caller-owned edition identity and language declaration.
@@ -20,12 +22,9 @@ One request document names the exact inputs of one Generation Run:
   to the run, each with its blob digest, size, and an absolute blob path.
   Source renditions declare their Source Asset binding (`source_asset_id`) or
   media source (`media_id`, `fingerprint`).
-- `available_resources`: already-qualified resources of the revision. A
-  Structured Reading resource is reusable only when it is a base resource
-  whose declared language and Material Revision both match the request; a
-  resource that is unknown, stale, or language-incompatible never suppresses
-  generation. Reuse embeds the reading's payload in the new package (the
-  package stays self-contained) and skips re-extraction.
+- `available_resources` does not enable resource reuse in the current media
+  producer. The run constructs its own Structured Reading from ASR or the
+  declared subtitle input; it does not embed a caller's existing reading payload.
 - `attempt_id`: caller-owned attempt identity (required for retry semantics;
   a retry creates a new attempt and never rewrites the old attempt's facts).
 - `created_at_ms`: caller-owned creation time; Gen never takes the clock, so
@@ -33,7 +32,12 @@ One request document names the exact inputs of one Generation Run:
 
 Provider selection and secrets stay outside the request: the caller selects
 ASR and alignment adapters with CLI flags. Document renditions are rejected;
-the presence of accompanying text does not make a document a supported Source.
+the presence of accompanying subtitles does not make standalone text a supported
+Source. When `--subtitle` is supplied, no ASR runs for the transcript: Gen hashes
+the file before planning and parses the matching byte snapshot. A change between
+planning and execution fails the run. The subtitle digest and assembly settings
+enter the resource's `config_sha256`; neither the plan nor package records the
+local subtitle path.
 
 ## Events
 
@@ -45,7 +49,7 @@ exactly one terminal event.
 | --- | --- | --- |
 | `protocol` | `capabilities` | Protocol capabilities and contract identities. |
 | `accepted` | `attempt_id` | The run was accepted under this attempt identity. |
-| `planned` | `plan` | The planned derivation graph: `kind`, `input_rendition_ids`, `input_resource_ids`, `provider`, `label`. |
+| `planned` | `plan` | The planned derivation graph: `kind`, `input_rendition_ids`, `provider`, `label`, plus `subtitle_sha256` for subtitle input. |
 | `running` | `stage` | A derivation or packaging stage started. |
 | `warning` | `code`, `message` | Honest abstention (for example alignment unavailability); the run continues. |
 | `completed` | `package_sha256`, renditions, `resources`, `warnings` | The artifact was committed. `package_sha256` is `null` when the capability was already satisfied and nothing was produced. |
@@ -53,7 +57,8 @@ exactly one terminal event.
 | `failed` | `code`, `message` | Terminal failure; typed codes are stable and never leak raw provider output. |
 
 Failure codes: `invalid_request`, `invalid_arguments`,
-`unsupported_capability`, `abstained`, `asr_provider_failed`, `provider_not_configured`,
+`unsupported_capability`, `abstained`, `subtitle_unavailable`,
+`asr_provider_failed`, `provider_not_configured`,
 `input_unavailable`, `input_changed`, `resource_invalid`,
 `package_validation_failed`, `internal_error`.
 
@@ -71,14 +76,20 @@ Failure codes: `invalid_request`, `invalid_arguments`,
 
 `read` on media plans `media_to_structured_reading` (ASR plus alignment).
 This text is a listening foundation, not an independent reading activity.
-`listen` is already satisfied by the source media.
-`synchronized_read_listen` requests media transcription and exact alignment.
+With `--subtitle`, the same derivation uses provider `subtitle` and its declared
+digest instead of provider `asr`; subtitle timing and configured forced alignment
+supply the corresponding audio mappings.
+`listen` is already satisfied by the source media. `watch` requires a video
+rendition; an audio-only request is unsupported.
+`synchronized_read_listen` requests media transcription and exact alignment,
+or subtitle-based text and alignment when `--subtitle` is supplied.
 Document-to-reading and document-to-listening derivations are unavailable.
 
 ## CLI
 
 ```
 listen-gen package from-capability REQUEST --output OUT \
+  [--subtitle /path/to/track.srt] \
   [--provider none|fixture|command|qwen3|sensevoice|whisper-cpp] [--fixture P] ... \
   [--machine-events]
 ```

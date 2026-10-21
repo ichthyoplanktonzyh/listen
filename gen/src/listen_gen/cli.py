@@ -29,11 +29,13 @@ from .media import FfmpegAudioPreprocessor
 from .package import ConversionError
 from .plan import UnsupportedCapability
 from .produce import ProduceConfig, ProductionFailure, produce
+from .package_v3 import sha256_of_bytes
 from .protocol_v2 import (
     MachineEventV2Emitter,
     protocol_capabilities_v2,
 )
 from .whisper_cpp import WhisperCppAsrAdapter
+from .subtitle import read_subtitle_source
 
 
 class CancellationRequested(BaseException):
@@ -62,6 +64,12 @@ class _CancellationState:
 
     def requested(self) -> bool:
         return self.signal_number is not None
+
+
+def _source_checkout_sidecar(name: str) -> Path | None:
+    """Resolve an optional wrapper shipped beside a full source checkout."""
+    candidate = Path(__file__).resolve().parents[2] / "tools" / name
+    return candidate if candidate.is_file() else None
 
 
 @contextlib.contextmanager
@@ -120,7 +128,7 @@ def parser(
         default="none",
         choices=["none", "fixture", "command", "qwen3", "sensevoice", "whisper-cpp"],
         help="ASR provider for media-to-read derivations "
-        "(qwen3 default / sensevoice fast / whisper-cpp compatibility)",
+        "(qwen3 and sensevoice are source-checkout-only; whisper-cpp is a released provider)",
     )
     produce.add_argument("--fixture", type=Path, help="normalized JSON for the fixture ASR provider")
     produce.add_argument("--command", help="external ASR wrapper executable; no shell is used")
@@ -132,9 +140,14 @@ def parser(
     )
     produce.add_argument("--command-timeout-seconds", type=float, default=3600.0)
     produce.add_argument("--asr-timeout-seconds", type=float, default=3600.0, help="timeout for the qwen3/sensevoice ASR sidecars")
-    # Qwen3-ASR (default provider) sidecar options.
+    # Qwen3-ASR source-checkout-only sidecar options.
     produce.add_argument("--qwen3-python", type=Path, default=Path(sys.executable), help="python interpreter that runs the qwen3 ASR sidecar")
-    produce.add_argument("--qwen3-sidecar", type=Path, help="path to tools/qwen3_asr_wrapper.py")
+    produce.add_argument(
+        "--qwen3-sidecar",
+        type=Path,
+        default=_source_checkout_sidecar("qwen3_asr_wrapper.py"),
+        help="source-checkout-only sidecar path; unavailable in the released zipapp",
+    )
     produce.add_argument("--qwen3-model-id", default="Qwen/Qwen3-ASR-0.6B")
     produce.add_argument("--qwen3-forced-aligner-model-id", default="Qwen/Qwen3-ForcedAligner-0.6B")
     produce.add_argument("--qwen3-language", default="auto")
@@ -142,7 +155,12 @@ def parser(
     produce.add_argument("--qwen3-dtype", default="auto")
     # SenseVoice (fast / CPU provider) sidecar options.
     produce.add_argument("--sensevoice-python", type=Path, default=Path(sys.executable), help="python interpreter that runs the sensevoice ASR sidecar")
-    produce.add_argument("--sensevoice-sidecar", type=Path, help="path to tools/sensevoice_asr_wrapper.py")
+    produce.add_argument(
+        "--sensevoice-sidecar",
+        type=Path,
+        default=_source_checkout_sidecar("sensevoice_asr_wrapper.py"),
+        help="source-checkout-only sidecar path; unavailable in the released zipapp",
+    )
     produce.add_argument("--sensevoice-model-id", default="iic/SenseVoiceSmall")
     produce.add_argument("--sensevoice-language", default="auto", choices=["auto", "zh", "en", "yue", "ja", "ko"])
     produce.add_argument("--sensevoice-device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
@@ -315,7 +333,11 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     if args.provider == "qwen3":
         from .asr import Qwen3AsrAdapter
         if args.qwen3_sidecar is None:
-            raise ConversionError("--qwen3-sidecar is required for the qwen3 ASR provider")
+            raise ConversionError(
+                "qwen3 is source-checkout-only; this release does not include "
+                "tools/qwen3_asr_wrapper.py. Run from a full source checkout or "
+                "choose fixture, command, or whisper-cpp."
+            )
         return (
             PreprocessingAsrAdapter(
                 Qwen3AsrAdapter(
@@ -338,7 +360,11 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     if args.provider == "sensevoice":
         from .asr import SenseVoiceAsrAdapter
         if args.sensevoice_sidecar is None:
-            raise ConversionError("--sensevoice-sidecar is required for the sensevoice ASR provider")
+            raise ConversionError(
+                "sensevoice is source-checkout-only; this release does not include "
+                "tools/sensevoice_asr_wrapper.py. Run from a full source checkout "
+                "or choose fixture, command, or whisper-cpp."
+            )
         return (
             PreprocessingAsrAdapter(
                 SenseVoiceAsrAdapter(
@@ -613,6 +639,9 @@ def _run(
     writer: MachineEventV2Emitter | None,
 ) -> dict[str, Any]:
     request = CapabilityRequest.from_json_file(args.request)
+    subtitle_sha256 = None
+    if args.subtitle is not None:
+        subtitle_sha256 = sha256_of_bytes(read_subtitle_source(args.subtitle))
     if writer is not None:
         writer.accepted(request.attempt_id or _default_attempt_id(request))
 
@@ -626,7 +655,7 @@ def _run(
 
         from .plan import plan as plan_request
 
-        production_plan = plan_request(request)
+        production_plan = plan_request(request, subtitle_sha256=subtitle_sha256)
         writer.planned(production_plan.describe())
     else:
         check_cancelled = None
@@ -637,6 +666,7 @@ def _run(
         asr_preprocessor=asr_preprocessor,
         rich=_build_rich(args, progress=progress),
         subtitle=args.subtitle,
+        subtitle_sha256=subtitle_sha256,
     )
     outcome = produce(
         request,

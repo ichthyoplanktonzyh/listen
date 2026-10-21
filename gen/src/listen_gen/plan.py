@@ -10,12 +10,13 @@ empty plan (a minimal package still documents the available source), and a
 capability that no supported derivation can produce raises
 :class:`UnsupportedCapability` before anything runs.
 
-The only derivation is media-to-structured-reading. Listen and watch are
-already satisfied by a declared audio or video rendition.
+The only derivation is media-to-structured-reading. Listen is satisfied by
+audio or video media; watch requires video media.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -36,6 +37,9 @@ class DerivationKind(str, Enum):
     MEDIA_READ = "media_to_structured_reading"
 
 
+_SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
 @dataclass(frozen=True)
 class Derivation:
     """One planned step: exact inputs, one provider-kind requirement.
@@ -47,14 +51,18 @@ class Derivation:
     input_rendition_ids: tuple[str, ...]
     provider: str
     label: str
+    subtitle_sha256: str | None = None
 
     def describe(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "kind": self.kind.value,
             "input_rendition_ids": list(self.input_rendition_ids),
             "provider": self.provider,
             "label": self.label,
         }
+        if self.subtitle_sha256 is not None:
+            result["subtitle_sha256"] = self.subtitle_sha256
+        return result
 
 
 @dataclass(frozen=True)
@@ -85,25 +93,38 @@ def _media_input(request: CapabilityRequest) -> AvailableMediaRendition:
     )
 
 
-def plan(request: CapabilityRequest) -> ProductionPlan:
+def plan(
+    request: CapabilityRequest,
+    *,
+    subtitle_sha256: str | None = None,
+) -> ProductionPlan:
     """Plan the smallest derivation graph for one capability request.
 
     Deterministic and side-effect free. Raises :class:`UnsupportedCapability`
     when no supported derivation can produce the requested capability.
-    Listen and watch require no derivation from an existing media source.
+    Listen requires audio or video media; watch requires video media. Both
+    capabilities are already satisfied when their required media is present.
     """
     capability = request.requested_capability
     derivations: list[Derivation] = []
 
     if capability == "read":
         if request.media_renditions:
+            if subtitle_sha256 is not None and not _SHA256_RE.fullmatch(subtitle_sha256):
+                raise ConversionError("subtitle_sha256 must be a lowercase sha256 id")
             rendition = _media_input(request)
+            subtitle_mode = subtitle_sha256 is not None
             derivations.append(
                 Derivation(
                     kind=DerivationKind.MEDIA_READ,
                     input_rendition_ids=(rendition.rendition_id,),
-                    provider="asr",
-                    label="transcribe and align the media",
+                    provider="subtitle" if subtitle_mode else "asr",
+                    label=(
+                        "structure the media from the supplied SRT/VTT subtitle track"
+                        if subtitle_mode
+                        else "transcribe and align the media"
+                    ),
+                    subtitle_sha256=subtitle_sha256,
                 )
             )
         else:
@@ -116,19 +137,27 @@ def plan(request: CapabilityRequest) -> ProductionPlan:
         raise UnsupportedCapability("listen requires audio or video media")
 
     if capability == "watch":
-        if request.media_renditions:
-            return ProductionPlan((), capability)
-        raise UnsupportedCapability("watch requires audio or video media")
+        if not any(entry.media_kind == "video" for entry in request.media_renditions):
+            raise UnsupportedCapability("watch requires video media")
+        return ProductionPlan((), capability)
 
     if capability == "synchronized_read_listen":
         if request.media_renditions:
+            if subtitle_sha256 is not None and not _SHA256_RE.fullmatch(subtitle_sha256):
+                raise ConversionError("subtitle_sha256 must be a lowercase sha256 id")
             rendition = _media_input(request)
+            subtitle_mode = subtitle_sha256 is not None
             derivations.append(
                 Derivation(
                     kind=DerivationKind.MEDIA_READ,
                     input_rendition_ids=(rendition.rendition_id,),
-                    provider="asr",
-                    label="transcribe, align, and structure the media",
+                    provider="subtitle" if subtitle_mode else "asr",
+                    label=(
+                        "structure the media from the supplied SRT/VTT subtitle track"
+                        if subtitle_mode
+                        else "transcribe, align, and structure the media"
+                    ),
+                    subtitle_sha256=subtitle_sha256,
                 )
             )
             return ProductionPlan(tuple(derivations), capability)

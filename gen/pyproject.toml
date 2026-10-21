@@ -18,17 +18,19 @@ align = [
     "librosa>=0.10",
     "torch>=2.1",
 ]
-# Default ASR provider: Qwen3-ASR-0.6B, run by tools/qwen3_asr_wrapper.py. Same
-# runtime as the forced aligner (also needs a Transformers build shipping the
-# Qwen3-ASR classes).
+# Source-checkout-only ASR provider: Qwen3-ASR-0.6B, run by
+# tools/qwen3_asr_wrapper.py. The released zipapp does not carry this sidecar.
+# Same runtime as the forced aligner (also needs a Transformers build shipping
+# the Qwen3-ASR classes).
 asr-qwen = [
     "qwen-asr>=0.1",
     "soundfile>=0.12",
     "torch>=2.1",
 ]
-# Fast / CPU ASR provider: SenseVoiceSmall via FunASR, run by
-# tools/sensevoice_asr_wrapper.py.  FunASR pulls the model from ModelScope, so
-# the default model id is the FunASR/ModelScope id ``iic/SenseVoiceSmall``.
+# Source-checkout-only ASR provider: SenseVoiceSmall via FunASR, run by
+# tools/sensevoice_asr_wrapper.py. The released zipapp does not carry this
+# sidecar. FunASR pulls the model from ModelScope, so the default model id is
+# the FunASR/ModelScope id ``iic/SenseVoiceSmall``.
 asr-sensevoice = [
     "funasr>=1.1",
     "torch>=2.1",

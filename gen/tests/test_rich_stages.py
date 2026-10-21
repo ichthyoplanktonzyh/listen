@@ -22,7 +22,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from test_produce import media_rendition, run_cli  # noqa: E402
 from listen_gen.asr import AsrSegment, AsrTranscript, AsrWord, _tokens  # noqa: E402
-from listen_gen.produce import ProduceConfig  # noqa: E402
+from listen_gen.capability import CapabilityRequest  # noqa: E402
+from listen_gen.package_v3 import sha256_of_bytes  # noqa: E402
+from listen_gen.produce import ProduceConfig, ProductionFailure, produce  # noqa: E402
 from listen_gen.rich_stages import RichStages  # noqa: E402
 
 
@@ -684,6 +686,7 @@ class RichAlignedMediaTests(unittest.TestCase):
             "--subtitle", str(srt),
             "--aligner", "fixture", "--aligner-fixture", str(FIXTURES / "sample.alignment.json"),
             "--sense-groups", "baseline",
+            "--machine-events",
         ])
         self.assertEqual(result.returncode, 0, result.stderr)
         kinds = resource_kinds(output)
@@ -692,6 +695,12 @@ class RichAlignedMediaTests(unittest.TestCase):
         self.assertIn("word_timeline", kinds)
         self.assertIn("sense_group_analysis", kinds)
         resources = package_resources(output)
+        events = [json.loads(line) for line in result.stdout.splitlines() if line]
+        planned = next(event["plan"] for event in events if event.get("event") == "planned")
+        derivation = planned["derivations"][0]
+        self.assertEqual(derivation["provider"], "subtitle")
+        self.assertEqual(derivation["subtitle_sha256"], sha256_of_bytes(srt.read_bytes()))
+        self.assertNotIn(str(srt), json.dumps(planned))
         alignment = next(
             r for r in resources
             if r["descriptor"]["kind"] == "anchor_time_alignment"
@@ -706,6 +715,58 @@ class RichAlignedMediaTests(unittest.TestCase):
             all(entry["timing_source"] == "forced_aligned" for entry in words)
         )
         self.assertEqual(words[0]["start_ms"], 100)
+        first_reading = next(
+            r for r in resources if r["descriptor"]["kind"] == "structured_reading"
+        )
+        first_config_identity = first_reading["descriptor"]["provenance"]["config_sha256"]
+
+        changed_srt = self.directory / "changed-track.srt"
+        changed_srt.write_text(
+            srt.read_text(encoding="utf-8").replace("00:00:00,100", "00:00:00,110"),
+            encoding="utf-8",
+        )
+        changed_output = self.directory / "changed-package.zip"
+        changed_result = self._run(changed_output, request_path, [
+            "--subtitle", str(changed_srt), "--machine-events",
+        ])
+        self.assertEqual(changed_result.returncode, 0, changed_result.stderr)
+        changed_events = [
+            json.loads(line) for line in changed_result.stdout.splitlines() if line
+        ]
+        changed_plan = next(
+            event["plan"] for event in changed_events if event.get("event") == "planned"
+        )
+        self.assertNotEqual(planned, changed_plan)
+        changed_reading = next(
+            r for r in package_resources(changed_output)
+            if r["descriptor"]["kind"] == "structured_reading"
+        )
+        self.assertNotEqual(
+            first_config_identity,
+            changed_reading["descriptor"]["provenance"]["config_sha256"],
+        )
+
+    def test_subtitle_change_after_planning_fails_without_a_package(self) -> None:
+        srt = self.directory / "changing-track.srt"
+        srt.write_text(
+            "1\n00:00:00,100 --> 00:00:01,200\nListen carefully!\n",
+            encoding="utf-8",
+        )
+        expected_sha256 = sha256_of_bytes(srt.read_bytes())
+        srt.write_text(
+            "1\n00:00:00,100 --> 00:00:01,200\nListen very carefully!\n",
+            encoding="utf-8",
+        )
+        output = self.directory / "must-not-exist.zip"
+        request = CapabilityRequest.from_document(request_media())
+        with self.assertRaises(ProductionFailure) as caught:
+            produce(
+                request,
+                output,
+                config=ProduceConfig(subtitle=srt, subtitle_sha256=expected_sha256),
+            )
+        self.assertEqual(caught.exception.code, "input_changed")
+        self.assertFalse(output.exists())
 
     def test_subtitle_fragments_merge_before_forced_alignment(self) -> None:
         first = "Send us their name, photo, and a couple lines"
