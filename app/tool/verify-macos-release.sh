@@ -24,15 +24,91 @@ isolated_home="$tmp/home"
 isolated_support="$tmp/support"
 minimal_path="/usr/bin:/bin:/usr/sbin:/sbin"
 pid=""
+core_sidecar_path=""
+diagnostics_preserved=0
+
+core_sidecar_pid_matches() {
+  local core_pid="$1"
+  local command_line
+  command_line="$(ps -p "$core_pid" -o command= 2>/dev/null || true)"
+  [[ "$command_line" == "$core_sidecar_path" || "$command_line" == "$core_sidecar_path "* ]]
+}
+
+core_sidecar_pids() {
+  local app_pid="$1"
+  local candidates candidate
+  candidates="$(
+    {
+      pgrep -P "$app_pid" 2>/dev/null || true
+      lsof -nP -t "$tmp/mvp.sqlite.lock" 2>/dev/null || true
+    } | sort -u
+  )"
+  for candidate in $candidates; do
+    if core_sidecar_pid_matches "$candidate"; then
+      printf '%s\n' "$candidate"
+    fi
+  done
+}
+
+wait_for_core_shutdown() {
+  local core_pids="$1"
+  local timeout_seconds="$2"
+  python3 "$root/tool/wait_for_core_shutdown.py" \
+    --lock-file "$tmp/mvp.sqlite.lock" \
+    --pids "$core_pids" \
+    --timeout-seconds "$timeout_seconds"
+}
+
+stop_app() {
+  [[ -n "$pid" ]] || return 0
+
+  local app_pid="$pid"
+  local core_pids core_pid
+  core_pids="$(core_sidecar_pids "$app_pid")"
+
+  # Match the App's graceful sidecar shutdown before terminating the desktop
+  # process. The PIDs came from its process children or this smoke's unique
+  # database-lock file and are checked against the extracted sidecar path.
+  for core_pid in $core_pids; do
+    if core_sidecar_pid_matches "$core_pid"; then
+      kill -INT "$core_pid" 2>/dev/null || true
+    fi
+  done
+  if kill -0 "$app_pid" 2>/dev/null; then
+    kill "$app_pid" 2>/dev/null || true
+    wait "$app_pid" 2>/dev/null || true
+  fi
+
+  if wait_for_core_shutdown "$core_pids" 8; then
+    pid=""
+    return 0
+  fi
+
+  # A stuck sidecar is still scoped by the same unique PID/path checks. Do not
+  # kill another Listen instance or any process that merely shares its name.
+  for core_pid in $core_pids; do
+    if core_sidecar_pid_matches "$core_pid"; then
+      kill -KILL "$core_pid" 2>/dev/null || true
+    fi
+  done
+  if wait_for_core_shutdown "$core_pids" 2; then
+    pid=""
+    return 0
+  fi
+  echo "Could not stop this smoke's Core sidecar or release its database lock." >&2
+  return 1
+}
 
 cleanup() {
   local status=$?
   local cleanup_status=0
   trap - EXIT
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-    pkill -P "$pid" 2>/dev/null || true
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
+  if [[ -n "$pid" ]] && ! stop_app; then
+    echo "Packaged App/Core teardown did not complete cleanly." >&2
+    status=1
+  fi
+  if [[ "$status" -ne 0 && "$diagnostics_preserved" -eq 0 ]] && declare -F preserve_audio_smoke_diagnostics >/dev/null; then
+    preserve_audio_smoke_diagnostics || true
   fi
   if rm -rf "$tmp"; then
     :
@@ -52,15 +128,6 @@ python3 "$root/tool/backend_artifacts.py" --lock "$backend_lock" verify \
 python3 "$root/tool/listen_gen_artifacts.py" --lock "$gen_lock" verify \
   --manifest "$gen_manifest"
 
-stop_app() {
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-    pkill -P "$pid" 2>/dev/null || true
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-  fi
-  pid=""
-}
-
 preserve_audio_smoke_diagnostics() {
   local diagnostics
   diagnostics="$(mktemp -d "${TMPDIR:-/tmp}/listen-audio-smoke-timeout.XXXXXX")" ||
@@ -78,6 +145,7 @@ preserve_audio_smoke_diagnostics() {
     fi
   done
   echo "Isolated audio smoke diagnostics preserved at: $diagnostics" >&2
+  diagnostics_preserved=1
 }
 
 fail() {
@@ -135,6 +203,7 @@ ditto -x -k "$archive" "$tmp/package"
 cd "$tmp/package"
 [[ -x "$app/Contents/MacOS/api-http" ]] ||
   fail "release archive does not contain the API sidecar"
+core_sidecar_path="$(cd "$app/Contents/MacOS" && pwd -P)/api-http"
 
 if [[ -n "$release_version$release_channel$source_commit$minimum_macos$release_build_number" ]]; then
   [[ -n "$release_version" && -n "$release_channel" && -n "$source_commit" && -n "$minimum_macos" && -n "$release_build_number" ]] ||
@@ -277,7 +346,9 @@ if ! python3 "$root/tool/wait_for_sqlite_value.py" \
   --timeout-seconds 20 \
   --interval-seconds 0.2 \
   --description "audio media item count"; then
-  stop_app
+  if ! stop_app; then
+    echo "Audio smoke timed out and Core teardown also failed." >&2
+  fi
   preserve_audio_smoke_diagnostics ||
     echo "Could not preserve isolated audio smoke diagnostics." >&2
   fail "audio media item registration did not reach 2 within 20 seconds"
@@ -291,4 +362,5 @@ assert_sqlite_value 'SELECT count(*) FROM media_items;' "2" "audio media item co
 python3 "$root/tool/listen_gen_artifacts.py" --lock "$gen_lock" verify \
   --bundle-dir "$app/Contents/Resources/runtime/listen-gen"
 codesign --verify --deep --strict "$app"
+stop_app
 echo "Packaged macOS MVP smoke test passed."
