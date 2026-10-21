@@ -26,7 +26,7 @@ void openColdStartMarkingFlow({
   final l = AppLocalizations.of(context);
   final trackId = subtitleController.primaryTrack?.id;
   final language = subtitleController.primaryTrack?.language;
-  // Unavailable State (CONTEXT.md): the cold-start button renders whenever
+  // Honest unavailable state: the cold-start button renders whenever
   // the content-fit card does, so each missing prerequisite names its own
   // recovery action instead of leaving a dead button.
   if (createViewModel == null) {

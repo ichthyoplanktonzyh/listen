@@ -33,7 +33,7 @@ typedef ManagedStoreLocation = ({String path, StorageLocationState state});
 /// — every entry is a verified copy named by its SHA-256, with no extension —
 /// and it holds what the learner kept. A download is neither: its digest is
 /// unknown until the bytes finish arriving, and acquisition is not retention
-/// (CONTEXT.md Retention Decision). Two locations keep the filesystem saying
+/// (explicit learner retention). Two locations keep the filesystem saying
 /// the same thing the app says.
 typedef DownloadsLocation = ({String path, StorageLocationState state});
 

@@ -64,3 +64,15 @@ listening and playback do not require Python or a Whisper model. Hosted
 generation providers may need their own credentials and are optional. The app
 stores its managed data in the user's Application Support directory; installing
 the preview does not require deleting existing Listen data.
+
+## Third-party playback components
+
+The vendored FVP plugin has its own [BSD license](../../app/third_party/fvp/LICENSE).
+The macOS dependency lock separately selects the MDK binary SDK (`0.36.0` in
+[Podfile.lock](../../app/macos/Podfile.lock)). Its published terms are in the
+[versioned MDK podspec](https://github.com/wang-bin/mdk-sdk/blob/v0.36.0/mdk.podspec)
+and the [SDK license information](https://github.com/wang-bin/mdk-sdk#license).
+FVP's license is not a license statement for every SDK dependency. Preserve
+the notices supplied with the actual bundled components. The separately
+packaged Whisper/FFmpeg command-line tools have their own
+[runtime notices](../../core/third_party/runtime/THIRD_PARTY_NOTICES.md).

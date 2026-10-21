@@ -1,14 +1,13 @@
 # Listen Content Package v3
 
-Content Package v3 is the Phase 1 canonical release contract. One canonical
+Content Package v3 is the canonical package release contract. One canonical
 `release.json` fixes exactly one Learning Edition of exactly one Material
 Revision and names an exact set of Document and Media Renditions and
 Learning Resources. Release, resource, rendition, and blob identity are
 distinct and independent: no archive path or URL participates in any of them.
 
-V1 and v2 remain separate, unchanged historical contracts (`../v1`,
-`../v2`). V3 never reinterprets their semantics, and no older field is reused
-with a different meaning here.
+The [v2 contract](../v2/README.md) is documented separately. V3 does not
+reinterpret its schema or field meanings.
 
 ## Contract files
 
@@ -174,7 +173,6 @@ or absent.
 - `translation` is an Assistance Resource anchored to an exact Base Resource.
   In the v3 active path its base must be a `structured_reading` resource and
   each `source_segment_id` must reference one of its sentence anchors.
-  Phase 1 does not add a translation provider.
 
 ## Committed golden examples
 

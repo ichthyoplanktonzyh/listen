@@ -63,7 +63,7 @@ import 'package:llplayer_next/theme/listen_theme.dart';
 /// generated on **macOS (arm64, Apple Silicon), Flutter 3.44.1 / Impeller**;
 /// they are the reference for a macOS-first desktop app and are *not* expected
 /// to match a Linux CI runner byte for byte. Do not "fix" a foreign-platform
-/// diff by re-recording. See `docs/development/golden-visual-regression.md`.
+/// diff by re-recording. See the root `docs/development/app-ui.md`.
 
 /// Fixed surfaces for golden scenes.
 ///

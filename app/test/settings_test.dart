@@ -21,8 +21,7 @@ void main() {
   );
 
   test('defaults theme mode to dark (design charter: 暗色为家)', () {
-    // Fresh installs open into the dimmed room — see
-    // design-notes/listen-design-charter.md and #29.
+    // Fresh installs open into the dimmed room.
     expect(const AppSettings().themeMode, 'dark');
     // A saved file without theme_mode (never persisted one) also gets dark.
     final settings = AppSettings.fromJson({'version': 8});

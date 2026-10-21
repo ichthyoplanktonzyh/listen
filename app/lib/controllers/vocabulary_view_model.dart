@@ -15,9 +15,7 @@ import '../state/store.dart';
 import 'occurrence_media_resolver.dart';
 
 /// Everything the listening dictionary renders from, as one immutable
-/// snapshot. Field order and meaning follow
-/// `design-notes/vocabulary-behavior-contract.md` §1 so the two can be read
-/// side by side.
+/// snapshot.
 ///
 /// `==` is deliberately **not** overridden: [Store.update] skips a
 /// notification when the new state equals the old one, and identity equality

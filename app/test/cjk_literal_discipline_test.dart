@@ -57,7 +57,7 @@ final _han = RegExp(r'[一-鿿㐀-䶿]');
 
 /// Chinese text that stays Chinese in an English interface, because it is not
 /// interface copy at all. Each entry is a proper name, and the reasons are
-/// recorded once in `docs/development/ui-terminology.md`:
+/// recorded once in the root `docs/development/app-ui.md`:
 ///
 /// - a language names itself in its own script, in every locale (`中文` in an
 ///   `en` menu of subtitle languages is correct, not a missed translation);

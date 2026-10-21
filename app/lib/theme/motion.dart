@@ -1,14 +1,13 @@
 import 'package:flutter/animation.dart';
 
-/// The charter's motion language (#28 / #32): content arrives by "powering
-/// on / settling", the shell leaves by "receding" — never by bouncing.
+/// Content arrives by powering on and settling; the shell leaves by receding,
+/// never by bouncing.
 ///
-/// Durations and curves mirror the owner-approved motion spec
-/// (`design-notes/listen-motion.html`). Widgets reference these instead of
-/// inventing literals so the whole app breathes at one tempo.
+/// Durations and curves are centralized here so the whole app moves at one
+/// tempo instead of inventing local literals.
 ///
-/// Forbidden by the spec: bounce / rubber-band / overshoot, celebratory
-/// effects, decorative spinners, attention-grabbing motion. All animation
+/// Avoid bounce, rubber-band or overshoot, celebratory effects, decorative
+/// spinners, and attention-grabbing motion. All animation
 /// sites must respect `MediaQuery.disableAnimationsOf` (reduce motion) by
 /// dropping to zero duration.
 abstract final class ListenMotion {

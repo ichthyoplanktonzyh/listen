@@ -25,10 +25,9 @@ import 'package:llplayer_next/widgets/vocabulary/vocabulary_gap_panel.dart';
 ///
 /// These pin CURRENT behaviour ahead of the `LexicalRepository` +
 /// `VocabularyViewModel` extraction, so that refactor can be shown to preserve
-/// what the user sees. Several of them pin behaviour that
-/// `design-notes/vocabulary-behavior-contract.md` records as a suspected
-/// defect; each such test names the defect in its own comment, and its name
-/// states what happens today rather than what ought to.
+/// what the user sees. Several pin suspected defects; each such test names the
+/// behavior in its own comment, and its name states what happens today rather
+/// than what ought to.
 ///
 /// Same pattern as the neighbouring vocabulary tests: a fake **transport**
 /// feeding a real [LocalApi], never a fake `LocalApi`.

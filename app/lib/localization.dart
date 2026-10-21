@@ -3448,7 +3448,7 @@ class AppLocalizations {
       // the Chinese interface read 「Listening Inbox」 next to 「泛听进行中」 and
       // 「还没有标记的泛听片段」. It is a feature surface, not a product name —
       // 泛听 is the word the rest of this block already uses for it. See
-      // docs/development/ui-terminology.md for which terms stay English.
+      // Root docs/development/app-ui.md lists terms that stay English.
       'listeningInbox': '泛听收集箱',
       'listeningInboxEmpty': '还没有标记的泛听片段。',
       'comprehensionReportPrompt': '这次泛听理解得怎么样？',

@@ -1667,7 +1667,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_openingRealtimeConversation) return;
     _openingRealtimeConversation = true;
     try {
-      // Unavailable State (CONTEXT.md): the sidebar conversation entry is a
+      // Honest unavailable state: the sidebar conversation entry is a
       // user click — a silent return left it as a dead button, so name the
       // reason instead.
       if (!widget.platformCapabilities.isMacOS) {

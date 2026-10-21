@@ -232,7 +232,7 @@ class ResourceActionsCoordinator {
 
   Future<void> archiveSubtitleResource(SubtitleTrack track) async {
     if (!repository.isAvailable) {
-      // Unavailable State (CONTEXT.md): all the panel row actions below are
+      // Honest unavailable state: all the panel row actions below are
       // direct clicks, so a missing core is reported, never swallowed.
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;

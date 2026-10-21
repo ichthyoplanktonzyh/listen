@@ -59,7 +59,7 @@ class HuntingActionsCoordinator {
     if (!_repository.isAvailable ||
         !extensiveListening.repositoryAvailable ||
         mediaId == null) {
-      // Unavailable State (CONTEXT.md): the toggle is user-triggered, so name
+      // Honest unavailable state: the toggle is user-triggered, so name
       // the cause and the recovery action instead of silently doing nothing.
       player.setStatus(text('statusOpenMediaAndCoreFirst'));
       return;

@@ -1,145 +1,41 @@
-# Test Data
+# Core test data
 
-> **Last updated:** 2026-06-13
-> **Status:** active
+These files are inputs to existing tests and verification tools. They do not
+set the current project scope or establish that a feature has passed product
+acceptance. Shared checks are in [DEVELOPMENT.md](../../DEVELOPMENT.md).
 
-## Directory Structure
+## Inputs
 
-```
-testdata/
-├── README.md                  # This file — fixture catalog
-├── generate.sh                # Regenerates all generated/ media files
-│
-├── asr/                       # ASR/transcription fixtures
-│   └── sample-output.json     # Hand-crafted whisper.cpp -ojf output (3 segments)
-├── chunk/                     # Chunk partition calibration fixtures
-│   ├── v2-golden.json         # V2 acoustic-first partition golden corpus
-│   ├── v3-rich-acoustic.json  # C3 duration and hesitation evidence corpus
-│   └── v4-learned-prosodic.json # C4 optional learned-provider corpus
-│
-├── subtitles/                 # Subtitle parsing fixtures
-│   ├── timeline.srt           # SRT with gaps, overlap, punctuation, apostrophe, hyphen
-│   └── timeline.vtt           # Same timeline in WebVTT format
-│
-├── pronunciation/             # Pronunciation analysis fixtures
-│   └── en-us-baseline.tsv     # 100-sentence fixed en-US baseline for rule validation
-├── syntactic-analysis/         # Phase 3.9.1 mapping + ambiguity preregistration
-│   ├── mapping-contract-v1.json
-│   ├── ambiguity-dev-v1.jsonl
-│   └── ambiguity-validation-v1.jsonl
-├── phonetic-analysis/          # M2.0 Phase 0 research catalog and scorer smoke data
-│   ├── evaluation-catalog-v1.tsv
-│   ├── candidates-v1.json
-│   ├── reference-smoke-v1.jsonl
-│   ├── prediction-smoke-v1.jsonl
-│   └── prediction-smoke-errors-v1.jsonl
-│
-└── generated/                 # Synthetic media (gitignored, rebuild with generate.sh)
-    ├── SHA256SUMS             # Checksums of generated files
-    ├── sample-video.mp4       # 10s color bars + sine-wave audio
-    ├── sample-audio.m4a       # 10s sine-wave audio-only
-    ├── multi-audio.mkv        # Video with two distinguishable audio tracks
-    ├── long-timeline.srt      # 2,100 subtitle cues
-    └── embedded-text-subtitle.mkv  # MKV with embedded text subtitle track
+- `asr/`, `subtitles/`, and `pronunciation/`: deterministic parser/analysis inputs.
+- `chunk/` and `word-timelines/`: existing timeline/scoring regression fixtures.
+- `phonetic-analysis/`: scorer and adapter inputs, including synthetic data and
+  a source/license registry. Synthetic examples are not quality evidence.
+- [Syntactic analysis](syntactic-analysis/README.md): alignment/mapping and locked
+  validation inputs.
+- [Content packages](content-package/README.md): package import/idempotency data.
+- [Sound-line media metadata](sound-line-real-media/README.md): manifests and
+  Markdown QA inputs checked by the media verifier.
+- [Rhythm QA](rhythm-frame-qa/README.md) and
+  [prosody fixtures](rhythm-prosody-benchmarks/README.md): scoring examples.
+
+Keep copyrighted media, restricted corpora, credentials, and generated full
+transcripts out of Git. Source/license records in fixture manifests remain
+part of the input provenance.
+
+## Generated media
+
+From `core/`, with FFmpeg available:
+
+```sh
+bash testdata/generate.sh
 ```
 
-## Fixture Catalog
+This produces ignored synthetic media and checksums under `testdata/generated/`.
+Tests use crate-relative paths or `include_str!`/`include_bytes!`; do not move
+an input without updating its actual consumers.
 
-### ASR Fixtures
-
-| File | Size | Used By | Description |
-|------|------|---------|-------------|
-| `asr/sample-output.json` | ~2 KB | `speech-analysis/tests/asr_timing_integration_test.rs` | Compact real-structure whisper `-ojf` output exercising special-token filtering, non-empty word intervals, subword merge, and unavailable lexical-token fallback |
-
-### Subtitle Fixtures
-
-| File | Size | Used By | Description |
-|------|------|---------|-------------|
-| `subtitles/timeline.srt` | ~400 B | `subtitle-core/src/lib.rs` (6 tests), `persistence-sqlite/src/lib.rs` (17 tests), `persistence-sqlite/tests/persistence_integration_test.rs` (6 tests), `api-http/src/lib.rs` (6 tests) | 4-cue SRT with gaps, overlap, punctuation, apostrophe, hyphen, and line-break scenarios |
-| `subtitles/timeline.vtt` | ~500 B | `subtitle-core/src/lib.rs` (6 tests) | WebVTT equivalent of timeline.srt |
-
-### Chunk Fixtures
-
-| File | Size | Used By | Description |
-|------|------|---------|-------------|
-| `chunk/v2-golden.json` | ~3 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | Acoustic-first V2 calibration cases covering fast speech, hesitation, inferred/trusted punctuation, moderate pauses, fixed expressions, and long subtitles |
-| `chunk/v3-rich-acoustic.json` | ~2 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | C3 cases proving pre-boundary lengthening can split without a pause, filled-pause evidence can suppress likely hesitation gaps, and missing providers degrade to C2 |
-| `chunk/v4-learned-prosodic.json` | ~2 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | C4 cases proving the optional learned provider changes ambiguous boundaries, leaves ordinary delivery unchanged, and defers to decisive rule evidence |
-
-### Pronunciation Fixtures
-
-| File | Size | Used By | Description |
-|------|------|---------|-------------|
-| `pronunciation/en-us-baseline.tsv` | ~10 KB | `speech-analysis/src/lib.rs` (1 test) | 100-sentence baseline mapping words to expected ARPAbet/IPA/stress. Validates the CMUdict lookup + deterministic fallback pipeline |
-
-### Phonetic Analysis Research Fixtures
-
-| File | Used By | Description |
-|------|---------|-------------|
-| `phonetic-analysis/evaluation-catalog-v1.tsv` | `scripts/verify-m20-phase0.sh` | Fixed 60-slot M2.0 evaluation design. Slots remain planned until licensed audio and human-verified actual-phone references exist. |
-| `phonetic-analysis/candidates-v1.json` | Phase 0 research | Candidate status, licensing constraints, and source registry. |
-| `phonetic-analysis/reference-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic scorer reference; not quality evidence. |
-| `phonetic-analysis/prediction-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic perfect prediction used to verify metric calculations. |
-| `phonetic-analysis/prediction-smoke-errors-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic errors used to verify PER and failed release-gate calculations. |
-| `phonetic-analysis/input-manifest-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Structural external-input manifest smoke fixture; not real audio or benchmark evidence. |
-| `phonetic-analysis/zipa-ctc-frames-smoke-v1.json` | `scripts/phonetic-research-adapter.py` | Synthetic CTC frame IDs and confidence values for experimental timeline projection smoke coverage. |
-| `phonetic-analysis/zipa-tokens-smoke-v1.txt` | `scripts/phonetic-research-adapter.py` | Synthetic token inventory paired with the ZIPA CTC frame projection smoke fixture. |
-| `phonetic-analysis/zipa-research-requirements-v1.txt` | `scripts/setup-zipa-research.sh` | Pinned isolated ZIPA research dependencies; not application runtime dependencies. |
-
-### Syntactic Analysis Fixtures
-
-| File | Used By | Description |
-|------|---------|-------------|
-| `syntactic-analysis/mapping-contract-v1.json` | `scripts/validate-syntactic-fixtures.py` | Provider-neutral Unicode-scalar char-span mapping examples, including 1:N, N:1, normalized overlap, and explicit unaligned tokens. |
-| `syntactic-analysis/ambiguity-dev-v1.jsonl` | Phase 3.9.1 provider adapter development | Real-caption excerpts plus controlled ambiguity pairs allowed for adapter/offset development. |
-| `syntactic-analysis/ambiguity-validation-v1.jsonl` | Phase 3.9.1 locked provider qualification | Holdout ambiguity cases locked by SHA-256 before any provider run; not overall parser-quality gold. |
-
-### Word Timeline Evaluation Fixtures
-
-| File | Used By | Description |
-|------|---------|-------------|
-| `word-timelines/baseline-v1.json` | `scripts/evaluate-word-timelines.py` | Synthetic Whisper-DTW-style word timeline used to verify pairwise drift metrics. |
-| `word-timelines/candidate-v1.json` | `scripts/evaluate-word-timelines.py` | Synthetic forced-aligned candidate timeline used to verify weak comparison metrics. |
-| `word-timelines/gold-v1.json` | `scripts/evaluate-word-timelines.py` | Synthetic manual-boundary fixture used to verify gold MAE and threshold accuracy calculations. |
-
-### Generated Media
-
-Generated files are **not checked into Git** (size: ~2 MB). Run `generate.sh` to recreate them locally. They are used by acceptance (`verify-m*.sh`) and manual QA scripts.
-
-| File | Use Case |
-|------|----------|
-| `sample-video.mp4` | Media registration, subtitle import workflow |
-| `sample-audio.m4a` | Audio-only media tests |
-| `multi-audio.mkv` | Multi-audio-track selection tests |
-| `long-timeline.srt` | Large subtitle import performance/stress tests |
-| `embedded-text-subtitle.mkv` | MKV embedded subtitle extraction tests |
-
-## Fixture Design Principles
-
-1. **Version-controlled fixtures** (`asr/`, `subtitles/`, `pronunciation/`) are checked into Git. They are hand-crafted and intended to be stable over time.
-2. **Generated media** (`generated/`) is created by `generate.sh` using FFmpeg. It is gitignored — run the script locally to recreate.
-3. **Test references** use `include_str!` or `include_bytes!` for compile-time embedding, or relative paths from the crate root for runtime access.
-4. **Isolation**: Each fixture targets a specific test concern. Don't overload fixtures with unrelated test scenarios.
-
-## Adding a New Fixture
-
-1. Place the file in the appropriate subdirectory.
-2. Update this README — add an entry to the catalog table.
-3. Reference it from tests using one of these patterns:
-   - `include_str!("../../../testdata/<category>/<file>")` — for text fixtures
-   - `include_bytes!("../../../testdata/<category>/<file>")` — for binary fixtures
-   - `concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/<category>/<file>")` — for runtime paths (integration tests)
-
-## Regenerating Media
-
-```bash
-cd testdata && bash generate.sh
-```
-
-Requires: `ffmpeg` in PATH. Produces `generated/SHA256SUMS` for integrity verification.
-
-## Related
-
-- [Testing Milestone](../docs/features/testing-milestone.md)
-- [Unified Testing Workflow](../docs/features/testing-workflow.md)
-- [CI Configuration](../.github/workflows/ci.yml)
+Some manifests explicitly name Markdown files through `qa_notes`; keep those
+files with the manifest. In contrast, provenance fields may name historical
+source paths removed from the working tree. Those values record original
+inputs and are not current navigation or project instructions. Documentation
+cleanup does not rewrite fixture data.

@@ -99,7 +99,7 @@ Future<void> openLearningAssetsFlow({
       createPersonalExpressionViewModel == null ||
       createPersonalExpressionDetailViewModel == null) {
     viewModel?.dispose();
-    // Unavailable State (CONTEXT.md): opening the assets screen is
+    // Honest unavailable state: opening the assets screen is
     // user-triggered, so name the cause and recovery instead of swallowing
     // the click.
     final l = AppLocalizations.of(context);
@@ -151,7 +151,7 @@ Future<void> openPersonalExpressionFlow({
 }) async {
   if (viewModel == null || createDetailViewModel == null) {
     viewModel?.dispose();
-    // Unavailable State (CONTEXT.md): the expressions screen is a standing
+    // Honest unavailable state: the expressions screen is a standing
     // user destination; a dead click would hide why it will not open.
     final l = AppLocalizations.of(context);
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
@@ -186,7 +186,7 @@ Future<void> openLearningResourcesFlow({
   required PlayerController playerController,
 }) async {
   if (viewModel == null) {
-    // Unavailable State (CONTEXT.md): user-triggered menu entry — report the
+    // Honest unavailable state: user-triggered menu entry — report the
     // missing core instead of doing nothing.
     final l = AppLocalizations.of(context);
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
@@ -211,7 +211,7 @@ Future<void> openPhraseFlow({
   final l = AppLocalizations.of(context);
   if (viewModel == null || playerController.mediaFingerprint == null) {
     viewModel?.dispose();
-    // Unavailable State (CONTEXT.md): the phrase chip is a user tap; saving a
+    // Honest unavailable state: the phrase chip is a user tap; saving a
     // phrase needs both the core and an open, fingerprinted media source.
     playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
     return;
@@ -285,7 +285,7 @@ Future<void> correctCurrentLemmaFlow({
   final l = AppLocalizations.of(context);
   final token = learningController.selectedToken;
   if (viewModel == null) {
-    // Unavailable State (CONTEXT.md): the correct-lemma button is a user
+    // Honest unavailable state: the correct-lemma button is a user
     // action; report the missing core instead of swallowing the click.
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
     return;
@@ -323,7 +323,7 @@ Future<void> showVocabularyFlow({
   if (viewModel == null || semanticSearchViewModel == null) {
     viewModel?.dispose();
     semanticSearchViewModel?.dispose();
-    // Unavailable State (CONTEXT.md): the vocabulary entry points (rail item,
+    // Honest unavailable state: the vocabulary entry points (rail item,
     // asset card, app-bar menu) are user clicks — a silent return here reads
     // as a dead button when the core is disconnected.
     final l = AppLocalizations.of(context);
@@ -364,7 +364,7 @@ Future<void> importWordListFlow({
 }) async {
   final l = AppLocalizations.of(context);
   if (viewModel == null) {
-    // Unavailable State (CONTEXT.md): importing a word list is user-triggered
+    // Honest unavailable state: importing a word list is user-triggered
     // and cannot proceed without the core — say so before opening a picker.
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
     return;

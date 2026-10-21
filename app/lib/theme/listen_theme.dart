@@ -6,9 +6,8 @@ import '../theme/typography.dart';
 /// App-wide appearance preference, mirrored from the persisted `themeMode`
 /// setting. Mirrors the `appLanguage` notifier so `ListenApp` can rebuild the
 /// single `MaterialApp` without threading the value through the widget tree.
-/// Defaults to dark — "暗色为家" per the design charter
-/// (design-notes/listen-design-charter.md) — so the first frame is already the
-/// dimmed room instead of flashing a bright theme before settings load.
+/// Defaults to dark so the first frame opens in the dimmed room instead of
+/// flashing a bright theme before settings load.
 final appThemeMode = ValueNotifier<ThemeMode>(ThemeMode.dark);
 
 /// Maps the persisted `system` / `light` / `dark` string onto [ThemeMode],
@@ -74,21 +73,18 @@ abstract final class ListenColors {
   static const learningNeedsReview = Color(0xffffbf47);
   static const learningRecognized = Color(0xff68d391);
 
-  // Charter color table additions (#70 Phase 2, design-notes/
-  // listen-design-charter.md · "底色定义"). Content light sources in the
-  // "光源家族" — the other person's voice and the review "first seen" state —
-  // not chrome. Like the sound/phoneme family above they are brightness-
-  // independent by design: they only ever appear on the dark stage/cards, so
-  // they read directly (not through [ListenSchemeShades]) and are covered by a
-  // dark-background AA gate in theme_palette_discipline_test.dart.
-  /// 月白 — the other person's voice / the light shining in (owner 2026-07-23,
-  /// #70 conversation stage). The月白 that falls when the assistant speaks and
-  /// gets pulled into the water when you interrupt (S7 回声水面).
+  // Content light sources represent the other person's voice and the review
+  // "first seen" state, not chrome. Like the sound/phoneme family above, they
+  // are brightness-independent by design: they only ever appear on the dark
+  // stage/cards, so they read directly (not through [ListenSchemeShades]) and
+  // are covered by a dark-background AA gate in
+  // theme_palette_discipline_test.dart.
+  /// 月白 — the other person's voice and the light shining in. It falls when
+  /// the assistant speaks and gets pulled into the water when you interrupt.
   static const moonWhite = Color(0xffc7d4cf);
 
-  /// 月蓝 — the review `new` card "first seen" state (owner 2026-07-24, #70
-  /// review page, "加第五色"). The fifth palette color, reserved for cards a
-  /// learner has never studied (S11 卡状态四态).
+  /// 月蓝 — the review `new` card "first seen" state, reserved for cards a
+  /// learner has never studied.
   static const moonBlue = Color(0xff6db3ff);
 
   // Judgment verdict shades (#22). Covered/partial labels render as 12px w700
@@ -101,8 +97,7 @@ abstract final class ListenColors {
   static const darkVerdictCovered = Color(0xff5cc389);
   static const darkVerdictPartial = Color(0xffefa05c);
 
-  /// The stage's compressed ground (#70 Phase 2 / S6; design-notes/
-  /// listen-live-conversation.html `--ground2`): half a stop darker than the
+  /// The stage ground is half a stop darker than the
   /// quiet room, so the shell reads as "lights off" and only the content
   /// glows. Stage mode dims the room under *both* themes — it is
   /// brightness-independent by design, like the overlay vocabulary — so it is
@@ -129,9 +124,8 @@ abstract final class ListenColors {
   static const darkOutline = Color(0xff6d7a76);
   static const darkBorder = Color(0xff333f3b);
   static const darkDisabled = Color(0xff6b7874);
-  // Charter signal teal (design-notes/listen-design-charter.md): the one
-  // color that means "this is the content speaking" — current word, progress,
-  // selection. Calibrated from #5cc6b8 in Slice 2 (#30).
+  // Signal teal means "this is the content speaking" — current word, progress,
+  // or selection.
   static const darkPrimary = Color(0xff4db8a8);
   static const darkPrimaryPressed = Color(0xff8bdcd0);
   static const darkSelected = Color(0xff1d4f49);

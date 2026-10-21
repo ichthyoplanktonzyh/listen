@@ -225,8 +225,8 @@ class MediaSessionCoordinator {
       if (_isStale(sessionEpoch)) return;
       if (repository.isAvailable) {
         // Opening local media is Temporary Material: playable immediately, but
-        // never a Personal Library membership by itself (CONTEXT.md Retention
-        // Decision — the learner's explicit Keep adds membership later).
+        // never a Personal Library membership by itself; only the learner's
+        // explicit Keep adds membership later.
         final media = await repository.registerMedia(path, retain: false);
         if (_isStale(sessionEpoch)) return;
         final id = media.id;

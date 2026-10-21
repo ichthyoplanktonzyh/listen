@@ -1,7 +1,7 @@
 # Listen Context Map
 
 This map assigns authority across the language world and learning world defined
-in [MODEL.md](MODEL.md). All current modules live in one Git repository (see [decision 0005](decisions/0005-single-repository-development.md)).
+in [MODEL.md](MODEL.md). All current modules live in one Git repository.
 It describes durable seams, not detailed source directories,
 transport shapes, or current implementation completeness.
 
@@ -78,8 +78,7 @@ activity selection.
 ### Project Governance — root documentation
 
 Owns the project model, product semantics, ubiquitous language,
-cross-module responsibilities, learner journeys, roadmap, durable project
-decisions, and current project state. Root prose does not override executable contracts or runtime
+cross-module responsibilities, learner journeys, roadmap, and current project state. Root prose does not override executable contracts or runtime
 facts owned by the modules.
 
 ### Community and Sync — required future context

@@ -1,5 +1,8 @@
 # Listen Product Semantics
 
+This document describes product direction. Current scope and execution priority
+are defined in [STATE.md](STATE.md) and [ROADMAP.md](ROADMAP.md).
+
 > Status: owner-approved semantic baseline, revision 7, 2026-09-08.
 
 This document defines what Listen is, why it exists, and the durable product
