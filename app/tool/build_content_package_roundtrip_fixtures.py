@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Build deterministic, local-only fixtures for the package E2E gate.
+"""Build deterministic, local-only AV fixtures for the package E2E gate.
 
-The gate must exercise the same material families that the App accepts without
-checking private desktop files into the repository.  Text fixtures are written
-directly, EPUB/PDF containers are assembled from fixed bytes, and the media
-fixtures are generated with local ffmpeg.  No provider, model, network, or
-system speech service is used.
+Audio/video containers are generated locally; ASR and speech-analysis results
+are fixed fixtures. No provider, model, network, or system speech service is
+used.
 
 The output directory is disposable.  ``manifest.json`` records the exact
 hashes of every generated file, so the Dart test can refuse a partially built
@@ -21,15 +19,10 @@ import math
 import shutil
 import subprocess
 import wave
-import zipfile
 from pathlib import Path
 
 
 TEXT = "Listen, carefully! Words matter."
-FULL_SENTENCE = (
-    "Send us their name, photo, and a couple lines "
-    "about what they mean to you, CNN10@cnn.com."
-)
 
 
 def _sha256(path: Path) -> str:
@@ -42,89 +35,6 @@ def _write(path: Path, value: str | bytes) -> None:
         path.write_text(value, encoding="utf-8")
     else:
         path.write_bytes(value)
-
-
-def _pdf(objects: list[bytes]) -> bytes:
-    """Return a minimal deterministic PDF with the supplied object bodies."""
-    header = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
-    output = bytearray(header)
-    offsets = [0]
-    for index, body in enumerate(objects, 1):
-        offsets.append(len(output))
-        output.extend(f"{index} 0 obj\n".encode("ascii"))
-        output.extend(body)
-        output.extend(b"\nendobj\n")
-    xref_offset = len(output)
-    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
-    output.extend(b"0000000000 65535 f \n")
-    for offset in offsets[1:]:
-        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
-    output.extend(
-        (
-            f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
-            f"startxref\n{xref_offset}\n%%EOF\n"
-        ).encode("ascii")
-    )
-    return bytes(output)
-
-
-def _text_pdf(text: str) -> bytes:
-    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-    stream = f"BT /F1 12 Tf 50 150 Td ({escaped}) Tj ET".encode("latin-1")
-    return _pdf(
-        [
-            b"<< /Type /Catalog /Pages 2 0 R >>",
-            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
-            b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-            b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n"
-            + stream
-            + b"\nendstream",
-        ]
-    )
-
-
-def _blank_pdf() -> bytes:
-    return _pdf(
-        [
-            b"<< /Type /Catalog /Pages 2 0 R >>",
-            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
-        ]
-    )
-
-
-def _epub() -> bytes:
-    entries = {
-        "mimetype": b"application/epub+zip",
-        "META-INF/container.xml": (
-            b'<?xml version="1.0"?><container version="1.0">'
-            b'<rootfiles><rootfile full-path="OEBPS/content.opf" '
-            b'media-type="application/oebps-package+xml"/></rootfiles></container>'
-        ),
-        "OEBPS/content.opf": (
-            b'<package version="3.0" xmlns="http://www.idpf.org/2007/opf">'
-            b'<manifest><item id="chapter" href="chapter.xhtml" '
-            b'media-type="application/xhtml+xml"/></manifest>'
-            b'<spine><itemref idref="chapter"/></spine></package>'
-        ),
-        "OEBPS/chapter.xhtml": (
-            b'<html xmlns="http://www.w3.org/1999/xhtml"><body>'
-            b'<p>Listen, carefully! Words matter.</p>'
-            b'</body></html>'
-        ),
-    }
-    from io import BytesIO
-
-    buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        for name, data in entries.items():
-            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_STORED if name == "mimetype" else zipfile.ZIP_DEFLATED
-            info.create_system = 0
-            archive.writestr(info, data)
-    return buffer.getvalue()
 
 
 def _wav(path: Path, duration_ms: int = 4200) -> None:
@@ -306,51 +216,6 @@ def _simple_alignment() -> dict[str, object]:
     }
 
 
-def _document_alignment() -> dict[str, object]:
-    """Word timings inside Fake TTS's 0ms/1680ms sentence windows."""
-    timings = [
-        {
-            "segment_index": 0,
-            "word_index": 0,
-            "text": "Listen",
-            "start_ms": 100,
-            "end_ms": 328,
-            "score": 0.98,
-        },
-        {
-            "segment_index": 0,
-            "word_index": 1,
-            "text": "carefully",
-            "start_ms": 348,
-            "end_ms": 630,
-            "score": 0.98,
-        },
-        {
-            "segment_index": 1,
-            "word_index": 0,
-            "text": "Words",
-            "start_ms": 1700,
-            "end_ms": 1910,
-            "score": 0.98,
-        },
-        {
-            "segment_index": 1,
-            "word_index": 1,
-            "text": "matter",
-            "start_ms": 1930,
-            "end_ms": 2158,
-            "score": 0.98,
-        },
-    ]
-    return {
-        "schema": "listen_gen.alignment-result.v1",
-        "provider": {"id": "fixture-aligner", "version": "1"},
-        "model": {"id": "fixture-align-model", "version": "1"},
-        "config_sha256": "sha256:" + "b" * 64,
-        "words": timings,
-    }
-
-
 def _rich_fixtures() -> dict[str, object]:
     # Word tokens occupy every other/every third slot depending on
     # punctuation.  The fixture deliberately covers the complete single
@@ -437,23 +302,13 @@ def _rich_fixtures() -> dict[str, object]:
     }
 
 
-def _simple_rich_fixtures(*, document: bool = False) -> dict[str, object]:
+def _simple_rich_fixtures() -> dict[str, object]:
     """Return rich adapters that exactly cover the two short fixture cues."""
     words = [
         (0, 0, 100, 328),
         (0, 3, 348, 630),
-        (
-            1,
-            1 if document else 0,
-            1700 if document else 1300,
-            1910 if document else 1510,
-        ),
-        (
-            1,
-            3 if document else 2,
-            1930 if document else 1530,
-            2158 if document else 1758,
-        ),
+        (1, 0, 1300, 1510),
+        (1, 2, 1530, 1758),
     ]
     measurements = [
         {
@@ -484,11 +339,7 @@ def _simple_rich_fixtures(*, document: bool = False) -> dict[str, object]:
             "token_index": token_index,
             "lexical_stress": "primary",
             "realized_prominence": 0.7,
-            "utterance_role": (
-                "nucleus"
-                if token_index == 0 or token_index == (3 if document else 2)
-                else "prenuclear"
-            ),
+            "utterance_role": "nucleus" if token_index in (0, 2) else "prenuclear",
             "evidence": ["energy", "pitch", "duration"],
             "confidence": 0.8,
         }
@@ -515,10 +366,10 @@ def _simple_rich_fixtures(*, document: bool = False) -> dict[str, object]:
                     "sentence_index": 1,
                     "group_index": 0,
                     "start_token_index": 0,
-                    "end_token_index_exclusive": 5 if document else 4,
+                    "end_token_index_exclusive": 4,
                     "confidence": 0.9,
                     "label": "short-1",
-                    "head_token_index": 3 if document else 2,
+                    "head_token_index": 2,
                     "sources": ["rule"],
                 },
             ],
@@ -551,8 +402,8 @@ def _simple_rich_fixtures(*, document: bool = False) -> dict[str, object]:
                     "sentence_index": 1,
                     "chunk_index": 0,
                     "start_token_index": 0,
-                    "end_token_index_exclusive": 5 if document else 4,
-                    "nucleus_token_index": 3 if document else 2,
+                    "end_token_index_exclusive": 4,
+                    "nucleus_token_index": 2,
                     "confidence": 0.85,
                 },
             ],
@@ -582,7 +433,7 @@ def _validate_short_rich_fixtures(rich: dict[str, object], words: list[tuple[int
     """Fail fixture construction when refs, spans, or phone clocks drift."""
     sense_groups = rich["sense"]["groups"]  # type: ignore[index]
     prosody = rich["prosody"]  # type: ignore[assignment]
-    expected_ends = [5, 5 if words[-2][1] == 1 else 4]
+    expected_ends = [5, 4]
     if [item["end_token_index_exclusive"] for item in sense_groups] != expected_ends:  # type: ignore[index]
         raise RuntimeError("short sense fixtures must cover all subtitle tokens")
     if [item["end_token_index_exclusive"] for item in prosody["chunks"]] != expected_ends:  # type: ignore[index]
@@ -605,42 +456,10 @@ def build(output: Path, ffmpeg: str, ffprobe: str) -> None:
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
-    _write(output / "lesson.txt", TEXT + "\n")
-    _write(output / "lesson.md", TEXT + "\n")
-    _write(output / "lesson.html", "<html><body><p>" + TEXT + "</p></body></html>\n")
-    _write(output / "lesson.epub", _epub())
-    _write(output / "lesson-text.pdf", _text_pdf(TEXT))
-    _write(output / "lesson-scanned.pdf", _blank_pdf())
-    _write(output / "ocr.txt", TEXT + "\n")
-    _write(
-        output / "subtitle-simple.srt",
-        "1\n00:00:00,100 --> 00:00:01,200\nListen, carefully!\n\n"
-        "2\n00:00:01,300 --> 00:00:02,100\nWords matter.\n",
-    )
-    _write(
-        output / "subtitle-full.srt",
-        "1\n00:00:00,100 --> 00:00:01,850\n"
-        "Send us their name, photo, and a couple lines\n\n"
-        "2\n00:00:01,860 --> 00:00:03,900\n"
-        "about what they mean to you, CNN10@cnn.com.\n",
-    )
-    _write(
-        output / "subtitle-three.srt",
-        "1\n00:00:00,100 --> 00:00:01,450\n"
-        "Send us their name, photo, and a couple lines\n\n"
-        "2\n00:00:01,460 --> 00:00:02,750\n"
-        "about what they mean to you,\n\n"
-        "3\n00:00:02,760 --> 00:00:03,900\n"
-        "CNN10@cnn.com.\n",
-    )
     _write(output / "sample.asr.json", json.dumps(_asr(), indent=2) + "\n")
     _write(
         output / "simple.alignment.json",
         json.dumps(_simple_alignment(), indent=2) + "\n",
-    )
-    _write(
-        output / "document.alignment.json",
-        json.dumps(_document_alignment(), indent=2) + "\n",
     )
     _write(output / "full.alignment.json", json.dumps(_full_alignment(), indent=2) + "\n")
     rich = _rich_fixtures()
@@ -648,44 +467,23 @@ def build(output: Path, ffmpeg: str, ffprobe: str) -> None:
     _write(output / "full.acoustics.json", json.dumps(rich["acoustics"], indent=2) + "\n")
     _write(output / "full.prosody.json", json.dumps(rich["prosody"], indent=2) + "\n")
     _write(output / "full.phones.json", json.dumps(rich["phone"], indent=2) + "\n")
-    for prefix, rich in (
-        ("simple", _simple_rich_fixtures()),
-        ("document", _simple_rich_fixtures(document=True)),
+    simple = _simple_rich_fixtures()
+    simple_words = [
+        (0, 0, 100, 328),
+        (0, 3, 348, 630),
+        (1, 0, 1300, 1510),
+        (1, 2, 1530, 1758),
+    ]
+    _validate_short_rich_fixtures(simple, simple_words)
+    for suffix, key in (
+        ("sense-groups", "sense"),
+        ("acoustics", "acoustics"),
+        ("prosody", "prosody"),
+        ("phones", "phone"),
     ):
-        _validate_short_rich_fixtures(
-            rich,
-            [
-                (0, 0, 100, 328),
-                (0, 3, 348, 630),
-                (
-                    1,
-                    1 if prefix == "document" else 0,
-                    1700 if prefix == "document" else 1300,
-                    1910 if prefix == "document" else 1510,
-                ),
-                (
-                    1,
-                    3 if prefix == "document" else 2,
-                    1930 if prefix == "document" else 1530,
-                    2158 if prefix == "document" else 1758,
-                ),
-            ],
-        )
         _write(
-            output / f"{prefix}.sense-groups.json",
-            json.dumps(rich["sense"], indent=2) + "\n",
-        )
-        _write(
-            output / f"{prefix}.acoustics.json",
-            json.dumps(rich["acoustics"], indent=2) + "\n",
-        )
-        _write(
-            output / f"{prefix}.prosody.json",
-            json.dumps(rich["prosody"], indent=2) + "\n",
-        )
-        _write(
-            output / f"{prefix}.phones.json",
-            json.dumps(rich["phone"], indent=2) + "\n",
+            output / f"simple.{suffix}.json",
+            json.dumps(simple[key], indent=2) + "\n",
         )
     _wav(output / "sample-media.wav")
     _video(output / "sample-video.mp4", output / "sample-media.wav", ffmpeg)
@@ -700,7 +498,7 @@ def build(output: Path, ffmpeg: str, ffprobe: str) -> None:
             files[path.name] = _sha256(path)
     manifest = {
         "schema": "listen_app.content-package-roundtrip-fixture.v3",
-        "source_repository": "ichthyoplanktonzyh/listen-gen",
+        "source_repository": "ichthyoplanktonzyh/listen",
         "files": files,
         "media_streams": {
             "sample-media.wav": ["audio"],

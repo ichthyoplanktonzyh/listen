@@ -30,7 +30,7 @@ import 'package:llplayer_next/services/api_service.dart';
 void main() {
   /// The body the field actually reported, verbatim.
   const envelope =
-      '{"code":"validation_error","message":"recording metadata must not be '
+      '{"code":"validation_error","message":"media metadata must not be '
       'empty","correlation_id":"api-853","retryable":false}';
 
   /// Everything the exchange carried that a status line is not a place for.
@@ -42,7 +42,7 @@ void main() {
     '127.0.0.1',
     '62645',
     'validation_error',
-    'recording metadata must not be empty',
+    'media metadata must not be empty',
     'uri =',
     'retryable',
     '/v1/',

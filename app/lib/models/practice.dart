@@ -1,16 +1,5 @@
 import 'types.dart';
 
-/// Platform-independent microphone authorization state used by practice and
-/// conversation features. Platform services translate native values into this
-/// model; presentation code never depends on the recorder implementation.
-enum MicrophonePermissionStatus {
-  granted,
-  denied,
-  restricted,
-  notDetermined,
-  unavailable,
-}
-
 class PracticeSession {
   const PracticeSession({
     required this.id,
@@ -256,283 +245,6 @@ class SubmitPracticeAttempt {
     'text_answer': textAnswer,
     'create_review_item_on_failure': createReviewItemOnFailure,
   };
-}
-
-class PlayableSegment {
-  const PlayableSegment({
-    this.mediaId,
-    required this.startMs,
-    required this.endMs,
-    required this.label,
-    required this.subtitleSnapshot,
-    required this.availability,
-  });
-
-  factory PlayableSegment.fromJson(Map<String, dynamic> json) =>
-      PlayableSegment(
-        mediaId: json['media_id'] as String?,
-        startMs: json['start_ms'] as int,
-        endMs: json['end_ms'] as int,
-        label: json['label'] as String,
-        subtitleSnapshot: json['subtitle_snapshot'] as String,
-        availability: json['availability'] as String,
-      );
-
-  final String? mediaId;
-  final int startMs;
-  final int endMs;
-  final String label;
-  final String subtitleSnapshot;
-  final String availability;
-
-  Map<String, dynamic> toJson() => {
-    'media_id': mediaId,
-    'start_ms': startMs,
-    'end_ms': endMs,
-    'label': label,
-    'subtitle_snapshot': subtitleSnapshot,
-    'availability': availability,
-  };
-}
-
-class RecordingAudioMetadata {
-  const RecordingAudioMetadata({
-    required this.container,
-    required this.codec,
-    required this.sampleRateHz,
-    required this.channels,
-    required this.sampleFormat,
-    required this.byteLength,
-    required this.contentSha256,
-  });
-
-  factory RecordingAudioMetadata.fromJson(Map<String, dynamic> json) =>
-      RecordingAudioMetadata(
-        container: json['container'] as String,
-        codec: json['codec'] as String,
-        sampleRateHz: json['sample_rate_hz'] as int,
-        channels: json['channels'] as int,
-        sampleFormat: json['sample_format'] as String,
-        byteLength: json['byte_length'] as int,
-        contentSha256: json['content_sha256'] as String,
-      );
-
-  final String container;
-  final String codec;
-  final int sampleRateHz;
-  final int channels;
-  final String sampleFormat;
-  final int byteLength;
-  final String contentSha256;
-
-  Map<String, dynamic> toJson() => {
-    'container': container,
-    'codec': codec,
-    'sample_rate_hz': sampleRateHz,
-    'channels': channels,
-    'sample_format': sampleFormat,
-    'byte_length': byteLength,
-    'content_sha256': contentSha256,
-  };
-}
-
-class RecordingAsset {
-  const RecordingAsset({
-    required this.id,
-    required this.filePath,
-    required this.createdAtMs,
-    required this.durationMs,
-    this.practiceAttemptId,
-    required this.target,
-    required this.sourceSegment,
-    required this.language,
-    required this.audio,
-    required this.recorderVersion,
-  });
-
-  factory RecordingAsset.fromJson(Map<String, dynamic> json) => RecordingAsset(
-    id: json['id'] as String,
-    filePath: json['file_path'] as String,
-    createdAtMs: json['created_at_ms'] as int,
-    durationMs: json['duration_ms'] as int,
-    practiceAttemptId: json['practice_attempt_id'] as String?,
-    target: PracticeTarget.fromJson(json['target'] as Map<String, dynamic>),
-    sourceSegment: PlayableSegment.fromJson(
-      json['source_segment'] as Map<String, dynamic>,
-    ),
-    language: json['language'] as String,
-    audio: RecordingAudioMetadata.fromJson(
-      json['audio'] as Map<String, dynamic>,
-    ),
-    recorderVersion: json['recorder_version'] as String,
-  );
-
-  final String id;
-  final String filePath;
-  final int createdAtMs;
-  final int durationMs;
-  final String? practiceAttemptId;
-  final PracticeTarget target;
-  final PlayableSegment sourceSegment;
-  final String language;
-  final RecordingAudioMetadata audio;
-  final String recorderVersion;
-}
-
-class CreateRecordingAsset {
-  const CreateRecordingAsset({
-    required this.filePath,
-    required this.durationMs,
-    required this.target,
-    required this.sourceSegment,
-    required this.language,
-    required this.audio,
-    required this.recorderVersion,
-  });
-
-  final String filePath;
-  final int durationMs;
-  final PracticeTarget target;
-  final PlayableSegment sourceSegment;
-  final String language;
-  final RecordingAudioMetadata audio;
-  final String recorderVersion;
-
-  Map<String, dynamic> toJson() => {
-    'file_path': filePath,
-    'duration_ms': durationMs,
-    'target': target.toJson(),
-    'source_segment': sourceSegment.toJson(),
-    'language': language,
-    'audio': audio.toJson(),
-    'recorder_version': recorderVersion,
-  };
-}
-
-class AudioPauseInterval {
-  const AudioPauseInterval({required this.startMs, required this.endMs});
-
-  factory AudioPauseInterval.fromJson(Map<String, dynamic> json) =>
-      AudioPauseInterval(
-        startMs: json['start_ms'] as int,
-        endMs: json['end_ms'] as int,
-      );
-
-  final int startMs;
-  final int endMs;
-}
-
-class AudioWaveformSummary {
-  const AudioWaveformSummary({
-    required this.durationMs,
-    required this.bucketMs,
-    required this.peaks,
-    required this.rms,
-  });
-
-  factory AudioWaveformSummary.fromJson(Map<String, dynamic> json) =>
-      AudioWaveformSummary(
-        durationMs: json['duration_ms'] as int,
-        bucketMs: json['bucket_ms'] as int,
-        peaks: (json['peaks'] as List<dynamic>)
-            .map((value) => (value as num).toDouble())
-            .toList(growable: false),
-        rms: (json['rms'] as List<dynamic>)
-            .map((value) => (value as num).toDouble())
-            .toList(growable: false),
-      );
-
-  final int durationMs;
-  final int bucketMs;
-  final List<double> peaks;
-  final List<double> rms;
-}
-
-class RecordingAudioFacts {
-  const RecordingAudioFacts({
-    required this.recordingId,
-    required this.durationMs,
-    required this.pauses,
-    required this.waveform,
-  });
-
-  factory RecordingAudioFacts.fromJson(Map<String, dynamic> json) =>
-      RecordingAudioFacts(
-        recordingId: json['recording_id'] as String,
-        durationMs: json['duration_ms'] as int,
-        pauses: (json['pauses'] as List<dynamic>)
-            .map(
-              (value) =>
-                  AudioPauseInterval.fromJson(value as Map<String, dynamic>),
-            )
-            .toList(growable: false),
-        waveform: AudioWaveformSummary.fromJson(
-          json['waveform'] as Map<String, dynamic>,
-        ),
-      );
-
-  final String recordingId;
-  final int durationMs;
-  final List<AudioPauseInterval> pauses;
-  final AudioWaveformSummary waveform;
-
-  int get totalPauseMs =>
-      pauses.fold(0, (total, pause) => total + pause.endMs - pause.startMs);
-}
-
-class ShadowingComparison {
-  const ShadowingComparison({
-    required this.attemptId,
-    required this.referenceSegment,
-    required this.recordingId,
-    required this.durationDeltaMs,
-    required this.referencePauses,
-    required this.recordingPauses,
-    this.meanAbsolutePauseOffsetMs,
-    required this.referenceWaveform,
-    required this.recordingWaveform,
-  });
-
-  factory ShadowingComparison.fromJson(Map<String, dynamic> json) {
-    final alignment = json['pause_alignment'] as Map<String, dynamic>;
-    return ShadowingComparison(
-      attemptId: json['attempt_id'] as String,
-      referenceSegment: PlayableSegment.fromJson(
-        json['reference_segment'] as Map<String, dynamic>,
-      ),
-      recordingId: json['recording_id'] as String,
-      durationDeltaMs: json['duration_delta_ms'] as int,
-      referencePauses: (alignment['reference_pauses'] as List<dynamic>)
-          .map(
-            (value) =>
-                AudioPauseInterval.fromJson(value as Map<String, dynamic>),
-          )
-          .toList(growable: false),
-      recordingPauses: (alignment['recording_pauses'] as List<dynamic>)
-          .map(
-            (value) =>
-                AudioPauseInterval.fromJson(value as Map<String, dynamic>),
-          )
-          .toList(growable: false),
-      meanAbsolutePauseOffsetMs: alignment['mean_absolute_offset_ms'] as int?,
-      referenceWaveform: AudioWaveformSummary.fromJson(
-        json['reference_waveform'] as Map<String, dynamic>,
-      ),
-      recordingWaveform: AudioWaveformSummary.fromJson(
-        json['recording_waveform'] as Map<String, dynamic>,
-      ),
-    );
-  }
-
-  final String attemptId;
-  final PlayableSegment referenceSegment;
-  final String recordingId;
-  final int durationDeltaMs;
-  final List<AudioPauseInterval> referencePauses;
-  final List<AudioPauseInterval> recordingPauses;
-  final int? meanAbsolutePauseOffsetMs;
-  final AudioWaveformSummary referenceWaveform;
-  final AudioWaveformSummary recordingWaveform;
 }
 
 class PracticeTokenEvaluation {
@@ -828,7 +540,6 @@ class ReviewQueueEntry {
     required this.schedule,
     required this.state,
     required this.card,
-    required this.origin,
   });
 
   factory ReviewQueueEntry.fromJson(
@@ -838,14 +549,12 @@ class ReviewQueueEntry {
     schedule: ReviewSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
     state: ReviewCardState.fromJson(json['state'] as String),
     card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
-    origin: ReviewItemOrigin.fromJson(json['origin'] as Map<String, dynamic>),
   );
 
   final ReviewItem item;
   final ReviewSchedule schedule;
   final ReviewCardState state;
   final ReviewCard card;
-  final ReviewItemOrigin origin;
 
   int? get playbackStartMs => item.anchors
       .map((value) => value.startMs)
@@ -864,44 +573,11 @@ class ReviewQueueEntry {
       );
 }
 
-/// Where a card came from. An `imported_anki` card carries no listening
-/// evidence of its own, so [hasListeningEnhancements] is the backend saying
-/// which of listen's own affordances the card can actually support — the
-/// session reads it instead of assuming every card was born here.
-class ReviewItemOrigin {
-  const ReviewItemOrigin({
-    required this.kind,
-    required this.ankiGuid,
-    required this.deckId,
-    required this.deckName,
-    required this.hasListeningEnhancements,
-  });
-
-  factory ReviewItemOrigin.fromJson(Map<String, dynamic> json) =>
-      ReviewItemOrigin(
-        kind: json['kind'] as String,
-        ankiGuid: json['anki_guid'] as String?,
-        deckId: json['deck_id'] as String?,
-        deckName: json['deck_name'] as String?,
-        hasListeningEnhancements: json['has_listening_enhancements'] as bool,
-      );
-
-  final String kind;
-  final String? ankiGuid;
-  final String? deckId;
-  final String? deckName;
-  final bool hasListeningEnhancements;
-
-  bool get isImportedAnki => kind == 'imported_anki';
-}
-
 class ReviewSubmission {
   const ReviewSubmission({
     required this.attempt,
     required this.schedule,
     required this.generatedObservationIds,
-    required this.huntingCandidateIds,
-    required this.upgradeSuggestions,
   });
 
   factory ReviewSubmission.fromJson(
@@ -913,70 +589,11 @@ class ReviewSubmission {
         ((json['generated_observation_ids'] as List<dynamic>?) ?? const [])
             .cast<String>()
             .toList(growable: false),
-    huntingCandidateIds:
-        ((json['hunting_candidate_ids'] as List<dynamic>?) ?? const [])
-            .cast<String>()
-            .toList(growable: false),
-    upgradeSuggestions:
-        ((json['upgrade_suggestions'] as List<dynamic>?) ?? const [])
-            .map(
-              (value) =>
-                  UpgradeSuggestion.fromJson(value as Map<String, dynamic>),
-            )
-            .toList(growable: false),
   );
 
   final ReviewAttempt attempt;
   final ReviewSchedule schedule;
   final List<String> generatedObservationIds;
-  final List<String> huntingCandidateIds;
-  final List<UpgradeSuggestion> upgradeSuggestions;
-}
-
-class HuntingCandidate {
-  const HuntingCandidate({
-    required this.id,
-    required this.lexicalEntryId,
-    required this.reviewItemId,
-    required this.targetSnapshot,
-    required this.promptSnapshot,
-    required this.failureCount,
-    required this.status,
-    required this.createdAtMs,
-    required this.lastFailedAtMs,
-    this.sentenceId,
-    this.mediaId,
-    this.trackId,
-  });
-
-  factory HuntingCandidate.fromJson(Map<String, dynamic> json) =>
-      HuntingCandidate(
-        id: json['id'] as String,
-        lexicalEntryId: json['lexical_entry_id'] as String,
-        reviewItemId: json['review_item_id'] as String,
-        sentenceId: json['sentence_id'] as String?,
-        mediaId: json['media_id'] as String?,
-        trackId: json['track_id'] as String?,
-        targetSnapshot: json['target_snapshot'] as String,
-        promptSnapshot: json['prompt_snapshot'] as String,
-        failureCount: json['failure_count'] as int,
-        status: json['status'] as String,
-        createdAtMs: json['created_at_ms'] as int,
-        lastFailedAtMs: json['last_failed_at_ms'] as int,
-      );
-
-  final String id;
-  final String lexicalEntryId;
-  final String reviewItemId;
-  final String? sentenceId;
-  final String? mediaId;
-  final String? trackId;
-  final String targetSnapshot;
-  final String promptSnapshot;
-  final int failureCount;
-  final String status;
-  final int createdAtMs;
-  final int lastFailedAtMs;
 }
 
 class HuntingTarget {
@@ -1074,55 +691,4 @@ class HuntingCheckResult {
   final String answer;
   final String eventId;
   final String? observationId;
-}
-
-class UpgradeSuggestion {
-  const UpgradeSuggestion({
-    required this.id,
-    required this.lexicalEntryId,
-    required this.lexicalDisplayForm,
-    required this.previousStatus,
-    required this.suggestedStatus,
-    required this.status,
-    required this.evidenceContextCount,
-    required this.evidenceIds,
-    required this.threshold,
-    required this.evidenceClass,
-    required this.createdAtMs,
-    this.resolvedAtMs,
-    this.cooldownUntilMs,
-  });
-
-  factory UpgradeSuggestion.fromJson(Map<String, dynamic> json) =>
-      UpgradeSuggestion(
-        id: json['id'] as String,
-        lexicalEntryId: json['lexical_entry_id'] as String,
-        lexicalDisplayForm: json['lexical_display_form'] as String,
-        previousStatus: json['previous_status'] as String,
-        suggestedStatus: json['suggested_status'] as String,
-        status: json['status'] as String,
-        evidenceContextCount: json['evidence_context_count'] as int,
-        evidenceIds: ((json['evidence_ids'] as List<dynamic>?) ?? const [])
-            .cast<String>()
-            .toList(growable: false),
-        threshold: json['threshold'] as int,
-        evidenceClass: json['evidence_class'] as String,
-        createdAtMs: json['created_at_ms'] as int,
-        resolvedAtMs: json['resolved_at_ms'] as int?,
-        cooldownUntilMs: json['cooldown_until_ms'] as int?,
-      );
-
-  final String id;
-  final String lexicalEntryId;
-  final String lexicalDisplayForm;
-  final String previousStatus;
-  final String suggestedStatus;
-  final String status;
-  final int evidenceContextCount;
-  final List<String> evidenceIds;
-  final int threshold;
-  final String evidenceClass;
-  final int createdAtMs;
-  final int? resolvedAtMs;
-  final int? cooldownUntilMs;
 }

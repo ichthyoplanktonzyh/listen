@@ -1,5 +1,4 @@
-//! Material Capability projection and attempt use cases (Phase 1 contract
-//! 4.0.0).
+//! Material Capability projection and attempt use cases (contract 5.0.0).
 //!
 //! The projection is the observable five-state view over one Material:
 //! `available`, `derivable`, `generating`, `unavailable`, or `failed_attempt`.
@@ -13,7 +12,8 @@ use std::sync::Arc;
 
 use domain::{
     AdoptedComposition, CapabilityAttempt, CapabilityAttemptStatus, LearningMaterialId,
-    MaterialCapability, MaterialCapabilityProjection, adopted_composition_for, project_capability,
+    MaterialCapability, MaterialCapabilityProjection, MaterialRevision, adopted_composition_for,
+    project_capability,
 };
 
 use crate::{ApplicationError, MaterialRepository, PackageLifecycleRepository};
@@ -50,10 +50,7 @@ impl MaterialCapabilityUseCases {
             .materials
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
-        let revision = self
-            .materials
-            .get_revision(&material.current_revision_id)?
-            .ok_or_else(|| ApplicationError::Repository("current revision is missing".into()))?;
+        let revision = self.current_revision(&material)?;
         let adopted = self.adopted_composition(material_id)?;
         let attempts = self.attempts.list_attempts(material_id)?;
         Ok([
@@ -64,6 +61,22 @@ impl MaterialCapabilityUseCases {
         ]
         .map(|capability| project_capability(capability, &revision, adopted.as_ref(), &attempts))
         .to_vec())
+    }
+
+    fn current_revision(
+        &self,
+        material: &domain::LearningMaterial,
+    ) -> Result<MaterialRevision, ApplicationError> {
+        let revision = self
+            .materials
+            .get_revision(&material.current_revision_id)?
+            .ok_or_else(|| ApplicationError::Repository("current revision is missing".into()))?;
+        if revision.material_id != material.id {
+            return Err(ApplicationError::Repository(
+                "current revision belongs to another material".into(),
+            ));
+        }
+        Ok(revision)
     }
 
     /// Resolves the current adopted composition of one Material, if any. The
@@ -102,9 +115,19 @@ impl MaterialCapabilityUseCases {
         capability: MaterialCapability,
         started_at_ms: u64,
     ) -> Result<CapabilityAttempt, ApplicationError> {
-        self.materials
+        let material = self
+            .materials
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
+        let revision = self.current_revision(&material)?;
+        let adopted = self.adopted_composition(material_id)?;
+        let structural_projection =
+            project_capability(capability, &revision, adopted.as_ref(), &[]);
+        if structural_projection.status == domain::CapabilityStatus::Unavailable {
+            return Err(ApplicationError::Invalid(
+                "material capability is not producible from current audio/video media".into(),
+            ));
+        }
         self.attempts
             .start_attempt(material_id.clone(), capability, started_at_ms)
     }
@@ -246,7 +269,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
-    use domain::{DocumentRendition, MaterialRevision, Rendition, RenditionOrigin};
+    use domain::{MaterialRevision, MediaRendition, Rendition, RenditionOrigin};
 
     use crate::PreparedPackageInstallation;
 
@@ -337,39 +360,51 @@ mod tests {
     }
 
     impl FakeMaterials {
-        fn create_text_material(&self, title: &str, text: &str) -> LearningMaterialId {
+        fn create_audio_material(&self, title: &str) -> LearningMaterialId {
+            self.create_media_material(title, domain::MediaKind::Audio)
+        }
+
+        fn create_video_material(&self, title: &str) -> LearningMaterialId {
+            self.create_media_material(title, domain::MediaKind::Video)
+        }
+
+        fn create_media_material(
+            &self,
+            title: &str,
+            kind: domain::MediaKind,
+        ) -> LearningMaterialId {
             let now = 1;
-            let digest = {
-                use sha2::Digest as _;
-                hex::encode(sha2::Sha256::digest(text.as_bytes()))
+            let (media_id, fingerprint, media_type) = match kind {
+                domain::MediaKind::Audio => (
+                    "media-capability-audio-test",
+                    "fingerprint-capability-audio-test",
+                    "audio/mpeg",
+                ),
+                domain::MediaKind::Video => (
+                    "media-capability-video-test",
+                    "fingerprint-capability-video-test",
+                    "video/mp4",
+                ),
             };
-            let asset = domain::SourceAsset::new(
-                "text/plain",
-                text.len() as u64,
-                digest.clone(),
-                domain::SourceAssetBinding::Managed,
-                domain::SourceAssetAvailability::Available,
-                now,
-            )
-            .expect("valid source asset");
-            let renditions = vec![Rendition::Document(
-                DocumentRendition::new(
+            let renditions = vec![Rendition::Media(
+                MediaRendition::new(
                     RenditionOrigin::Source,
-                    "text/plain",
+                    kind,
+                    media_type,
+                    fingerprint,
+                    domain::MediaAvailability::Available,
+                    Some(domain::MediaId::parse(media_id).unwrap()),
                     None,
-                    digest,
-                    text.len() as u64,
-                    Some(asset.id.clone()),
+                    None,
                     None,
                     None,
                 )
-                .expect("valid rendition"),
+                .expect("valid media rendition"),
             )];
             let material_id =
-                domain::initial_material_id(std::slice::from_ref(&asset), &renditions)
-                    .expect("valid material id");
+                domain::initial_material_id(&[], &renditions).expect("valid material id");
             let revision =
-                MaterialRevision::new(material_id.clone(), title, vec![asset], renditions, now)
+                MaterialRevision::new(material_id.clone(), title, vec![], renditions, now)
                     .expect("valid revision");
             let material = domain::LearningMaterial::new(&revision, Some(now), now, now)
                 .expect("valid material");
@@ -494,14 +529,6 @@ mod tests {
         ) -> Result<Option<Vec<u8>>, ApplicationError> {
             unreachable!("not used in these tests")
         }
-        fn read_rendition_blob(
-            &self,
-            _material_id: &LearningMaterialId,
-            _release_id: &domain::PackageReleaseId,
-            _rendition_id: &str,
-        ) -> Result<Option<Vec<u8>>, ApplicationError> {
-            unreachable!("not used in these tests")
-        }
         fn delete_installation(
             &self,
             _material_id: &LearningMaterialId,
@@ -524,9 +551,9 @@ mod tests {
     #[test]
     fn attempt_lifecycle_is_durable_and_retries_never_rewrite_old_facts() {
         let (use_cases, materials) = setup();
-        let material_id = materials.create_text_material("Doc", "hello world");
+        let material_id = materials.create_audio_material("Audio");
         let first = use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .start_attempt(&material_id, MaterialCapability::Read, 5)
             .expect("start");
         let failed = use_cases
             .finalize_attempt(
@@ -546,7 +573,7 @@ mod tests {
 
         // A retry creates a new attempt and never rewrites the first.
         let retry = use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 11)
+            .start_attempt(&material_id, MaterialCapability::Read, 11)
             .expect("retry");
         assert_ne!(retry.attempt_id, first.attempt_id);
         let finished = use_cases
@@ -566,8 +593,8 @@ mod tests {
             .project(&material_id)
             .expect("project")
             .into_iter()
-            .find(|projection| projection.capability == MaterialCapability::Listen)
-            .expect("listen projection");
+            .find(|projection| projection.capability == MaterialCapability::Read)
+            .expect("read projection");
         // The latest attempt is the succeeded retry; without an adoption the
         // capability is still structurally derivable.
         assert_eq!(
@@ -584,23 +611,23 @@ mod tests {
     #[test]
     fn a_new_attempt_atomically_supersedes_the_previous_running_attempt() {
         let (use_cases, materials) = setup();
-        let material_id = materials.create_text_material("Doc", "hello world");
+        let material_id = materials.create_audio_material("Audio");
         let first = use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .start_attempt(&material_id, MaterialCapability::Read, 5)
             .expect("start");
         assert_eq!(first.status, CapabilityAttemptStatus::Running);
         // Same millisecond retry: distinct attempt ids and the old running
         // attempt becomes superseded in the same atomic start.
         let second = use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .start_attempt(&material_id, MaterialCapability::Read, 5)
             .expect("retry in the same millisecond");
         assert_ne!(first.attempt_id, second.attempt_id);
         let projection = use_cases
             .project(&material_id)
             .expect("project")
             .into_iter()
-            .find(|projection| projection.capability == MaterialCapability::Listen)
-            .expect("listen projection");
+            .find(|projection| projection.capability == MaterialCapability::Read)
+            .expect("read projection");
         assert_eq!(projection.status, domain::CapabilityStatus::Generating);
         let latest = projection.latest_attempt.expect("latest attempt");
         assert_eq!(latest.attempt_id, second.attempt_id);
@@ -619,11 +646,26 @@ mod tests {
     }
 
     #[test]
+    fn attempts_require_a_derivable_capability() {
+        let (use_cases, materials) = setup();
+        let video_id = materials.create_video_material("Video");
+        let listen_error = use_cases
+            .start_attempt(&video_id, MaterialCapability::Listen, 5)
+            .expect_err("video-only source cannot derive independent audio");
+        assert!(matches!(listen_error, ApplicationError::Invalid(_)));
+
+        let read_attempt = use_cases
+            .start_attempt(&video_id, MaterialCapability::Read, 5)
+            .expect("read is derivable from media");
+        assert_eq!(read_attempt.status, CapabilityAttemptStatus::Running);
+    }
+
+    #[test]
     fn cancelled_attempts_are_honest_and_never_failed_attempts() {
         let (use_cases, materials) = setup();
-        let material_id = materials.create_text_material("Doc", "hello world");
+        let material_id = materials.create_audio_material("Audio");
         let attempt = use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .start_attempt(&material_id, MaterialCapability::Read, 5)
             .expect("start");
         let cancelled = use_cases
             .finalize_attempt(
@@ -639,7 +681,7 @@ mod tests {
             .project(&material_id)
             .expect("project")
             .into_iter()
-            .find(|projection| projection.capability == MaterialCapability::Listen)
+            .find(|projection| projection.capability == MaterialCapability::Read)
             .expect("listen projection");
         assert_eq!(projection.status, domain::CapabilityStatus::Derivable);
     }
@@ -647,12 +689,12 @@ mod tests {
     #[test]
     fn restart_reconciliation_supersedes_every_running_attempt() {
         let (use_cases, materials) = setup();
-        let material_id = materials.create_text_material("Doc", "hello world");
+        let material_id = materials.create_audio_material("Audio");
         use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .start_attempt(&material_id, MaterialCapability::Read, 5)
             .expect("start");
         use_cases
-            .start_attempt(&material_id, MaterialCapability::Read, 6)
+            .start_attempt(&material_id, MaterialCapability::SynchronizedReadListen, 6)
             .expect("start");
         let reconciled = use_cases
             .reconcile_running_attempts(100)
@@ -662,8 +704,8 @@ mod tests {
             .project(&material_id)
             .expect("project")
             .into_iter()
-            .find(|projection| projection.capability == MaterialCapability::Listen)
-            .expect("listen projection");
+            .find(|projection| projection.capability == MaterialCapability::Read)
+            .expect("read projection");
         assert_eq!(
             projection.status,
             domain::CapabilityStatus::Derivable,
@@ -674,7 +716,7 @@ mod tests {
     #[test]
     fn finalizing_an_unknown_or_finished_attempt_is_refused() {
         let (use_cases, materials) = setup();
-        let material_id = materials.create_text_material("Doc", "hello world");
+        let material_id = materials.create_audio_material("Audio");
         let unknown = domain::CapabilityAttemptId::parse("attempt-missing").expect("valid id");
         let err = use_cases
             .finalize_attempt(
@@ -692,7 +734,7 @@ mod tests {
         ));
 
         let attempt = use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 1)
+            .start_attempt(&material_id, MaterialCapability::Read, 1)
             .expect("start");
         use_cases
             .finalize_attempt(
@@ -724,9 +766,9 @@ mod tests {
     #[test]
     fn empty_failure_reasons_are_rejected() {
         let (use_cases, materials) = setup();
-        let material_id = materials.create_text_material("Doc", "hello world");
+        let material_id = materials.create_audio_material("Audio");
         let attempt = use_cases
-            .start_attempt(&material_id, MaterialCapability::Listen, 1)
+            .start_attempt(&material_id, MaterialCapability::Read, 1)
             .expect("start");
         let err = use_cases
             .finalize_attempt(

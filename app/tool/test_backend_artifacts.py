@@ -38,6 +38,18 @@ def write_archive(path: Path, manifest: dict, files: dict[str, tuple[bytes, int]
 
 class BackendArtifactTests(unittest.TestCase):
     def test_installs_locked_artifacts_and_syncs_frontend_fixtures(self):
+        self.assertEqual(
+            artifacts.FIXTURE_MAP,
+            {
+                "contracts/events/examples.json": "test/fixtures/events/examples.json",
+                "testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json": (
+                    "test/fixtures/rhythm-frame/fixture-no-phone-rhythm.lltimeline.json"
+                ),
+                "testdata/rhythm-frame-qa/fixture-rhythm.lltimeline.json": (
+                    "test/fixtures/rhythm-frame/fixture-rhythm.lltimeline.json"
+                ),
+            },
+        )
         with tempfile.TemporaryDirectory() as directory:
             frontend = Path(directory) / "listen-app"
             frontend.mkdir()

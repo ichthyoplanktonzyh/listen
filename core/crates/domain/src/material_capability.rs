@@ -1,9 +1,10 @@
-//! Material Capability projection and attempts (Phase 1 contract 4.0.0).
+//! Material Capability projection and attempts (contract 5.0.0).
 //!
 //! A Material Capability is a modality view over one Material: Read, Listen,
 //! Watch, or synchronized Read-and-Listen. The projection reports
 //! `available`, `derivable`, `generating`, `unavailable`, or `failed_attempt`
-//! by reading both the current Material revision and the adopted composition.
+//! by reading both the current Material revision and the selected adopted
+//! composition.
 //! Failure is attached to a specific attempt and never invalidates an
 //! otherwise usable Material.
 //!
@@ -23,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AdoptedComposition, CapabilityAttemptId, DomainError, LearningMaterialId, MaterialRevision,
-    MediaKind, Rendition,
+    MediaKind, Rendition, RenditionOrigin,
 };
 
 /// One learner-facing Material Capability.
@@ -51,7 +52,7 @@ impl MaterialCapability {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityStatus {
-    /// The adopted composition already provides the capability.
+    /// The current media source or adopted composition already provides it.
     Available,
     /// The capability can be produced from the current Material facts.
     Derivable,
@@ -174,100 +175,129 @@ pub struct MaterialCapabilityProjection {
     pub latest_attempt: Option<CapabilityAttempt>,
 }
 
-/// Structural derivation rules for capabilities, independent of provider
-/// configuration.
-///
-/// - Read is derivable from any Media Rendition (speech-to-structured-reading
-///   path via ASR).
-/// - Listen is derivable when a Document Rendition exists (TTS path) or the
-///   adopted composition already provides a Structured Reading Resource.
-/// - Synchronized Read-and-Listen is derivable exactly when the exact
-///   structure, audio, and alignment can be produced from the current
-///   Material facts (a Document Rendition for structure and TTS audio, or
-///   media for structure via ASR).
-/// - Watch is not derivable in Phase 1: it is available only from a video
-///   Media Rendition.
+/// An available source media rendition that agrees with its declared media
+/// kind. Material API inputs bind source renditions to the current media item;
+/// keep the checks here too so stale or malformed snapshots do not advertise
+/// a playback capability.
+fn revision_has_media_kind(revision: &MaterialRevision, kind: MediaKind) -> bool {
+    revision.renditions.iter().any(|rendition| {
+        matches!(
+            rendition,
+            Rendition::Media(media)
+                if media.origin == RenditionOrigin::Source
+                    && media.media_id.is_some()
+                    && media.availability == crate::MediaAvailability::Available
+                    && media.kind == kind
+                    && crate::media_type_kind(&media.media_type) == Some(kind)
+        )
+    })
+}
+
+/// A selected, available media rendition of the adopted composition.
+fn adopted_has_media_kind(adopted: Option<&AdoptedComposition>, kind: MediaKind) -> bool {
+    adopted.is_some_and(|adopted| {
+        adopted.renditions.iter().any(|rendition| {
+            rendition.kind == "media"
+                && rendition.available
+                && adopted
+                    .selected_rendition_ids
+                    .contains(&rendition.rendition_id)
+                && crate::media_type_kind(&rendition.media_type) == Some(kind)
+        })
+    })
+}
+
+fn has_media(revision: &MaterialRevision, adopted: Option<&AdoptedComposition>) -> bool {
+    [MediaKind::Audio, MediaKind::Video]
+        .into_iter()
+        .any(|kind| {
+            revision_has_media_kind(revision, kind) || adopted_has_media_kind(adopted, kind)
+        })
+}
+
+fn adopted_has_structured_reading(adopted: &AdoptedComposition) -> bool {
+    adopted.resources.iter().any(|resource| {
+        resource.kind == "structured_reading"
+            && resource.availability == crate::PackageResourceAvailability::Available
+            && adopted
+                .selected_resource_ids
+                .contains(&resource.resource_id)
+    })
+}
+
+fn adopted_has_matching_alignment(adopted: &AdoptedComposition) -> bool {
+    let reading_ids: Vec<&str> = adopted
+        .resources
+        .iter()
+        .filter(|resource| {
+            resource.kind == "structured_reading"
+                && resource.availability == crate::PackageResourceAvailability::Available
+                && adopted
+                    .selected_resource_ids
+                    .contains(&resource.resource_id)
+        })
+        .map(|resource| resource.resource_id.as_str())
+        .collect();
+    !reading_ids.is_empty()
+        && adopted.resources.iter().any(|alignment| {
+            alignment.kind == "anchor_time_alignment"
+                && alignment.availability == crate::PackageResourceAvailability::Available
+                && adopted
+                    .selected_resource_ids
+                    .contains(&alignment.resource_id)
+                && alignment.anchor_resource_ids.iter().any(|anchor_id| {
+                    reading_ids
+                        .iter()
+                        .any(|reading_id| *reading_id == anchor_id)
+                })
+        })
+}
+
+/// Structural derivation rules for listening capabilities, independent of
+/// provider configuration. Read and synchronized Read-and-Listen can be
+/// produced from available audio or video media; Listen and Watch use an
+/// existing audio or video rendition directly and are never derived from text.
 fn derivation_prerequisite(
     capability: MaterialCapability,
     revision: &MaterialRevision,
     adopted: Option<&AdoptedComposition>,
 ) -> bool {
     match capability {
-        MaterialCapability::Read => revision.renditions.iter().any(|rendition| {
-            matches!(
-                rendition,
-                Rendition::Media(media)
-                    if media.kind == MediaKind::Video || media.kind == MediaKind::Audio
-            )
-        }),
-        MaterialCapability::Listen => {
-            revision
-                .renditions
-                .iter()
-                .any(|rendition| matches!(rendition, Rendition::Document(_)))
-                || adopted.is_some_and(|adopted| adopted.has_selected_structured_reading())
+        MaterialCapability::Read | MaterialCapability::SynchronizedReadListen => {
+            has_media(revision, adopted)
         }
-        MaterialCapability::Watch => false,
-        MaterialCapability::SynchronizedReadListen => {
-            let has_document = revision
-                .renditions
-                .iter()
-                .any(|rendition| matches!(rendition, Rendition::Document(_)));
-            let has_media = revision
-                .renditions
-                .iter()
-                .any(|rendition| matches!(rendition, Rendition::Media(_)));
-            has_document || has_media
-        }
+        MaterialCapability::Listen | MaterialCapability::Watch => false,
     }
 }
 
-/// Whether the adopted composition already provides a capability, from the
-/// adopted composition facts alone. `available` requires an adopted
-/// installation whose selected facts realize the capability.
-fn adopted_composition_provides(
+/// Whether the current media source or selected package composition already
+/// provides a capability. Structured-reading capabilities require media and
+/// exact, available package resources; media playback itself needs no package
+/// adoption when the current revision already binds the source rendition.
+fn current_source_or_adoption_provides(
     capability: MaterialCapability,
+    revision: &MaterialRevision,
     adopted: Option<&AdoptedComposition>,
 ) -> bool {
+    let has_audio = revision_has_media_kind(revision, MediaKind::Audio)
+        || adopted_has_media_kind(adopted, MediaKind::Audio);
+    let has_video = revision_has_media_kind(revision, MediaKind::Video)
+        || adopted_has_media_kind(adopted, MediaKind::Video);
     let Some(adopted) = adopted else {
-        return false;
+        return match capability {
+            MaterialCapability::Listen => has_audio,
+            MaterialCapability::Watch => has_video,
+            MaterialCapability::Read | MaterialCapability::SynchronizedReadListen => false,
+        };
     };
-    let has_document = adopted
-        .renditions
-        .iter()
-        .any(|rendition| matches!(rendition.kind.as_str(), "document"));
-    let has_audio = adopted
-        .renditions
-        .iter()
-        .any(|rendition| rendition.kind == "media" && rendition.media_type.starts_with("audio/"));
-    let has_video = adopted
-        .renditions
-        .iter()
-        .any(|rendition| rendition.kind == "media" && rendition.media_type.starts_with("video/"));
-    let has_structured_reading = adopted
-        .resources
-        .iter()
-        .any(|resource| resource.kind == "structured_reading");
+    let media_available = has_audio || has_video;
+    let has_structured_reading = adopted_has_structured_reading(adopted);
     match capability {
-        MaterialCapability::Read => has_document || has_structured_reading,
+        MaterialCapability::Read => media_available && has_structured_reading,
         MaterialCapability::Listen => has_audio,
         MaterialCapability::Watch => has_video,
         MaterialCapability::SynchronizedReadListen => {
-            // An exact Structured Reading, usable media, and a compatible
-            // alignment must all coexist: the alignment must declare the
-            // exact adopted Structured Reading resource as its anchor input.
-            has_audio
-                && has_structured_reading
-                && adopted.resources.iter().any(|resource| {
-                    resource.kind == "anchor_time_alignment" && {
-                        resource.anchor_resource_ids.iter().any(|anchor_id| {
-                            adopted.resources.iter().any(|candidate| {
-                                candidate.kind == "structured_reading"
-                                    && candidate.resource_id == *anchor_id
-                            })
-                        })
-                    }
-                })
+            media_available && has_structured_reading && adopted_has_matching_alignment(adopted)
         }
     }
 }
@@ -275,7 +305,7 @@ fn adopted_composition_provides(
 /// The five-state projection for one capability over the exact Material facts
 /// and the adopted composition.
 ///
-/// 1. An adopted composition that provides the capability is `available`.
+/// 1. A source or adopted composition that provides the capability is `available`.
 /// 2. Otherwise the latest attempt drives `generating` or `failed_attempt`;
 ///    cancelled and superseded attempts are honest terminal facts that never
 ///    project as failures.
@@ -291,7 +321,7 @@ pub fn project_capability(
         .iter()
         .filter(|attempt| attempt.capability == capability)
         .max_by_key(|attempt| (attempt.started_at_ms, attempt.attempt_id.as_str()));
-    let status = if adopted_composition_provides(capability, adopted) {
+    let status = if current_source_or_adoption_provides(capability, revision, adopted) {
         CapabilityStatus::Available
     } else if let Some(attempt) = &latest_attempt {
         match attempt.status {
@@ -372,19 +402,29 @@ mod tests {
     }
 
     fn media_revision(kind: MediaKind) -> MaterialRevision {
-        let material_id = LearningMaterialId::parse("material-media").expect("valid material id");
+        media_revision_with_availability(kind, crate::MediaAvailability::Available)
+    }
+
+    fn media_revision_with_availability(
+        kind: MediaKind,
+        availability: crate::MediaAvailability,
+    ) -> MaterialRevision {
+        let (material_id, media_id, fingerprint, media_type) = match kind {
+            MediaKind::Audio => ("material-audio", "media-audio", "fp-audio", "audio/mpeg"),
+            MediaKind::Video => ("material-video", "media-video", "fp-video", "video/mp4"),
+        };
         MaterialRevision::new(
-            material_id,
+            LearningMaterialId::parse(material_id).expect("valid material id"),
             "Media",
             vec![],
             vec![Rendition::Media(
                 crate::MediaRendition::new(
                     RenditionOrigin::Source,
                     kind,
-                    "audio/mpeg",
-                    "fp-1",
-                    crate::MediaAvailability::Available,
-                    Some(crate::MediaId::parse("media-1").expect("valid media id")),
+                    media_type,
+                    fingerprint,
+                    availability,
+                    Some(crate::MediaId::parse(media_id).expect("valid media id")),
                     None,
                     None,
                     None,
@@ -403,7 +443,7 @@ mod tests {
         key: u64,
     ) -> CapabilityAttempt {
         let mut attempt = CapabilityAttempt::start(
-            LearningMaterialId::parse("material-doc").expect("valid material id"),
+            LearningMaterialId::parse("material-audio").expect("valid material id"),
             capability,
             5,
             key,
@@ -439,61 +479,148 @@ mod tests {
     }
 
     #[test]
-    fn document_revision_projects_listen_derivable_and_read_unavailable() {
+    fn document_only_facts_do_not_enable_listening_capabilities() {
         let revision = document_revision();
-        let projection = project_capability(MaterialCapability::Listen, &revision, None, &[]);
-        assert_eq!(projection.status, CapabilityStatus::Derivable);
-        let read = project_capability(MaterialCapability::Read, &revision, None, &[]);
-        assert_eq!(read.status, CapabilityStatus::Unavailable);
-        let watch = project_capability(MaterialCapability::Watch, &revision, None, &[]);
-        assert_eq!(watch.status, CapabilityStatus::Unavailable);
-        // Synchronized reading is derivable from a document (structure + TTS
-        // audio + alignment can all be produced).
-        let synced = project_capability(
+        for capability in [
+            MaterialCapability::Read,
+            MaterialCapability::Listen,
+            MaterialCapability::Watch,
             MaterialCapability::SynchronizedReadListen,
-            &revision,
-            None,
-            &[],
-        );
-        assert_eq!(synced.status, CapabilityStatus::Derivable);
+        ] {
+            let projection = project_capability(capability, &revision, None, &[]);
+            assert_eq!(
+                projection.status,
+                CapabilityStatus::Unavailable,
+                "document facts do not provide {capability:?}"
+            );
+        }
+
+        let mut adopted_document = adopted(false, false, false, Vec::new());
+        adopted_document
+            .renditions
+            .push(crate::PackageRenditionFact {
+                rendition_id: "rendition-document".into(),
+                kind: "document".into(),
+                origin: RenditionOrigin::Source,
+                media_type: "text/plain".into(),
+                available: true,
+                media_digest: format!("sha256:{}", "d".repeat(64)),
+                media_size_bytes: 11,
+                media_id: None,
+                source_asset_id: None,
+                producer: None,
+            });
+        adopted_document
+            .selected_rendition_ids
+            .push("rendition-document".into());
+        for capability in [
+            MaterialCapability::Read,
+            MaterialCapability::Listen,
+            MaterialCapability::Watch,
+            MaterialCapability::SynchronizedReadListen,
+        ] {
+            let projection =
+                project_capability(capability, &revision, Some(&adopted_document), &[]);
+            assert_eq!(
+                projection.status,
+                CapabilityStatus::Unavailable,
+                "adopted document facts do not provide {capability:?}"
+            );
+        }
     }
 
     #[test]
-    fn media_revision_projects_read_derivable_and_synced_derivable() {
-        let revision = media_revision(MediaKind::Audio);
-        let read = project_capability(MaterialCapability::Read, &revision, None, &[]);
-        assert_eq!(read.status, CapabilityStatus::Derivable);
-        let listen = project_capability(MaterialCapability::Listen, &revision, None, &[]);
-        assert_eq!(listen.status, CapabilityStatus::Unavailable);
-        let synced = project_capability(
-            MaterialCapability::SynchronizedReadListen,
-            &revision,
-            None,
-            &[],
+    fn audio_and_video_sources_project_direct_and_derivable_capabilities() {
+        let audio = media_revision(MediaKind::Audio);
+        assert_eq!(
+            project_capability(MaterialCapability::Listen, &audio, None, &[]).status,
+            CapabilityStatus::Available
         );
-        assert_eq!(synced.status, CapabilityStatus::Derivable);
+        assert_eq!(
+            project_capability(MaterialCapability::Watch, &audio, None, &[]).status,
+            CapabilityStatus::Unavailable
+        );
+        for capability in [
+            MaterialCapability::Read,
+            MaterialCapability::SynchronizedReadListen,
+        ] {
+            assert_eq!(
+                project_capability(capability, &audio, None, &[]).status,
+                CapabilityStatus::Derivable
+            );
+        }
+
+        let video = media_revision(MediaKind::Video);
+        assert_eq!(
+            project_capability(MaterialCapability::Listen, &video, None, &[]).status,
+            CapabilityStatus::Unavailable
+        );
+        assert_eq!(
+            project_capability(MaterialCapability::Watch, &video, None, &[]).status,
+            CapabilityStatus::Available
+        );
+        for capability in [
+            MaterialCapability::Read,
+            MaterialCapability::SynchronizedReadListen,
+        ] {
+            assert_eq!(
+                project_capability(capability, &video, None, &[]).status,
+                CapabilityStatus::Derivable
+            );
+        }
+    }
+
+    #[test]
+    fn unavailable_or_mislabeled_source_renditions_do_not_enable_capabilities() {
+        let missing =
+            media_revision_with_availability(MediaKind::Audio, crate::MediaAvailability::Missing);
+        for capability in [
+            MaterialCapability::Read,
+            MaterialCapability::Listen,
+            MaterialCapability::Watch,
+            MaterialCapability::SynchronizedReadListen,
+        ] {
+            assert_eq!(
+                project_capability(capability, &missing, None, &[]).status,
+                CapabilityStatus::Unavailable
+            );
+        }
+
+        let mut mislabeled = media_revision(MediaKind::Audio);
+        let Rendition::Media(media) = &mut mislabeled.renditions[0] else {
+            unreachable!("fixture has a media rendition")
+        };
+        media.media_type = "video/mp4".into();
+        assert_eq!(
+            project_capability(MaterialCapability::Listen, &mislabeled, None, &[]).status,
+            CapabilityStatus::Unavailable
+        );
+        assert_eq!(
+            project_capability(MaterialCapability::Watch, &mislabeled, None, &[]).status,
+            CapabilityStatus::Unavailable
+        );
     }
 
     #[test]
     fn running_and_failed_attempts_drive_generating_and_failed_attempt() {
-        let revision = document_revision();
+        let revision = media_revision(MediaKind::Audio);
         let running = project_capability(
-            MaterialCapability::Listen,
+            MaterialCapability::Read,
             &revision,
             None,
             &[attempt(
-                MaterialCapability::Listen,
+                MaterialCapability::Read,
                 CapabilityAttemptStatus::Running,
                 1,
             )],
         );
         assert_eq!(running.status, CapabilityStatus::Generating);
         let failed = project_capability(
-            MaterialCapability::Listen,
+            MaterialCapability::Read,
             &revision,
             None,
             &[attempt(
-                MaterialCapability::Listen,
+                MaterialCapability::Read,
                 CapabilityAttemptStatus::Failed,
                 1,
             )],
@@ -501,19 +628,11 @@ mod tests {
         assert_eq!(failed.status, CapabilityStatus::FailedAttempt);
         // Failure is attached to the attempt; the attempt facts are never
         // rewritten by a later attempt.
-        let first = attempt(
-            MaterialCapability::Listen,
-            CapabilityAttemptStatus::Failed,
-            1,
-        );
-        let mut later = attempt(
-            MaterialCapability::Listen,
-            CapabilityAttemptStatus::Failed,
-            2,
-        );
+        let first = attempt(MaterialCapability::Read, CapabilityAttemptStatus::Failed, 1);
+        let mut later = attempt(MaterialCapability::Read, CapabilityAttemptStatus::Failed, 2);
         later.started_at_ms = 9;
         let projection = project_capability(
-            MaterialCapability::Listen,
+            MaterialCapability::Read,
             &revision,
             None,
             &[first.clone(), later.clone()],
@@ -524,7 +643,7 @@ mod tests {
 
     #[test]
     fn cancelled_and_superseded_attempts_are_never_failed_attempts() {
-        let revision = document_revision();
+        let revision = media_revision(MediaKind::Audio);
         for (status, expected) in [
             (
                 CapabilityAttemptStatus::Cancelled,
@@ -536,10 +655,10 @@ mod tests {
             ),
         ] {
             let projection = project_capability(
-                MaterialCapability::Listen,
+                MaterialCapability::Read,
                 &revision,
                 None,
-                &[attempt(MaterialCapability::Listen, status, 1)],
+                &[attempt(MaterialCapability::Read, status, 1)],
             );
             assert_eq!(
                 projection.status, expected,
@@ -555,13 +674,13 @@ mod tests {
 
     #[test]
     fn a_succeeded_attempt_without_adoption_is_still_derivable() {
-        let revision = document_revision();
+        let revision = media_revision(MediaKind::Audio);
         let projection = project_capability(
-            MaterialCapability::Listen,
+            MaterialCapability::Read,
             &revision,
             None,
             &[attempt(
-                MaterialCapability::Listen,
+                MaterialCapability::Read,
                 CapabilityAttemptStatus::Succeeded,
                 1,
             )],
@@ -659,14 +778,19 @@ mod tests {
             resources,
             renditions,
             selected_resource_ids: selected_resources,
-            selected_rendition_ids: vec!["rendition-audio".into()],
+            selected_rendition_ids: if with_audio {
+                vec!["rendition-audio".into()]
+            } else {
+                Vec::new()
+            },
         }
     }
 
     #[test]
-    fn adopted_composition_provides_listen_and_synchronized_read_listen() {
-        let revision = document_revision();
-        // Audio rendition alone makes Listen available.
+    fn adopted_audio_and_exact_reading_alignment_provide_capabilities() {
+        let revision = media_revision(MediaKind::Video);
+        // A selected audio rendition makes Listen available for a video
+        // material without requiring a package adoption for its source video.
         let audio_only = adopted(true, false, false, Vec::new());
         let listen = project_capability(
             MaterialCapability::Listen,
@@ -676,7 +800,7 @@ mod tests {
         );
         assert_eq!(listen.status, CapabilityStatus::Available);
 
-        // Structured reading + audio + a compatible alignment make
+        // Structured reading + available media + a compatible alignment make
         // Synchronized Read-and-Listen available.
         let synced = adopted(true, true, true, vec!["resource-reading".into()]);
         let projection = project_capability(
@@ -689,7 +813,7 @@ mod tests {
 
         // An alignment that does not anchor the selected Structured Reading
         // is not compatible: the capability stays structurally derivable
-        // from the document, but is never available from the adoption.
+        // from the current media, but is never available from the adoption.
         let mismatched = adopted(true, true, true, vec!["other-reading".into()]);
         let projection = project_capability(
             MaterialCapability::SynchronizedReadListen,
@@ -701,20 +825,20 @@ mod tests {
     }
 
     #[test]
-    fn adopted_structured_reading_makes_listen_derivable_without_document() {
-        let revision = media_revision(MediaKind::Audio);
-        // The adopted composition supplies a Structured Reading Resource but
-        // no audio rendition, so Listen (TTS from the reading) becomes
-        // derivable even though the revision has no Document Rendition.
+    fn structured_reading_does_not_create_independent_listen_audio() {
+        let revision = media_revision(MediaKind::Video);
+        // An adopted reading resource does not derive audio. Video playback
+        // remains Watch, and Read can use the adopted structure.
         let synced = adopted(false, true, false, Vec::new());
-        let projection =
-            project_capability(MaterialCapability::Listen, &revision, Some(&synced), &[]);
-        assert_eq!(projection.status, CapabilityStatus::Derivable);
+        let listen = project_capability(MaterialCapability::Listen, &revision, Some(&synced), &[]);
+        assert_eq!(listen.status, CapabilityStatus::Unavailable);
+        let read = project_capability(MaterialCapability::Read, &revision, Some(&synced), &[]);
+        assert_eq!(read.status, CapabilityStatus::Available);
     }
 
     #[test]
     fn adopted_composition_view_projects_from_an_installation_and_plan() {
-        let revision = document_revision();
+        let revision = media_revision(MediaKind::Video);
         let installation = PackageInstallation {
             release_id: PackageReleaseId::parse("sha256:release").expect("valid release id"),
             release_created_at_ms: 1,
@@ -759,5 +883,35 @@ mod tests {
             &[],
         );
         assert_eq!(projection.status, CapabilityStatus::Available);
+    }
+
+    #[test]
+    fn adopted_media_must_be_available_and_selected() {
+        let revision = media_revision(MediaKind::Video);
+        let mut unavailable = adopted(true, false, false, Vec::new());
+        unavailable.renditions[0].available = false;
+        assert_eq!(
+            project_capability(
+                MaterialCapability::Listen,
+                &revision,
+                Some(&unavailable),
+                &[]
+            )
+            .status,
+            CapabilityStatus::Unavailable
+        );
+
+        let mut unselected = adopted(true, false, false, Vec::new());
+        unselected.selected_rendition_ids.clear();
+        assert_eq!(
+            project_capability(
+                MaterialCapability::Listen,
+                &revision,
+                Some(&unselected),
+                &[]
+            )
+            .status,
+            CapabilityStatus::Unavailable
+        );
     }
 }

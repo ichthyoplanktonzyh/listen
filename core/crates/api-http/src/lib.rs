@@ -5,8 +5,8 @@ use std::time::Instant;
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, DictionaryProvider, EnglishPronunciationProvider,
-    ImportSubtitle, InMemorySecretStore, RecordSpeakingProduction, RegisterMedia, SecretStore,
-    SyntacticAnalysisProvider, SyntacticConsumerOrchestrator, SyntacticProductQualification,
+    ImportSubtitle, InMemorySecretStore, RegisterMedia, SecretStore, SyntacticAnalysisProvider,
+    SyntacticConsumerOrchestrator, SyntacticProductQualification,
 };
 use axum::body::Body;
 use axum::extract::{MatchedPath, Path, Query, State};
@@ -20,13 +20,11 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    HuntingCandidate, HuntingCandidateStatus, HuntingOccurrenceQueryResult, HuntingTarget,
-    HuntingTargetId, HuntingTargetStatus, LanguageCode, LearningStatus, LexicalEntryId,
-    ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus, MediaAvailability, MediaId,
-    MediaKind, MediaTriageIntent, PracticeAttempt, PracticeAttemptId, PracticeItem,
-    PracticeSession, PracticeSessionId, ReviewItem, ReviewItemId, SubtitleSentenceId,
-    SubtitleTrackId, UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus,
-    VocabularyAssetBundle,
+    HuntingOccurrenceQueryResult, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
+    LanguageCode, LearningStatus, LexicalEntryId, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxStatus, MediaAvailability, MediaId, MediaKind, MediaTriageIntent,
+    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
+    ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -42,8 +40,8 @@ use application_executor::ApplicationExecutor;
 use local_runtime::{
     CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
     LearningPreparationCoordinator, LearningResourceManager, PhoneticAnalysisCoordinator,
-    RecordingTranscriptionCoordinator, SoundLineCoordinator, SpeechBatchCoordinator,
-    SpeechSynthesisManager, SubtitleSearchCoordinator,
+    SoundLineCoordinator, SpeechBatchCoordinator, SpeechSynthesisManager,
+    SubtitleSearchCoordinator,
 };
 pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
 pub use secret_store_keychain::KeychainSecretStore;
@@ -51,22 +49,6 @@ pub use secret_store_keychain::KeychainSecretStore;
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub const API_VERSION: u16 = 1;
-/// Contract `3.3.0` adds the durable package lifecycle HTTP surface on top of
-/// the learning-material `3.2.0` (itself an additive minor over the
-/// material-retention `3.1.0`, which was an additive minor over the R5
-/// breaking `3.0.0`, which removed the published `/v1/*chunk-timelines*`
-/// operations and the retired ChunkTimeline LLTimeline fields). The minor
-/// bump is purely additive and backward-compatible: the fixed
-/// `/v1/materials/{material_id}/package-installations`,
-/// `/v1/materials/{material_id}/editions`, and
-/// `/v1/materials/{material_id}/edition-adoption` operations expose the
-/// application-owned Package Installation (candidate-only), Edition Listing,
-/// and Learning Edition Adoption (explicit, idempotent) intents behind
-/// path-free, privacy-redacted DTOs, while every previously published
-/// endpoint stays compatible. API generation stays `1`, the runtime/workspace
-/// version stays `0.7.0`, the SQLite schema stays v60 with no new migration,
-/// and the Content Package v1/v2 schema versions are unchanged; `3.3.0` is
-/// the current unreleased contract.
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -74,7 +56,12 @@ pub fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-pub const CONTRACT_VERSION: &str = "4.0.0";
+/// Contract 5.0.0 is the breaking listening-focused HTTP surface. It accepts
+/// audio/video materials, removes document-only and non-listening workflows,
+/// and retains media package installation/adoption. API generation remains 1,
+/// the workspace version remains 0.7.0, the fresh SQLite schema is v64, and
+/// the Content Package v3 format is unchanged.
+pub const CONTRACT_VERSION: &str = "5.0.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))
@@ -82,7 +69,6 @@ fn next_correlation_id() -> String {
 
 #[derive(Clone)]
 pub struct AnalysisRuntime {
-    pub transcription: Arc<RecordingTranscriptionCoordinator>,
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub sound_line: Arc<SoundLineCoordinator>,
@@ -114,9 +100,6 @@ pub struct GenerativeRuntime {
     /// Builds protocol-neutral semantic runtimes from persisted profiles.
     /// Concrete protocol selection stays in the adapter crate.
     pub llm_runtime_factory: Arc<dyn application::SemanticLlmRuntimeFactory>,
-    /// Assembles native realtime protocol adapters behind the
-    /// application-owned provider-neutral seam.
-    pub realtime_adapter_factory: Arc<dyn application::RealtimeConversationAdapterFactory>,
 }
 
 #[derive(Clone)]
@@ -138,8 +121,7 @@ pub struct ApiState {
 impl ApiState {
     pub fn new<R>(services: AppServices, repository: Arc<R>, token: impl Into<Arc<str>>) -> Self
     where
-        R: application::TranscriptionRepository
-            + application::PhoneticAnalysisRepository
+        R: application::PhoneticAnalysisRepository
             + application::BackgroundJobStore
             + application::LearningPreparationRunRepository
             + 'static,
@@ -152,14 +134,6 @@ impl ApiState {
                 Arc::new(EnglishPronunciationProvider),
                 Arc::new(ChinesePronunciationProvider::new()),
             ]);
-        let transcription = Arc::new(
-            RecordingTranscriptionCoordinator::new(
-                services.clone(),
-                repository.clone(),
-                events.clone(),
-            )
-            .expect("recording transcription coordinator must initialize"),
-        );
         #[cfg(test)]
         let phonetic_analysis = Arc::new(
             PhoneticAnalysisCoordinator::new_with_test_provider(
@@ -190,7 +164,6 @@ impl ApiState {
         Self {
             application: ApplicationExecutor::new(services.clone()),
             analysis: AnalysisRuntime {
-                transcription,
                 phonetic_analysis,
                 speech_jobs,
                 sound_line,
@@ -230,9 +203,6 @@ impl ApiState {
                 llm_batches: application::batch_governor::LlmBatchCoordinator::new(repository)
                     .expect("LLM batch coordinator must initialize"),
                 llm_runtime_factory: Arc::new(llm_provider::LlmSemanticRuntimeFactory::new()),
-                realtime_adapter_factory: Arc::new(
-                    realtime_provider::NativeRealtimeAdapterFactory::new(),
-                ),
             },
             infrastructure: ApiInfrastructure {
                 token: token.into(),
@@ -253,14 +223,6 @@ impl ApiState {
         factory: Arc<dyn application::SemanticLlmRuntimeFactory>,
     ) -> Self {
         self.generative.llm_runtime_factory = factory;
-        self
-    }
-
-    pub fn with_realtime_adapter_factory(
-        mut self,
-        factory: Arc<dyn application::RealtimeConversationAdapterFactory>,
-    ) -> Self {
-        self.generative.realtime_adapter_factory = factory;
         self
     }
 
@@ -476,12 +438,6 @@ impl From<ApplicationError> for ApiError {
                 "adopted composition content is missing or fails integrity verification",
                 false,
             ),
-            ApplicationError::SourceUnavailable => Self::new(
-                StatusCode::BAD_GATEWAY,
-                "source_unavailable",
-                "a referenced source asset is unavailable",
-                true,
-            ),
             ApplicationError::Subtitle(error) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "subtitle_parse_error",
@@ -529,31 +485,6 @@ impl From<ApplicationError> for ApiError {
                     _ => (StatusCode::BAD_GATEWAY, false),
                 };
                 Self::new(status, "llm_provider_error", error.to_string(), retryable)
-            }
-            ApplicationError::RealtimeProvider(error) => {
-                use domain::RealtimeProviderError as E;
-                if matches!(error, E::Auth) {
-                    Self::new(
-                        StatusCode::BAD_REQUEST,
-                        "realtime_credential_missing",
-                        "realtime provider credential is missing",
-                        false,
-                    )
-                } else {
-                    let (status, retryable) = match &error {
-                        E::RateLimit { .. } => (StatusCode::TOO_MANY_REQUESTS, true),
-                        E::Timeout => (StatusCode::GATEWAY_TIMEOUT, true),
-                        E::Offline | E::Disconnected => (StatusCode::BAD_GATEWAY, true),
-                        E::UnsupportedCapability { .. } => (StatusCode::BAD_REQUEST, false),
-                        E::Protocol { .. } | E::Auth => (StatusCode::BAD_GATEWAY, false),
-                    };
-                    Self::new(
-                        status,
-                        "realtime_provider_error",
-                        error.to_string(),
-                        retryable,
-                    )
-                }
             }
             ApplicationError::SecretStore(error) => Self::internal(
                 StatusCode::INTERNAL_SERVER_ERROR,

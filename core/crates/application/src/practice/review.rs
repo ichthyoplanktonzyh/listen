@@ -155,9 +155,7 @@ pub(super) fn review_card(item: &ReviewItem) -> ReviewCard {
             target.as_deref().unwrap_or_default(),
         )),
         ReviewCardKind::PhrasePresence => target.clone(),
-        ReviewCardKind::WordRecognition
-        | ReviewCardKind::SourceSentenceRecall
-        | ReviewCardKind::DelayedRetelling => None,
+        ReviewCardKind::WordRecognition | ReviewCardKind::SourceSentenceRecall => None,
     };
     let answer = match kind {
         ReviewCardKind::WordRecognition => target
@@ -165,8 +163,7 @@ pub(super) fn review_card(item: &ReviewItem) -> ReviewCard {
             .unwrap_or_else(|| item.prompt_snapshot.clone()),
         ReviewCardKind::ChunkCloze
         | ReviewCardKind::PhrasePresence
-        | ReviewCardKind::SourceSentenceRecall
-        | ReviewCardKind::DelayedRetelling => item.prompt_snapshot.clone(),
+        | ReviewCardKind::SourceSentenceRecall => item.prompt_snapshot.clone(),
     };
     ReviewCard {
         kind,
@@ -182,7 +179,6 @@ fn review_card_kind(item: &ReviewItem) -> ReviewCardKind {
         ReviewSourceKind::Chunk => ReviewCardKind::ChunkCloze,
         ReviewSourceKind::ConnectedSpeech => ReviewCardKind::PhrasePresence,
         ReviewSourceKind::Sentence => ReviewCardKind::SourceSentenceRecall,
-        ReviewSourceKind::SpeakingAttempt => ReviewCardKind::DelayedRetelling,
         ReviewSourceKind::PracticeFailure | ReviewSourceKind::ListeningInbox => {
             if item
                 .anchors
@@ -214,7 +210,7 @@ fn review_card_target(item: &ReviewItem, kind: ReviewCardKind) -> Option<String>
         ReviewCardKind::WordRecognition => PracticeAnchorKind::LexicalEntry,
         ReviewCardKind::ChunkCloze => PracticeAnchorKind::Chunk,
         ReviewCardKind::PhrasePresence => PracticeAnchorKind::ConnectedSpeech,
-        ReviewCardKind::SourceSentenceRecall | ReviewCardKind::DelayedRetelling => return None,
+        ReviewCardKind::SourceSentenceRecall => return None,
     };
     item.anchors
         .iter()
@@ -264,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn fsrs_writes_memory_state_and_preserves_anki_learning_states() {
+    fn fsrs_writes_memory_state_and_preserves_short_learning_steps() {
         let current = new_schedule();
         assert_eq!(current.state(), ReviewCardState::New);
 
@@ -392,16 +388,5 @@ mod tests {
         ));
         assert_eq!(sentence.kind, ReviewCardKind::SourceSentenceRecall);
         assert_eq!(sentence.answer, "I would have gone");
-
-        let delayed = review_card(&item(
-            ReviewSourceKind::SpeakingAttempt,
-            PracticeAnchorKind::Sentence,
-            Some("en"),
-            "The ferry leaves on Tuesday.",
-        ));
-        assert_eq!(delayed.kind, ReviewCardKind::DelayedRetelling);
-        assert_eq!(delayed.answer, "The ferry leaves on Tuesday.");
-        assert!(delayed.cue.is_none());
-        assert!(delayed.target.is_none());
     }
 }

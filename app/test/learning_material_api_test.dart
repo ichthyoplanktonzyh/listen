@@ -5,27 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
-/// The learning-material API surface (Core contract 4.0): exact routes,
-/// encoded id path segments, honest tri-state retain transmission, and the
-/// pure-model boundary (no location, no wire coupling in lib/models).
+/// Core 5.0 media-material API behavior: exact routes, media-only rendition payloads,
+/// honest retain transmission, and the pure-model boundary.
 void main() {
   test('learning material models stay pure and location-free', () {
     final source = File('lib/models/learning_material.dart').readAsStringSync();
 
     expect(
       source,
-      isNot(contains('path')),
-      reason: 'no file location may exist in the material domain models',
+      isNot(
+        RegExp(
+          r'^\s*(?:final|late\s+final)\s+(?:String|Uri)\s+\w*(?:path|file|uri)\s*;',
+          multiLine: true,
+          caseSensitive: false,
+        ),
+      ),
+      reason: 'material DTOs must not expose filesystem locations',
     );
-    expect(
-      source,
-      isNot(RegExp(r'\b(?:fromJson|toJson)\b')),
-      reason: 'JSON decode/encode belongs in services/api/materials.dart only',
-    );
+    expect(source, isNot(RegExp(r'\b(?:fromJson|toJson)\b')));
   });
 
-  test('parses source assets and typed renditions with nullable fields',
-      () async {
+  test('decodes media renditions without document material fields', () async {
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
@@ -36,28 +36,6 @@ void main() {
           statusCode: 200,
           body: jsonEncode(
             _details(
-              sourceAssets: [
-                {
-                  'id': 'source-1',
-                  'media_type': 'text/plain',
-                  'byte_length': 11,
-                  'sha256_digest': 'a' * 64,
-                  'binding': {'type': 'managed', 'reference': null},
-                  'availability': {'state': 'available', 'reason': null},
-                  'created_at_ms': 1,
-                },
-              ],
-              documentRenditions: [
-                {
-                  'id': 'document-1',
-                  'origin': 'source',
-                  'media_type': 'text/plain',
-                  'language': null,
-                  'digest': 'a' * 64,
-                  'byte_size': 11,
-                  'source_asset_id': 'source-1',
-                },
-              ],
               mediaRenditions: [
                 {
                   'id': 'media-1',
@@ -82,209 +60,163 @@ void main() {
     expect(details.material.id, 'material-1');
     expect(details.material.retainedAtMs, 42);
     expect(details.material.currentRevisionId, 'revision-1');
-    expect(details.shape, MaterialShape.mixed);
+    expect(details.shape, MaterialShape.audio);
     final revision = details.currentRevision;
-    expect(revision.id, 'revision-1');
-    expect(revision.materialId, 'material-1');
     expect(revision.title, 'A podcast episode');
-    final source = revision.sourceAssets.single;
-    expect(source.id, 'source-1');
-    expect(source.mediaType, 'text/plain');
-    expect(source.binding.type, SourceAssetBindingType.managed);
-    expect(source.binding.reference, isNull);
-    expect(source.availability.isAvailable, isTrue);
-    final document = revision.documentRenditions.single;
-    expect(document.language, isNull);
-    expect(document.digest, hasLength(64));
-    expect(document.byteSize, 11);
-    expect(document.sourceAssetId, 'source-1');
+    expect(revision.mediaRenditions, hasLength(1));
     final media = revision.mediaRenditions.single;
     expect(media.mediaId, 'media-1');
     expect(media.kind, MediaRenditionKind.audio);
     expect(media.availability, MediaRenditionAvailability.archived);
   });
 
-  test('decodes Temporary Material as nullable membership evidence', () async {
+  test('resolves temporary media as nullable library membership', () async {
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
       transport: (method, path, body) async {
-        final details = _details(
-          retainedAtMs: null,
-          shape: 'audio',
-          sourceAssets: const [],
-          documentRenditions: const [],
-          mediaRenditions: [
-            {
-              'id': 'media-1',
-              'origin': 'source',
-              'kind': 'video',
-              'media_type': 'video/mp4',
-              'fingerprint': 'fp',
-              'availability': 'missing',
-              'media_id': 'media-1',
-              'media_sha256': null,
-              'media_byte_size': null,
-            },
-          ],
+        expect(path, '/v1/media/media-1/material');
+        return (
+          statusCode: 200,
+          body: jsonEncode(
+            _details(
+              retainedAtMs: null,
+              shape: 'video',
+              mediaRenditions: [
+                {
+                  'id': 'media-1',
+                  'origin': 'source',
+                  'kind': 'video',
+                  'media_type': 'video/mp4',
+                  'fingerprint': 'fp',
+                  'availability': 'missing',
+                  'media_id': 'media-1',
+                  'media_sha256': null,
+                  'media_byte_size': null,
+                },
+              ],
+            ),
+          ),
         );
-        return (statusCode: 200, body: jsonEncode(details));
       },
     );
 
     final details = await api.resolveMaterialForMedia('media-1');
 
-    expect(details.material.retainedAtMs, isNull);
     expect(details.material.isRetained, isFalse);
-    expect(details.isRetained, isFalse);
-    expect(details.shape, MaterialShape.audio);
-    final rendition = details.currentRevision.mediaRenditions.single;
-    expect(rendition.kind, MediaRenditionKind.video);
-    expect(rendition.availability, MediaRenditionAvailability.missing);
-  });
-
-  test('list returns retained materials through /v1/materials', () async {
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        expect(method, 'GET');
-        expect(path, '/v1/materials');
-        expect(body, isNull);
-        return (statusCode: 200, body: jsonEncode([_details()]));
-      },
+    expect(details.shape, MaterialShape.video);
+    expect(
+      details.currentRevision.mediaRenditions.single.availability,
+      MediaRenditionAvailability.missing,
     );
-
-    final materials = await api.listLearningMaterials();
-
-    expect(materials, hasLength(1));
-    expect(materials.single.material.id, 'material-1');
   });
 
-  test('read encodes the material id path segment', () async {
+  test(
+    'list and read use the materials routes and encode path segments',
+    () async {
+      final seen = <String>[];
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'token',
+        transport: (method, path, body) async {
+          seen.add('$method $path');
+          return (
+            statusCode: 200,
+            body: jsonEncode(
+              method == 'GET' && path == '/v1/materials'
+                  ? [_details()]
+                  : _details(),
+            ),
+          );
+        },
+      );
+
+      expect(await api.listLearningMaterials(), hasLength(1));
+      await api.readLearningMaterial('material/1');
+
+      expect(seen, ['GET /v1/materials', 'GET /v1/materials/material%2F1']);
+    },
+  );
+
+  test(
+    'create sends media renditions and no document rendition field',
+    () async {
+      Map<String, dynamic>? request;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'token',
+        transport: (method, path, body) async {
+          expect(method, 'POST');
+          expect(path, '/v1/materials');
+          request = jsonDecode(body!) as Map<String, dynamic>;
+          return (statusCode: 200, body: jsonEncode(_details()));
+        },
+      );
+
+      final details = await api.createLearningMaterial(
+        CreateLearningMaterialInput(
+          title: 'A podcast episode',
+          mediaRenditions: const [MediaRenditionInput(mediaId: 'media-1')],
+        ),
+      );
+
+      expect(request!['title'], 'A podcast episode');
+      expect(request!.containsKey('source_assets'), isFalse);
+      expect(request!.containsKey('document_renditions'), isFalse);
+      expect(request!['media_renditions'], [
+        {'media_id': 'media-1'},
+      ]);
+      expect(details.material.id, 'material-1');
+    },
+  );
+
+  test(
+    'create retain preserves explicit null, false, true, and omission',
+    () async {
+      final bodies = <Map<String, dynamic>>[];
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'token',
+        transport: (method, path, body) async {
+          bodies.add(jsonDecode(body!) as Map<String, dynamic>);
+          return (statusCode: 200, body: jsonEncode(_details()));
+        },
+      );
+      final input = CreateLearningMaterialInput(
+        title: 'Episode',
+        mediaRenditions: const [MediaRenditionInput(mediaId: 'media-1')],
+      );
+
+      await api.createLearningMaterial(
+        input,
+        retain: const MaterialRetainExplicit(false),
+      );
+      await api.createLearningMaterial(
+        input,
+        retain: const MaterialRetainExplicit(null),
+      );
+      await api.createLearningMaterial(input);
+      await api.createLearningMaterial(
+        input,
+        retain: const MaterialRetainExplicit(true),
+      );
+
+      expect(bodies[0]['retain'], isFalse);
+      expect(bodies[1].containsKey('retain'), isTrue);
+      expect(bodies[1]['retain'], isNull);
+      expect(bodies[2].containsKey('retain'), isFalse);
+      expect(bodies[3]['retain'], isTrue);
+    },
+  );
+
+  test('append revision posts only media rendition inputs', () async {
     String? seenPath;
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        seenPath = path;
-        return (statusCode: 200, body: jsonEncode(_details()));
-      },
-    );
-
-    await api.readLearningMaterial('material/1');
-
-    expect(seenPath, '/v1/materials/material%2F1');
-  });
-
-  test('create transmits source assets and typed renditions on /v1/materials',
-      () async {
     Map<String, dynamic>? request;
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
       transport: (method, path, body) async {
         expect(method, 'POST');
-        expect(path, '/v1/materials');
-        request = jsonDecode(body!) as Map<String, dynamic>;
-        return (statusCode: 200, body: jsonEncode(_details()));
-      },
-    );
-
-    final details = await api.createLearningMaterial(
-      CreateLearningMaterialInput(
-        title: 'A podcast episode',
-        sourceAssets: [
-          SourceAssetInput(
-            mediaType: 'text/plain',
-            byteLength: 5,
-            sha256Digest: 'b' * 64,
-            binding: const SourceAssetBinding(
-              type: SourceAssetBindingType.managed,
-            ),
-          ),
-        ],
-        documentRenditions: [
-          DocumentRenditionInput(
-            mediaType: 'text/plain',
-            digest: 'b' * 64,
-            byteSize: 5,
-            language: 'en',
-            sourceAssetIndex: 0,
-          ),
-        ],
-        mediaRenditions: const [MediaRenditionInput(mediaId: 'media-1')],
-      ),
-    );
-
-    expect(request!['title'], 'A podcast episode');
-    final sourceAssets = request!['source_assets'] as List<dynamic>;
-    expect(sourceAssets, hasLength(1));
-    expect(sourceAssets[0], {
-      'media_type': 'text/plain',
-      'byte_length': 5,
-      'sha256_digest': 'b' * 64,
-      'binding': {'type': 'managed', 'reference': null},
-    });
-    final documentRenditions =
-        request!['document_renditions'] as List<dynamic>;
-    expect(documentRenditions, hasLength(1));
-    expect(documentRenditions[0], {
-      'media_type': 'text/plain',
-      'language': 'en',
-      'digest': 'b' * 64,
-      'byte_size': 5,
-      'source_asset_index': 0,
-    });
-    expect(request!['media_renditions'], [
-      {'media_id': 'media-1'},
-    ]);
-    expect(details.material.id, 'material-1');
-  });
-
-  test('create retain: explicit null/false/true are transmitted honestly, '
-      'omission stays omission', () async {
-    final bodies = <Map<String, dynamic>>[];
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        bodies.add(jsonDecode(body!) as Map<String, dynamic>);
-        return (statusCode: 200, body: jsonEncode(_details()));
-      },
-    );
-
-    await api.createLearningMaterial(
-      _createInput(),
-      retain: const MaterialRetainExplicit(false),
-    );
-    await api.createLearningMaterial(
-      _createInput(),
-      retain: const MaterialRetainExplicit(null),
-    );
-    await api.createLearningMaterial(_createInput());
-    await api.createLearningMaterial(
-      _createInput(),
-      retain: const MaterialRetainExplicit(true),
-    );
-
-    expect(bodies[0]['retain'], isFalse);
-    expect(bodies[1].containsKey('retain'), isTrue);
-    expect(bodies[1]['retain'], isNull);
-    expect(bodies[2].containsKey('retain'), isFalse);
-    expect(bodies[3]['retain'], isTrue);
-  });
-
-  test('append revision posts typed inputs to the encoded material route',
-      () async {
-    String? seenMethod;
-    String? seenPath;
-    Map<String, dynamic>? request;
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        seenMethod = method;
         seenPath = path;
         request = jsonDecode(body!) as Map<String, dynamic>;
         return (statusCode: 200, body: jsonEncode(_details()));
@@ -295,103 +227,63 @@ void main() {
       'material/1',
       AppendMaterialRevisionInput(
         title: 'Revised',
-        sourceAssets: [
-          SourceAssetInput(
-            mediaType: 'text/plain',
-            byteLength: 4,
-            sha256Digest: 'c' * 64,
-            binding: const SourceAssetBinding(
-              type: SourceAssetBindingType.managed,
-            ),
-          ),
-        ],
-        documentRenditions: [
-          DocumentRenditionInput(
-            mediaType: 'text/plain',
-            digest: 'c' * 64,
-            byteSize: 4,
-            sourceAssetIndex: 0,
-          ),
-        ],
-        mediaRenditions: const [],
+        mediaRenditions: const [MediaRenditionInput(mediaId: 'media-2')],
       ),
     );
 
-    expect(seenMethod, 'POST');
     expect(seenPath, '/v1/materials/material%2F1/revisions');
     expect(request!['title'], 'Revised');
-    expect(
-      (request!['source_assets'] as List<dynamic>).single['sha256_digest'],
-      'c' * 64,
-    );
-    expect(
-      (request!['document_renditions'] as List<dynamic>).single['digest'],
-      'c' * 64,
-    );
-    expect(
-      (request!['document_renditions'] as List<dynamic>).single['byte_size'],
-      4,
-    );
+    expect(request!.containsKey('source_assets'), isFalse);
+    expect(request!.containsKey('document_renditions'), isFalse);
+    expect(request!['media_renditions'], [
+      {'media_id': 'media-2'},
+    ]);
   });
 
-  test('read revision encodes both id path segments', () async {
-    String? seenPath;
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        seenPath = path;
-        return (
-          statusCode: 200,
-          body: jsonEncode({
-            'id': 'revision/2',
-            'material_id': 'material-1',
-            'title': 'A podcast episode',
-            'source_assets': [
-              {
-                'id': 'source-1',
-                'media_type': 'text/plain',
-                'byte_length': 11,
-                'sha256_digest': 'b' * 64,
-                'binding': {'type': 'managed', 'reference': null},
-                'availability': {'state': 'available', 'reason': null},
-                'created_at_ms': 1,
-              },
-            ],
-            'document_renditions': [
-              {
-                'id': 'document-1',
-                'origin': 'source',
-                'media_type': 'text/plain',
-                'language': null,
-                'digest': 'b' * 64,
-                'byte_size': 11,
-                'source_asset_id': 'source-1',
-              },
-            ],
-            'media_renditions': <Map<String, dynamic>>[],
-            'created_at_ms': 1,
-          }),
-        );
-      },
-    );
+  test(
+    'revision reads encode both material and revision path segments',
+    () async {
+      String? seenPath;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'token',
+        transport: (method, path, body) async {
+          seenPath = path;
+          return (
+            statusCode: 200,
+            body: jsonEncode({
+              'id': 'revision/2',
+              'material_id': 'material-1',
+              'title': 'A podcast episode',
+              'media_renditions': <Map<String, dynamic>>[],
+              'created_at_ms': 1,
+            }),
+          );
+        },
+      );
 
-    final revision = await api.readMaterialRevision('material/1', 'revision/2');
+      final revision = await api.readMaterialRevision(
+        'material/1',
+        'revision/2',
+      );
 
-    expect(seenPath, '/v1/materials/material%2F1/revisions/revision%2F2');
-    expect(revision.id, 'revision/2');
-    expect(revision.title, 'A podcast episode');
-  });
+      expect(seenPath, '/v1/materials/material%2F1/revisions/revision%2F2');
+      expect(revision.id, 'revision/2');
+      expect(revision.mediaRenditions, isEmpty);
+    },
+  );
 
-  test('retain and unretain use the material library-membership routes',
-      () async {
+  test('retain and unretain use the library-membership routes', () async {
     final seen = <String>[];
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
       transport: (method, path, body) async {
         seen.add('$method $path');
-        return (statusCode: 200, body: jsonEncode(_details()));
+        return (
+          statusCode: 200,
+          body: jsonEncode(_details(retainedAtMs: method == 'PUT' ? 42 : null)),
+        );
       },
     );
 
@@ -403,130 +295,60 @@ void main() {
       'DELETE /v1/materials/material%2F1/library-membership',
     ]);
     expect(retained.material.retainedAtMs, 42);
-    expect(unretained.material.retainedAtMs, 42);
+    expect(unretained.material.retainedAtMs, isNull);
   });
 
-  test('source asset availability posts typed facts to the encoded route',
-      () async {
-    String? seenMethod;
-    String? seenPath;
-    Map<String, dynamic>? request;
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        seenMethod = method;
-        seenPath = path;
-        request = jsonDecode(body!) as Map<String, dynamic>;
-        return (
-          statusCode: 200,
-          body: jsonEncode(_details()['current_revision'] as Map),
-        );
-      },
-    );
-
-    final revision = await api.updateSourceAssetAvailability(
-      'material/1',
-      'source/2',
-      const SourceAssetAvailability(
-        state: SourceAssetAvailabilityState.unavailable,
-        reason: SourceAssetUnavailableReason.fileMissing,
-      ),
-    );
-
-    expect(seenMethod, 'PUT');
-    expect(seenPath, '/v1/materials/material%2F1/source-assets/source%2F2'
-        '/availability');
-    expect(request, {
-      'availability': {'state': 'unavailable', 'reason': 'file_missing'},
-    });
-    expect(revision.id, 'revision-1');
-  });
-
-  test('list capabilities decodes the five-state projection', () async {
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        expect(method, 'GET');
-        expect(path, '/v1/materials/material-1/capabilities');
-        return (
-          statusCode: 200,
-          body: jsonEncode([
-            {
-              'capability': 'read',
-              'status': 'available',
-              'latest_attempt': null,
-            },
-            {
-              'capability': 'listen',
-              'status': 'failed_attempt',
-              'latest_attempt': {
-                'attempt_id': 'attempt-1',
-                'material_id': 'material-1',
-                'capability': 'listen',
-                'status': 'failed',
-                'started_at_ms': 1,
-                'finished_at_ms': 2,
-                'failure_reason': 'provider failed',
-                'producer_tool_id': null,
-                'producer_tool_version': null,
+  test(
+    'capability projection keeps media transcription and listening facts',
+    () async {
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'token',
+        transport: (method, path, body) async {
+          expect(path, '/v1/materials/material-1/capabilities');
+          return (
+            statusCode: 200,
+            body: jsonEncode([
+              {
+                'capability': 'read',
+                'status': 'available',
+                'latest_attempt': null,
               },
-            },
-          ]),
-        );
-      },
-    );
+              {
+                'capability': 'listen',
+                'status': 'failed_attempt',
+                'latest_attempt': {
+                  'attempt_id': 'attempt-1',
+                  'status': 'failed',
+                  'started_at_ms': 1,
+                  'finished_at_ms': 2,
+                  'failure_reason': 'provider failed',
+                  'producer_tool_id': null,
+                  'producer_tool_version': null,
+                },
+              },
+            ]),
+          );
+        },
+      );
 
-    final projections = await api.listMaterialCapabilities('material-1');
+      final projections = await api.listMaterialCapabilities('material-1');
 
-    expect(projections, hasLength(2));
-    final read = projections[0];
-    expect(read.capability, MaterialCapability.read);
-    expect(read.status, MaterialCapabilityStatus.available);
-    expect(read.latestAttempt, isNull);
-    final listen = projections[1];
-    expect(listen.capability, MaterialCapability.listen);
-    expect(listen.status, MaterialCapabilityStatus.failedAttempt);
-    expect(listen.latestAttempt!.attemptId, 'attempt-1');
-    expect(listen.latestAttempt!.failureReason, 'provider failed');
-  });
-
-  test('decode rejects an unknown binding type honestly', () async {
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        final details = _details(
-          sourceAssets: [
-            {
-              'id': 'source-1',
-              'media_type': 'text/plain',
-              'byte_length': 1,
-              'sha256_digest': 'b' * 64,
-              'binding': {'type': 'surprise', 'reference': null},
-              'availability': {'state': 'available', 'reason': null},
-              'created_at_ms': 1,
-            },
-          ],
-        );
-        return (statusCode: 200, body: jsonEncode(details));
-      },
-    );
-
-    await expectLater(
-      api.readLearningMaterial('material-1'),
-      throwsA(isA<FormatException>()),
-    );
-  });
+      expect(projections, hasLength(2));
+      expect(projections.first.capability, MaterialCapability.read);
+      expect(projections.first.status, MaterialCapabilityStatus.available);
+      final listen = projections.last;
+      expect(listen.capability, MaterialCapability.listen);
+      expect(listen.latestAttempt!.attemptId, 'attempt-1');
+      expect(listen.latestAttempt!.failureReason, 'provider failed');
+    },
+  );
 }
 
 Map<String, dynamic> _details({
   int? retainedAtMs = 42,
-  String shape = 'mixed',
-  List<Map<String, dynamic>>? sourceAssets,
-  List<Map<String, dynamic>>? documentRenditions,
-  List<Map<String, dynamic>>? mediaRenditions,
+  String shape = 'audio',
+  List<Map<String, dynamic>> mediaRenditions = const [],
 }) => {
   'material': {
     'id': 'material-1',
@@ -539,71 +361,8 @@ Map<String, dynamic> _details({
     'id': 'revision-1',
     'material_id': 'material-1',
     'title': 'A podcast episode',
-    'source_assets':
-        sourceAssets ??
-        [
-          {
-            'id': 'source-1',
-            'media_type': 'text/plain',
-            'byte_length': 11,
-            'sha256_digest': 'a' * 64,
-            'binding': {'type': 'managed', 'reference': null},
-            'availability': {'state': 'available', 'reason': null},
-            'created_at_ms': 1,
-          },
-        ],
-    'document_renditions':
-        documentRenditions ??
-        [
-          {
-            'id': 'document-1',
-            'origin': 'source',
-            'media_type': 'text/plain',
-            'language': 'en',
-            'digest': 'a' * 64,
-            'byte_size': 11,
-            'source_asset_id': 'source-1',
-          },
-        ],
-    'media_renditions':
-        mediaRenditions ??
-        [
-          {
-            'id': 'media-1',
-            'origin': 'source',
-            'kind': 'audio',
-            'media_type': 'audio/mpeg',
-            'fingerprint': 'fp',
-            'availability': 'available',
-            'media_id': 'media-1',
-            'media_sha256': null,
-            'media_byte_size': null,
-          },
-        ],
+    'media_renditions': mediaRenditions,
     'created_at_ms': 1,
   },
   'shape': shape,
 };
-
-CreateLearningMaterialInput _createInput() => CreateLearningMaterialInput(
-  title: 'A podcast episode',
-  sourceAssets: [
-    SourceAssetInput(
-      mediaType: 'text/plain',
-      byteLength: 5,
-      sha256Digest: 'b' * 64,
-      binding: const SourceAssetBinding(
-        type: SourceAssetBindingType.managed,
-      ),
-    ),
-  ],
-  documentRenditions: [
-    DocumentRenditionInput(
-      mediaType: 'text/plain',
-      digest: 'b' * 64,
-      byteSize: 5,
-      sourceAssetIndex: 0,
-    ),
-  ],
-  mediaRenditions: const [],
-);

@@ -26,9 +26,7 @@ MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
     updatedAtMs: 1,
   ),
   primaryTrackId: null,
-  fit: null,
   triageIntent: null,
-  familiarMaterial: false,
 );
 
 /// A media-only library row bound to [entry] — the shape [ListeningHome] and
@@ -37,7 +35,6 @@ PersonalLibraryEntry _row(MediaLibraryEntry entry) => PersonalLibraryEntry(
   details: materialDetails(
     materialId: 'material-${entry.media.id}',
     title: 'Talk',
-    documentRenditions: const [],
     mediaRenditions: [
       mediaRendition(
         id: 'asset-1',
@@ -49,16 +46,6 @@ PersonalLibraryEntry _row(MediaLibraryEntry entry) => PersonalLibraryEntry(
     shape: MaterialShape.video,
   ),
   mediaEntries: [entry],
-);
-
-PersonalLibraryEntry _documentRow() => PersonalLibraryEntry(
-  details: materialDetails(
-    materialId: 'material-document-1',
-    title: 'Saved text material',
-    documentRenditions: [documentRenditionForText('Saved body')],
-    shape: MaterialShape.text,
-  ),
-  mediaEntries: const [],
 );
 
 Widget _wrap(Widget child) => MaterialApp(
@@ -95,7 +82,6 @@ Widget _home({
     onStartExtensiveEntry: (_) {},
     onStartIntensiveEntry: (_) {},
     onSetLibraryIntent: (_, _) {},
-    onToggleFamiliarSupply: (_) {},
   ),
 );
 
@@ -149,7 +135,7 @@ void main() {
     );
   });
 
-  testWidgets('a retained text material is visible on the library first view', (
+  testWidgets('a retained AV material is visible on the library first view', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
@@ -161,13 +147,13 @@ void main() {
           status: MediaLibraryScanStatus.completed,
           folderPath: '/media',
         ),
-        library: [_documentRow()],
+        library: [_row(_entry('/media/saved.mp4'))],
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Saved text material'), findsOneWidget);
-    expect(find.text('Saved text material').hitTestable(), findsOneWidget);
+    expect(find.text('Talk'), findsOneWidget);
+    expect(find.text('Talk').hitTestable(), findsOneWidget);
   });
 
   testWidgets(

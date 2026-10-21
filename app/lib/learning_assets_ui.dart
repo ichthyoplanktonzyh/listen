@@ -14,11 +14,9 @@ class LearningAssetsScreen extends StatefulWidget {
   const LearningAssetsScreen({
     super.key,
     required this.viewModel,
-    required this.personalExpressionBuilder,
   });
 
   final LearningAssetsViewModel viewModel;
-  final WidgetBuilder personalExpressionBuilder;
 
   @override
   State<LearningAssetsScreen> createState() => _LearningAssetsScreenState();
@@ -134,29 +132,6 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
           appBar: AppBar(title: Text(l.text('learningAssets'))),
           body: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                child: Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.auto_stories_outlined),
-                    // Both strings already existed in `localization.dart` for
-                    // this same destination — the compact home card reads them —
-                    // so this tile was showing a second, hand-written subtitle for
-                    // one place. Reading the keys fixes the i18n hole and makes the
-                    // two surfaces agree on what 我的表达 is for.
-                    title: Text(l.text('personalExpressions')),
-                    subtitle: Text(l.text('personalExpressionSummary')),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: widget.personalExpressionBuilder,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(

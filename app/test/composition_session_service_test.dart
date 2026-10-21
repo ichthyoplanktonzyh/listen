@@ -10,25 +10,10 @@ import 'package:llplayer_next/services/composition_session_service.dart';
 import 'package:llplayer_next/services/core_timeline_export.dart';
 
 void main() {
-  test(
-    'composition workbench media id prefers source, then derived binding',
-    () {
-      expect(
-        _adoptedComposition(
-          detached: true,
-          includeDerivedBinding: true,
-        ).workbenchMediaId,
-        'derived-media-1',
-      );
-      expect(
-        _adoptedComposition(
-          detached: false,
-          includeDerivedBinding: true,
-        ).workbenchMediaId,
-        'media-1',
-      );
-    },
-  );
+  test('composition workbench identity requires a source media binding', () {
+    expect(_adoptedComposition(detached: true).workbenchMediaId, isNull);
+    expect(_adoptedComposition(detached: false).workbenchMediaId, 'media-1');
+  });
 
   test(
     'a composition without a formal Core transcript is not projected',
@@ -262,7 +247,6 @@ AdoptedComposition _adoptedComposition({
   required bool detached,
   String? senseGroupSchema,
   bool includeRichResources = true,
-  bool includeDerivedBinding = false,
 }) => AdoptedComposition(
   materialId: 'material-1',
   materialRevisionId: 'revision-1',
@@ -290,25 +274,11 @@ AdoptedComposition _adoptedComposition({
         kind: 'media',
         origin: 'source',
         mediaType: 'audio/wav',
-        language: 'en',
         digest: 'digest',
         byteSize: 1,
         blobAvailable: false,
         binding: AdoptedCompositionMediaBinding(mediaId: 'media-1'),
         producerToolId: 'source',
-      ),
-    if (includeDerivedBinding)
-      const AdoptedCompositionRendition(
-        renditionId: 'derived-media-1',
-        kind: 'media',
-        origin: 'derived',
-        mediaType: 'audio/wav',
-        language: 'en',
-        digest: 'derived-digest',
-        byteSize: 1,
-        blobAvailable: true,
-        binding: AdoptedCompositionMediaBinding(mediaId: 'derived-media-1'),
-        producerToolId: 'listen-gen',
       ),
   ],
 );
@@ -535,13 +505,6 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     String materialId,
     String resourceId,
   ) async => payloads[resourceId]!;
-
-  @override
-  Future<List<int>> readCompositionRenditionBlob(
-    String materialId,
-    String renditionId,
-  ) async => throw StateError('unexpected rendition read');
-
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -1,204 +1,5 @@
 use super::*;
 
-fn speaking_facts_wav() -> Vec<u8> {
-    let sample_rate = 16_000_u32;
-    let sample_count = sample_rate as usize;
-    let data_len = (sample_count * 2) as u32;
-    let mut bytes = Vec::with_capacity(44 + data_len as usize);
-    bytes.extend_from_slice(b"RIFF");
-    bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
-    bytes.extend_from_slice(b"WAVEfmt ");
-    bytes.extend_from_slice(&16_u32.to_le_bytes());
-    bytes.extend_from_slice(&1_u16.to_le_bytes());
-    bytes.extend_from_slice(&1_u16.to_le_bytes());
-    bytes.extend_from_slice(&sample_rate.to_le_bytes());
-    bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
-    bytes.extend_from_slice(&2_u16.to_le_bytes());
-    bytes.extend_from_slice(&16_u16.to_le_bytes());
-    bytes.extend_from_slice(b"data");
-    bytes.extend_from_slice(&data_len.to_le_bytes());
-    for index in 0..sample_count {
-        let time_ms = index * 1000 / sample_rate as usize;
-        let sample = if (300..500).contains(&time_ms) {
-            0_i16
-        } else {
-            8_000_i16
-        };
-        bytes.extend_from_slice(&sample.to_le_bytes());
-    }
-    bytes
-}
-
-#[tokio::test]
-async fn recording_and_unscored_shadowing_routes_round_trip() {
-    let app = test_app();
-    let recording_path = std::env::temp_dir().join(format!(
-        "llplayer-speaking-facts-{}-{}.wav",
-        std::process::id(),
-        application::now_ms()
-    ));
-    let wav = speaking_facts_wav();
-    std::fs::write(&recording_path, &wav).unwrap();
-    async fn post(app: &Router, path: &str, body: serde_json::Value) -> serde_json::Value {
-        let response = app
-            .clone()
-            .oneshot(
-                Request::post(path)
-                    .header(AUTHORIZATION, "Bearer secret")
-                    .header(CONTENT_TYPE, "application/json")
-                    .body(Body::from(body.to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
-    }
-
-    let session = post(
-        &app,
-        "/v1/practice/sessions",
-        serde_json::json!({"mode": "intensive", "source": "shadowing-route-test"}),
-    )
-    .await;
-    let target = serde_json::json!({
-        "kind": "chunk",
-        "id": "chunk-route-1",
-        "sentence_id": "sentence-route-1",
-        "chunk_id": "chunk-route-1",
-        "start_ms": 100,
-        "end_ms": 900
-    });
-    let item = post(
-        &app,
-        "/v1/practice/items",
-        serde_json::json!({
-            "session_id": session["id"],
-            "kind": "shadowing",
-            "target": target,
-            "prompt_snapshot": "follow this chunk",
-            "expected_text": "follow this chunk",
-            "anchors": []
-        }),
-    )
-    .await;
-    let recording = post(
-        &app,
-        "/v1/recordings",
-        serde_json::json!({
-            "file_path": recording_path.to_string_lossy(),
-            "duration_ms": 1000,
-            "target": item["target"],
-            "source_segment": {
-                "media_id": null,
-                "start_ms": 100,
-                "end_ms": 900,
-                "label": "chunk 1",
-                "subtitle_snapshot": "follow this chunk",
-                "availability": "available"
-            },
-            "language": "en",
-            "audio": {
-                "container": "wav",
-                "codec": "pcm_s16le",
-                "sample_rate_hz": 16000,
-                "channels": 1,
-                "sample_format": "s16",
-                "byte_length": wav.len(),
-                "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            },
-            "recorder_version": "flutter-recorder-v1"
-        }),
-    )
-    .await;
-    let attempt = post(
-        &app,
-        "/v1/practice/shadowing-attempts",
-        serde_json::json!({
-            "item_id": item["id"],
-            "recording_id": recording["id"]
-        }),
-    )
-    .await;
-    assert_eq!(attempt["result"], "completed");
-    assert!(attempt["score"].is_null());
-    assert_eq!(attempt["generated_observation_ids"], serde_json::json!([]));
-
-    let recording_id = recording["id"].as_str().unwrap();
-    let get_response = app
-        .clone()
-        .oneshot(
-            Request::get(format!("/v1/recordings/{recording_id}"))
-                .header(AUTHORIZATION, "Bearer secret")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(get_response.status(), StatusCode::OK);
-    let facts_response = app
-        .clone()
-        .oneshot(
-            Request::get(format!("/v1/recordings/{recording_id}/audio-facts"))
-                .header(AUTHORIZATION, "Bearer secret")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(facts_response.status(), StatusCode::OK);
-    let facts: serde_json::Value = serde_json::from_slice(
-        &to_bytes(facts_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(facts["duration_ms"], 1000);
-    assert_eq!(facts["pauses"].as_array().unwrap().len(), 1);
-    let comparison = post(
-        &app,
-        "/v1/shadowing/comparisons",
-        serde_json::json!({
-            "recording_id": recording_id,
-            "reference_wav_path": recording_path.to_string_lossy()
-        }),
-    )
-    .await;
-    assert_eq!(
-        comparison["analysis_v2"]["abstain_reason"],
-        "missing_reference_timeline"
-    );
-    let analysis_response = app
-        .clone()
-        .oneshot(
-            Request::get(format!("/v1/recordings/{recording_id}/shadowing-analysis"))
-                .header(AUTHORIZATION, "Bearer secret")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(analysis_response.status(), StatusCode::OK);
-    let persisted_analysis: serde_json::Value = serde_json::from_slice(
-        &to_bytes(analysis_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(persisted_analysis["analysis"], comparison["analysis_v2"]);
-    let delete_response = app
-        .oneshot(
-            Request::delete(format!("/v1/recordings/{recording_id}"))
-                .header(AUTHORIZATION, "Bearer secret")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(delete_response.status(), StatusCode::OK);
-    let _ = std::fs::remove_file(recording_path);
-}
-
 #[tokio::test]
 async fn hunting_occurrence_and_check_routes_round_trip_not_noticed_without_observation() {
     let app = test_app();
@@ -529,7 +330,6 @@ async fn practice_routes_create_and_read_attempts() {
     let review_id = due[0]["item"]["id"].as_str().unwrap();
     assert_eq!(due[0]["schedule"]["algorithm"], "fsrs_6_default_v1");
     assert_eq!(due[0]["state"], "new");
-    assert_eq!(due[0]["origin"]["kind"], "native");
     assert_eq!(due[0]["card"]["kind"], "source_sentence_recall");
     assert_eq!(due[0]["card"]["answer"], "hello world");
 
@@ -595,10 +395,6 @@ async fn practice_routes_create_and_read_attempts() {
         review_submission["generated_observation_ids"],
         serde_json::json!([])
     );
-    assert_eq!(
-        review_submission["hunting_candidate_ids"],
-        serde_json::json!([])
-    );
 
     let read_response = app
         .oneshot(
@@ -610,42 +406,6 @@ async fn practice_routes_create_and_read_attempts() {
         .await
         .unwrap();
     assert_eq!(read_response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn upgrade_suggestion_routes_expose_pending_and_history_queries() {
-    let app = test_app();
-    for path in [
-        "/v1/review/upgrade-suggestions",
-        "/v1/review/upgrade-suggestions/history",
-    ] {
-        let response = app
-            .clone()
-            .oneshot(
-                Request::get(path)
-                    .header(AUTHORIZATION, "Bearer secret")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let values: serde_json::Value =
-            serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
-                .unwrap();
-        assert_eq!(values, serde_json::json!([]));
-    }
-
-    let missing = app
-        .oneshot(
-            Request::post("/v1/review/upgrade-suggestions/missing/confirm")
-                .header(AUTHORIZATION, "Bearer secret")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

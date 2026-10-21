@@ -14,14 +14,12 @@ class ReviewState {
     this.revealed = false,
     this.busy = false,
     this.completedCount = 0,
-    List<UpgradeSuggestion> upgradeSuggestions = const [],
     List<ReviewIntervalPreview> previews = const [],
     this.limitStatus,
     this.customStudy,
     this.advancesNormalSchedule,
     this.error,
   }) : _queue = List.unmodifiable(queue),
-       _upgradeSuggestions = List.unmodifiable(upgradeSuggestions),
        _previews = List.unmodifiable(previews);
 
   final List<ReviewQueueEntry> _queue;
@@ -30,9 +28,6 @@ class ReviewState {
   final bool revealed;
   final bool busy;
   final int completedCount;
-  final List<UpgradeSuggestion> _upgradeSuggestions;
-  List<UpgradeSuggestion> get upgradeSuggestions =>
-      List.unmodifiable(_upgradeSuggestions);
 
   /// FSRS's prediction for each rating on the *current* card, empty whenever
   /// the prediction has not arrived or could not be fetched. Empty means the
@@ -64,7 +59,6 @@ class ReviewState {
     bool? revealed,
     bool? busy,
     int? completedCount,
-    List<UpgradeSuggestion>? upgradeSuggestions,
     List<ReviewIntervalPreview>? previews,
     ReviewLimitStatus? limitStatus,
     CustomStudyRequest? customStudy,
@@ -77,7 +71,6 @@ class ReviewState {
     revealed: revealed ?? this.revealed,
     busy: busy ?? this.busy,
     completedCount: completedCount ?? this.completedCount,
-    upgradeSuggestions: upgradeSuggestions ?? this.upgradeSuggestions,
     previews: previews ?? this.previews,
     limitStatus: limitStatus ?? this.limitStatus,
     customStudy: customStudy ?? this.customStudy,
@@ -115,19 +108,12 @@ class ReviewController extends ChangeNotifier {
     _set((state) => state.copyWith(busy: true, clearError: true));
     try {
       final queue = await _repository.queue(limit: limit);
-      List<UpgradeSuggestion> suggestions;
-      try {
-        suggestions = await _repository.pendingUpgradeSuggestions();
-      } catch (_) {
-        suggestions = const [];
-      }
       if (_disposed || generation != _loadGeneration) return false;
       _store.replace(
         ReviewState(
           queue: queue.entries,
           busy: false,
           completedCount: 0,
-          upgradeSuggestions: suggestions,
           limitStatus: queue.limitStatus,
         ),
       );
@@ -202,13 +188,15 @@ class ReviewController extends ChangeNotifier {
     _set((state) => state.copyWith(busy: true, clearError: true));
     final customStudy = state.customStudy;
     try {
-      final submission = customStudy == null
-          ? await _repository.submitRating(current.item.id, rating)
-          : await _repository.submitCustomStudyRating(
-              itemId: current.item.id,
-              rating: rating,
-              request: customStudy,
-            );
+      if (customStudy == null) {
+        await _repository.submitRating(current.item.id, rating);
+      } else {
+        await _repository.submitCustomStudyRating(
+          itemId: current.item.id,
+          rating: rating,
+          request: customStudy,
+        );
+      }
       _previewGeneration++;
       _set(
         (state) => state.copyWith(
@@ -217,10 +205,6 @@ class ReviewController extends ChangeNotifier {
           busy: false,
           previews: const [],
           completedCount: state.completedCount + 1,
-          upgradeSuggestions: _mergeSuggestions(
-            state.upgradeSuggestions,
-            submission.upgradeSuggestions,
-          ),
         ),
       );
       return true;
@@ -228,34 +212,6 @@ class ReviewController extends ChangeNotifier {
       _set(
         (state) =>
             state.copyWith(busy: false, error: 'Could not save review result'),
-      );
-      return false;
-    }
-  }
-
-  Future<bool> resolveUpgradeSuggestion(
-    String id, {
-    required bool confirm,
-  }) async {
-    if (state.busy) return false;
-    _set((state) => state.copyWith(busy: true, clearError: true));
-    try {
-      await _repository.resolveUpgradeSuggestion(id, confirm: confirm);
-      _set(
-        (state) => state.copyWith(
-          busy: false,
-          upgradeSuggestions: state.upgradeSuggestions
-              .where((value) => value.id != id)
-              .toList(growable: false),
-        ),
-      );
-      return true;
-    } catch (error) {
-      _set(
-        (state) => state.copyWith(
-          busy: false,
-          error: 'Could not update recognition status',
-        ),
       );
       return false;
     }
@@ -269,15 +225,4 @@ class ReviewController extends ChangeNotifier {
     _store.dispose();
     super.dispose();
   }
-}
-
-List<UpgradeSuggestion> _mergeSuggestions(
-  List<UpgradeSuggestion> current,
-  List<UpgradeSuggestion> incoming,
-) {
-  final byId = {for (final value in current) value.id: value};
-  for (final value in incoming) {
-    byId[value.id] = value;
-  }
-  return byId.values.toList(growable: false);
 }

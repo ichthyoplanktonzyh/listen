@@ -2,17 +2,14 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 
-use super::composition::{
-    read_composition_rendition_blob, read_composition_resource_payload, read_material_composition,
-};
+use super::composition::{read_composition_resource_payload, read_material_composition};
 use super::corpus::{reindex_corpus, search_corpus};
 use super::dictionary::{diagnose_sentence, dictionary_lookup};
 use super::language::{language_profile, list_languages};
 use super::learner::{l1_specialty_occurrences, learner_profile, update_learner_profile};
 use super::llm::{
-    cancel_llm_batch, delete_llm_provider, feedback_via_llm_provider,
-    generate_rubric_via_llm_provider, generate_sense_groups_via_llm_provider, get_llm_provider,
-    judge_via_llm_provider, list_llm_providers, llm_batch_status, probe_llm_provider,
+    cancel_llm_batch, delete_llm_provider, generate_sense_groups_via_llm_provider,
+    get_llm_provider, list_llm_providers, llm_batch_status, probe_llm_provider,
     register_llm_provider,
 };
 use super::material::{
@@ -25,19 +22,14 @@ use super::material_capability::{
     start_material_capability_attempt,
 };
 use super::media::{
-    archive_subtitle, cold_start_words, content_fit_calibration_samples, delete_subtitle,
-    export_subtitle, import_lltimeline, import_lltimeline_for_media, import_subtitle,
-    list_media_library, media_subtitles, read_media, read_subtitle, register_media,
-    restore_subtitle, retain_media, set_media_triage_intent, track_content_fit, unretain_media,
-    update_track_language,
+    archive_subtitle, delete_subtitle, export_subtitle, import_lltimeline,
+    import_lltimeline_for_media, import_subtitle, list_media_library, media_subtitles, read_media,
+    read_subtitle, register_media, restore_subtitle, retain_media, set_media_triage_intent,
+    unretain_media, update_track_language,
 };
 use super::package_lifecycle::{
     adopt_learning_edition, delete_learning_edition, install_material_package,
     list_learning_editions,
-};
-use super::personal_expression::{
-    create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
-    list_pattern_versions, list_patterns, record_pattern_attempt, revise_pattern,
 };
 use super::phonetic_analysis::{
     cancel_phonetic_analysis_job, cancel_phonetic_analysis_model_install,
@@ -48,50 +40,23 @@ use super::phonetic_analysis::{
     retry_phonetic_analysis_job, track_phonetic_analyses, update_phonetic_finding_feedback,
 };
 use super::practice::{
-    archive_hunting_target, capture_listening_inbox_item, coach_dashboard, coach_evidence,
-    compare_shadowing, complete_listening_session, complete_shadowing_attempt,
-    confirm_upgrade_suggestion, create_hunting_target, create_practice_item,
-    create_practice_session, create_recording_asset, create_review_item, custom_study,
-    delete_recording_asset, export_anki_package, graduate_coach_material, import_anki_package,
-    latest_shadowing_analysis, list_due_review_items, list_hunting_candidates,
-    list_hunting_occurrences, list_hunting_targets, list_listening_inbox_items,
-    list_upgrade_suggestions, practice_attempt, process_listening_inbox_item, recording_asset,
-    recording_audio_facts, reject_upgrade_suggestion, review_daily_limits, review_deck_overview,
-    review_interval_preview, review_item, review_queue, submit_custom_study_attempt,
-    submit_hunting_check, submit_practice_attempt, submit_review_attempt,
-    update_review_daily_limits, upgrade_suggestion_history,
-};
-use super::production_corpus::{
-    production_gap_review, reindex_production_corpus, search_production_corpus,
-};
-use super::projection_review::{
-    audit_projection, cross_modal_gaps, decide_projection, list_projection_proposals,
-    rebuild_projections,
+    archive_hunting_target, capture_listening_inbox_item, complete_listening_session,
+    create_hunting_target, create_practice_item, create_practice_session, create_review_item,
+    custom_study, list_due_review_items, list_hunting_occurrences, list_hunting_targets,
+    list_listening_inbox_items, practice_attempt, process_listening_inbox_item,
+    review_daily_limits, review_deck_overview, review_interval_preview, review_item, review_queue,
+    submit_custom_study_attempt, submit_hunting_check, submit_practice_attempt,
+    submit_review_attempt, update_review_daily_limits,
 };
 use super::pronunciation::{
     analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
     pronunciation_providers, track_pronunciation,
 };
-use super::reading::{reading_position, record_reading_marking, save_reading_position};
-use super::realtime_conversation::{
-    connect as connect_realtime_conversation, delete_profile as delete_realtime_profile,
-    list_profiles as list_realtime_profiles, list_sessions as list_realtime_sessions,
-    list_turns as list_realtime_turns, register_profile as register_realtime_profile,
-    save_session as save_realtime_session, save_turn as save_realtime_turn,
-};
-use super::semantic::{
-    confirm_speaking_target, create_judgment_adjudication, create_semantic_attempt,
-    create_semantic_judgment, create_semantic_rubric, create_writing_disposition,
-    create_writing_finding, delete_writing_draft, generate_local_writing_findings,
-    lookup_semantic_rubric, save_writing_draft, semantic_attempt, semantic_attempt_judgments,
-    semantic_judgment_adjudications, semantic_rubric, semantic_rubric_attempts,
-    writing_dispositions, writing_draft, writing_findings,
-};
 use super::semantic_embedding::{
     capability as semantic_embedding_capability, disable as disable_semantic_embedding,
-    enable as enable_semantic_embedding, enrich_gap_review as enrich_production_gap_semantically,
-    install as install_semantic_embedding, rebuild as rebuild_semantic_embedding,
-    search as semantic_search, uninstall as uninstall_semantic_embedding,
+    enable as enable_semantic_embedding, install as install_semantic_embedding,
+    rebuild as rebuild_semantic_embedding, search as semantic_search,
+    uninstall as uninstall_semantic_embedding,
 };
 use super::sound_line::{
     cancel_sound_line_job, create_sound_line_job, retry_sound_line_job, sound_line_job,
@@ -120,12 +85,7 @@ use super::timelines::{
     track_sense_group_analysis_summaries, track_word_timeline_summaries, track_word_timelines,
     track_word_timing_diagnostics, track_word_timings, word_timeline,
 };
-use super::transcription::{
-    cancel_recording_transcription, cancel_transcription_model_install,
-    create_recording_transcription, delete_transcription_model, install_transcription_model,
-    pronunciation_rules, recording_transcription_job, register_custom_transcription_model,
-    transcription_models, transcription_providers,
-};
+use super::transcription::pronunciation_rules;
 use super::tts::{clear_speech_synthesis_cache, speech_synthesis_capability, synthesize_speech};
 use super::vocabulary::{
     assign_sense_folder_occurrence, create_sense_folder, delete_sense_folder, export_vocabulary,
@@ -147,7 +107,7 @@ pub(crate) fn protected_router(state: &ApiState) -> Router<ApiState> {
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize))
 }
 
-/// Learning-material routes (contract `4.0.0`). The router only wires
+/// Learning-material routes (contract `5.0.0`). The router only wires
 /// handlers; every policy decision stays in the application layer.
 fn material_routes() -> Router<ApiState> {
     Router::new()
@@ -209,10 +169,6 @@ fn material_routes() -> Router<ApiState> {
             get(read_composition_resource_payload),
         )
         .route(
-            "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob",
-            get(read_composition_rendition_blob),
-        )
-        .route(
             "/v1/media/{media_id}/material",
             get(resolve_learning_material_for_media),
         )
@@ -266,18 +222,6 @@ fn media_analysis_routes() -> Router<ApiState> {
             axum::routing::patch(update_track_language),
         )
         .route("/v1/subtitles/{track_id}/export", get(export_subtitle))
-        .route(
-            "/v1/subtitles/{track_id}/content-fit",
-            get(track_content_fit),
-        )
-        .route(
-            "/v1/content-fit/calibration-samples",
-            get(content_fit_calibration_samples),
-        )
-        .route(
-            "/v1/subtitles/{track_id}/cold-start-words",
-            get(cold_start_words),
-        )
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
         .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
         .route(
@@ -448,24 +392,6 @@ fn media_analysis_routes() -> Router<ApiState> {
             "/v1/media/{media_id}/availability",
             axum::routing::put(update_media_availability),
         )
-        .route("/v1/transcription/providers", get(transcription_providers))
-        .route("/v1/transcription/models", get(transcription_models))
-        .route(
-            "/v1/transcription/models/install",
-            post(install_transcription_model),
-        )
-        .route(
-            "/v1/transcription/models/register-custom",
-            post(register_custom_transcription_model),
-        )
-        .route(
-            "/v1/transcription/models/{model_id}/cancel-install",
-            post(cancel_transcription_model_install),
-        )
-        .route(
-            "/v1/transcription/models/{model_id}",
-            axum::routing::delete(delete_transcription_model),
-        )
         .route(
             "/v1/phonetic-analysis/providers",
             get(phonetic_analysis_providers),
@@ -588,12 +514,6 @@ fn learning_routes() -> Router<ApiState> {
             get(super::lexical_entries::phrase_candidates),
         )
         .route("/v1/practice/sessions", post(create_practice_session))
-        .route("/v1/coach/dashboard", get(coach_dashboard))
-        .route("/v1/coach/evidence", get(coach_evidence))
-        .route(
-            "/v1/coach/materials/{media_id}/graduate",
-            post(graduate_coach_material),
-        )
         .route(
             "/v1/listening/sessions/{id}/complete",
             post(complete_listening_session),
@@ -602,36 +522,6 @@ fn learning_routes() -> Router<ApiState> {
         .route("/v1/practice/attempts", post(submit_practice_attempt))
         .route("/v1/practice/attempts/{id}", get(practice_attempt))
         .route(
-            "/v1/practice/shadowing-attempts",
-            post(complete_shadowing_attempt),
-        )
-        .route("/v1/shadowing/comparisons", post(compare_shadowing))
-        .route("/v1/recordings", post(create_recording_asset))
-        .route(
-            "/v1/recordings/{id}",
-            get(recording_asset).delete(delete_recording_asset),
-        )
-        .route(
-            "/v1/recordings/{id}/audio-facts",
-            get(recording_audio_facts),
-        )
-        .route(
-            "/v1/recordings/{id}/shadowing-analysis",
-            get(latest_shadowing_analysis),
-        )
-        .route(
-            "/v1/recording-transcriptions",
-            post(create_recording_transcription),
-        )
-        .route(
-            "/v1/recording-transcriptions/{job_id}",
-            get(recording_transcription_job),
-        )
-        .route(
-            "/v1/recording-transcriptions/{job_id}/cancel",
-            post(cancel_recording_transcription),
-        )
-        .route(
             "/v1/listening-inbox/items",
             get(list_listening_inbox_items).post(capture_listening_inbox_item),
         )
@@ -639,7 +529,6 @@ fn learning_routes() -> Router<ApiState> {
             "/v1/listening-inbox/items/{id}/process",
             post(process_listening_inbox_item),
         )
-        .route("/v1/hunting/candidates", get(list_hunting_candidates))
         .route(
             "/v1/hunting/targets",
             get(list_hunting_targets).post(create_hunting_target),
@@ -662,73 +551,15 @@ fn learning_routes() -> Router<ApiState> {
             "/v1/review/custom-study/attempts",
             post(submit_custom_study_attempt),
         )
-        .route("/v1/review/anki/import", post(import_anki_package))
-        .route("/v1/review/anki/export", post(export_anki_package))
         .route("/v1/review/items/{id}", get(review_item))
         .route(
             "/v1/review/items/{id}/interval-preview",
             get(review_interval_preview),
         )
         .route("/v1/review/attempts", post(submit_review_attempt))
-        .route("/v1/review/cross-modal", get(cross_modal_gaps))
-        .route("/v1/projections/rebuild", post(rebuild_projections))
-        .route(
-            "/v1/projections/entries/{id}",
-            get(list_projection_proposals).post(audit_projection),
-        )
-        .route(
-            "/v1/projections/proposals/{id}/decision",
-            post(decide_projection),
-        )
-        .route(
-            "/v1/review/upgrade-suggestions",
-            get(list_upgrade_suggestions),
-        )
-        .route(
-            "/v1/review/upgrade-suggestions/history",
-            get(upgrade_suggestion_history),
-        )
-        .route(
-            "/v1/review/upgrade-suggestions/{id}/confirm",
-            post(confirm_upgrade_suggestion),
-        )
-        .route(
-            "/v1/review/upgrade-suggestions/{id}/reject",
-            post(reject_upgrade_suggestion),
-        )
         .route("/v1/vocabulary", get(list_vocabulary))
         .route("/v1/corpus/search", get(search_corpus))
         .route("/v1/corpus/reindex", post(reindex_corpus))
-        .route(
-            "/v1/production-corpus/search",
-            get(search_production_corpus),
-        )
-        .route(
-            "/v1/production-corpus/reindex",
-            post(reindex_production_corpus),
-        )
-        .route("/v1/production-gap/review", get(production_gap_review))
-        .route(
-            "/v1/personal-expression/patterns",
-            get(list_patterns).post(create_pattern),
-        )
-        .route(
-            "/v1/personal-expression/patterns/{id}",
-            get(get_pattern).put(revise_pattern).delete(delete_pattern),
-        )
-        .route(
-            "/v1/personal-expression/patterns/{id}/versions",
-            get(list_pattern_versions),
-        )
-        .route(
-            "/v1/personal-expression/patterns/{id}/attempts",
-            get(list_pattern_attempts).post(record_pattern_attempt),
-        )
-        .route("/v1/personal-expression/export", get(export_patterns))
-        .route(
-            "/v1/production-gap/semantic-enrichment",
-            get(enrich_production_gap_semantically),
-        )
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
         .route(
@@ -740,11 +571,6 @@ fn learning_routes() -> Router<ApiState> {
             get(learner_profile).put(update_learner_profile),
         )
         .route("/v1/learner/l1-specialty", get(l1_specialty_occurrences))
-        .route(
-            "/v1/reading/positions/{track_id}",
-            get(reading_position).put(save_reading_position),
-        )
-        .route("/v1/reading/markings", post(record_reading_marking))
 }
 
 fn generative_routes() -> Router<ApiState> {
@@ -783,50 +609,6 @@ fn generative_routes() -> Router<ApiState> {
             post(rebuild_semantic_embedding),
         )
         .route("/v1/semantic-search", get(semantic_search))
-        .route("/v1/semantic/rubrics", post(create_semantic_rubric))
-        .route("/v1/semantic/rubrics/lookup", get(lookup_semantic_rubric))
-        .route("/v1/semantic/rubrics/{id}", get(semantic_rubric))
-        .route(
-            "/v1/semantic/rubrics/{id}/attempts",
-            get(semantic_rubric_attempts),
-        )
-        .route("/v1/semantic/attempts", post(create_semantic_attempt))
-        .route(
-            "/v1/semantic/writing-drafts/{id}",
-            get(writing_draft)
-                .put(save_writing_draft)
-                .delete(delete_writing_draft),
-        )
-        .route("/v1/semantic/attempts/{id}", get(semantic_attempt))
-        .route(
-            "/v1/semantic/attempts/{id}/writing-findings",
-            get(writing_findings).post(create_writing_finding),
-        )
-        .route(
-            "/v1/semantic/attempts/{id}/writing-findings/local",
-            post(generate_local_writing_findings),
-        )
-        .route(
-            "/v1/semantic/attempts/{id}/speaking-targets",
-            post(confirm_speaking_target),
-        )
-        .route(
-            "/v1/semantic/attempts/{id}/judgments",
-            get(semantic_attempt_judgments),
-        )
-        .route("/v1/semantic/judgments", post(create_semantic_judgment))
-        .route(
-            "/v1/semantic/judgments/{id}/adjudications",
-            get(semantic_judgment_adjudications),
-        )
-        .route(
-            "/v1/semantic/adjudications",
-            post(create_judgment_adjudication),
-        )
-        .route(
-            "/v1/semantic/writing-findings/{id}/dispositions",
-            get(writing_dispositions).post(create_writing_disposition),
-        )
         .route(
             "/v1/llm/providers",
             get(list_llm_providers).post(register_llm_provider),
@@ -836,33 +618,6 @@ fn generative_routes() -> Router<ApiState> {
             get(get_llm_provider).delete(delete_llm_provider),
         )
         .route("/v1/llm/providers/{id}/probe", post(probe_llm_provider))
-        .route(
-            "/v1/realtime/providers",
-            get(list_realtime_profiles).post(register_realtime_profile),
-        )
-        .route(
-            "/v1/realtime/providers/{id}",
-            delete(delete_realtime_profile),
-        )
-        .route(
-            "/v1/realtime/conversations/ws",
-            get(connect_realtime_conversation),
-        )
-        .route(
-            "/v1/realtime/sessions",
-            get(list_realtime_sessions).post(save_realtime_session),
-        )
-        .route("/v1/realtime/sessions/{id}/turns", get(list_realtime_turns))
-        .route("/v1/realtime/turns", post(save_realtime_turn))
-        .route("/v1/llm/providers/{id}/judge", post(judge_via_llm_provider))
-        .route(
-            "/v1/llm/providers/{id}/feedback",
-            post(feedback_via_llm_provider),
-        )
-        .route(
-            "/v1/llm/providers/{id}/rubric",
-            post(generate_rubric_via_llm_provider),
-        )
         .route(
             "/v1/llm/providers/{id}/sense-groups",
             post(generate_sense_groups_via_llm_provider),

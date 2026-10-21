@@ -16,7 +16,6 @@ fn library_services(repo: &Arc<SqliteRepository>) -> AppServices {
         repo.clone(),
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
-    .with_difficulty_repository(repo.clone())
 }
 
 fn media(id: &str, updated_at_ms: u64) -> MediaItem {
@@ -80,46 +79,9 @@ fn media_library_lists_facts_without_requiring_fit() {
         library[0].triage_intent,
         Some(MediaTriageIntent::PinExtensive)
     );
-    // No subtitle track exists: fit degrades to None, the row still serves.
+    // No subtitle track exists; the media remains visible in the library.
     assert_eq!(library[0].primary_track_id, None);
-    assert!(library[0].fit.is_none());
-    assert!(!library[0].familiar_material);
     assert_eq!(library[1].triage_intent, None);
-}
-
-#[test]
-fn familiar_material_mark_reaches_the_library_entry() {
-    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let services = library_services(&repo);
-    let item = MediaRepository::upsert(repo.as_ref(), &media("familiar-media", 10)).unwrap();
-
-    LearningEventRepository::append_learning_event(
-        repo.as_ref(),
-        &LearningEvent {
-            id: LearningEventId::from_fingerprint("learning-event", "familiar-test"),
-            occurred_at_ms: 42,
-            kind: LearningEventKind::FamiliarMaterialMarked,
-            subject: LearningEventSubject {
-                kind: LearningEventSubjectKind::Media,
-                id: item.id.as_str().to_owned(),
-            },
-            payload: serde_json::json!({}),
-            session_id: None,
-        },
-    )
-    .unwrap();
-
-    let library = services.media_analysis().list_media_library().unwrap();
-    assert_eq!(library.len(), 1);
-    assert!(library[0].familiar_material);
-    assert_eq!(
-        repo.list_event_subject_ids(
-            LearningEventKind::FamiliarMaterialMarked,
-            LearningEventSubjectKind::Media,
-        )
-        .unwrap(),
-        vec![item.id.as_str().to_owned()]
-    );
 }
 
 #[test]
@@ -509,7 +471,7 @@ fn unretain_preserves_progress_subtitles_and_learner_owned_state() {
         &LearningEvent {
             id: LearningEventId::from_fingerprint("learning-event", "state-preserving"),
             occurred_at_ms: 42,
-            kind: LearningEventKind::FamiliarMaterialMarked,
+            kind: LearningEventKind::ListeningCompleted,
             subject: LearningEventSubject {
                 kind: LearningEventSubjectKind::Media,
                 id: item.id.as_str().to_owned(),
@@ -532,7 +494,7 @@ fn unretain_preserves_progress_subtitles_and_learner_owned_state() {
     // The learner-owned fact survives.
     assert_eq!(
         repo.list_event_subject_ids(
-            LearningEventKind::FamiliarMaterialMarked,
+            LearningEventKind::ListeningCompleted,
             LearningEventSubjectKind::Media,
         )
         .unwrap(),

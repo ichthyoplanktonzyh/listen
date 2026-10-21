@@ -1,6 +1,9 @@
 import 'learning_edition.dart';
 import 'learning_material.dart';
 
+/// Durable terminal state for a Core capability-production attempt.
+enum CapabilityAttemptFinalStatus { succeeded, failed, cancelled }
+
 /// One capability run's lifecycle view, as the coordinator exposes it to the
 /// UI. States are honest: no phase is faked into another.
 enum CapabilityRunPhase {
@@ -37,6 +40,7 @@ class CapabilityRunView {
     required this.materialId,
     required this.capability,
     required this.phase,
+    this.requestToken = 0,
     this.stage,
     this.warnings = const [],
     this.failureCode,
@@ -48,6 +52,7 @@ class CapabilityRunView {
   final String materialId;
   final MaterialCapability capability;
   final CapabilityRunPhase phase;
+  final int requestToken;
 
   /// Human-stage of the active run (e.g. "transcribing"), when known.
   final String? stage;
@@ -64,6 +69,8 @@ class CapabilityRunView {
     CapabilityRunPhase.adopting => true,
     _ => false,
   };
+
+  bool get canCancel => busy && phase != CapabilityRunPhase.adopting;
 
   bool get terminal => switch (phase) {
     CapabilityRunPhase.completed ||

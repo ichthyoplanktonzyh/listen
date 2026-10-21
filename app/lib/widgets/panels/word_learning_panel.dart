@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
-import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../vocabulary/pronunciation_button.dart';
@@ -16,16 +15,14 @@ class WordLearningPanel extends StatefulWidget {
     required this.dictionary,
     this.pronunciation,
     this.languageProfile,
-    required this.onStatus,
     required this.onSave,
     required this.onSource,
     required this.onHeard,
     required this.onNotHeard,
-    this.onCapabilityOverride,
+    this.onListeningOverride,
     this.onRecordSource,
     this.onOpenListeningDictionary,
     this.onPlayPronunciationAudio,
-    this.onReadingMark,
     this.onCorrectLemma,
     this.hasSelectedCue = false,
   });
@@ -34,20 +31,14 @@ class WordLearningPanel extends StatefulWidget {
   final DictionaryLookupBundle? dictionary;
   final WordPronunciation? pronunciation;
   final LanguageProfile? languageProfile;
-  final ValueChanged<String?> onStatus;
   final Future<void> Function(String?, String?) onSave;
   final ValueChanged<Map<String, dynamic>> onSource;
   final VoidCallback onHeard;
   final VoidCallback onNotHeard;
-  final Future<void> Function(String capability, String? conclusion)?
-  onCapabilityOverride;
+  final Future<void> Function(String? conclusion)? onListeningOverride;
   final VoidCallback? onRecordSource;
   final VoidCallback? onOpenListeningDictionary;
   final ValueChanged<String>? onPlayPronunciationAudio;
-
-  /// Explicit reading mark (Phase 3.13); non-null only while the reading
-  /// posture is open. `true` = understood while reading.
-  final void Function(bool understood)? onReadingMark;
 
   /// Overrides the lemma the normalizer picked for the selected token. It
   /// only makes sense with a token in hand, which is why it lives here rather
@@ -186,25 +177,6 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                borderRadius: ListenRadii.pillBorder,
-              ),
-              child: Padding(
-                padding: ListenPadding.tight,
-                child: Text(
-                  l.status(entry.status),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
         const SizedBox(height: ListenSpacing.gap12),
@@ -224,30 +196,11 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           const SizedBox(height: ListenSpacing.gap12),
         _sectionHeader(
           context,
-          l.text('capabilityProfile'),
-          Icons.school_outlined,
+          l.text('capabilityListening'),
+          Icons.hearing_outlined,
         ),
         const SizedBox(height: ListenSpacing.gap8),
-        if (profile != null)
-          _capabilityGrid(context, l, profile)
-        else
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final value in const [
-                null,
-                'unknown_meaning',
-                'known_not_recognized',
-                'known_recognized',
-              ])
-                ChoiceChip(
-                  label: Text(l.status(value)),
-                  selected: entry.status == value,
-                  onSelected: (_) => widget.onStatus(value),
-                ),
-            ],
-          ),
+        _capabilityGrid(context, l, profile),
         const SizedBox(height: ListenSpacing.gap6),
         Wrap(
           spacing: 8,
@@ -266,26 +219,6 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
               onPressed: widget.onNotHeard,
               label: Text(l.text('notHeard')),
             ),
-            if (widget.onReadingMark != null) ...[
-              TextButton.icon(
-                key: const ValueKey('reading-mark-understood'),
-                icon: const Icon(
-                  Icons.chrome_reader_mode_outlined,
-                  size: ListenIconSize.control,
-                ),
-                onPressed: () => widget.onReadingMark!(true),
-                label: Text(l.text('readUnderstood')),
-              ),
-              TextButton.icon(
-                key: const ValueKey('reading-mark-not-understood'),
-                icon: const Icon(
-                  Icons.help_outline,
-                  size: ListenIconSize.control,
-                ),
-                onPressed: () => widget.onReadingMark!(false),
-                label: Text(l.text('readNotUnderstood')),
-              ),
-            ],
             if (widget.onCorrectLemma != null)
               TextButton.icon(
                 key: const ValueKey('correct-lemma'),
@@ -523,88 +456,50 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   Widget _capabilityGrid(
     BuildContext context,
     AppLocalizations l,
-    LexicalCapabilityProfile profile,
+    LexicalCapabilityProfile? profile,
   ) {
-    const channels = [
-      ('reading', 'capabilityReading', Icons.menu_book_outlined),
-      ('listening', 'capabilityListening', Icons.hearing_outlined),
-      ('speaking', 'capabilitySpeaking', Icons.record_voice_over_outlined),
-      ('writing', 'capabilityWriting', Icons.edit_outlined),
-    ];
-    CapabilityDimensionState dim(String name) => switch (name) {
-      'reading' => profile.reading,
-      'listening' => profile.listening,
-      'speaking' => profile.speaking,
-      _ => profile.writing,
-    };
-    return Column(
+    final dimension = profile?.listening;
+    final assessment = dimension?.effectiveAssessment ?? 'unassessed';
+    final selected = assessment == 'acquired' || assessment == 'not_acquired'
+        ? {assessment}
+        : const <String>{};
+    final colors = Theme.of(context).colorScheme;
+    return Row(
       children: [
-        for (final (key, labelKey, icon) in channels)
-          _capabilityRow(context, l, key, l.text(labelKey), icon, dim(key)),
-      ],
-    );
-  }
-
-  Widget _capabilityRow(
-    BuildContext context,
-    AppLocalizations l,
-    String capability,
-    String label,
-    IconData icon,
-    CapabilityDimensionState state,
-  ) {
-    final assessment = state.effectiveAssessment;
-    final hasOverride = state.userOverride != null;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: ListenIconSize.control,
-            color: Theme.of(context).colorScheme.primary,
+        Expanded(
+          child: Text(
+            l.text('capabilityListening'),
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(width: ListenSpacing.gap6),
-          SizedBox(width: 48, child: Text(label, style: ListenType.reading)),
-          const SizedBox(width: ListenSpacing.gap8),
-          for (final value in const ['acquired', 'not_acquired'])
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: ChoiceChip(
-                label: Text(l.text(value), style: ListenType.body),
-                selected: assessment == value,
-                visualDensity: VisualDensity.compact,
-                onSelected: widget.onCapabilityOverride == null
-                    ? null
-                    : (_) => widget.onCapabilityOverride!(
-                        capability,
-                        assessment == value ? null : value,
-                      ),
-              ),
-            ),
-          if (assessment == 'unassessed')
-            Text(
-              l.text('unassessed'),
-              style: ListenType.body.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          if (hasOverride)
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Tooltip(
-                message: 'User override',
-                child: Icon(
-                  // A provenance marker in the row's text flow, not a control.
-                  Icons.person_outline,
-                  size: ListenIconSize.inline,
-                  color: Theme.of(context).colorScheme.outline,
+        ),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          emptySelectionAllowed: true,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: [
+            for (final value in const ['acquired', 'not_acquired'])
+              ButtonSegment<String>(value: value, label: Text(l.text(value))),
+          ],
+          selected: selected,
+          onSelectionChanged: widget.onListeningOverride == null
+              ? null
+              : (values) => widget.onListeningOverride!(
+                  values.isEmpty ? null : values.first,
                 ),
+        ),
+        if (dimension?.userOverride != null)
+          Padding(
+            padding: const EdgeInsets.only(left: ListenSpacing.gap4),
+            child: Tooltip(
+              message: l.text('capabilityUserOverride'),
+              child: Icon(
+                Icons.person_outline,
+                size: ListenIconSize.inline,
+                color: colors.outline,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 

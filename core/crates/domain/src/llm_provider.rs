@@ -53,8 +53,6 @@ impl LlmAdapterKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmUse {
-    RubricGeneration,
-    SemanticJudgment,
     SenseGroupPartition,
 }
 
@@ -341,11 +339,10 @@ mod tests {
             batch_policy: LlmBatchPolicy::default(),
             cost_budget: None,
             retention: DataRetentionPreference::Unknown,
-            allowed_uses: vec![LlmUse::SemanticJudgment],
+            allowed_uses: vec![LlmUse::SenseGroupPartition],
             capability: ProviderCapability::unknown(),
             created_at_ms: 0,
         };
-        assert!(profile.allows(LlmUse::SemanticJudgment));
-        assert!(!profile.allows(LlmUse::RubricGeneration));
+        assert!(profile.allows(LlmUse::SenseGroupPartition));
     }
 }

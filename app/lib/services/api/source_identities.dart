@@ -1,6 +1,6 @@
 part of '../api_service.dart';
 
-// Source Identity (Core 4.0): mapping a discovered item's source-scoped
+// Source Identity (Core 5.0): mapping a discovered item's source-scoped
 // canonical key to the exact Material Revision it resolved to, and resolving
 // it back. The canonical key is the only match identity; everything else in
 // the mapping is typed evidence carried along, never substituted for the key.
@@ -23,14 +23,18 @@ extension SourceIdentityApi on LocalApi {
       'source_id': sourceId,
       'item_id': itemId,
       'evidence': {
-        'feed_item_id': _evidenceOf(SourceItemEvidenceKind.feedItemId, evidence),
-        'entry_url':
-            ?_evidenceOf(SourceItemEvidenceKind.entryUrl, evidence),
+        'feed_item_id': _evidenceOf(
+          SourceItemEvidenceKind.feedItemId,
+          evidence,
+        ),
+        'entry_url': ?_evidenceOf(SourceItemEvidenceKind.entryUrl, evidence),
         'enclosure_urls': [
           ?_evidenceOf(SourceItemEvidenceKind.enclosureUrl, evidence),
         ],
-        'file_sha256':
-            ?_evidenceOf(SourceItemEvidenceKind.byteFingerprint, evidence),
+        'file_sha256': ?_evidenceOf(
+          SourceItemEvidenceKind.byteFingerprint,
+          evidence,
+        ),
         'title': ?_evidenceOf(SourceItemEvidenceKind.title, evidence),
       },
       'material_id': materialId,
@@ -54,8 +58,8 @@ extension SourceIdentityApi on LocalApi {
       response = await _request(
         'GET',
         '/v1/source-identities/resolve?source_id='
-        '${Uri.encodeQueryComponent(sourceId)}'
-        '&item_id=${Uri.encodeQueryComponent(itemId)}',
+            '${Uri.encodeQueryComponent(sourceId)}'
+            '&item_id=${Uri.encodeQueryComponent(itemId)}',
       );
     } on HttpException catch (error) {
       // An unrecorded key is a typed not-found, not a transport failure: the

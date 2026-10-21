@@ -8,7 +8,6 @@ import '../../controllers/practice_controller.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../theme/breakpoints.dart';
-import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -26,23 +25,12 @@ class IntensivePracticeWindow extends StatefulWidget {
     required this.totalSentences,
     required this.canGoPrevious,
     required this.canGoNext,
-    this.showSentenceNavigation = true,
     required this.isPlaying,
     required this.onReplay,
     required this.onTogglePlayback,
     required this.onNavigate,
     required this.onSubmit,
     required this.onSaveReview,
-    required this.onStartRecording,
-    required this.onStopRecording,
-    required this.onCancelRecording,
-    required this.onOpenMicrophoneSettings,
-    required this.onPlayReference,
-    required this.onPlayRecording,
-    required this.onPlayAba,
-    required this.onDeleteRecording,
-    required this.onShadowingRateChanged,
-    required this.onShadowingStepChanged,
     required this.onClose,
   });
 
@@ -51,23 +39,12 @@ class IntensivePracticeWindow extends StatefulWidget {
   final int totalSentences;
   final bool canGoPrevious;
   final bool canGoNext;
-  final bool showSentenceNavigation;
   final bool isPlaying;
   final Future<void> Function() onReplay;
   final Future<void> Function() onTogglePlayback;
   final Future<void> Function(int delta) onNavigate;
   final Future<void> Function() onSubmit;
   final Future<void> Function() onSaveReview;
-  final Future<void> Function() onStartRecording;
-  final Future<void> Function() onStopRecording;
-  final Future<void> Function() onCancelRecording;
-  final Future<void> Function() onOpenMicrophoneSettings;
-  final Future<void> Function() onPlayReference;
-  final Future<void> Function() onPlayRecording;
-  final Future<void> Function() onPlayAba;
-  final Future<void> Function() onDeleteRecording;
-  final Future<void> Function(double rate) onShadowingRateChanged;
-  final Future<void> Function(int index) onShadowingStepChanged;
   final Future<void> Function() onClose;
 
   @override
@@ -237,262 +214,9 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
       );
     }
     return SingleChildScrollView(
-      child: state.draft!.kind == 'shadowing'
-          ? _shadowing(state)
-          : state.attempt == null
-          ? _prompt(state)
-          : _result(state),
+      child: state.attempt == null ? _prompt(state) : _result(state),
     );
   }
-
-  Widget _shadowing(PracticeState state) {
-    final draft = state.draft!;
-    final asset = state.recordingAsset;
-    final comparison = state.comparison;
-    final permissionBlocked =
-        state.microphonePermission == MicrophonePermissionStatus.denied ||
-        state.microphonePermission == MicrophonePermissionStatus.restricted;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _practiceHeader(draft),
-        if (draft.degradedMessage != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              draft.degradedMessage!,
-              style: ListenType.body.copyWith(
-                color: Theme.of(context).colorScheme.secondary,
-              ),
-            ),
-          ),
-        const SizedBox(height: ListenSpacing.gap12),
-        Text(draft.promptText, style: Theme.of(context).textTheme.titleMedium),
-        if (draft.shadowingSteps.length > 1) ...[
-          const SizedBox(height: ListenSpacing.gap12),
-          SegmentedButton<int>(
-            segments: [
-              for (final entry in draft.shadowingSteps.indexed)
-                ButtonSegment(value: entry.$1, label: Text(entry.$2.label)),
-            ],
-            selected: {draft.shadowingStepIndex},
-            onSelectionChanged:
-                controller.busy || state.recordingActive || asset != null
-                ? null
-                : (values) =>
-                      unawaited(widget.onShadowingStepChanged(values.single)),
-          ),
-        ],
-        const SizedBox(height: ListenSpacing.gap12),
-        Text(
-          l.text('shadowingSpeed'),
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: ListenSpacing.gap6),
-        SegmentedButton<double>(
-          segments: const [
-            ButtonSegment(value: 0.75, label: Text('0.75×')),
-            ButtonSegment(value: 0.9, label: Text('0.9×')),
-            ButtonSegment(value: 1.0, label: Text('1.0×')),
-          ],
-          selected: {state.shadowingRate},
-          onSelectionChanged: controller.busy || state.recordingActive
-              ? null
-              : (values) =>
-                    unawaited(widget.onShadowingRateChanged(values.single)),
-        ),
-        const SizedBox(height: ListenSpacing.gap12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              onPressed: controller.busy || state.recordingActive
-                  ? null
-                  : () => unawaited(widget.onPlayReference()),
-              icon: const Icon(Icons.hearing),
-              label: Text(l.text('shadowingPlayOriginal')),
-            ),
-            if (!state.recordingActive)
-              FilledButton.icon(
-                onPressed: controller.busy
-                    ? null
-                    : () => unawaited(() async {
-                        if (asset != null) await widget.onDeleteRecording();
-                        await widget.onStartRecording();
-                      }()),
-                icon: const Icon(Icons.mic),
-                label: Text(
-                  asset == null
-                      ? l.text('shadowingStartRecording')
-                      : l.text('shadowingRecordAgain'),
-                ),
-              )
-            else ...[
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                ),
-                onPressed: controller.busy
-                    ? null
-                    : () => unawaited(widget.onStopRecording()),
-                icon: const Icon(Icons.stop_circle_outlined),
-                label: Text(l.text('shadowingStopRecording')),
-              ),
-              TextButton(
-                onPressed: controller.busy
-                    ? null
-                    : () => unawaited(widget.onCancelRecording()),
-                child: Text(l.text('cancel')),
-              ),
-            ],
-          ],
-        ),
-        if (state.recordingActive)
-          Padding(
-            padding: const EdgeInsets.only(top: ListenSpacing.gap8),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.fiber_manual_record,
-                  size: ListenIconSize.inline,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                const SizedBox(width: ListenSpacing.gap6),
-                Text(l.text('shadowingRecordingActive')),
-              ],
-            ),
-          ),
-        if (permissionBlocked)
-          Padding(
-            padding: const EdgeInsets.only(top: ListenSpacing.gap8),
-            child: Row(
-              children: [
-                Expanded(child: Text(l.text('shadowingPermissionDenied'))),
-                TextButton(
-                  onPressed: () => unawaited(widget.onOpenMicrophoneSettings()),
-                  child: Text(l.text('openSystemSettings')),
-                ),
-              ],
-            ),
-          ),
-        if (asset != null) ...[
-          const Divider(height: 28),
-          Text(
-            l.text('shadowingComparison'),
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: ListenSpacing.gap8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: controller.busy
-                    ? null
-                    : () => unawaited(widget.onPlayRecording()),
-                icon: const Icon(Icons.person),
-                label: Text(l.text('shadowingPlayMine')),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: controller.busy
-                    ? null
-                    : () => unawaited(widget.onPlayAba()),
-                icon: const Icon(Icons.compare_arrows),
-                label: const Text('A / B / A'),
-              ),
-              TextButton.icon(
-                onPressed: controller.busy
-                    ? null
-                    : () => unawaited(widget.onDeleteRecording()),
-                icon: const Icon(Icons.delete_outline),
-                label: Text(l.text('delete')),
-              ),
-            ],
-          ),
-          if (comparison != null) ...[
-            const SizedBox(height: ListenSpacing.gap12),
-            _comparisonMetrics(comparison),
-            const SizedBox(height: ListenSpacing.gap12),
-            _waveformRow(
-              l.text('shadowingOriginal'),
-              comparison.referenceWaveform,
-              Theme.of(context).colorScheme.tertiary,
-            ),
-            const SizedBox(height: ListenSpacing.gap8),
-            _waveformRow(
-              l.text('shadowingMine'),
-              comparison.recordingWaveform,
-              Theme.of(context).colorScheme.secondary,
-            ),
-          ],
-          if (state.comparisonWarning != null)
-            Padding(
-              padding: const EdgeInsets.only(top: ListenSpacing.gap8),
-              child: Text(
-                state.comparisonWarning!,
-                style: ListenType.body.copyWith(
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
-              ),
-            ),
-        ],
-        if (controller.error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: ListenSpacing.gap8),
-            child: Text(
-              controller.error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _comparisonMetrics(ShadowingComparison comparison) {
-    final delta = comparison.durationDeltaMs;
-    final durationText = delta == 0
-        ? l.text('shadowingSameDuration')
-        : delta > 0
-        ? '+$delta ms'
-        : '$delta ms';
-    final pauseOffset = comparison.meanAbsolutePauseOffsetMs;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        Chip(label: Text('${l.text('shadowingDurationDelta')}: $durationText')),
-        Chip(
-          label: Text(
-            '${l.text('shadowingPauseCount')}: '
-            '${comparison.referencePauses.length} / ${comparison.recordingPauses.length}',
-          ),
-        ),
-        if (pauseOffset != null)
-          Chip(
-            label: Text('${l.text('shadowingPauseOffset')}: $pauseOffset ms'),
-          ),
-      ],
-    );
-  }
-
-  Widget _waveformRow(
-    String label,
-    AudioWaveformSummary waveform,
-    Color color,
-  ) => Row(
-    children: [
-      SizedBox(width: 54, child: Text(label, style: ListenType.body)),
-      Expanded(
-        child: SizedBox(
-          height: 42,
-          child: CustomPaint(painter: _WaveformPainter(waveform.peaks, color)),
-        ),
-      ),
-      const SizedBox(width: ListenSpacing.gap8),
-      Text('${waveform.durationMs} ms', style: ListenType.caption),
-    ],
-  );
 
   Widget _prompt(PracticeState state) {
     final draft = state.draft!;
@@ -658,13 +382,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
       ListenSpacing.gap16,
       ListenSpacing.gap8,
     ),
-    child: Row(
-      children: [
-        if (widget.showSentenceNavigation) _progressPill(),
-        const Spacer(),
-        _settingsPill(),
-      ],
-    ),
+    child: Row(children: [_progressPill(), const Spacer(), _settingsPill()]),
   );
 
   Widget _progressPill() {
@@ -739,14 +457,13 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (widget.showSentenceNavigation)
-            IconButton(
-              tooltip: l.text('previousSentence'),
-              onPressed: controller.busy || !widget.canGoPrevious
-                  ? null
-                  : () => unawaited(widget.onNavigate(-1)),
-              icon: const Icon(Icons.chevron_left),
-            ),
+          IconButton(
+            tooltip: l.text('previousSentence'),
+            onPressed: controller.busy || !widget.canGoPrevious
+                ? null
+                : () => unawaited(widget.onNavigate(-1)),
+            icon: const Icon(Icons.chevron_left),
+          ),
           _hintAction(
             keyCap: '⌘P',
             label: l.text('practicePlayPause'),
@@ -762,14 +479,13 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
                 ? null
                 : () => unawaited(widget.onReplay()),
           ),
-          if (widget.showSentenceNavigation)
-            IconButton(
-              tooltip: l.text('nextSentence'),
-              onPressed: controller.busy || !widget.canGoNext
-                  ? null
-                  : () => unawaited(widget.onNavigate(1)),
-              icon: const Icon(Icons.chevron_right),
-            ),
+          IconButton(
+            tooltip: l.text('nextSentence'),
+            onPressed: controller.busy || !widget.canGoNext
+                ? null
+                : () => unawaited(widget.onNavigate(1)),
+            icon: const Icon(Icons.chevron_right),
+          ),
         ],
       ),
     );
@@ -813,19 +529,11 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
 
   Widget _practiceHeader(PracticeDraft draft) => Row(
     children: [
-      Icon(
-        draft.kind == 'shadowing'
-            ? Icons.mic_none
-            : draft.kind == 'cloze'
-            ? Icons.text_fields
-            : Icons.keyboard,
-      ),
+      Icon(draft.kind == 'cloze' ? Icons.text_fields : Icons.keyboard),
       const SizedBox(width: ListenSpacing.gap8),
       Expanded(
         child: Text(
-          draft.kind == 'shadowing'
-              ? l.text('shadowingPractice')
-              : draft.kind == 'cloze'
+          draft.kind == 'cloze'
               ? l.text('clozePractice')
               : draft.targetKind == 'chunk'
               ? l.text('chunkDictation')
@@ -896,35 +604,4 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
     'mismatch' => Theme.of(context).colorScheme.error,
     _ => Theme.of(context).colorScheme.onSurfaceVariant,
   };
-}
-
-class _WaveformPainter extends CustomPainter {
-  const _WaveformPainter(this.peaks, this.color);
-
-  final List<double> peaks;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (peaks.isEmpty) return;
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = math.max(1, size.width / peaks.length * 0.65)
-      ..strokeCap = StrokeCap.round;
-    final center = size.height / 2;
-    final step = size.width / peaks.length;
-    for (var index = 0; index < peaks.length; index++) {
-      final amplitude = peaks[index].clamp(0.0, 1.0) * center;
-      final x = (index + 0.5) * step;
-      canvas.drawLine(
-        Offset(x, center - amplitude),
-        Offset(x, center + amplitude),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _WaveformPainter oldDelegate) =>
-      oldDelegate.peaks != peaks || oldDelegate.color != color;
 }

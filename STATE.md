@@ -1,10 +1,10 @@
 # Project State
 
-> Updated: 2026-10-21 (Asia/Shanghai).
+> Updated: 2026-10-22 (Asia/Shanghai).
 
 ## Current focus
 
-Listen is reducing its active implementation to one audio/video listening
+Listen limits its active implementation to one audio/video listening
 journey: acquire a Source, process and adopt a Learning Material, learn in the
 MaterialWorkbench with contextual help, explicitly retain useful language,
 and return through the Personal Corpus and listening review.
@@ -13,12 +13,13 @@ The owner has selected four implementations to move to separate branches:
 
 - AI conversation, including standalone and material-anchored voice sessions;
 - independent reading, writing, and speaking activities, output assessment,
-  shadowing recording/comparison, personal-expression training, and the
-  production corpus;
+  shadowing recording/comparison, personal-expression training, the
+  production corpus, and imported Anki text-flashcard activities;
 - document/text material import, extraction, OCR, display, and document-to-audio
   production;
 - learner coaching, cross-channel dashboards, material-fit policies, automatic
-  capability-upgrade suggestions, and learning recommendations.
+  capability-upgrade suggestions, review-derived hunting candidates, and
+  learning recommendations.
 
 Timed text, transcription, Structured Reading, translation, lookup, sound
 analysis, and perceptual help remain foundations of listening. Removing a
@@ -33,9 +34,18 @@ cross-channel recommendations, or automatic capability-upgrade suggestions.
 
 The full implementation is preserved at `f01ba17e` on
 `codex/preserve-before-listening-focus`. The scope reduction is developed on
-`codex/listening-focus`; deferred implementations will have dedicated
-`codex/park-*` branches. They are frozen recovery points, not separately
-maintained products.
+`codex/listening-focus`. Dedicated recovery branches use the reduced baseline:
+
+| Deferred implementation | Branch |
+|---|---|
+| AI conversation | `codex/park-ai-conversation` |
+| Other learning channels and output training | `codex/park-other-learning-channels` |
+| Document materials | `codex/park-document-materials` |
+| Learning coach and recommendations | `codex/park-learning-coach` |
+
+These are frozen recovery points, not separately maintained products. Each
+keeps its own feature and necessary dependencies; the complete earlier product
+remains on the preservation branch.
 
 The owner has explicitly waived data compatibility for this stage. Development
 and validation target fresh isolated stores; no in-place upgrade of the earlier

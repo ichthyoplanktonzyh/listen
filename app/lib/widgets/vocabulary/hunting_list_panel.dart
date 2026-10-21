@@ -10,14 +10,12 @@ class HuntingListPanel extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onRefresh,
-    required this.onPromoteCandidate,
     required this.onArchiveTarget,
     this.onOpenEntry,
   });
 
   final HuntingController controller;
   final Future<void> Function() onRefresh;
-  final Future<void> Function(HuntingCandidate candidate) onPromoteCandidate;
   final Future<void> Function(HuntingTarget target) onArchiveTarget;
   final ValueChanged<String>? onOpenEntry;
 
@@ -88,9 +86,7 @@ class HuntingListPanel extends StatelessWidget {
                         title: Text(target.targetSnapshot),
                         subtitle: Text(
                           l.text(
-                            target.sourceKind == 'review_candidate'
-                                ? 'huntingSourceReview'
-                                : target.sourceKind == 'listening_inbox'
+                            target.sourceKind == 'listening_inbox'
                                 ? 'huntingSourceInbox'
                                 : 'huntingSourceManual',
                           ),
@@ -104,39 +100,6 @@ class HuntingListPanel extends StatelessWidget {
                               ? null
                               : () => onArchiveTarget(target),
                           icon: const Icon(Icons.remove_circle_outline),
-                        ),
-                      ),
-                    ),
-                const SizedBox(height: ListenSpacing.gap12),
-                _SectionLabel(l.text('huntingReviewCandidates')),
-                if (state.candidates.isEmpty)
-                  _EmptyCard(text: l.text('huntingNoCandidates'))
-                else
-                  for (final candidate in state.candidates)
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.hearing_outlined),
-                        title: Text(candidate.targetSnapshot),
-                        subtitle: Text(
-                          l
-                              .text('huntingFailureCount')
-                              .replaceAll(
-                                '{count}',
-                                '${candidate.failureCount}',
-                              ),
-                        ),
-                        onTap: onOpenEntry == null
-                            ? null
-                            : () => onOpenEntry!(candidate.lexicalEntryId),
-                        trailing: FilledButton.tonal(
-                          onPressed:
-                              state.busy ||
-                                  state.containsLexicalEntry(
-                                    candidate.lexicalEntryId,
-                                  )
-                              ? null
-                              : () => onPromoteCandidate(candidate),
-                          child: Text(l.text('huntingAdd')),
                         ),
                       ),
                     ),

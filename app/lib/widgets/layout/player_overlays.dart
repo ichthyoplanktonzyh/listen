@@ -85,7 +85,6 @@ class PlayerOverlays extends StatelessWidget {
                 ? SlicePlaybackWindow(
                     controller: slicePlayerController,
                     onClose: onCloseSlicePlayback,
-                    onShadowing: practiceActions.startSliceWindowShadowing,
                   )
                 : const SizedBox.shrink(),
           ),
@@ -108,26 +107,12 @@ class PlayerOverlays extends StatelessWidget {
           subtitleController.currentPrimaryCue,
         ) !=
         null,
-    showSentenceNavigation:
-        practiceController.draft?.referenceMediaPath == null,
-    isPlaying: practiceController.draft?.referenceMediaPath != null
-        ? slicePlayerController.state.playing
-        : playerController.playing,
+    isPlaying: playerController.playing,
     onReplay: practiceActions.replayPracticeWindow,
     onTogglePlayback: practiceActions.togglePracticePlayback,
     onNavigate: practiceActions.navigatePracticeSentence,
     onSubmit: practiceActions.submitPractice,
     onSaveReview: practiceActions.savePracticeReview,
-    onStartRecording: practiceActions.beginShadowingRecording,
-    onStopRecording: practiceActions.stopShadowingRecording,
-    onCancelRecording: practiceController.cancelShadowingRecording,
-    onOpenMicrophoneSettings: practiceController.openMicrophoneSettings,
-    onPlayReference: practiceActions.playShadowingReferenceOnce,
-    onPlayRecording: practiceActions.playShadowingRecording,
-    onPlayAba: practiceActions.playShadowingAba,
-    onDeleteRecording: practiceController.deleteCurrentRecording,
-    onShadowingRateChanged: practiceActions.setShadowingRate,
-    onShadowingStepChanged: practiceActions.setShadowingStep,
     onClose: practiceActions.closePracticeWindow,
   );
 }

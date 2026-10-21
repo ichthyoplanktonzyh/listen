@@ -1,13 +1,12 @@
 use async_trait::async_trait;
 use domain::{
-    AsrReliability, CapabilityClaim, DictionaryLookup, DictionaryProviderInfo, JudgmentAbstain,
-    LanguageCode, LlmAdapterKind, LlmProviderError, PhraseCandidate, PointJudgment,
-    PronunciationProviderInfo, ProviderCapability, RubricPointImportance,
-    SYNTACTIC_CONTRACT_VERSION, SemanticRubric, SemanticTaskKind, SentencePronunciation,
-    SubtitleSentence, SyntacticAnalysis, SyntacticAnalysisId, SyntacticProviderDescriptor,
-    SyntacticProviderError, SyntacticSentenceAnalysis, SyntacticValidationReport,
-    SyntacticValidationStatus, WordPronunciation, syntactic_analysis_fingerprint,
-    syntactic_source_fingerprint, validate_syntactic_analysis,
+    CapabilityClaim, DictionaryLookup, DictionaryProviderInfo, LanguageCode, LlmAdapterKind,
+    LlmProviderError, PhraseCandidate, PronunciationProviderInfo, ProviderCapability,
+    SYNTACTIC_CONTRACT_VERSION, SentencePronunciation, SubtitleSentence, SyntacticAnalysis,
+    SyntacticAnalysisId, SyntacticProviderDescriptor, SyntacticProviderError,
+    SyntacticSentenceAnalysis, SyntacticValidationReport, SyntacticValidationStatus,
+    WordPronunciation, syntactic_analysis_fingerprint, syntactic_source_fingerprint,
+    validate_syntactic_analysis,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -242,17 +241,10 @@ pub fn finalize_syntactic_analysis(
 //     (OpenAI Chat Completions, Anthropic Messages, ...) implements it. This is
 //     the surface where neutrality is proven: a shared contract suite drives
 //     every adapter through the same scenarios.
-//   * `SemanticRubricProvider` / `SemanticJudgeProvider` are the *application
-//     seams* that `AppServices` holds. A single generic composition
-//     (`LlmSemanticProvider<A>` in crate `llm-provider`) builds the prompt +
-//     schema, parses the output into a draft, and works over *any*
-//     `LlmChatAdapter`. Swapping the adapter must not change semantics.
+//   * the runtime builds on this wire seam for listening-media sense groups.
 //
-// Providers return content **drafts** only. They never mint identity, version,
-// or snapshot hashes and never return a `SemanticRubric`/`SemanticJudgment`
-// with an id: Phase 3.11 keeps identity, versioning, and validation on the
-// server-side use case, so a vendor layer can never become a second identity
-// writer (ADR 0021 four-layer separation).
+// Provider output stays behind the media-analysis use case and does not mint
+// Core identities.
 // ---------------------------------------------------------------------------
 
 /// A neutral, structured-output chat request. Wire-agnostic: it names no
@@ -369,9 +361,6 @@ pub trait LlmChatAdapter: Send + Sync {
 /// seams remain the test surfaces for their individual use cases.
 #[async_trait]
 pub trait SemanticLlmRuntime: Send + Sync {
-    fn rubric(&self) -> &dyn SemanticRubricProvider;
-    fn judge(&self) -> &dyn SemanticJudgeProvider;
-    fn feedback(&self) -> &dyn OutputFeedbackProvider;
     fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider;
     async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError>;
 }
@@ -387,122 +376,6 @@ pub trait SemanticLlmRuntimeFactory: Send + Sync {
         profile: &domain::LlmProviderProfile,
         secret: Option<String>,
     ) -> Result<Box<dyn SemanticLlmRuntime>, LlmProviderError>;
-}
-
-/// Composition seam for assembling a provider-neutral realtime adapter from a
-/// persisted profile and its dispatch-time credential. Protocol selection and
-/// configuration policy belong to the adapter crate implementing this trait.
-pub trait RealtimeConversationAdapterFactory: Send + Sync {
-    fn build(
-        &self,
-        profile: &domain::RealtimeProviderProfile,
-        credential: Option<String>,
-    ) -> Result<Box<dyn crate::RealtimeConversationAdapter>, domain::RealtimeProviderError>;
-}
-
-/// Neutral rubric-generation request. The provider proposes information points;
-/// the use case assigns identity, version, provenance, and snapshot hashes.
-#[derive(Debug, Clone, PartialEq)]
-pub struct RubricGenerationRequest {
-    pub purpose: SemanticTaskKind,
-    pub source_language: LanguageCode,
-    pub response_language: LanguageCode,
-    pub transcript_snapshot: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RubricPointDraft {
-    pub importance: RubricPointImportance,
-    pub statement: String,
-    pub accepted_paraphrase_notes: Option<String>,
-}
-
-/// Content-only rubric proposal. No id, no version, no source snapshot — those
-/// belong to the server-side [`domain::SemanticRubric`] the use case builds.
-#[derive(Debug, Clone, PartialEq)]
-pub struct RubricDraft {
-    pub points: Vec<RubricPointDraft>,
-    pub model_id: Option<String>,
-    pub prompt_version: Option<String>,
-    pub schema_version: Option<String>,
-    pub raw_output: serde_json::Value,
-}
-
-/// Neutral judge request over one response against a fixed rubric version.
-#[derive(Debug, Clone, PartialEq)]
-pub struct JudgeRequest {
-    pub rubric: SemanticRubric,
-    pub response_transcript: String,
-    pub response_language: LanguageCode,
-    pub asr_reliability: Option<AsrReliability>,
-}
-
-/// Content-only judgment proposal. Reuses the identity-free Phase 3.11
-/// [`domain::PointJudgment`] / [`domain::JudgmentAbstain`]; the use case wraps
-/// it into a versioned, hashed, validated `SemanticJudgment`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct JudgmentDraft {
-    pub points: Vec<PointJudgment>,
-    pub abstain: Option<JudgmentAbstain>,
-    pub model_id: Option<String>,
-    pub prompt_version: Option<String>,
-    pub schema_version: Option<String>,
-    pub raw_output: serde_json::Value,
-}
-
-/// Application seam for generating a fixed scoring rubric from a segment.
-#[async_trait]
-pub trait SemanticRubricProvider: Send + Sync {
-    fn descriptor(&self) -> LlmProviderDescriptor;
-    async fn generate_rubric(
-        &self,
-        request: &RubricGenerationRequest,
-    ) -> Result<RubricDraft, LlmProviderError>;
-}
-
-/// Application seam for judging one response against a fixed rubric version.
-/// Since the Phase 3.19 output-feedback redesign this seam serves Reading
-/// only; speaking/writing qualitative feedback goes through
-/// [`OutputFeedbackProvider`] instead.
-#[async_trait]
-pub trait SemanticJudgeProvider: Send + Sync {
-    fn descriptor(&self) -> LlmProviderDescriptor;
-    async fn judge(&self, request: &JudgeRequest) -> Result<JudgmentDraft, LlmProviderError>;
-}
-
-/// Free-text qualitative feedback request over one output-task (speaking or
-/// writing) response. Unlike [`JudgeRequest`] it carries the full source
-/// context — transcript and task prompt — so the provider can respond like a
-/// teacher instead of filling a per-point scorecard.
-#[derive(Debug, Clone, PartialEq)]
-pub struct OutputFeedbackRequest {
-    pub task_kind: SemanticTaskKind,
-    pub source_language: LanguageCode,
-    pub response_language: LanguageCode,
-    pub source_transcript: String,
-    pub prompt_snapshot: Option<String>,
-    pub learner_response: String,
-    pub asr_reliability: Option<AsrReliability>,
-}
-
-/// Content-only free-text feedback. Deliberately identity-free and never
-/// persisted: the client shows it as ephemeral assist, and no observation or
-/// projection is ever derived from it.
-#[derive(Debug, Clone, PartialEq)]
-pub struct OutputFeedbackDraft {
-    pub feedback: String,
-    pub model_id: Option<String>,
-    pub prompt_version: Option<String>,
-}
-
-/// Application seam for qualitative feedback on output tasks.
-#[async_trait]
-pub trait OutputFeedbackProvider: Send + Sync {
-    fn descriptor(&self) -> LlmProviderDescriptor;
-    async fn give_feedback(
-        &self,
-        request: &OutputFeedbackRequest,
-    ) -> Result<OutputFeedbackDraft, LlmProviderError>;
 }
 
 #[cfg(test)]

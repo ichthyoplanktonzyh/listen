@@ -1,4 +1,4 @@
-//! Adopted composition HTTP surface (contract `4.0.0`).
+//! Adopted composition HTTP surface (contract `5.0.0`).
 //!
 //! This module is the single Core-owned composition interface: it resolves
 //! the current adopted composition of a Material, lists the selected
@@ -8,8 +8,7 @@
 //! [`application::CompositionUseCases`]. The App never re-parses a
 //! `.listenpkg` to read adopted content, and no response ever exposes a local
 //! path, manifest, or raw provider output. Missing or tampered selected
-//! content is an explicit `composition_integrity_failure`; an unreachable
-//! referenced Source Asset is an explicit `source_unavailable`.
+//! content is an explicit `composition_integrity_failure`.
 
 use application::{
     AdoptedCompositionView, CompositionBinding, CompositionPayload, CompositionRenditionView,
@@ -59,7 +58,6 @@ pub(crate) struct CompositionRenditionResponse {
     kind: String,
     origin: &'static str,
     media_type: String,
-    language: Option<String>,
     digest: String,
     byte_size: u64,
     blob_available: bool,
@@ -70,17 +68,7 @@ pub(crate) struct CompositionRenditionResponse {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum CompositionBindingResponse {
-    ManagedSourceAsset {
-        source_asset_id: String,
-    },
-    ReferencedSourceAsset {
-        source_asset_id: String,
-        reference: String,
-        available: bool,
-    },
-    Media {
-        media_id: String,
-    },
+    Media { media_id: String },
 }
 
 impl From<AdoptedCompositionView> for AdoptedCompositionResponse {
@@ -143,7 +131,6 @@ impl From<CompositionRenditionView> for CompositionRenditionResponse {
             kind: value.kind,
             origin: origin_string(value.origin),
             media_type: value.media_type,
-            language: value.language.map(|language| language.as_str().to_owned()),
             digest: value.digest,
             byte_size: value.byte_size,
             blob_available: value.blob_available,
@@ -156,18 +143,6 @@ impl From<CompositionRenditionView> for CompositionRenditionResponse {
 impl From<CompositionBinding> for CompositionBindingResponse {
     fn from(value: CompositionBinding) -> Self {
         match value {
-            CompositionBinding::ManagedSourceAsset { source_asset_id } => {
-                Self::ManagedSourceAsset { source_asset_id }
-            }
-            CompositionBinding::ReferencedSourceAsset {
-                source_asset_id,
-                reference,
-                available,
-            } => Self::ReferencedSourceAsset {
-                source_asset_id,
-                reference,
-                available,
-            },
             CompositionBinding::Media { media_id } => Self::Media {
                 media_id: media_id.as_str().to_owned(),
             },
@@ -254,29 +229,6 @@ pub(crate) async fn read_composition_resource_payload(
         .map_err(composition_error)
 }
 
-/// GET /v1/materials/{material_id}/composition/renditions/{rendition_id}/blob
-/// — the exact durable embedded blob of one selected Document/Media Rendition
-/// of the adopted composition, re-verified by Core. Missing or tampered
-/// content is an explicit `composition_integrity_failure`; an unreachable
-/// referenced Source Asset is an explicit `source_unavailable`.
-pub(crate) async fn read_composition_rendition_blob(
-    State(state): State<ApiState>,
-    Path((material_id, rendition_id)): Path<(String, String)>,
-) -> Result<Response, ApiError> {
-    let material_id = LearningMaterialId::parse(material_id).map_err(ApplicationError::from)?;
-    state
-        .application
-        .execute("composition.read_rendition_blob", move |services| {
-            services
-                .composition()
-                .read_rendition_blob(&material_id, &rendition_id)
-                .map_err(ApplicationError::from)
-        })
-        .await
-        .map(payload_response)
-        .map_err(composition_error)
-}
-
 /// The raw typed content body. Resource payloads are JSON documents;
 /// Document/Media rendition blobs are raw bytes.
 fn payload_response(payload: CompositionPayload) -> Response {
@@ -289,8 +241,7 @@ fn payload_response(payload: CompositionPayload) -> Response {
 
 /// Maps composition failures into their stable wire errors. A missing or
 /// tampered adopted selection is `composition_integrity_failure` (never a
-/// silent fallback); an unreachable referenced Source Asset is
-/// `source_unavailable` (never a Material or adoption deletion).
+/// silent fallback).
 fn composition_error(error: ApplicationError) -> ApiError {
     match error {
         ApplicationError::NotFound(entity) => ApiError::not_found(entity),
@@ -299,12 +250,6 @@ fn composition_error(error: ApplicationError) -> ApiError {
             "composition_integrity_failure",
             "adopted composition content is missing or fails integrity verification",
             false,
-        ),
-        ApplicationError::SourceUnavailable => ApiError::new(
-            StatusCode::BAD_GATEWAY,
-            "source_unavailable",
-            "a referenced source asset is unavailable",
-            true,
         ),
         other => ApiError::internal(
             StatusCode::INTERNAL_SERVER_ERROR,

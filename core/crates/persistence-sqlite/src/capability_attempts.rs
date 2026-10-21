@@ -232,8 +232,8 @@ mod tests {
     use super::*;
     use application::MaterialRepository;
     use domain::{
-        DocumentRendition, LearningMaterial, MaterialRevision, Rendition, RenditionOrigin,
-        initial_material_id,
+        LearningMaterial, MaterialRevision, MediaAvailability, MediaKind, MediaRendition,
+        Rendition, RenditionOrigin, initial_material_id,
     };
 
     /// A file-backed repository used to prove attempts survive a real close
@@ -249,42 +249,27 @@ mod tests {
     /// Creates one real material the attempts can reference through the
     /// foreign key.
     fn ensure_material(store: &SqliteRepository) -> LearningMaterialId {
-        let text = "capability attempt material";
-        let digest = {
-            use sha2::Digest as _;
-            hex::encode(sha2::Sha256::digest(text.as_bytes()))
-        };
-        let asset = domain::SourceAsset::new(
-            "text/plain",
-            text.len() as u64,
-            digest.clone(),
-            domain::SourceAssetBinding::Managed,
-            domain::SourceAssetAvailability::Available,
-            1,
-        )
-        .unwrap();
-        let rendition = Rendition::Document(
-            DocumentRendition::new(
+        let media_id = domain::MediaId::parse("capability-material-media").unwrap();
+        let rendition = Rendition::Media(
+            MediaRendition::new(
                 RenditionOrigin::Source,
-                "text/plain",
+                MediaKind::Audio,
+                "audio/mpeg",
+                "capability-material-fingerprint",
+                MediaAvailability::Available,
+                Some(media_id),
                 None,
-                digest,
-                text.len() as u64,
-                Some(asset.id.clone()),
+                None,
                 None,
                 None,
             )
             .unwrap(),
         );
-        let material_id = initial_material_id(
-            std::slice::from_ref(&asset),
-            std::slice::from_ref(&rendition),
-        )
-        .unwrap();
+        let material_id = initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap();
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Capability material",
-            vec![asset],
+            Vec::new(),
             vec![rendition],
             1,
         )

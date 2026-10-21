@@ -186,6 +186,24 @@ class ProduceCliTests(unittest.TestCase):
         self.assertIsNone(completed["package_sha256"])
         self.assertFalse(output.exists())
 
+    def test_video_only_listen_is_rejected_without_audio_conversion(self) -> None:
+        request = request_media("listen")
+        rendition = request["available_renditions"][0]
+        rendition["media_kind"] = "video"
+        rendition["media_type"] = "video/mp4"
+        request_path = self.write_request(request)
+        output = self.directory / "video-only-listen.zip"
+        result = run_cli([
+            "package", "from-capability", str(request_path),
+            "--output", str(output), "--machine-events",
+        ])
+        self.assertEqual(result.returncode, 2)
+        failed = parse_events(result.stdout)[-1]
+        self.assertEqual(failed["event"], "failed")
+        self.assertEqual(failed["code"], "unsupported_capability")
+        self.assertIn("listen requires an audio rendition", failed["message"])
+        self.assertFalse(output.exists())
+
     def test_invalid_capability_fails_before_running(self) -> None:
         request_path = self.write_request(request_media("speak"))
         result = run_cli([

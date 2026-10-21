@@ -104,37 +104,6 @@ void main() {
   });
 
   group('parseFeed (Atom)', () {
-    test('reads Atom channel metadata and entries across the namespace', () {
-      final feed = parseFeed(_atomFeed);
-
-      expect(feed.format, FeedFormat.atom);
-      expect(feed.title, 'The Weekly Article');
-      expect(feed.description, 'Long reads for learners.');
-      expect(feed.language, 'en');
-      expect(feed.items, hasLength(2));
-    });
-
-    test('reads the Atom id, alternate link and published date', () {
-      final item = parseFeed(_atomFeed).items.first;
-
-      expect(item.id, 'tag:example.com,2026:post-001');
-      expect(item.title, 'The first article');
-      expect(item.entryUrl, 'https://example.com/posts/first-article');
-      expect(item.publishedOn, '2026-07-28');
-    });
-
-    test('reads the publisher from the author element', () {
-      final item = parseFeed(_atomFeed).items.first;
-
-      expect(item.publisherId, 'Ada Example');
-    });
-
-    test('leaves an entry without a link unacquirable as a document', () {
-      final item = parseFeed(_atomFeed).items[1];
-
-      expect(item.entryUrl, isNull);
-    });
-
     test('a YouTube-style Atom entry exposes the video id and thumbnail', () {
       final feed = parseFeed(_youtubeAtom);
       final item = feed.items.first;
@@ -163,68 +132,76 @@ void main() {
       title: 'No id here',
       description: '',
       publishedOn: '2026-08-01',
-      entryUrl: 'https://blog.example.com/posts/9',
+      entryUrl: 'https://show.example.com/episodes/9',
     );
 
-    test('marks the key and binds it to the source and the entry reference', () {
-      final key = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/blog.xml',
-        item: itemWithoutId,
-      );
+    test(
+      'marks the key and binds it to the source and the entry reference',
+      () {
+        final key = sourceScopedSurrogateId(
+          sourceId: 'https://feeds.example.com/show.xml',
+          item: itemWithoutId,
+        );
 
-      expect(key, startsWith('source_scoped_surrogate:'));
-      expect(key.length, 'source_scoped_surrogate:'.length + 64);
-    });
+        expect(key, startsWith('source_scoped_surrogate:'));
+        expect(key.length, 'source_scoped_surrogate:'.length + 64);
+      },
+    );
 
     test('the same item re-read yields the same key', () {
       final first = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/blog.xml',
+        sourceId: 'https://feeds.example.com/show.xml',
         item: itemWithoutId,
       );
       final second = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/blog.xml',
+        sourceId: 'https://feeds.example.com/show.xml',
         item: itemWithoutId,
       );
 
       expect(second, first);
     });
 
-    test('is scoped to the source: the same entry in two feeds never collides',
-        () {
-      final a = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/a.xml',
-        item: itemWithoutId,
-      );
-      final b = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/b.xml',
-        item: itemWithoutId,
-      );
+    test(
+      'is scoped to the source: the same entry in two feeds never collides',
+      () {
+        final a = sourceScopedSurrogateId(
+          sourceId: 'https://feeds.example.com/a.xml',
+          item: itemWithoutId,
+        );
+        final b = sourceScopedSurrogateId(
+          sourceId: 'https://feeds.example.com/b.xml',
+          item: itemWithoutId,
+        );
 
-      expect(b, isNot(a));
-    });
+        expect(b, isNot(a));
+      },
+    );
 
-    test('a changed entry reference yields a new key, never a silent merge', () {
-      final original = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/blog.xml',
-        item: itemWithoutId,
-      );
-      final changed = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/blog.xml',
-        item: ParsedFeedItem(
-          id: null,
-          title: 'No id here',
-          description: '',
-          publishedOn: '2026-08-01',
-          entryUrl: 'https://blog.example.com/posts/10',
-        ),
-      );
+    test(
+      'a changed entry reference yields a new key, never a silent merge',
+      () {
+        final original = sourceScopedSurrogateId(
+          sourceId: 'https://feeds.example.com/show.xml',
+          item: itemWithoutId,
+        );
+        final changed = sourceScopedSurrogateId(
+          sourceId: 'https://feeds.example.com/show.xml',
+          item: ParsedFeedItem(
+            id: null,
+            title: 'No id here',
+            description: '',
+            publishedOn: '2026-08-01',
+            entryUrl: 'https://show.example.com/episodes/10',
+          ),
+        );
 
-      expect(changed, isNot(original));
-    });
+        expect(changed, isNot(original));
+      },
+    );
 
     test('falls back to title and date when the item has no URL at all', () {
       final key = sourceScopedSurrogateId(
-        sourceId: 'https://feeds.example.com/blog.xml',
+        sourceId: 'https://feeds.example.com/show.xml',
         item: ParsedFeedItem(
           id: null,
           title: 'Notes only',
@@ -263,7 +240,7 @@ void main() {
   /// so everything past the cap is history nobody asked for.
   group('reading only what the shelf shows', () {
     test(
-      'reading stops at the cap and still yields a parseable document',
+      'reading stops at the cap and still yields parseable feed XML',
       () async {
         final body = await readFeedBody(
           _inChunks(_feedWith(500), 997),
@@ -306,10 +283,7 @@ void main() {
 
     test('a feed shorter than the cap is read whole and left intact', () async {
       final source = _feedWith(3);
-      final body = await readFeedBody(
-        _inChunks(source, 64),
-        maxItems: 50,
-      );
+      final body = await readFeedBody(_inChunks(source, 64), maxItems: 50);
 
       expect(body, source);
       expect(parseFeed(body).items, hasLength(3));
@@ -318,10 +292,7 @@ void main() {
     test('the parser caps items even when handed a whole feed', () {
       // Belt and braces: a body that never went through the reader should not
       // build 2937 item objects either.
-      expect(
-        parseFeed(_feedWith(400), maxItems: 25).items,
-        hasLength(25),
-      );
+      expect(parseFeed(_feedWith(400), maxItems: 25).items, hasLength(25));
     });
   });
 }
@@ -363,27 +334,6 @@ const _feed = '''
     </item>
   </channel>
 </rss>
-''';
-
-const _atomFeed = '''
-<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
-  <title>The Weekly Article</title>
-  <subtitle>Long reads for learners.</subtitle>
-  <entry>
-    <id>tag:example.com,2026:post-001</id>
-    <title>The first article</title>
-    <summary>A long-form look at the first topic.</summary>
-    <link rel="alternate" href="https://example.com/posts/first-article"/>
-    <published>2026-07-28T09:00:00Z</published>
-    <author><name>Ada Example</name></author>
-  </entry>
-  <entry>
-    <id>tag:example.com,2026:post-002</id>
-    <title>The second article</title>
-    <published>2026-07-29T09:00:00Z</published>
-  </entry>
-</feed>
 ''';
 
 /// A YouTube channel feed: the shape `youtube.com/feeds/videos.xml` serves,

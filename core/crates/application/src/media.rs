@@ -1,9 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
-    AppServices, ApplicationError, CoachDashboardRepository, CorpusIndexRepository,
-    DifficultyRepository, LLTimelineImportRepository, LLTimelineResourceRepository,
-    LearnerProfileUseCases, LearningEventKind, LearningEventRepository, LearningEventSubjectKind,
+    AppServices, ApplicationError, CorpusIndexRepository, LLTimelineImportRepository,
+    LLTimelineResourceRepository, LearnerProfileUseCases, LearningEventRepository,
     LexicalEntryRepository, LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem,
     MediaLibraryEntry, MediaRepository, MediaTriageIntent, PhoneTimelineRepository,
     PlaybackProgressRepository, PronunciationProvider, PronunciationRepository,
@@ -29,10 +28,8 @@ pub struct MediaAnalysisUseCases {
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
-    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
-    pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
     lexical_learning: LexicalLearningUseCases,
     learner_profile: LearnerProfileUseCases,
@@ -52,10 +49,8 @@ impl MediaAnalysisUseCases {
             lltimeline_resources: services.lltimeline_resources.clone(),
             lltimeline_imports: services.lltimeline_imports.clone(),
             corpus: services.corpus.clone(),
-            difficulty: services.difficulty.clone(),
             lexical_entries: services.lexical_entries.clone(),
             learning_events: services.learning_events.clone(),
-            coach_dashboard: services.coach_dashboard.clone(),
             pronunciation_providers: services.pronunciation_providers.clone(),
             lexical_learning: LexicalLearningUseCases::from_services(services),
             learner_profile: LearnerProfileUseCases::new(services.learner_profiles.clone()),
@@ -149,35 +144,18 @@ impl MediaAnalysisUseCases {
         self.media.set_library_membership(media_id, None, now)
     }
 
-    /// Media library read model for triage (Phase 3.5 Slice 5): every
-    /// retained media with the cached content fit of its primary language
-    /// track, the user's explicit triage intent, and the familiar-material
-    /// mark. Temporary Material (registered with `retain: false`, or
-    /// unretained) is readable through `read_media` but absent here. Per-media
-    /// fit failures degrade to `None` instead of failing the list — triage
-    /// only suggests, it never gates (P3/P5 red lines).
+    /// Media library read model with the user's explicit organization state.
+    /// Temporary material remains addressable by ID but is absent here.
     pub fn list_media_library(&self) -> Result<Vec<MediaLibraryEntry>, ApplicationError> {
         let intents: HashMap<MediaId, MediaTriageIntent> =
             self.media.list_triage_intents()?.into_iter().collect();
-        let familiar: HashSet<String> = self
-            .learning_events
-            .list_event_subject_ids(
-                LearningEventKind::FamiliarMaterialMarked,
-                LearningEventSubjectKind::Media,
-            )
-            // A services instance without the learning loop configured still
-            // serves the library; the familiar supply channel just idles.
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
         self.media
             .list()?
             .into_iter()
             .filter(|media| media.retained_at_ms.is_some())
             .map(|media| {
                 let intent = intents.get(&media.id).copied();
-                let familiar_material = familiar.contains(media.id.as_str());
-                self.media_library_entry(media, intent, familiar_material)
+                self.media_library_entry(media, intent)
             })
             .collect()
     }
@@ -194,27 +172,16 @@ impl MediaAnalysisUseCases {
             .get(media_id)?
             .ok_or(ApplicationError::NotFound("media"))?;
         self.media.set_triage_intent(media_id, intent, now_ms())?;
-        let familiar_material = self
-            .learning_events
-            .list_event_subject_ids(
-                LearningEventKind::FamiliarMaterialMarked,
-                LearningEventSubjectKind::Media,
-            )
-            .unwrap_or_default()
-            .iter()
-            .any(|id| id == media_id.as_str());
-        self.media_library_entry(media, intent, familiar_material)
+        self.media_library_entry(media, intent)
     }
 
     fn media_library_entry(
         &self,
         media: MediaItem,
         triage_intent: Option<MediaTriageIntent>,
-        familiar_material: bool,
     ) -> Result<MediaLibraryEntry, ApplicationError> {
-        // First available track with a language: deterministic and matches
-        // the track the workbench would load as primary. Fit stays media
-        // level; the track only identifies the transcript (ADR 0018).
+        // First available track with a language is the deterministic primary
+        // transcript for one-click listening session starts.
         let primary_track = self
             .subtitle_tracks
             .list_tracks_for_media(&media.id)?
@@ -223,18 +190,10 @@ impl MediaAnalysisUseCases {
                 track.status == SubtitleTrackStatus::Available && track.language.is_some()
             });
         let primary_track_id = primary_track.as_ref().map(|track| track.id.clone());
-        // Cached read path; recomputes only on fingerprint mismatch. Any
-        // failure (no word tokens, degraded resources) silently drops the
-        // badge rather than the row.
-        let fit = primary_track_id
-            .as_ref()
-            .and_then(|track_id| self.content_fit_for_track(track_id).ok());
         Ok(MediaLibraryEntry {
             media,
             primary_track_id,
-            fit,
             triage_intent,
-            familiar_material,
         })
     }
 

@@ -45,14 +45,12 @@ void main() {
       // ── Local feed server ──────────────────────────────────────────────
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() async => server.close(force: true));
-      final feedUrl =
-          'http://${server.address.host}:${server.port}/show.xml';
+      final feedUrl = 'http://${server.address.host}:${server.port}/show.xml';
       const enclosurePath = '/media.wav';
       final mediaBytes = await File(
         'test/fixtures/content-package-roundtrip/sample-media.wav',
       ).readAsBytes();
-      final feedBody = utf8.encode(
-        '''
+      final feedBody = utf8.encode('''
 <?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
   <channel>
@@ -68,8 +66,7 @@ void main() {
     </item>
   </channel>
 </rss>
-''',
-      );
+''');
       server.listen((request) async {
         if (request.uri.path == '/show.xml') {
           request.response
@@ -135,8 +132,11 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 300));
 
       final localPath = await first.acquireForLearning('ep-001');
-      expect(localPath?.mediaPath, isNotNull,
-          reason: 'the enclosure must land locally');
+      expect(
+        localPath?.mediaPath,
+        isNotNull,
+        reason: 'the enclosure must land locally',
+      );
       expect(
         first.state.acquisitionStateOf('ep-001'),
         DiscoveryItemState.available,
@@ -178,7 +178,7 @@ void main() {
       // Re-registering the same bytes is Core's fingerprint convergence: it
       // returns the very media row adoption registered, now retained.
       final media = await mediaLibrary.registerMedia(
-        localPath.mediaPath!,
+        localPath.mediaPath,
         retain: true,
       );
       final mediaId = media.id;
@@ -191,8 +191,6 @@ void main() {
       final material = await materials.createLearningMaterial(
         CreateLearningMaterialInput(
           title: 'Episode one',
-          sourceAssets: const [],
-          documentRenditions: const [],
           mediaRenditions: [MediaRenditionInput(mediaId: mediaId)],
         ),
         retain: const MaterialRetainExplicit(true),

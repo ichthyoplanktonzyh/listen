@@ -25,8 +25,6 @@ void main() {
 
   Widget workbench({
     String materialTitle = 'CNN 10.mp4',
-    VoidCallback? onShadow,
-    bool canShadow = false,
     Widget? learningEditionAction,
   }) => MaterialWorkbench(
     materialTitle: materialTitle,
@@ -34,8 +32,6 @@ void main() {
     learningPanel: const ColoredBox(color: Colors.white),
     mediaFraction: 0.42,
     onMediaFractionChanged: _noopFraction,
-    onShadow: onShadow,
-    canShadow: canShadow,
     learningEditionAction: learningEditionAction,
   );
 
@@ -91,44 +87,6 @@ void main() {
     expect(find.byKey(const Key('learning-edition-action')), findsOneWidget);
     await tester.tap(find.byKey(const Key('learning-edition-action')));
     expect(opened, 1);
-  });
-
-  testWidgets('shadow entry is disabled with a reason until a sentence plays', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1400, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
-    var shadowed = 0;
-    await tester.pumpWidget(
-      localized(workbench(onShadow: () => shadowed += 1, canShadow: false)),
-    );
-
-    const key = Key('workbench-shadow');
-    final button = buttonFor(tester, key);
-    expect(button.onPressed, isNull);
-    expect(button.tooltip, '播放到某句后即可跟读');
-    await tester.tap(find.byKey(key));
-    expect(shadowed, 0);
-  });
-
-  testWidgets('shadow entry fires on the current sentence when one plays', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1400, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
-    var shadowed = 0;
-    await tester.pumpWidget(
-      localized(workbench(onShadow: () => shadowed += 1, canShadow: true)),
-    );
-
-    const key = Key('workbench-shadow');
-    final button = buttonFor(tester, key);
-    expect(button.onPressed, isNotNull);
-    expect(button.tooltip, '跟读当前句');
-    await tester.tap(find.byKey(key));
-    expect(shadowed, 1);
   });
 
   testWidgets('unwired take-away entries are shown disabled, with the reason', (

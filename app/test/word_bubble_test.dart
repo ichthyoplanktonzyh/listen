@@ -150,7 +150,6 @@ class WordBubbleFixture extends StatelessWidget {
     details: details,
     dictionary: dictionary,
     pronunciation: null,
-    onStatus: (_) {},
     onOpenDetails: onOpenDetails ?? () {},
   );
 }

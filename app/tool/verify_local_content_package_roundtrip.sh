@@ -4,10 +4,16 @@
 set -euo pipefail
 
 readonly EXPECTED_MEDIA_TEST="local Gen bundle to local Core round trips through capability production, installation, and adoption"
-readonly EXPECTED_DOCUMENT_TEST="a document material produces listen through the fake TTS provider and its derived audio resolves from the adopted composition through Core"
-readonly EXPECTED_MATRIX_TEST="the Gen/Core/App matrix keeps one adopted package shape across document and media families"
-readonly EXPECTED_RICH_TEST="a video subtitle with fragmented cues lands as one complete sentence with every rich timeline"
-readonly EXPECTED_RENDER_TEST="Core-adopted compositions render honest audio and text surfaces for document, audio, and video"
+readonly EXPECTED_MATRIX_TEST="audio and video ASR/subtitle inputs produce adopted media packages through Gen, Core, and App"
+readonly EXPECTED_RICH_TEST="fragmented video subtitles produce one time-aligned transcript with rich speech analysis"
+readonly EXPECTED_MALFORMED_TEST="a malformed package fails installation cleanly and pollutes no state"
+readonly EXPECTED_UNKNOWN_RELEASE_TEST="adopting an unknown release fails without changing the composition"
+readonly EXPECTED_PROVIDER_FAILURE_TEST="a provider failure surfaces as a clean failed attempt and retries without hanging or orphaning the generator"
+readonly EXPECTED_DISCOVERY_TEST="a fixture feed item acquires, keeps, reopens after restart, and never duplicates its material on a second refresh"
+readonly EXPECTED_CANCEL_TEST="process lifecycle cancellation reports cancelled promptly"
+readonly EXPECTED_CANCEL_ESCALATION_TEST="process lifecycle cancellation escalates when the generator ignores soft signals"
+readonly EXPECTED_PROCESS_CLEANUP_TEST="process lifecycle protocol failure is prompt while cleanup reclaims a hung process"
+readonly EXPECTED_RELEASE_HASH_TEST="process lifecycle does not execute an artifact swapped after verification"
 
 app_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_root=""
@@ -124,13 +130,9 @@ if [[ -z "${VERIFY_ROUNDTRIP_STAGE_RUNNER:-}" ]]; then
 import sys
 if sys.version_info < (3, 11):
     raise SystemExit("listen-gen E2E requires Python >=3.11")
-try:
-    import pypdf  # noqa: F401
-except ImportError as error:
-    raise SystemExit("listen-gen E2E requires the Gen PDF dependency pypdf") from error
 PY
   then
-    fail "Gen PDF fixture dependencies are unavailable in $GEN_PYTHON"
+    fail "Gen E2E requires Python 3.11 or newer at $GEN_PYTHON"
   fi
 fi
 
@@ -170,7 +172,7 @@ esac
   run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 "$GEN_PYTHON" tools/release_bundle.py verify \
     --core-contract-manifest "$core_contract_manifest" "$gen_manifest" )
 
-echo "verify-roundtrip: building disposable content-family fixtures"
+echo "verify-roundtrip: building disposable audio/video fixtures"
 fixture_root="$tmp/fixtures"
 run_stage fixture-build env PYTHONDONTWRITEBYTECODE=1 "$GEN_PYTHON" \
   "$APP_SOURCE/tool/build_content_package_roundtrip_fixtures.py" \
@@ -199,13 +201,23 @@ report="$tmp/flutter-report.jsonl"
       test/integration/content_package_e2e_test.dart \
       test/integration/material_failure_injection_test.dart \
       test/integration/discovery_feed_roundtrip_test.dart \
+      test/listen_gen_process_service_test.dart \
       --concurrency 1 --reporter expanded --file-reporter "json:$report" )
 
-python3 "$APP_SOURCE/tool/verify_flutter_test_report.py" "$report" "$EXPECTED_MEDIA_TEST"
-python3 "$APP_SOURCE/tool/verify_flutter_test_report.py" "$report" "$EXPECTED_DOCUMENT_TEST"
-python3 "$APP_SOURCE/tool/verify_flutter_test_report.py" "$report" "$EXPECTED_MATRIX_TEST"
-python3 "$APP_SOURCE/tool/verify_flutter_test_report.py" "$report" "$EXPECTED_RICH_TEST"
-python3 "$APP_SOURCE/tool/verify_flutter_test_report.py" "$report" "$EXPECTED_RENDER_TEST"
+for expected in \
+  "$EXPECTED_MEDIA_TEST" \
+  "$EXPECTED_MATRIX_TEST" \
+  "$EXPECTED_RICH_TEST" \
+  "$EXPECTED_MALFORMED_TEST" \
+  "$EXPECTED_UNKNOWN_RELEASE_TEST" \
+  "$EXPECTED_PROVIDER_FAILURE_TEST" \
+  "$EXPECTED_DISCOVERY_TEST" \
+  "$EXPECTED_CANCEL_TEST" \
+  "$EXPECTED_CANCEL_ESCALATION_TEST" \
+  "$EXPECTED_PROCESS_CLEANUP_TEST" \
+  "$EXPECTED_RELEASE_HASH_TEST"; do
+  python3 "$APP_SOURCE/tool/verify_flutter_test_report.py" "$report" "$expected"
+done
 
 if [[ -n "$source_head" ]]; then
   final_head="$(git -C "$source_root" rev-parse HEAD)"

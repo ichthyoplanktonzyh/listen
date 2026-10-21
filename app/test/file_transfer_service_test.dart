@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,29 +12,6 @@ void main() {
 
   tearDown(() async {
     if (await directory.exists()) await directory.delete(recursive: true);
-  });
-
-  test('personal-expression export writes indented valid JSON', () async {
-    final path = '${directory.path}/expression.json';
-
-    await const LocalPersonalExpressionExportFileService().writeToPath(
-      path: path,
-      document: {
-        'version': 1,
-        'patterns': [
-          {'name': 'Ended up'},
-        ],
-      },
-    );
-
-    final encoded = await File(path).readAsString();
-    expect(encoded, contains('\n  "version": 1'));
-    expect(jsonDecode(encoded), {
-      'version': 1,
-      'patterns': [
-        {'name': 'Ended up'},
-      ],
-    });
   });
 
   test('external word-list service reads and parses TXT and CSV', () async {

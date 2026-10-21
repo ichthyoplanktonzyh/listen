@@ -1,27 +1,20 @@
-//! Phase 3.12 neutrality proof.
-//!
-//! The same scenario suite is driven through both heterogeneous adapters
-//! (OpenAI Chat Completions and Anthropic Messages) against a local fake
-//! server. Each protocol receives its own wire-shaped canned response, yet the
-//! neutral outcome — a `JudgmentDraft`, a standardized `LlmProviderError`, or a
-//! probed capability — must be identical. Different wire in, same domain out:
-//! that is the property that proves the domain layer is not captured by any
-//! single provider's wire format.
+//! Provider neutrality contract for the retained listening assistance: subtitle
+//! sense-group partitioning and structured-output capability probing.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use application::{
-    JudgeRequest, LlmChatAdapter, OutputFeedbackProvider, OutputFeedbackRequest,
-    SemanticJudgeProvider, SenseGroupPartitionProvider, SenseGroupPartitionRequest,
-    SenseGroupProtectedSpan, SenseGroupTokenInput,
+    LlmChatAdapter, SemanticLlmRuntimeFactory, SenseGroupPartitionProvider,
+    SenseGroupPartitionRequest, SenseGroupProtectedSpan, SenseGroupTokenInput,
 };
 use axum::{Json, Router, extract::State, http::HeaderMap, http::StatusCode, routing::post};
 use domain::{
-    AsrReliability, CapabilityClaim, LanguageCode, LlmProviderError, RubricPoint,
-    RubricPointImportance, RubricSource, SemanticGeneratorKind, SemanticGeneratorProvenance,
-    SemanticRubric, SemanticTaskKind, semantic_rubric_id,
+    CapabilityClaim, DataRetentionPreference, LanguageCode, LlmAdapterKind, LlmProviderError,
+    LlmProviderProfile, LlmUse, ProviderCapability, llm_provider_profile_id,
 };
-use llm_provider::{AnthropicMessagesAdapter, LlmSemanticProvider, OpenAiChatAdapter};
+use llm_provider::{
+    AnthropicMessagesAdapter, LlmSemanticProvider, LlmSemanticRuntimeFactory, OpenAiChatAdapter,
+};
 use tokio::net::TcpListener;
 
 #[derive(Clone, Copy, Debug)]
@@ -64,21 +57,20 @@ async fn spawn(canned: Canned) -> String {
     format!("http://{addr}")
 }
 
-/// Wrap a structured-output payload into each protocol's success envelope.
 fn success_envelope(protocol: Protocol, tool_name: &str, output: serde_json::Value) -> Canned {
     let body = match protocol {
         Protocol::OpenAi => serde_json::json!({
             "model": "fake-openai-model",
-            "choices": [ {
+            "choices": [{
                 "finish_reason": "stop",
                 "message": { "content": output.to_string(), "refusal": null }
-            } ],
+            }],
             "usage": { "prompt_tokens": 10, "completion_tokens": 20 }
         }),
         Protocol::Anthropic => serde_json::json!({
             "model": "fake-anthropic-model",
             "stop_reason": "tool_use",
-            "content": [ { "type": "tool_use", "name": tool_name, "input": output } ],
+            "content": [{ "type": "tool_use", "name": tool_name, "input": output }],
             "usage": { "input_tokens": 10, "output_tokens": 20 }
         }),
     };
@@ -90,137 +82,7 @@ fn success_envelope(protocol: Protocol, tool_name: &str, output: serde_json::Val
     }
 }
 
-fn sample_rubric() -> SemanticRubric {
-    let language = LanguageCode::parse("en").unwrap();
-    let response_language = LanguageCode::parse("en").unwrap();
-    let snapshot = "The quake struck at dawn near the coast.";
-    let id = semantic_rubric_id(
-        None,
-        0,
-        4000,
-        SemanticTaskKind::L2Retelling,
-        &language,
-        &response_language,
-        snapshot,
-    );
-    SemanticRubric {
-        id,
-        purpose: SemanticTaskKind::L2Retelling,
-        source: RubricSource {
-            media_id: None,
-            track_id: None,
-            start_ms: 0,
-            end_ms: 4000,
-            language,
-            transcript_snapshot: snapshot.into(),
-        },
-        response_language,
-        points: vec![
-            RubricPoint {
-                point_id: "p1".into(),
-                importance: RubricPointImportance::Required,
-                statement: "A quake happened.".into(),
-                accepted_paraphrase_notes: None,
-            },
-            RubricPoint {
-                point_id: "p2".into(),
-                importance: RubricPointImportance::Optional,
-                statement: "It was near the coast.".into(),
-                accepted_paraphrase_notes: None,
-            },
-        ],
-        version: 1,
-        provenance: SemanticGeneratorProvenance {
-            kind: SemanticGeneratorKind::Fixture,
-            detail: None,
-            model_id: None,
-            prompt_version: None,
-            schema_version: None,
-        },
-        revision: None,
-        created_at_ms: 0,
-    }
-}
-
-fn judge_request() -> JudgeRequest {
-    JudgeRequest {
-        rubric: sample_rubric(),
-        response_transcript: "quake at dawn".into(),
-        response_language: LanguageCode::parse("en").unwrap(),
-        asr_reliability: Some(AsrReliability::Reliable),
-    }
-}
-
-/// Build the semantic judge for a protocol pointed at `base_url`.
-enum Judge {
-    OpenAi(LlmSemanticProvider<OpenAiChatAdapter>),
-    Anthropic(LlmSemanticProvider<AnthropicMessagesAdapter>),
-}
-
-impl Judge {
-    fn build(protocol: Protocol, base_url: &str, timeout: Duration) -> Self {
-        match protocol {
-            Protocol::OpenAi => Judge::OpenAi(LlmSemanticProvider::new(
-                OpenAiChatAdapter::new(base_url, "m", Some("k".into()), timeout).unwrap(),
-            )),
-            Protocol::Anthropic => Judge::Anthropic(LlmSemanticProvider::new(
-                AnthropicMessagesAdapter::new(base_url, "m", Some("k".into()), None, timeout)
-                    .unwrap(),
-            )),
-        }
-    }
-
-    async fn judge(
-        &self,
-        request: &JudgeRequest,
-    ) -> Result<application::JudgmentDraft, LlmProviderError> {
-        match self {
-            Judge::OpenAi(provider) => provider.judge(request).await,
-            Judge::Anthropic(provider) => provider.judge(request).await,
-        }
-    }
-
-    async fn probe(&self) -> Result<CapabilityClaim, LlmProviderError> {
-        match self {
-            Judge::OpenAi(provider) => provider.adapter().probe_structured_output().await,
-            Judge::Anthropic(provider) => provider.adapter().probe_structured_output().await,
-        }
-    }
-
-    async fn feedback(
-        &self,
-        request: &OutputFeedbackRequest,
-    ) -> Result<application::OutputFeedbackDraft, LlmProviderError> {
-        match self {
-            Judge::OpenAi(provider) => provider.give_feedback(request).await,
-            Judge::Anthropic(provider) => provider.give_feedback(request).await,
-        }
-    }
-
-    async fn sense_groups(
-        &self,
-        request: &SenseGroupPartitionRequest,
-    ) -> Result<application::SenseGroupPartitionDraft, LlmProviderError> {
-        match self {
-            Judge::OpenAi(provider) => provider.partition_sense_groups(request).await,
-            Judge::Anthropic(provider) => provider.partition_sense_groups(request).await,
-        }
-    }
-}
-
-fn feedback_request() -> OutputFeedbackRequest {
-    OutputFeedbackRequest {
-        task_kind: SemanticTaskKind::L2Retelling,
-        source_language: LanguageCode::parse("en").unwrap(),
-        response_language: LanguageCode::parse("en").unwrap(),
-        source_transcript: "The quake struck at dawn near the coast.".into(),
-        prompt_snapshot: Some("Retell what happened in your own words.".into()),
-        learner_response: "quake at dawn".into(),
-        asr_reliability: Some(AsrReliability::Reliable),
-    }
-}
-
-fn sense_group_request() -> SenseGroupPartitionRequest {
+fn request() -> SenseGroupPartitionRequest {
     SenseGroupPartitionRequest {
         language: Some(LanguageCode::parse("en").unwrap()),
         source_text: "When it rains, we stay inside.".into(),
@@ -269,58 +131,57 @@ fn sense_group_request() -> SenseGroupPartitionRequest {
     }
 }
 
-async fn run_judge(
+enum Provider {
+    OpenAi(LlmSemanticProvider<OpenAiChatAdapter>),
+    Anthropic(LlmSemanticProvider<AnthropicMessagesAdapter>),
+}
+
+impl Provider {
+    fn build(protocol: Protocol, base_url: &str, timeout: Duration) -> Self {
+        match protocol {
+            Protocol::OpenAi => Self::OpenAi(LlmSemanticProvider::new(
+                OpenAiChatAdapter::new(base_url, "m", Some("k".into()), timeout).unwrap(),
+            )),
+            Protocol::Anthropic => Self::Anthropic(LlmSemanticProvider::new(
+                AnthropicMessagesAdapter::new(base_url, "m", Some("k".into()), None, timeout)
+                    .unwrap(),
+            )),
+        }
+    }
+
+    fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
+        match self {
+            Self::OpenAi(provider) => provider,
+            Self::Anthropic(provider) => provider,
+        }
+    }
+
+    async fn probe(&self) -> Result<CapabilityClaim, LlmProviderError> {
+        match self {
+            Self::OpenAi(provider) => provider.adapter().probe_structured_output().await,
+            Self::Anthropic(provider) => provider.adapter().probe_structured_output().await,
+        }
+    }
+
+    async fn partition(
+        &self,
+        input: &SenseGroupPartitionRequest,
+    ) -> Result<application::SenseGroupPartitionDraft, LlmProviderError> {
+        self.sense_groups().partition_sense_groups(input).await
+    }
+}
+
+const TIMEOUT: Duration = Duration::from_secs(5);
+
+async fn run_partition(
     protocol: Protocol,
     canned: Canned,
     timeout: Duration,
-) -> Result<application::JudgmentDraft, LlmProviderError> {
+) -> Result<application::SenseGroupPartitionDraft, LlmProviderError> {
     let base = spawn(canned).await;
-    Judge::build(protocol, &base, timeout)
-        .judge(&judge_request())
+    Provider::build(protocol, &base, timeout)
+        .partition(&request())
         .await
-}
-
-const T: Duration = Duration::from_secs(5);
-
-#[tokio::test]
-async fn success_yields_identical_neutral_judgment_across_protocols() {
-    let output = serde_json::json!({
-        "abstain": null,
-        "points": [
-            { "point_id": "p1", "verdict": "covered", "supporting_spans": [ { "start_char": 0, "end_char": 5 } ] },
-            { "point_id": "p2", "verdict": "missing", "supporting_spans": [] }
-        ]
-    });
-    let mut drafts = Vec::new();
-    for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "semantic_judgment", output.clone());
-        let draft = run_judge(protocol, canned, T).await.expect("judgment");
-        assert!(draft.abstain.is_none());
-        assert_eq!(draft.points.len(), 2);
-        assert_eq!(draft.points[0].point_id, "p1");
-        drafts.push(draft.points);
-    }
-    // The core neutrality assertion: different wire, identical domain output.
-    assert_eq!(drafts[0], drafts[1]);
-}
-
-#[tokio::test]
-async fn feedback_success_yields_identical_text_across_protocols() {
-    let output = serde_json::json!({
-        "feedback": "You conveyed the quake clearly; next time add where it struck."
-    });
-    let mut texts = Vec::new();
-    for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "output_feedback", output.clone());
-        let base = spawn(canned).await;
-        let draft = Judge::build(protocol, &base, T)
-            .feedback(&feedback_request())
-            .await
-            .expect("feedback");
-        assert!(draft.prompt_version.is_some());
-        texts.push(draft.feedback);
-    }
-    assert_eq!(texts[0], texts[1]);
 }
 
 #[tokio::test]
@@ -328,165 +189,142 @@ async fn sense_group_partition_is_protocol_neutral() {
     let output = serde_json::json!({ "boundary_after_token_indices": [4] });
     let mut results = Vec::new();
     for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "sense_group_partition", output.clone());
-        let base = spawn(canned).await;
-        let draft = Judge::build(protocol, &base, T)
-            .sense_groups(&sense_group_request())
-            .await
-            .expect("sense groups");
+        let draft = run_partition(
+            protocol,
+            success_envelope(protocol, "sense_group_partition", output.clone()),
+            TIMEOUT,
+        )
+        .await
+        .expect("partition");
         assert_eq!(
             draft.prompt_version.as_deref(),
             Some("sense-group-partition/v1")
         );
+        assert_eq!(draft.boundary_after_token_indices, vec![4]);
         results.push(draft.boundary_after_token_indices);
     }
     assert_eq!(results[0], results[1]);
 }
 
 #[tokio::test]
-async fn empty_feedback_is_rejected_as_schema_invalid() {
-    let output = serde_json::json!({ "feedback": "   " });
+async fn malformed_output_maps_to_schema_invalid_for_both_protocols() {
+    let output = serde_json::json!({ "boundary_after_token_indices": "invalid" });
     for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "output_feedback", output.clone());
-        let base = spawn(canned).await;
-        let error = Judge::build(protocol, &base, T)
-            .feedback(&feedback_request())
-            .await
-            .unwrap_err();
+        let error = run_partition(
+            protocol,
+            success_envelope(protocol, "sense_group_partition", output.clone()),
+            TIMEOUT,
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(error, LlmProviderError::SchemaInvalid { .. }));
     }
 }
 
 #[tokio::test]
-async fn abstain_is_carried_through_both_protocols() {
-    let output = serde_json::json!({
-        "abstain": { "reason": "unreliable_transcript", "note": null },
-        "points": []
-    });
+async fn refusal_and_truncation_map_to_neutral_errors() {
     for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "semantic_judgment", output.clone());
-        let draft = run_judge(protocol, canned, T).await.expect("judgment");
-        assert!(draft.abstain.is_some());
-        assert!(draft.points.is_empty());
-    }
-}
-
-#[tokio::test]
-async fn abstain_with_points_is_rejected_as_schema_invalid() {
-    let output = serde_json::json!({
-        "abstain": { "reason": "other", "note": null },
-        "points": [ { "point_id": "p1", "verdict": "covered", "supporting_spans": [] } ]
-    });
-    for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "semantic_judgment", output.clone());
-        let error = run_judge(protocol, canned, T).await.unwrap_err();
-        assert!(matches!(error, LlmProviderError::SchemaInvalid { .. }));
-    }
-}
-
-#[tokio::test]
-async fn wrong_schema_output_maps_to_schema_invalid() {
-    let output = serde_json::json!({ "abstain": null, "points": "not-an-array" });
-    for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "semantic_judgment", output.clone());
-        let error = run_judge(protocol, canned, T).await.unwrap_err();
-        assert!(matches!(error, LlmProviderError::SchemaInvalid { .. }));
-    }
-}
-
-#[tokio::test]
-async fn refusal_maps_to_refusal_across_protocols() {
-    for protocol in ALL_PROTOCOLS {
-        let body = match protocol {
+        let refusal = match protocol {
             Protocol::OpenAi => serde_json::json!({
                 "model": "m",
-                "choices": [ { "finish_reason": "stop", "message": { "content": null, "refusal": "I can't help with that." } } ]
+                "choices": [{ "finish_reason": "stop", "message": { "content": null, "refusal": "I can't help with that." } }]
             }),
             Protocol::Anthropic => serde_json::json!({
-                "model": "m",
-                "stop_reason": "refusal",
-                "content": []
+                "model": "m", "stop_reason": "refusal", "content": []
             }),
         };
-        let canned = Canned {
-            status: StatusCode::OK,
-            body,
-            retry_after: None,
-            delay_ms: 0,
-        };
-        let error = run_judge(protocol, canned, T).await.unwrap_err();
+        let error = run_partition(
+            protocol,
+            Canned {
+                status: StatusCode::OK,
+                body: refusal,
+                retry_after: None,
+                delay_ms: 0,
+            },
+            TIMEOUT,
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(error, LlmProviderError::Refusal { .. }));
-    }
-}
 
-#[tokio::test]
-async fn truncation_maps_to_truncated_across_protocols() {
-    for protocol in ALL_PROTOCOLS {
-        let body = match protocol {
+        let truncated = match protocol {
             Protocol::OpenAi => serde_json::json!({
                 "model": "m",
-                "choices": [ { "finish_reason": "length", "message": { "content": "{" } } ]
+                "choices": [{ "finish_reason": "length", "message": { "content": "{" } }]
             }),
             Protocol::Anthropic => serde_json::json!({
-                "model": "m",
-                "stop_reason": "max_tokens",
-                "content": []
+                "model": "m", "stop_reason": "max_tokens", "content": []
             }),
         };
-        let canned = Canned {
-            status: StatusCode::OK,
-            body,
-            retry_after: None,
-            delay_ms: 0,
-        };
-        let error = run_judge(protocol, canned, T).await.unwrap_err();
-        assert!(matches!(error, LlmProviderError::Truncated));
+        let error = run_partition(
+            protocol,
+            Canned {
+                status: StatusCode::OK,
+                body: truncated,
+                retry_after: None,
+                delay_ms: 0,
+            },
+            TIMEOUT,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error, LlmProviderError::Truncated);
     }
 }
 
 #[tokio::test]
-async fn rate_limit_status_maps_with_retry_after() {
+async fn provider_failures_are_normalized_without_leaking_auth_payloads() {
     for protocol in ALL_PROTOCOLS {
-        let canned = Canned {
-            status: StatusCode::TOO_MANY_REQUESTS,
-            body: serde_json::json!({ "error": "slow down" }),
-            retry_after: Some("2".into()),
-            delay_ms: 0,
-        };
-        let error = run_judge(protocol, canned, T).await.unwrap_err();
+        let rate_limit = run_partition(
+            protocol,
+            Canned {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                body: serde_json::json!({ "error": "slow down" }),
+                retry_after: Some("2".into()),
+                delay_ms: 0,
+            },
+            TIMEOUT,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(
-            error,
+            rate_limit,
             LlmProviderError::RateLimit {
                 retry_after_ms: Some(2000)
             }
+        );
+
+        let auth = run_partition(
+            protocol,
+            Canned {
+                status: StatusCode::UNAUTHORIZED,
+                body: serde_json::json!({ "error": "bad key sk-secret-echoed" }),
+                retry_after: None,
+                delay_ms: 0,
+            },
+            TIMEOUT,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(auth, LlmProviderError::Auth);
+        assert!(
+            !serde_json::to_string(&auth)
+                .unwrap()
+                .contains("sk-secret-echoed")
         );
     }
 }
 
 #[tokio::test]
-async fn auth_status_maps_to_auth_without_payload() {
+async fn slow_provider_maps_to_timeout() {
     for protocol in ALL_PROTOCOLS {
-        let canned = Canned {
-            status: StatusCode::UNAUTHORIZED,
-            body: serde_json::json!({ "error": "bad key sk-secret-echoed" }),
-            retry_after: None,
-            delay_ms: 0,
-        };
-        let error = run_judge(protocol, canned, T).await.unwrap_err();
-        // Auth carries no payload, so no reflected secret can leak.
-        assert_eq!(error, LlmProviderError::Auth);
-        let serialized = serde_json::to_string(&error).unwrap();
-        assert!(!serialized.contains("sk-secret-echoed"));
-    }
-}
-
-#[tokio::test]
-async fn slow_server_maps_to_timeout() {
-    for protocol in ALL_PROTOCOLS {
-        let output = serde_json::json!({ "abstain": null, "points": [] });
-        let mut canned = success_envelope(protocol, "semantic_judgment", output);
+        let mut canned = success_envelope(
+            protocol,
+            "sense_group_partition",
+            serde_json::json!({ "boundary_after_token_indices": [4] }),
+        );
         canned.delay_ms = 400;
-        let error = run_judge(protocol, canned, Duration::from_millis(80))
+        let error = run_partition(protocol, canned, Duration::from_millis(80))
             .await
             .unwrap_err();
         assert_eq!(error, LlmProviderError::Timeout);
@@ -495,15 +333,14 @@ async fn slow_server_maps_to_timeout() {
 
 #[tokio::test]
 async fn probe_measures_structured_output_support() {
-    // A conforming endpoint probes as supported.
     for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(
+        let base = spawn(success_envelope(
             protocol,
             "capability_probe",
             serde_json::json!({ "ok": true }),
-        );
-        let base = spawn(canned).await;
-        let claim = Judge::build(protocol, &base, T)
+        ))
+        .await;
+        let claim = Provider::build(protocol, &base, TIMEOUT)
             .probe()
             .await
             .expect("probe");
@@ -515,38 +352,7 @@ async fn probe_measures_structured_output_support() {
             }
         ));
     }
-    // An endpoint that returns the wrong shape probes as unsupported, not error.
-    for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(
-            protocol,
-            "capability_probe",
-            serde_json::json!({ "ok": "nope" }),
-        );
-        let base = spawn(canned).await;
-        let claim = Judge::build(protocol, &base, T)
-            .probe()
-            .await
-            .expect("probe");
-        assert!(matches!(
-            claim,
-            CapabilityClaim::Probed {
-                supported: false,
-                ..
-            }
-        ));
-    }
 }
-
-// ---------------------------------------------------------------------------
-// Factory: a stored profile maps to the right adapter; both seams + probe work.
-// ---------------------------------------------------------------------------
-
-use application::SemanticLlmRuntimeFactory;
-use domain::{
-    DataRetentionPreference, LlmAdapterKind, LlmProviderProfile, LlmUse, ProviderCapability,
-    llm_provider_profile_id,
-};
-use llm_provider::LlmSemanticRuntimeFactory;
 
 fn profile_for(protocol: Protocol, base_url: &str) -> LlmProviderProfile {
     let adapter_kind = match protocol {
@@ -555,7 +361,7 @@ fn profile_for(protocol: Protocol, base_url: &str) -> LlmProviderProfile {
     };
     LlmProviderProfile {
         id: llm_provider_profile_id(adapter_kind, base_url, "m"),
-        display_name: "t".into(),
+        display_name: "test".into(),
         adapter_kind,
         protocol_version: None,
         base_url: base_url.into(),
@@ -566,57 +372,47 @@ fn profile_for(protocol: Protocol, base_url: &str) -> LlmProviderProfile {
         batch_policy: domain::LlmBatchPolicy::default(),
         cost_budget: None,
         retention: DataRetentionPreference::Unknown,
-        allowed_uses: vec![LlmUse::SemanticJudgment],
+        allowed_uses: vec![LlmUse::SenseGroupPartition],
         capability: ProviderCapability::unknown(),
         created_at_ms: 0,
     }
 }
 
 #[tokio::test]
-async fn factory_builds_matching_adapter_for_each_profile() {
-    let output = serde_json::json!({ "abstain": null, "points": [] });
+async fn factory_builds_the_retained_sense_group_capability() {
+    let output = serde_json::json!({ "boundary_after_token_indices": [4] });
     for protocol in ALL_PROTOCOLS {
         let base = spawn(success_envelope(
             protocol,
-            "semantic_judgment",
+            "sense_group_partition",
             output.clone(),
         ))
         .await;
-        let provider = LlmSemanticRuntimeFactory::new()
+        let runtime = LlmSemanticRuntimeFactory::new()
             .build(&profile_for(protocol, &base), Some("k".into()))
-            .expect("built");
-        // The chosen adapter kind matches the profile.
-        let expected = match protocol {
-            Protocol::OpenAi => LlmAdapterKind::OpenAiChatCompletions,
-            Protocol::Anthropic => LlmAdapterKind::AnthropicMessages,
-        };
-        assert_eq!(provider.judge().descriptor().adapter_kind, expected);
-        // The judge seam works through the factory-built provider.
-        let draft = provider
-            .judge()
-            .judge(&judge_request())
+            .expect("runtime");
+        let draft = runtime
+            .sense_groups()
+            .partition_sense_groups(&request())
             .await
-            .expect("judgment");
-        assert!(draft.abstain.is_none());
-    }
-}
-
-#[tokio::test]
-async fn factory_probe_measures_capability() {
-    for protocol in ALL_PROTOCOLS {
-        let base = spawn(success_envelope(
+            .expect("partition");
+        assert_eq!(draft.boundary_after_token_indices, vec![4]);
+        let probe_base = spawn(success_envelope(
             protocol,
             "capability_probe",
             serde_json::json!({ "ok": true }),
         ))
         .await;
-        let provider = LlmSemanticRuntimeFactory::new()
-            .build(&profile_for(protocol, &base), None)
-            .expect("built");
-        let claim = provider.probe_structured_output().await.expect("probe");
+        let probe_runtime = LlmSemanticRuntimeFactory::new()
+            .build(&profile_for(protocol, &probe_base), Some("k".into()))
+            .expect("probe runtime");
+        let claim = probe_runtime
+            .probe_structured_output()
+            .await
+            .expect("probe");
         assert!(matches!(
             claim,
-            domain::CapabilityClaim::Probed {
+            CapabilityClaim::Probed {
                 supported: true,
                 ..
             }
@@ -625,25 +421,23 @@ async fn factory_probe_measures_capability() {
 }
 
 async fn capture_request(
-    State(captured): State<std::sync::Arc<std::sync::Mutex<Option<serde_json::Value>>>>,
+    State(captured): State<Arc<std::sync::Mutex<Option<serde_json::Value>>>>,
     Json(body): Json<serde_json::Value>,
 ) -> Json<serde_json::Value> {
     *captured.lock().unwrap() = Some(body);
     Json(serde_json::json!({
         "model": "m",
-        "choices": [ {
+        "choices": [{
             "finish_reason": "stop",
             "message": { "content": "{\"ok\":true}", "refusal": null }
-        } ]
+        }]
     }))
 }
 
-/// DeepSeek and many other "OpenAI-compatible" endpoints reject the newer
-/// `json_schema` response_format with HTTP 400. The adapter must therefore use
-/// the broadly-compatible `json_object` mode and carry the schema in the prompt.
 #[tokio::test]
 async fn openai_adapter_uses_json_object_mode_with_schema_in_prompt() {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
+
     let captured: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
     let router = Router::new()
         .route("/chat/completions", post(capture_request))
@@ -653,22 +447,17 @@ async fn openai_adapter_uses_json_object_mode_with_schema_in_prompt() {
     tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
     });
-    let base = format!("http://{addr}");
-
     let adapter = OpenAiChatAdapter::new(
-        base,
+        format!("http://{addr}"),
         "deepseek-v4-flash",
         Some("k".into()),
-        Duration::from_secs(5),
+        TIMEOUT,
     )
     .unwrap();
     adapter.probe_structured_output().await.expect("probe");
 
     let body = captured.lock().unwrap().clone().expect("request captured");
-    // Never the `json_schema` type that DeepSeek rejects with HTTP 400.
     assert_eq!(body["response_format"]["type"], "json_object");
-    // json_object mode needs the token "json" and the schema shape in the
-    // prompt (the probe schema has an "ok" property).
     let system = body["messages"][0]["content"].as_str().unwrap();
     assert!(system.to_lowercase().contains("json"));
     assert!(system.contains("ok"));

@@ -14,8 +14,8 @@ canonical executable-contract authority within the same monorepo as App/Gen.
 - Long-running work has explicit progress, cancellation, failure and retry
   semantics. Learning records outlive replaceable media/resources.
 - Heavy reusable material production belongs in `gen/`; Core remains a local,
-  bounded and independently distributable runtime. Recording-related inference
-  and application provider adapters remain Core concerns.
+  bounded and independently distributable runtime. Media word timing,
+  pronunciation helpers, and application provider adapters remain Core concerns.
 - Never log secrets, expose them through read APIs, or store them in ordinary
   settings/database fields when an OS secret store is required.
 - Evidence, heuristics and model output retain provenance and do not claim

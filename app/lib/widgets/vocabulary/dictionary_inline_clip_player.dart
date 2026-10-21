@@ -20,14 +20,12 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
     required this.occurrence,
     required this.target,
     required this.onClose,
-    this.onShadowing,
   });
 
   final SlicePlayerController controller;
   final LexicalOccurrence occurrence;
   final String target;
   final VoidCallback onClose;
-  final Future<void> Function()? onShadowing;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -138,16 +136,6 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (onShadowing != null) ...[
-                    const SizedBox(width: ListenSpacing.gap8),
-                    OutlinedButton.icon(
-                      onPressed: state.loading
-                          ? null
-                          : () => unawaited(onShadowing!()),
-                      icon: const Icon(Icons.mic_none),
-                      label: Text(l.text('dictionaryClipShadow')),
-                    ),
-                  ],
                   const Spacer(),
                   IconButton(
                     onPressed: state.loading ? null : controller.toggleLooping,

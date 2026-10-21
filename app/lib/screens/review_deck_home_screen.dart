@@ -5,40 +5,25 @@ import 'package:flutter/material.dart';
 import '../controllers/review_deck_controller.dart';
 import '../localization.dart';
 import '../models/review_deck.dart';
-import '../services/anki_package_file_service.dart';
 import '../state/builder.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
 import '../theme/listen_theme.dart';
-import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
 
-/// The review home: what is waiting, in which decks, under what budget, and
-/// the ways to practise beyond the schedule.
-///
-/// It deliberately does **not** reuse `CapabilityCompass`. The compass's rings
-/// mean acquired / not acquired / unassessed *capability*; a deck's counts mean
-/// new / learning / due *cards*. Pouring the second set into the first would
-/// paint a due count in the "acquired" colour and make the ring state something
-/// untrue — the redesign asked for the compass here, but not at that price.
+/// Listening review counts, custom study and the daily budget.
 class ReviewDeckHomeScreen extends StatefulWidget {
   const ReviewDeckHomeScreen({
     super.key,
     required this.controller,
-    required this.fileService,
     required this.onStartSession,
     required this.onStartCustomStudy,
   });
 
   final ReviewDeckController controller;
-  final AnkiPackageFileService fileService;
-
-  /// Starts the day's scheduled queue.
   final VoidCallback onStartSession;
-
-  /// Starts a one-shot custom-study round.
   final void Function(CustomStudyRequest request) onStartCustomStudy;
 
   @override
@@ -58,21 +43,7 @@ class _ReviewDeckHomeScreenState extends State<ReviewDeckHomeScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l.text('reviewTitle')),
-        actions: [
-          IconButton(
-            onPressed: () => unawaited(_import()),
-            icon: const Icon(Icons.file_download_outlined),
-            tooltip: l.text('reviewImportAnkiDeck'),
-          ),
-          IconButton(
-            onPressed: () => unawaited(_export()),
-            icon: const Icon(Icons.file_upload_outlined),
-            tooltip: l.text('reviewExportAnkiDeck'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(l.text('reviewTitle'))),
       body: StoreBuilder<ReviewDeckState, ReviewDeckState>(
         store: controller.store,
         select: (state) => state,
@@ -110,36 +81,10 @@ class _ReviewDeckHomeScreenState extends State<ReviewDeckHomeScreen> {
                       const SizedBox(height: ListenSpacing.gap16),
                       ListenErrorNotice(message: state.error!),
                     ],
-                    if (state.importSummary != null) ...[
-                      const SizedBox(height: ListenSpacing.gap16),
-                      _ImportReport(
-                        summary: state.importSummary!,
-                        onDismiss: controller.dismissReports,
-                      ),
-                    ],
-                    if (state.exportSummary != null) ...[
-                      const SizedBox(height: ListenSpacing.gap16),
-                      _ExportReport(
-                        summary: state.exportSummary!,
-                        onDismiss: controller.dismissReports,
-                      ),
-                    ],
                     const SizedBox(height: ListenSpacing.gap32),
                     _SectionTitle(l.text('reviewNativeDeck')),
                     const SizedBox(height: ListenSpacing.gap8),
                     _NativeDeckRow(counts: overview.nativeCounts),
-                    if (overview.importedDecks.isNotEmpty) ...[
-                      const SizedBox(height: ListenSpacing.gap32),
-                      _SectionTitle(l.text('reviewImportedDecks')),
-                      const SizedBox(height: ListenSpacing.gap8),
-                      for (final deck in _sortedImported(
-                        overview.importedDecks,
-                      ))
-                        _ImportedDeckRow(
-                          deck: deck,
-                          depth: _depthOf(deck, overview.importedDecks),
-                        ),
-                    ],
                     const SizedBox(height: ListenSpacing.gap32),
                     _SectionTitle(l.text('reviewCustomStudy')),
                     const SizedBox(height: ListenSpacing.gap8),
@@ -161,53 +106,6 @@ class _ReviewDeckHomeScreenState extends State<ReviewDeckHomeScreen> {
           );
         },
       ),
-    );
-  }
-
-  /// Anki deck names are a `::`-separated tree. Sorting by name keeps a child
-  /// directly under its parent, which is what makes the indent readable.
-  static List<ReviewImportedDeck> _sortedImported(
-    List<ReviewImportedDeck> decks,
-  ) => [...decks]..sort((a, b) => a.name.compareTo(b.name));
-
-  /// Nesting depth, measured by how many ancestors the deck actually has in
-  /// this response rather than by counting `::` in a name — a deck whose
-  /// parent was not imported is a root here, and drawing it indented under
-  /// nothing would invent a tree.
-  static int _depthOf(ReviewImportedDeck deck, List<ReviewImportedDeck> all) {
-    final byId = {for (final value in all) value.deckId: value};
-    var depth = 0;
-    var parentId = deck.parentDeckId;
-    while (parentId != null && byId.containsKey(parentId) && depth < 8) {
-      depth++;
-      parentId = byId[parentId]!.parentDeckId;
-    }
-    return depth;
-  }
-
-  Future<void> _import() async {
-    final path = await widget.fileService.pickPackageToImport();
-    if (path == null) return;
-    final mediaDirectory = await widget.fileService.mediaDirectoryFor(path);
-    await controller.importAnkiPackage(
-      packagePath: path,
-      mediaDirectory: mediaDirectory,
-    );
-  }
-
-  Future<void> _export() async {
-    // The disclosure comes before the file dialog: the learner decides whether
-    // to export at all *knowing what will be lost*, rather than after having
-    // already chosen where to put it.
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => const _ExportDisclosureDialog(),
-    );
-    if (confirmed != true) return;
-    final path = await widget.fileService.pickExportDestination();
-    if (path == null) return;
-    await controller.exportAnkiPackage(
-      AnkiPackageExportRequest(packagePath: path),
     );
   }
 }
@@ -282,8 +180,8 @@ class _TodayHeader extends StatelessWidget {
   }
 }
 
-/// Anki's three numbers, in the three colours the session already uses for the
-/// same three states.
+/// The three schedule counts in the colours used for the same states in a
+/// listening session.
 class _CountsRow extends StatelessWidget {
   const _CountsRow({required this.counts});
 
@@ -351,38 +249,6 @@ class _NativeDeckRow extends StatelessWidget {
   }
 }
 
-class _ImportedDeckRow extends StatelessWidget {
-  const _ImportedDeckRow({required this.deck, required this.depth});
-
-  final ReviewImportedDeck deck;
-  final int depth;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    // The leaf name only: the tree is drawn by the indent, so repeating the
-    // full `Parent::Child` path on every row would say it twice.
-    final name = deck.name.split('::').last;
-    return Padding(
-      padding: ListenPadding.row.add(
-        EdgeInsets.only(left: depth * ListenSpacing.gap16),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: ListenIconSize.inline,
-            color: colors.onSurfaceVariant,
-          ),
-          const SizedBox(width: ListenSpacing.gap12),
-          Expanded(child: Text(name)),
-          _CountsRow(counts: deck.counts),
-        ],
-      ),
-    );
-  }
-}
-
 class _CustomStudyChips extends StatelessWidget {
   const _CustomStudyChips({required this.channels, required this.onStart});
 
@@ -391,13 +257,6 @@ class _CustomStudyChips extends StatelessWidget {
   /// disabled rather than as a button that returns an empty round.
   final List<ReviewChannelDeck> channels;
   final void Function(CustomStudyRequest request) onStart;
-
-  static String _channelLabelKey(String channel) => switch (channel) {
-    'speaking' => 'capabilitySpeaking',
-    'reading' => 'capabilityReading',
-    'writing' => 'capabilityWriting',
-    _ => 'capabilityListening',
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -465,7 +324,7 @@ class _CustomStudyChips extends StatelessWidget {
                             limit: 10,
                           ),
                         ),
-                  child: Text(l.text(_channelLabelKey(deck.channel))),
+                  child: Text(l.text('capabilityListening')),
                 ),
             ],
           ),
@@ -560,161 +419,5 @@ class _DailyLimitsCardState extends State<_DailyLimitsCard> {
     final reviews = int.tryParse(_reviews.text.trim());
     if (newCards == null || reviews == null) return;
     widget.onSave(ReviewDailyLimits(newCards: newCards, reviews: reviews));
-  }
-}
-
-/// What an `.apkg` export cannot carry, said before the learner commits to it.
-class _ExportDisclosureDialog extends StatelessWidget {
-  const _ExportDisclosureDialog();
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return AlertDialog(
-      title: Text(l.text('reviewExportAnkiDeck')),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: ListenBreakpoints.formColumnMax,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l.text('reviewExportDisclosureIntro')),
-            const SizedBox(height: ListenSpacing.gap12),
-            for (final key in const [
-              'reviewExportLossVideo',
-              'reviewExportLossShadowing',
-              'reviewExportLossSourceJump',
-              'reviewExportLossCapability',
-            ])
-              Padding(
-                padding: const EdgeInsets.only(bottom: ListenSpacing.gap4),
-                child: Text('· ${l.text(key)}'),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(l.text('cancel')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(l.text('reviewExportConfirm')),
-        ),
-      ],
-    );
-  }
-}
-
-class _ImportReport extends StatelessWidget {
-  const _ImportReport({required this.summary, required this.onDismiss});
-
-  final AnkiPackageImportSummary summary;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return _ReportCard(
-      title: l.text('reviewImportReport'),
-      lines: [
-        l
-            .text('reviewImportCounts')
-            .replaceAll('{imported}', '${summary.importedCards}')
-            .replaceAll('{updated}', '${summary.updatedCards}')
-            .replaceAll('{skipped}', '${summary.skippedCards}'),
-        l
-            .text('reviewImportDetails')
-            .replaceAll('{decks}', '${summary.importedDecks}')
-            .replaceAll('{revlog}', '${summary.importedRevlogEntries}')
-            .replaceAll('{media}', '${summary.importedMediaFiles}'),
-        ...summary.warnings,
-      ],
-      onDismiss: onDismiss,
-    );
-  }
-}
-
-class _ExportReport extends StatelessWidget {
-  const _ExportReport({required this.summary, required this.onDismiss});
-
-  final AnkiPackageExportSummary summary;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final fidelity = summary.fidelity;
-    return _ReportCard(
-      title: l.text('reviewExportReport'),
-      lines: [
-        l
-            .text('reviewExportCounts')
-            .replaceAll('{cards}', '${summary.exportedCards}')
-            .replaceAll('{revlog}', '${summary.exportedRevlogEntries}')
-            .replaceAll('{media}', '${summary.exportedMediaFiles}'),
-        // The measured loss, not the generic warning the dialog showed.
-        if (fidelity.videoSlicesRenderedAsAudio > 0)
-          l
-              .text('reviewExportVideoRendered')
-              .replaceAll('{count}', '${fidelity.videoSlicesRenderedAsAudio}'),
-        if (fidelity.mediaRenderFailures > 0)
-          l
-              .text('reviewExportMediaFailed')
-              .replaceAll('{count}', '${fidelity.mediaRenderFailures}'),
-        if (fidelity.omittedCapabilities.isNotEmpty)
-          l
-              .text('reviewExportOmitted')
-              .replaceAll('{items}', fidelity.omittedCapabilities.join(', ')),
-        ...summary.warnings,
-      ],
-      onDismiss: onDismiss,
-    );
-  }
-}
-
-class _ReportCard extends StatelessWidget {
-  const _ReportCard({
-    required this.title,
-    required this.lines,
-    required this.onDismiss,
-  });
-
-  final String title;
-  final List<String> lines;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Container(
-      padding: ListenPadding.card,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: ListenRadii.surfaceBorder,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: ListenSpacing.gap8),
-          for (final line in lines)
-            Padding(
-              padding: const EdgeInsets.only(bottom: ListenSpacing.gap4),
-              child: Text(line),
-            ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: onDismiss,
-              child: Text(l.text('dismiss')),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

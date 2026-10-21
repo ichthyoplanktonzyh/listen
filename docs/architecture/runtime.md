@@ -53,6 +53,12 @@ installation, and explicit Learning Edition adoption. App consumes the adopted
 material through Core; it does not interpret raw provider payloads as canonical
 learning material. See the [v3 contract](../../core/contracts/content-package/v3/README.md).
 
+Core also projects each installed Edition's available capabilities from its
+effective adoption selection. Missing or opaque resources do not establish
+readiness; synchronized text and media require the exact alignment anchors.
+App uses this projection when selecting an Edition instead of inferring
+readiness from resource-kind names.
+
 ## Persistence and boundaries
 
 Core owns durable domain storage and migrations. App also has local preferences,

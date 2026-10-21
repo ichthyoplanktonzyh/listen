@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/data/repositories/personal_expression_repository.dart';
 import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -23,28 +22,6 @@ void main() {
     );
 
     expect(describeApiFailure(failure), same(failure));
-  });
-
-  test('personal-expression repository exposes a typed failure', () async {
-    final repository = LocalPersonalExpressionRepository(_failingApi());
-
-    await expectLater(
-      repository.listPatterns(language: 'en'),
-      throwsA(
-        isA<ApiFailure>()
-            .having(
-              (failure) => failure.code,
-              'code',
-              'temporarily_unavailable',
-            )
-            .having(
-              (failure) => failure.correlationId,
-              'correlation id',
-              'request-42',
-            )
-            .having((failure) => failure.isRetryable, 'retryable', isTrue),
-      ),
-    );
   });
 
   test('provider repository exposes a typed failure', () async {

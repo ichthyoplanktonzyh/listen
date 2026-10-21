@@ -1,52 +1,12 @@
 import '../models/learning_material.dart';
 
-/// One already-available resource the current run may reuse, declared in the
-/// request as the planner's compatibility evidence. The request must carry the
-/// resource's exact payload bytes at [payloadPath] (same digest and size) so
-/// the generator can verify before it consumes; a run that reuses nothing
-/// sends an empty list.
-class RequestAvailableResource {
-  const RequestAvailableResource({
-    required this.resourceId,
-    required this.kind,
-    required this.schema,
-    required this.role,
-    required this.contentLanguage,
-    required this.materialRevisionId,
-    required this.payloadDigest,
-    required this.payloadSizeBytes,
-    required this.payloadPath,
-  });
-
-  final String resourceId;
-  final String kind;
-  final String schema;
-  final String role;
-  final String? contentLanguage;
-  final String? materialRevisionId;
-
-  /// Lowercase hex SHA-256 of the exact payload bytes at [payloadPath].
-  final String payloadDigest;
-  final int payloadSizeBytes;
-
-  /// Absolute readable path carrying exactly the payload bytes.
-  final String payloadPath;
-}
-
-/// Encodes one `listen_gen.capability-request.v2` document. Pure: transport
-/// and process knowledge stay in services. Ids follow Core 4.0 domain
-/// identity rules; the request wraps them in their `sha256:` reference form.
+/// Encodes one `listen_gen.capability-request.v2` document. The source and
+/// derived renditions are media-only; document acquisition and production are
+/// outside this app's listening flow.
 abstract final class CapabilityRequestEncoder {
   static const schema = 'listen_gen.capability-request.v2';
   static const version = 2;
 
-  /// [documentSourcePaths] maps each document rendition id to an absolute
-  /// readable path carrying exactly the rendition's bytes (the Source Asset's
-  /// exact bytes, never a projection); [documentSourceAssetIds] maps the
-  /// rendition to its bound Source Asset id. [documentTextSha256] facts come
-  /// from the rendition itself: Core 4.0 documents carry the digest and size
-  /// of their exact bytes, and the request declares them in the `sha256:`
-  /// reference form.
   static Map<String, dynamic> encode({
     required String materialId,
     required String materialRevisionId,
@@ -58,37 +18,10 @@ abstract final class CapabilityRequestEncoder {
     required String requestedCapability,
     required int createdAtMs,
     String? attemptId,
-    List<DocumentRendition> documentRenditions = const [],
-    Map<String, String>? documentSourcePaths,
-    Map<String, String>? documentSourceAssetIds,
     List<MediaRendition> mediaRenditions = const [],
     String? Function(MediaRendition rendition)? mediaFilePath,
     Map<String, MediaBlobFacts>? mediaBlobFacts,
-    List<RequestAvailableResource> availableResources = const [],
   }) {
-    final documentEntries = <Map<String, dynamic>>[];
-    for (final rendition in documentRenditions) {
-      final path = documentSourcePaths?[rendition.id];
-      final sourceAssetId =
-          documentSourceAssetIds?[rendition.id] ??
-          rendition.sourceAssetId ??
-          // Core 4.0 document renditions without a source asset bind carry no
-          // source_asset_id; the rendition's own stable sha256 id anchors the
-          // source identity for the package qualification.
-          rendition.id;
-      documentEntries.add({
-        'kind': 'document',
-        'rendition_id': _sha256Reference(rendition.id),
-        'media_type': rendition.mediaType,
-        'language': rendition.language,
-        'source_asset_id': _sha256Reference(sourceAssetId),
-        'blob': {
-          'digest': _sha256Reference(rendition.digest),
-          'size_bytes': rendition.byteSize,
-          'path': path,
-        },
-      });
-    }
     final mediaEntries = <Map<String, dynamic>>[];
     for (final rendition in mediaRenditions) {
       final path = mediaFilePath?.call(rendition);
@@ -109,22 +42,6 @@ abstract final class CapabilityRequestEncoder {
         },
       });
     }
-    final resourceEntries = <Map<String, dynamic>>[];
-    for (final resource in availableResources) {
-      resourceEntries.add({
-        'resource_id': _sha256Reference(resource.resourceId),
-        'kind': resource.kind,
-        'schema': resource.schema,
-        'role': resource.role,
-        'content_language': resource.contentLanguage,
-        'material_revision_id': resource.materialRevisionId,
-        'blob': {
-          'digest': _sha256Reference(resource.payloadDigest),
-          'size_bytes': resource.payloadSizeBytes,
-          'path': resource.payloadPath,
-        },
-      });
-    }
     return {
       'schema': schema,
       'version': version,
@@ -141,8 +58,7 @@ abstract final class CapabilityRequestEncoder {
         'support_languages': supportLanguages,
       },
       'requested_capability': requestedCapability,
-      'available_renditions': [...documentEntries, ...mediaEntries],
-      'available_resources': resourceEntries,
+      'available_renditions': mediaEntries,
       'attempt_id': ?attemptId,
     };
   }

@@ -119,26 +119,3 @@ fn background_jobs_survive_repository_reopen() {
     );
     assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
 }
-
-#[test]
-fn v50_database_migrates_to_the_durable_background_job_store() {
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("v50.sqlite");
-    let connection = rusqlite::Connection::open(&path).unwrap();
-    connection.pragma_update(None, "user_version", 50).unwrap();
-    drop(connection);
-
-    let repo = SqliteRepository::open(&path).unwrap();
-    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
-    let created = repo
-        .create(&job(
-            "migrated-job",
-            BackgroundJobKind::SpeechBatch,
-            BackgroundJobStatus::Queued,
-        ))
-        .unwrap();
-    assert_eq!(
-        BackgroundJobStore::get(&repo, &created.id).unwrap(),
-        Some(created)
-    );
-}

@@ -43,6 +43,7 @@ class TestGui(unittest.TestCase):
         self.assertIn(b"sub-file-input", content)
         self.assertIn("Qwen3 与 SenseVoice 仅在完整源码仓库中可用".encode(), content)
         self.assertIn("发行版不可用".encode(), content)
+        self.assertIn("video-only 不会转换音轨".encode(), content)
         for removed in (b"doc-file-input", b"work-doc-text", b"tts-provider", b"ocr-provider"):
             self.assertNotIn(removed, content)
 
@@ -307,10 +308,27 @@ class TestMultipartAndValidation(unittest.TestCase):
             "material": {"material_id": "m1", "material_revision_id": "rev-1", "title": "T"},
             "edition": {"edition_id": "ed-1", "title": "T", "target_language": "en-US", "support_languages": []},
             "requested_capability": "listen",
-            "available_renditions": [{"kind": "media", "rendition_id": "sha256:" + "1" * 64}],
+            "available_renditions": [{
+                "kind": "media",
+                "rendition_id": "sha256:" + "1" * 64,
+                "media_kind": "audio",
+            }],
         }
-        problem_fields = {p["field"] for p in _validate_produce_payload(listen_no_doc, {})}
-        self.assertNotIn("input", problem_fields)
+        self.assertEqual(_validate_produce_payload(listen_no_doc, {}), [])
+        video_only_listen = {
+            **listen_no_doc,
+            "available_renditions": [{
+                "kind": "media",
+                "rendition_id": "sha256:" + "2" * 64,
+                "media_kind": "video",
+            }],
+        }
+        video_problems = _validate_produce_payload(video_only_listen, {})
+        self.assertTrue(any(
+            p["field"] == "requested_capability"
+            and "video-only" in p["message"]
+            for p in video_problems
+        ))
 
     def test_document_upload_is_rejected_before_it_is_saved(self):
         with tempfile.TemporaryDirectory() as tmpdir, patch("listen_gen.gui.UPLOAD_DIR", Path(tmpdir)):

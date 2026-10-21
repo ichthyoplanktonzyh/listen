@@ -25,9 +25,6 @@ FIXTURE_MAP = {
     "testdata/rhythm-frame-qa/fixture-rhythm.lltimeline.json": (
         "test/fixtures/rhythm-frame/fixture-rhythm.lltimeline.json"
     ),
-    "testdata/semantic-task/gold-fixture-v1.json": (
-        "test/fixtures/semantic-task/gold-fixture-v1.json"
-    ),
 }
 
 

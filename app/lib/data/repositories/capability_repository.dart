@@ -2,9 +2,10 @@ import '../../models/adopted_composition.dart';
 import '../../models/api_failure.dart';
 import '../../models/learning_edition.dart';
 import '../../models/learning_material.dart';
+import '../../models/material_capability.dart';
 import '../../services/api_service.dart';
 
-/// The Core 4.0 capability + package-lifecycle + adopted-composition surface
+/// The Core 5.0 capability + package-lifecycle + adopted-composition surface
 /// the coordinator depends on. One seam for the deep completion flow, so
 /// tests can drive every state without a live sidecar.
 abstract interface class CapabilityRepository {
@@ -16,24 +17,18 @@ abstract interface class CapabilityRepository {
     String materialId,
   );
 
-  Future<CapabilityAttempt> startAttempt(
-    String materialId,
-    String capability,
-  );
+  Future<CapabilityAttempt> startAttempt(String materialId, String capability);
 
   Future<CapabilityAttempt> finalizeAttempt({
     required String materialId,
     required String attemptId,
-    required bool succeeded,
+    required CapabilityAttemptFinalStatus status,
     String? failureReason,
     String? toolId,
     String? toolVersion,
   });
 
-  Future<LearningEdition> installPackage(
-    String materialId,
-    String packagePath,
-  );
+  Future<LearningEdition> installPackage(String materialId, String packagePath);
 
   Future<List<LearningEdition>> listEditions(String materialId);
 
@@ -50,13 +45,6 @@ abstract interface class CapabilityRepository {
   Future<List<int>> readCompositionResourcePayload(
     String materialId,
     String resourceId,
-  );
-
-  /// The exact durable embedded bytes of one selected rendition of the
-  /// adopted composition, re-verified by Core.
-  Future<List<int>> readCompositionRenditionBlob(
-    String materialId,
-    String renditionId,
   );
 }
 
@@ -100,7 +88,7 @@ final class LocalCapabilityRepository implements CapabilityRepository {
   Future<CapabilityAttempt> finalizeAttempt({
     required String materialId,
     required String attemptId,
-    required bool succeeded,
+    required CapabilityAttemptFinalStatus status,
     String? failureReason,
     String? toolId,
     String? toolVersion,
@@ -110,7 +98,7 @@ final class LocalCapabilityRepository implements CapabilityRepository {
     return api.finalizeCapabilityAttempt(
       materialId: materialId,
       attemptId: attemptId,
-      succeeded: succeeded,
+      status: status,
       failureReason: failureReason,
       toolId: toolId,
       toolVersion: toolVersion,
@@ -152,9 +140,7 @@ final class LocalCapabilityRepository implements CapabilityRepository {
   }
 
   @override
-  Future<AdoptedComposition> readAdoptedComposition(
-    String materialId,
-  ) async {
+  Future<AdoptedComposition> readAdoptedComposition(String materialId) async {
     final api = _api;
     if (api == null) throw const ApiFailure(raw: 'core unavailable');
     return api.readAdoptedComposition(materialId);
@@ -168,15 +154,5 @@ final class LocalCapabilityRepository implements CapabilityRepository {
     final api = _api;
     if (api == null) throw const ApiFailure(raw: 'core unavailable');
     return api.readCompositionResourcePayload(materialId, resourceId);
-  }
-
-  @override
-  Future<List<int>> readCompositionRenditionBlob(
-    String materialId,
-    String renditionId,
-  ) async {
-    final api = _api;
-    if (api == null) throw const ApiFailure(raw: 'core unavailable');
-    return api.readCompositionRenditionBlob(materialId, renditionId);
   }
 }

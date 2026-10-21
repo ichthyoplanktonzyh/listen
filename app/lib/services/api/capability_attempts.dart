@@ -1,6 +1,6 @@
 part of '../api_service.dart';
 
-// Capability production attempts (Core 4.0). Attempts are the durable unit of
+// Capability production attempts (Core 5.0). Attempts are the durable unit of
 // `generating` / `failed_attempt` evidence; retries create new attempts and
 // never rewrite old facts.
 
@@ -19,23 +19,29 @@ extension CapabilityAttemptsApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  /// Finalizes a running attempt as succeeded or failed. Succeeded carries
-  /// the producer tool identity; failed carries the stable reason.
+  /// Finalizes a running attempt with its explicit terminal state.
+  /// Succeeded carries the producer tool identity; failed carries its stable
+  /// reason; cancelled carries neither.
   Future<CapabilityAttempt> finalizeCapabilityAttempt({
     required String materialId,
     required String attemptId,
-    required bool succeeded,
+    required CapabilityAttemptFinalStatus status,
     String? failureReason,
     String? toolId,
     String? toolVersion,
   }) async {
-    final body = succeeded
-        ? {
-            'status': 'succeeded',
-            'tool_id': toolId,
-            'tool_version': toolVersion,
-          }
-        : {'status': 'failed', 'reason': failureReason};
+    final body = switch (status) {
+      CapabilityAttemptFinalStatus.succeeded => {
+        'status': status.name,
+        'tool_id': toolId,
+        'tool_version': toolVersion,
+      },
+      CapabilityAttemptFinalStatus.failed => {
+        'status': status.name,
+        'reason': failureReason,
+      },
+      CapabilityAttemptFinalStatus.cancelled => {'status': status.name},
+    };
     return decodeCapabilityAttempt(
       (await _request(
             'PUT',

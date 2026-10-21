@@ -124,45 +124,10 @@ class VocabularyActionsCoordinator {
     }
   }
 
-  Future<void> setSelectedWordStatus(String? selected) async {
+  Future<void> setListeningOverride(String? conclusion) async {
     if (!_requireRepository()) return;
     try {
-      final update = await workflow.setSelectedWordStatus(
-        selected: selected,
-        language: settings.resolveLearningLanguage(
-          subtitle.primaryTrack?.language,
-        ),
-        learning: learning,
-        isMounted: isMounted,
-        sourceFor: _sourceFor,
-      );
-      if (isMounted() && update != null) {
-        player.setStatus(
-          text(
-            'statusGlobalWordStatusUpdated',
-          ).replaceAll('{word}', update.tokenText),
-        );
-      }
-      await refreshDiagnosis();
-    } catch (error) {
-      if (isMounted()) {
-        player.setStatus(
-          text('statusWordUpdateFailed'),
-          error: true,
-          failure: workflow.failureDetail(error),
-        );
-      }
-    }
-  }
-
-  Future<void> setCapabilityOverride(
-    String capability,
-    String? conclusion,
-  ) async {
-    if (!_requireRepository()) return;
-    try {
-      await workflow.setCapabilityOverride(
-        capability: capability,
+      await workflow.setListeningOverride(
         conclusion: conclusion,
         learning: learning,
         isMounted: isMounted,

@@ -14,8 +14,7 @@ import 'api_failure.dart';
 /// again, and nothing said why. A failure the learner can see and retry is a
 /// state, not the absence of one.
 enum DiscoveryItemState {
-  /// The source lists the item but grants nothing to fetch: a feed item
-  /// without an enclosure and without an article link.
+  /// The source lists the item but grants nothing to fetch.
   discoverable,
 
   /// The item's content can be fetched and nothing has been attempted yet.
@@ -85,10 +84,9 @@ final class ItemAcquisitionSnapshot {
 
 /// The families a content source can belong to.
 ///
-/// The kind decides nothing about acquisition on its own — a podcast feed and
-/// a blog feed are both fetched the same way — but it decides what the feed
-/// text *means*: enclosures become media, article links become documents.
-enum ContentSourceKind { youtube, podcast, document }
+/// The source family determines whether media uses its publisher enclosure or
+/// the user's configured external media tool.
+enum ContentSourceKind { youtube, podcast }
 
 /// How this item's content may be obtained, if at all.
 ///
@@ -105,20 +103,14 @@ enum AcquisitionMode {
   /// responsibility. The YouTube path.
   externalTool,
 
-  /// The item is a document: an article link the publisher offered. Acquiring
-  /// it fetches the page and takes it in as a Document Rendition.
-  article,
-
-  /// Nothing to acquire — a feed item with no enclosure and no article link.
+  /// Nothing to acquire.
   none,
 }
 
 /// What the acquired content is.
 ///
-/// Separate from [AcquisitionMode]: a document item has one acquisition mode
-/// and one content kind, but the kinds are about what the bytes are, not how
-/// they arrived.
-enum ItemContentKind { audio, video, article }
+/// The media bytes' playback kind.
+enum ItemContentKind { audio, video }
 
 /// The typed evidence kinds a discovered item can carry.
 ///
@@ -176,16 +168,11 @@ class ContentSource {
   final String? avatarUrl;
 }
 
-/// What acquiring an item's content lands on: registered media bytes, or a
-/// Material holding the document. Exactly one field is non-null; the surface
-/// opens accordingly.
+/// What acquiring an item's content lands on: registered media bytes.
 final class DiscoveryOpenTarget {
-  const DiscoveryOpenTarget.media(String this.mediaPath) : materialId = null;
+  const DiscoveryOpenTarget.media(this.mediaPath);
 
-  const DiscoveryOpenTarget.document(String this.materialId) : mediaPath = null;
-
-  final String? mediaPath;
-  final String? materialId;
+  final String mediaPath;
 }
 
 /// A discovered item of a [ContentSource].
@@ -207,7 +194,7 @@ class DiscoveryItem {
     this.thumbnailUrl,
     this.viewCount = 0,
     this.acquisition = AcquisitionMode.none,
-    this.contentKind = ItemContentKind.article,
+    this.contentKind = ItemContentKind.audio,
     this.mediaUrl,
     this.entryUrl,
     this.publisherId,
@@ -247,8 +234,8 @@ class DiscoveryItem {
   /// URL to fetch directly, a page URL to hand to an external tool, or null.
   final String? mediaUrl;
 
-  /// The article link the source offered for a document item. Distinct from
-  /// [mediaUrl]: it is evidence about what the item is, not where bytes are.
+  /// The source's permalink, when present. It is evidence about the item,
+  /// separate from the media URL used for acquisition.
   final String? entryUrl;
 
   /// The publisher the feed named, when it did. Evidence, not identity.

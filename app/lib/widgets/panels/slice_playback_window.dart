@@ -20,12 +20,10 @@ class SlicePlaybackWindow extends StatefulWidget {
     super.key,
     required this.controller,
     required this.onClose,
-    this.onShadowing,
   });
 
   final SlicePlayerController controller;
   final Future<void> Function() onClose;
-  final Future<void> Function(SlicePlayerState state)? onShadowing;
 
   @override
   State<SlicePlaybackWindow> createState() => _SlicePlaybackWindowState();
@@ -221,16 +219,6 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
                   : l.text('slicePlaybackPlay'),
             ),
           ),
-          if (widget.onShadowing != null) ...[
-            const SizedBox(width: ListenSpacing.gap8),
-            OutlinedButton.icon(
-              onPressed: state.loading || state.error != null
-                  ? null
-                  : () => unawaited(widget.onShadowing!(state)),
-              icon: const Icon(Icons.mic_none),
-              label: Text(l.text('shadowPosture')),
-            ),
-          ],
           const Spacer(),
           IconButton(
             tooltip: state.looping

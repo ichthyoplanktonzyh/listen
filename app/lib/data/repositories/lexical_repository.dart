@@ -1,9 +1,6 @@
 import '../../models/api_failure.dart';
 import '../../models/practice.dart';
-import '../../models/production_corpus.dart';
-import '../../models/projection_review.dart';
 import '../../models/semantic_embedding.dart';
-import '../../models/semantic_task.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
 import 'occurrence_media_repository.dart';
@@ -64,22 +61,10 @@ class LexicalRepository implements OccurrenceMediaRepository {
 
   // ── The open entry's decorations ──
 
-  Future<List<UpgradeSuggestion>> upgradeSuggestions({
-    required String lexicalEntryId,
-  }) => _api.upgradeSuggestions(lexicalEntryId: lexicalEntryId);
-
   Future<DictionaryLookupBundle> lookupDictionary(
     String lemma, {
     required String language,
   }) => _api.lookupDictionary(lemma, language: language);
-
-  Future<List<ProductionCorpusHitView>> searchProductionCorpus({
-    required String language,
-    required String query,
-  }) => _api.searchProductionCorpus(language: language, query: query);
-
-  Future<SemanticAttemptView> productionAttempt(String attemptId) =>
-      _api.semanticAttempt(attemptId);
 
   Future<List<LearningObservationView>> observationHistory(
     String lexicalEntryId, {
@@ -91,20 +76,6 @@ class LexicalRepository implements OccurrenceMediaRepository {
     offset: offset,
   );
 
-  // ── The gap pane's two sources ──
-
-  Future<List<CrossModalReviewCandidateView>> crossModalReviewGaps({
-    required String language,
-  }) => _api.crossModalReviewGaps(language: language);
-
-  Future<ProductionGapSemanticReviewView> semanticProductionGapReview({
-    required String language,
-  }) => _api.semanticProductionGapReview(language: language);
-
-  Future<ProductionGapReviewView> productionGapReview({
-    required String language,
-  }) => _api.productionGapReview(language: language);
-
   // ── Semantic search ──
 
   Future<SemanticEmbeddingCapabilityView> semanticEmbeddingCapability() =>
@@ -114,18 +85,6 @@ class LexicalRepository implements OccurrenceMediaRepository {
     required String query,
     required String language,
   }) => _api.semanticSearch(query: query, language: language);
-
-  // ── Capability projection review ──
-
-  Future<List<ProjectionProposalView>> projectionProposals(
-    String lexicalEntryId,
-  ) => _api.auditProjectionEntry(lexicalEntryId);
-
-  Future<ProjectionProposalView> decideProjectionProposal({
-    required String proposalId,
-    required String decision,
-  }) =>
-      _api.decideProjectionProposal(proposalId: proposalId, decision: decision);
 
   // ── Media behind a slice ──
 
@@ -215,12 +174,6 @@ class LexicalRepository implements OccurrenceMediaRepository {
     String occurrenceId,
   ) =>
       _api.unassignLexicalSenseFolderOccurrence(entryId, senseId, occurrenceId);
-
-  Future<UpgradeSuggestion> confirmUpgradeSuggestion(String suggestionId) =>
-      _api.confirmUpgradeSuggestion(suggestionId);
-
-  Future<UpgradeSuggestion> rejectUpgradeSuggestion(String suggestionId) =>
-      _api.rejectUpgradeSuggestion(suggestionId);
 
   // ── Practice exits ──
 

@@ -10,7 +10,6 @@ import '../controllers/vocabulary_view_model.dart';
 import '../controllers/semantic_search_view_model.dart';
 import '../localization.dart';
 import '../models/api_failure.dart';
-import '../models/production_corpus.dart';
 import '../models/types.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
@@ -22,14 +21,8 @@ import '../widgets/common/listen_loading.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
 import '../widgets/vocabulary/semantic_search_dialog.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
-import '../widgets/common/capability_viz.dart';
+import '../widgets/common/capability_viz.dart' show capabilityAssessmentColor;
 import '../widgets/vocabulary/vocabulary_book_view.dart';
-import '../widgets/vocabulary/vocabulary_gap_panel.dart';
-
-/// The dictionary hands slice audio to the practice window through this
-/// callback; the occurrence arrives as the raw occurrence JSON.
-typedef VocabularyShadowingCallback =
-    Future<void> Function(String path, Map<String, dynamic> occurrence);
 
 /// The listening dictionary workbench.
 ///
@@ -52,9 +45,7 @@ class VocabularyScreen extends StatefulWidget {
     required this.huntingController,
     required this.auxiliaryAudio,
     this.initialEntryId,
-    this.openCrossModalReviewOnStart = false,
     this.onPauseBackgroundPlayback,
-    this.onStartShadowing,
   });
 
   final VocabularyViewModel viewModel;
@@ -66,22 +57,16 @@ class VocabularyScreen extends StatefulWidget {
   final HuntingController huntingController;
   final AuxiliaryAudioController auxiliaryAudio;
   final String? initialEntryId;
-  final bool openCrossModalReviewOnStart;
 
   /// Pauses whatever is playing behind this route (the primary player) so a
   /// slice owns audio focus alone, matching the workbench behaviour.
   final Future<void> Function()? onPauseBackgroundPlayback;
-
-  /// Hands a slice's audio to the practice window. The occurrence is the raw
-  /// occurrence JSON the practice surface already speaks.
-  final VocabularyShadowingCallback? onStartShadowing;
 
   @override
   State<VocabularyScreen> createState() => _VocabularyScreenState();
 }
 
 class _VocabularyScreenState extends State<VocabularyScreen> {
-  static const capabilities = ['reading', 'listening', 'speaking', 'writing'];
   static const assessmentFilters = ['acquired', 'not_acquired', 'unassessed'];
 
   VocabularyViewModel get viewModel => widget.viewModel;
@@ -100,9 +85,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   void initState() {
     super.initState();
     unawaited(viewModel.load());
-    // The gap instrument room is the default right pane, so its two sources
-    // load up front (best-effort, each caught) rather than behind a click.
-    unawaited(viewModel.loadGapPanel());
     unawaited(viewModel.probeSemanticSearch());
     // The hunting controller is shared with the app shell, whose
     // ListenableBuilder is already subscribed while this route's first build
@@ -115,11 +97,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     if (initialEntryId != null) {
       unawaited(viewModel.openEntry(initialEntryId));
     }
-    if (widget.openCrossModalReviewOnStart) {
-      // The coach's cross-modal hand-off lands on the gap pane (the default
-      // right pane) rather than a dialog; emphasise the candidates section.
-      viewModel.landOnGapPane(highlightCandidates: true);
-    }
   }
 
   @override
@@ -127,13 +104,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     unawaited(widget.auxiliaryAudio.stop());
     super.dispose();
   }
-
-  String _capabilityLabelKey(String value) => switch (value) {
-    'reading' => 'capabilityReading',
-    'listening' => 'capabilityListening',
-    'speaking' => 'capabilitySpeaking',
-    _ => 'capabilityWriting',
-  };
 
   // ── Auxiliary audio (the shared controller owns its own transport) ──
 
@@ -171,56 +141,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   // ── Dialogs and sheets (the surfaces that need a BuildContext) ──
 
-  Future<void> _openProductionAttempt(ProductionCorpusHitView hit) async {
-    final attemptId = hit.document.attemptId;
-    final attempt = attemptId == null
-        ? null
-        : await viewModel.productionAttempt(attemptId);
-    if (!mounted) return;
-    final l = AppLocalizations.of(context);
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l.text('myOutputAttempt')),
-        content: SizedBox(
-          width: 620,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              Text(
-                '${hit.document.activityKind} · ${l.text('revision')} ${hit.document.responseRevision}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: ListenSpacing.gap12),
-              if (attempt == null) ...[
-                SelectableText(hit.document.responseText),
-              ],
-              // `attempt?.responses ?? const []` would infer `List<dynamic>`
-              // here (a for-in gives the literal an `Iterable<dynamic>`
-              // context), so promote instead and keep `response` typed.
-              if (attempt != null)
-                for (final response in attempt.responses) ...[
-                  Text(
-                    '${l.text('revision')} ${response.revision}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: ListenSpacing.gap4),
-                  SelectableText(response.transcript),
-                  const SizedBox(height: ListenSpacing.gap12),
-                ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l.text('close')),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _openSemanticIndexManager() {
     unawaited(
       showDialog<void>(
@@ -229,97 +149,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           viewModel: widget.semanticSearchViewModel,
           language: widget.language,
         ),
-      ),
-    );
-  }
-
-  Future<void> _openProjectionReview(String lexicalEntryId) async {
-    final l = AppLocalizations.of(context);
-    final outcome = await viewModel.projectionProposals(lexicalEntryId);
-    final proposals = outcome.proposals;
-    if (proposals == null) {
-      if (mounted) {
-        _snack(l.text('projectionReviewUnavailable'), failure: outcome.failure);
-      }
-      return;
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.text('projectionReviewTitle')),
-        content: SizedBox(
-          width: 680,
-          child: proposals.isEmpty
-              ? Text(l.text('projectionReviewEmpty'))
-              : ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final proposal in proposals)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          '${proposal.capability} → ${proposal.proposedConclusion}',
-                        ),
-                        subtitle: Text(
-                          '${proposal.rationale}\n${proposal.algorithmVersion} · ${proposal.status}',
-                        ),
-                        isThreeLine: true,
-                        trailing: proposal.status != 'pending'
-                            ? null
-                            : Wrap(
-                                children: [
-                                  IconButton(
-                                    tooltip: l.text('reject'),
-                                    onPressed: () async {
-                                      await viewModel.decideProjectionProposal(
-                                        proposalId: proposal.id,
-                                        decision: 'reject',
-                                      );
-                                      if (dialogContext.mounted) {
-                                        Navigator.pop(dialogContext);
-                                      }
-                                      if (mounted) {
-                                        unawaited(
-                                          _openProjectionReview(lexicalEntryId),
-                                        );
-                                      }
-                                    },
-                                    icon: const Icon(Icons.close),
-                                  ),
-                                  IconButton(
-                                    tooltip: l.text('confirm'),
-                                    onPressed: () async {
-                                      await viewModel.decideProjectionProposal(
-                                        proposalId: proposal.id,
-                                        decision: 'confirm',
-                                      );
-                                      if (dialogContext.mounted) {
-                                        Navigator.pop(dialogContext);
-                                      }
-                                      if (mounted) {
-                                        unawaited(
-                                          viewModel.openEntry(lexicalEntryId),
-                                        );
-                                        unawaited(
-                                          _openProjectionReview(lexicalEntryId),
-                                        );
-                                      }
-                                    },
-                                    icon: const Icon(Icons.check),
-                                  ),
-                                ],
-                              ),
-                      ),
-                  ],
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l.text('close')),
-          ),
-        ],
       ),
     );
   }
@@ -338,12 +167,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             controller: hunting,
             onRefresh: () async {
               await hunting.load();
-            },
-            onPromoteCandidate: (candidate) async {
-              final saved = await hunting.promoteCandidate(candidate);
-              if (mounted && saved) {
-                _snack(AppLocalizations.of(context).text('huntingAdded'));
-              }
             },
             onArchiveTarget: (target) async {
               final saved = await hunting.archive(target);
@@ -393,17 +216,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       occurrence: occurrence,
     );
     slicePlayer.setShowVideo(true);
-  }
-
-  Future<void> _startShadowingOccurrence(LexicalOccurrence occurrence) async {
-    final path = slicePlayer.state.path;
-    final callback = widget.onStartShadowing;
-    if (path == null || callback == null) return;
-    await slicePlayer.pause();
-    // Pushed contexts (deep links, tests) dismiss themselves; as a shell
-    // route the dictionary stays and hands audio to the practice window.
-    if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
-    await callback(path, occurrence.toJson());
   }
 
   Future<void> _playCorpus(CorpusOccurrence occurrence) async {
@@ -575,20 +387,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             // sub-surface needs a back affordance. The two-pane form keeps the
             // list beside the pane, so its app bar never grows a leading — it
             // never transforms (V5).
-            final narrowSubSurface =
-                !twoPane && (openDetails != null || state.narrowGapOpen);
+            final narrowSubSurface = !twoPane && openDetails != null;
             return Scaffold(
               appBar: AppBar(
                 leading: narrowSubSurface
-                    ? BackButton(
-                        onPressed: () {
-                          if (state.details != null) {
-                            _closeDetails();
-                          } else {
-                            viewModel.closeNarrowGap();
-                          }
-                        },
-                      )
+                    ? BackButton(onPressed: _closeDetails)
                     : null,
                 // Never transforms: title and tools stay constant whatever the
                 // right pane shows. Detail actions live in the detail pane, not
@@ -674,13 +477,12 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          width: 340,
-          child: _listColumn(l, gapSelected: openDetails == null),
-        ),
+        SizedBox(width: 340, child: _listColumn(l)),
         VerticalDivider(width: 1, color: colors.outlineVariant),
         Expanded(
-          child: openDetails == null ? _gapPane() : _detailBody(openDetails),
+          child: openDetails == null
+              ? _emptyDetailsPane(l)
+              : _detailBody(openDetails),
         ),
       ],
     );
@@ -689,18 +491,14 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   Widget _narrowBody(AppLocalizations l) {
     final openDetails = state.details;
     if (openDetails != null) return _detailBody(openDetails);
-    if (state.narrowGapOpen) return _gapPane();
-    return _listColumn(l, gapSelected: false, showGapStrip: true);
+    return _listColumn(l);
   }
 
-  Widget _gapPane() => VocabularyGapPanel(
-    loading: state.gapLoading,
-    candidates: state.gapCandidates,
-    candidatesError: state.gapCandidatesError,
-    production: state.gapProduction,
-    productionError: state.gapProductionError,
-    highlightCandidates: state.gapHighlightCandidates,
-    onOpenEntry: (id) => unawaited(viewModel.openEntry(id)),
+  Widget _emptyDetailsPane(AppLocalizations l) => Center(
+    child: ListenEmptyState(
+      icon: Icons.hearing_outlined,
+      message: l.text('dictionarySelectWord'),
+    ),
   );
 
   Widget _detailBody(LexicalEntryDetails value) => Center(
@@ -718,44 +516,21 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               // never leaks from another word.
               key: ValueKey(value.entry.id),
               details: value,
-              showProductionCorpus: true,
-              productionHits: state.productionHits,
-              productionLoadFailed: state.productionLoadFailed,
-              onOpenProductionAttempt: _openProductionAttempt,
               slicePlayer: slicePlayer,
               onPlay: (occurrence) =>
                   unawaited(_playOccurrenceMap(occurrence.toJson())),
-              onShadowing: widget.onStartShadowing == null
-                  ? null
-                  : _startShadowingOccurrence,
               onMark: (occurrence, heard) =>
                   _markOccurrence(value.entry, occurrence, heard),
               onSearchLibrary: () => viewModel.searchLibraryFor(value.entry),
               onPlayCorpus: (occurrence) => unawaited(_playCorpus(occurrence)),
               onCollectCorpus: (occurrence) =>
                   _collectCorpus(value.entry, occurrence),
-              suggestions: state.suggestions,
-              suggestionsLoading: state.suggestionsLoading,
               pronunciationLoading: state.pronunciationLoading,
-              onConfirmSuggestion: (suggestion) => _reportUpdate(
-                () => viewModel.confirmSuggestion(value.entry, suggestion),
-              ),
-              onRejectSuggestion: (suggestion) => _reportUpdate(
-                () => viewModel.rejectSuggestion(value.entry, suggestion),
-              ),
-              onCapabilityOverride: (capability, conclusion) => _reportUpdate(
-                () => viewModel.setCapabilityOverride(
-                  value.entry,
-                  capability,
-                  conclusion,
-                ),
+              onListeningOverride: (conclusion) => _reportUpdate(
+                () => viewModel.setListeningOverride(value.entry, conclusion),
               ),
               onLoadEvidenceHistory: ({String? capability, int offset = 0}) =>
-                  viewModel.observationHistory(
-                    value.entry.id,
-                    capability: capability,
-                    offset: offset,
-                  ),
+                  viewModel.observationHistory(value.entry.id, offset: offset),
               onSaveContent: (definition, note) =>
                   _saveContent(value.entry, definition, note),
               onCreateSenseFolder: (label, definition, gloss, externalRef) =>
@@ -852,11 +627,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               color: inHunting ? colors.primary : null,
             ),
           ),
-          IconButton(
-            tooltip: l.text('projectionReviewTitle'),
-            onPressed: () => unawaited(_openProjectionReview(value.entry.id)),
-            icon: const Icon(Icons.fact_check_outlined),
-          ),
         ],
       ),
     );
@@ -907,11 +677,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   /// The list column (left of the workbench, or the whole narrow screen): the
   /// search box, the persistent gap entry, the channel/assessment lens, then
   /// the word list.
-  Widget _listColumn(
-    AppLocalizations l, {
-    required bool gapSelected,
-    bool showGapStrip = false,
-  }) {
+  Widget _listColumn(AppLocalizations l) {
     final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -933,9 +699,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                   onSubmitted: (_) => viewModel.submitSearch(),
                 ),
               ),
-              // The semantic "use" surface folds into the main box; only the
-              // "manage" surface stays in the tools menu. The toggle appears
-              // only when the capability can actually search.
               if (state.semanticCanSearch) ...[
                 const SizedBox(width: ListenSpacing.gap8),
                 FilterChip(
@@ -947,36 +710,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             ],
           ),
         ),
-        // The gap instrument room is a permanent entry, not a buried icon —
-        // the workbench's self-falsification note asks for a visible way back
-        // to the gap list. Two-pane uses a selectable entry row; the narrow
-        // form uses a compact gap strip with live counts instead.
-        if (showGapStrip)
-          _narrowGapStrip(l)
-        else
-          ListTile(
-            dense: true,
-            selected: gapSelected,
-            selectedTileColor: colors.primary.withValues(alpha: 0.08),
-            leading: const Icon(Icons.hub_outlined),
-            title: Text(l.text('vocabGapEntry')),
-            onTap: viewModel.landOnGapPane,
-          ),
-        Divider(height: 1, color: colors.outlineVariant),
-        // Primary lens: the four-channel capability axis. The channel always
-        // re-lenses the entry rings (presentation); it only re-queries once an
-        // assessment is picked, which is when the backend filters by capability.
-        _filterRow(
-          children: [
-            for (final cap in capabilities)
-              ChoiceChip(
-                label: Text(l.text(_capabilityLabelKey(cap))),
-                visualDensity: VisualDensity.compact,
-                selected: state.capability == cap,
-                onSelected: (_) => viewModel.selectCapability(cap),
-              ),
-          ],
-        ),
         _filterRow(
           children: [
             _assessmentChip(l.text('vocabFilterAll'), null),
@@ -984,14 +717,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               _assessmentChip(
                 l.text(value),
                 value,
-                color: capabilityAssessmentColor(
-                  Theme.of(context).colorScheme,
-                  value,
-                ),
+                color: capabilityAssessmentColor(colors, value),
               ),
           ],
         ),
-        const SizedBox(height: ListenSpacing.gap4),
         Divider(height: 1, color: colors.outlineVariant),
         Expanded(child: _listResults(l)),
       ],
@@ -1034,50 +763,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     return VocabularyBookView(
       words: state.words,
       onWord: (value) => unawaited(viewModel.openEntry(value.entry.id)),
-      focusCapability: state.capability,
       selectedEntryId: state.details?.entry.id,
-    );
-  }
-
-  /// The narrow ("B") form keeps a compact gap strip at the top of the list so
-  /// gap-(c) is one tap away even without a second pane.
-  Widget _narrowGapStrip(AppLocalizations l) {
-    final colors = Theme.of(context).colorScheme;
-    final candidateCount = state.gapCandidates?.length;
-    final targetCount = state.gapProduction?.targets.length;
-    final subtitle = (candidateCount == null && targetCount == null)
-        ? l.text('vocabGapEntry')
-        : l
-              .text('gapPaneSubtitle')
-              .replaceAll('{candidates}', '${candidateCount ?? 0}')
-              .replaceAll('{targets}', '${targetCount ?? 0}');
-    return InkWell(
-      onTap: viewModel.landOnGapPane,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: Row(
-          children: [
-            Icon(
-              Icons.hub_outlined,
-              size: ListenIconSize.control,
-              color: colors.secondary,
-            ),
-            const SizedBox(width: ListenSpacing.gap8),
-            Expanded(
-              child: Text(
-                subtitle,
-                style: ListenType.caption.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Text(
-              l.text('vocabGapStripAction'),
-              style: ListenType.caption.copyWith(color: colors.secondary),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

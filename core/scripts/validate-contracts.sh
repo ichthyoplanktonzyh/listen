@@ -28,6 +28,7 @@ fi
 
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/check-architecture-coupling.py" \
+  "$root/scripts/generate_local_api_surface.py" \
   "$root/scripts/test_architecture_coupling.py" \
   "$root/scripts/benchmark-datasets.py" \
   "$root/scripts/evaluate-word-timelines.py" \
@@ -204,6 +205,8 @@ if (timitCandidateEvaluation.weak_metrics.matched_word_count !== 9) throw new Er
 if (timitCandidateEvaluation.weak_metrics.offsets.start_offset_ms.mean_abs !== 0) throw new Error("TIMIT candidate evaluation offset failed");
 ' "$lltimeline_report" "$lltimeline_evaluation_validation" "$timit_report" "$timit_validation" "$timit_output" "$timit_bundle_report" "$timit_candidate_report" "$timit_candidate_validation" "$timit_candidate_evaluation"
 
+python3 "$root/scripts/generate_local_api_surface.py" --check
+
 node -e '
 const fs = require("fs");
 const schema = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -211,193 +214,195 @@ const examples = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const events = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
 const openapi = fs.readFileSync(process.argv[4], "utf8");
 const client = fs.readFileSync(process.argv[5], "utf8");
-const routerSource = process.argv
-  .slice(6)
-  .map(path => fs.readFileSync(path, "utf8"))
-  .join("\n");
-if (schema.$defs.command.properties.version.const !== 1) throw new Error("command version missing");
-if (schema.$defs.event.properties.version.const !== 1) throw new Error("event version missing");
-if (!Array.isArray(examples) || examples.length === 0) throw new Error("examples missing");
+const routerSource = process.argv.slice(6).map(path => fs.readFileSync(path, "utf8")).join("\n");
+const generatedArray = name => {
+  const match = client.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\] as const;`));
+  if (!match) throw new Error(`generated API inventory is missing ${name}`);
+  return [...match[1].matchAll(/"([^"]+)"/g)].map(value => value[1]);
+};
+const sortedUnique = values => [...new Set(values)].sort();
+const assertEqual = (actual, expected, label) => {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`${label} differs from canonical OpenAPI`);
+  }
+};
+if (schema.$defs.command.properties.version.const !== 1) throw new Error("player command version missing");
+if (schema.$defs.event.properties.version.const !== 1) throw new Error("player event version missing");
+if (!Array.isArray(examples) || examples.length === 0) throw new Error("player examples missing");
 if (events.properties.version.const !== 1) throw new Error("event schema version missing");
-for (const path of ["/v1/health", "/v1/media", "/v1/lltimeline/import", "/v1/media/{media_id}/lltimeline/import", "/v1/media/{media_id}/progress", "/v1/media/{media_id}/subtitles", "/v1/subtitles/{track_id}", "/v1/subtitles/{track_id}/archive", "/v1/subtitles/{track_id}/restore", "/v1/subtitles/{track_id}/language", "/v1/subtitles/{track_id}/export", "/v1/pronunciation/providers", "/v1/pronunciation/lookup", "/v1/pronunciation/analyze-sentence", "/v1/pronunciation/rules", "/v1/subtitles/{track_id}/pronunciation", "/v1/subtitles/{track_id}/pronunciation-analysis", "/v1/subtitles/{track_id}/word-timings", "/v1/subtitles/{track_id}/word-timelines", "/v1/subtitles/{track_id}/word-timelines/summary", "/v1/subtitles/{track_id}/lltimeline/export", "/v1/word-timelines/{timeline_id}", "/v1/word-timelines/{timeline_id}/activate", "/v1/word-timelines/{timeline_id}/publish", "/v1/word-timelines/{timeline_id}/archive", "/v1/word-timelines/{timeline_id}/export", "/v1/subtitles/{track_id}/phone-timelines", "/v1/subtitles/{track_id}/phone-timelines/summary", "/v1/phone-timelines/{timeline_id}", "/v1/phone-timelines/{timeline_id}/activate", "/v1/phone-timelines/{timeline_id}/archive", "/v1/phone-timelines/{timeline_id}/export", "/v1/speech/jobs", "/v1/speech/jobs/{job_id}", "/v1/speech/jobs/{job_id}/cancel", "/v1/speech/jobs/{job_id}/retry", "/v1/lexical-entries/batch", "/v1/lexical-entries", "/v1/lexical-entries/{id}", "/v1/lexical-entries/{id}/learning-content", "/v1/lexical-observations", "/v1/lexical-normalization", "/v1/sentences/{sentence_id}/phrase-candidates", "/v1/practice/sessions", "/v1/practice/items", "/v1/practice/attempts", "/v1/practice/attempts/{id}", "/v1/listening/sessions/{id}/complete", "/v1/review/items", "/v1/review/items/{id}", "/v1/review/attempts", "/v1/learning-resources", "/v1/subtitle-search", "/v1/vocabulary", "/v1/vocabulary/export", "/v1/vocabulary/import", "/v1/vocabulary/import-external", "/v1/media/{media_id}/availability", "/v1/materials", "/v1/materials/{material_id}", "/v1/materials/{material_id}/revisions", "/v1/materials/{material_id}/revisions/{revision_id}", "/v1/materials/{material_id}/library-membership", "/v1/materials/{material_id}/package-installations", "/v1/materials/{material_id}/editions", "/v1/materials/{material_id}/edition-adoption", "/v1/materials/{material_id}/source-assets/{source_asset_id}/availability", "/v1/materials/{material_id}/capabilities", "/v1/materials/{material_id}/capability-attempts", "/v1/materials/{material_id}/capability-attempts/{attempt_id}", "/v1/source-identities/mappings", "/v1/source-identities/resolve", "/v1/source-identities/{source_id}/items/{item_id}", "/v1/media/{media_id}/material", "/v1/events", "/v1/dictionary", "/v1/languages", "/v1/languages/{code}/profile", "/v1/sentences/{sentence_id}/diagnosis", "/v1/transcription/providers", "/v1/transcription/models", "/v1/recording-transcriptions", "/v1/recording-transcriptions/{job_id}", "/v1/recording-transcriptions/{job_id}/cancel", "/v1/phonetic-analysis/providers", "/v1/phonetic-analysis/models", "/v1/phonetic-analysis/jobs", "/v1/phonetic-analysis/jobs/clear", "/v1/subtitles/{track_id}/phonetic-analyses", "/v1/phonetic-analysis/{analysis_id}/findings", "/v1/phonetic-analysis/findings/{finding_id}/feedback"]) {
-  if (!openapi.includes(path + ":")) throw new Error(`OpenAPI missing ${path}`);
+
+const version = openapi.match(/^  version: ([0-9]+\.[0-9]+\.[0-9]+)$/m)?.[1];
+if (version !== "5.0.0") throw new Error(`OpenAPI contract version is ${version}, expected 5.0.0`);
+if (!openapi.includes("openapi: 3.1.0")) throw new Error("OpenAPI specification version must remain 3.1.0");
+if (!client.includes(`localApiV1ContractVersion = "${version}"`)) throw new Error("generated contract version differs from OpenAPI");
+
+const paths = sortedUnique([...openapi.matchAll(/^  (\/v1\/[^:\n]+):\s*$/gm)].map(match => match[1]));
+const operationIds = sortedUnique([...openapi.matchAll(/\boperationId:\s*([A-Za-z][A-Za-z0-9_]*)/g)].map(match => match[1]));
+const schemaStart = openapi.split("\n").findIndex(line => line === "  schemas:");
+if (schemaStart < 0) throw new Error("OpenAPI components.schemas section missing");
+const schemaLines = openapi.split("\n").slice(schemaStart + 1);
+const schemaBlock = [];
+for (const line of schemaLines) {
+  if (line && line.startsWith("  ") && !line.startsWith("    ")) break;
+  schemaBlock.push(line);
 }
-for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id}", "/v1/transcription/jobs/{job_id}/cancel", "/v1/transcription/jobs/{job_id}/retry", "/v1/transcription/jobs/{job_id}/archive", "/v1/subtitles/{track_id}/chunk-timelines", "/v1/subtitles/{track_id}/chunk-timelines/summary", "/v1/chunk-timelines/{timeline_id}", "/v1/chunk-timelines/{timeline_id}/activate", "/v1/chunk-timelines/{timeline_id}/archive", "/v1/chunk-timelines/{timeline_id}/export"]) {
-  if (openapi.includes(removed + ":")) throw new Error(`removed OpenAPI path ${removed} must stay absent`);
+const schemas = sortedUnique([...schemaBlock.join("\n").matchAll(/^    ([A-Za-z][A-Za-z0-9_]*):\s*$/gm)].map(match => match[1]));
+assertEqual(generatedArray("localApiV1Paths"), paths, "generated path inventory");
+assertEqual(generatedArray("localApiV1OperationIds"), operationIds, "generated operation inventory");
+assertEqual(generatedArray("localApiV1ComponentSchemas"), schemas, "generated schema inventory");
+
+const implementedPaths = sortedUnique([...routerSource.matchAll(/"((?:\/v1\/)[^"]+)"/g)].map(match => match[1]));
+assertEqual(implementedPaths, paths, "implemented router paths");
+for (const required of [
+  "/v1/media",
+  "/v1/media/{media_id}/material",
+  "/v1/materials",
+  "/v1/materials/{material_id}/capabilities",
+  "/v1/materials/{material_id}/package-installations",
+  "/v1/materials/{material_id}/editions",
+  "/v1/materials/{material_id}/edition-adoption",
+  "/v1/materials/{material_id}/composition",
+  "/v1/materials/{material_id}/composition/resources/{resource_id}/payload",
+  "/v1/source-identities/mappings",
+  "/v1/speech-synthesis",
+  "/v1/semantic-search",
+  "/v1/review/items",
+  "/v1/listening-inbox/items",
+]) {
+  if (!paths.includes(required)) throw new Error(`active listening path missing: ${required}`);
 }
-for (const removedWire of ["chunk_timelines:", "active_chunk_timeline_id:", "ChunkTimeline:", "ChunkTimelineSummary:", "ChunkBoundarySource:", "GenerateChunkTimeline:"]) {
-  if (openapi.includes(removedWire)) throw new Error(`removed OpenAPI wire surface ${removedWire} must stay absent`);
+for (const prefix of [
+  "/v1/coach",
+  "/v1/realtime",
+  "/v1/production-corpus",
+  "/v1/production-gap",
+  "/v1/personal-expression",
+  "/v1/reading",
+  "/v1/speaking",
+  "/v1/writing",
+  "/v1/recordings",
+  "/v1/recording-transcriptions",
+  "/v1/shadowing",
+  "/v1/anki",
+]) {
+  if (paths.some(path => path === prefix || path.startsWith(`${prefix}/`))) {
+    throw new Error(`retired product path remains in OpenAPI: ${prefix}`);
+  }
 }
-if (!openapi.includes("version: 4.0.0")) throw new Error("OpenAPI must report the current Phase 1 canonical contract 4.0.0");
-if (!openapi.includes("openapi: 3.1.0")) throw new Error("OpenAPI specification line must stay 3.1.0");
-if (!openapi.includes("/v1/media/{media_id}/library-membership:")) throw new Error("OpenAPI library-membership path missing");
-if (!client.includes("retainMedia(mediaId: string): Promise<MediaItem>")) throw new Error("generated retainMedia client method missing");
-if (!client.includes("unretainMedia(mediaId: string): Promise<MediaItem>")) throw new Error("generated unretainMedia client method missing");
-if (!client.includes("retained_at_ms: number | null;")) throw new Error("generated MediaItem retained_at_ms missing");
-if (!client.includes("retain?: boolean | null;")) throw new Error("generated RegisterMedia retain missing");
-if (!openapi.includes("retained_at_ms:")) throw new Error("OpenAPI MediaItem retained_at_ms missing");
-if (!openapi.includes("retain:")) throw new Error("OpenAPI RegisterMedia retain missing");
-// Learning-material surface (4.0.0): canonical material operations, matching
-// DTOs, nullable membership evidence on LearningMaterial, and no path on any
-// material DTO.
-for (const materialPath of ["/v1/materials", "/v1/materials/{material_id}", "/v1/materials/{material_id}/revisions", "/v1/materials/{material_id}/revisions/{revision_id}", "/v1/materials/{material_id}/library-membership", "/v1/media/{media_id}/material", "/v1/materials/{material_id}/source-assets/{source_asset_id}/availability"]) {
-  if (!openapi.includes(materialPath + ":")) throw new Error(`OpenAPI missing material path ${materialPath}`);
+for (const retired of [
+  "DocumentRendition",
+  "DocumentRenditionInput",
+  "HuntingCandidate",
+  "UpgradeSuggestion",
+  "RecordingAsset",
+  "ShadowingComparison",
+  "SemanticTask",
+  "CoachDashboard",
+  "ContentDifficultyProfile",
+  "ProductionCorpus",
+  "PersonalExpression",
+  "RealtimeConversation",
+]) {
+  if (schemas.includes(retired)) throw new Error(`retired schema remains in OpenAPI: ${retired}`);
 }
-// Material Capability surface (4.0.0): the five-state projection and durable
-// production attempts.
-for (const capabilityPath of ["/v1/materials/{material_id}/capabilities", "/v1/materials/{material_id}/capability-attempts", "/v1/materials/{material_id}/capability-attempts/{attempt_id}"]) {
-  if (!openapi.includes(capabilityPath + ":")) throw new Error(`OpenAPI missing capability path ${capabilityPath}`);
+const lines = openapi.split("\n");
+const llmUseStart = lines.indexOf("    LlmUse:");
+if (llmUseStart < 0) throw new Error("retained LlmUse schema missing");
+let llmUseEnd = llmUseStart + 1;
+while (llmUseEnd < lines.length && !/^    [A-Za-z][A-Za-z0-9_]*:\s*$/.test(lines[llmUseEnd])) llmUseEnd++;
+const llmUseBlock = lines.slice(llmUseStart, llmUseEnd).join("\n");
+if (!llmUseBlock.includes("enum: [sense_group_partition]") || /rubric_generation|semantic_judgment/.test(llmUseBlock)) {
+  throw new Error("LlmUse must contain only the retained sense_group_partition use");
 }
-for (const capabilityOperation of ["listMaterialCapabilities", "startMaterialCapabilityAttempt", "finalizeMaterialCapabilityAttempt"]) {
-  if (!openapi.includes(`operationId: ${capabilityOperation}`)) throw new Error(`OpenAPI missing capability operationId ${capabilityOperation}`);
+const learningObservationStart = lines.indexOf("    LearningObservation:");
+if (learningObservationStart < 0) throw new Error("retained LearningObservation schema missing");
+let learningObservationEnd = learningObservationStart + 1;
+while (learningObservationEnd < lines.length && !/^    [A-Za-z][A-Za-z0-9_]*:\s*$/.test(lines[learningObservationEnd])) learningObservationEnd++;
+const learningObservationBlock = lines.slice(learningObservationStart, learningObservationEnd).join("\n");
+const taskTypeEnum = learningObservationBlock.match(/^        task_type: \{ enum: \[([^\]]+)\] \}$/m)?.[1]
+  .split(",")
+  .map(value => value.trim());
+assertEqual(taskTypeEnum, ["context_marking", "cloze", "dictation", "subtitle_fade", "review_recall"], "listening task type enum");
+if (!openapi.includes("Content Package v3 carrier") || openapi.includes("Content Package v2 carrier")) {
+  throw new Error("package installation must describe the active Content Package v3 carrier");
 }
-// Source Identity surface (4.0.0): canonical-key mappings to exact revisions.
-for (const sourceIdentityPath of ["/v1/source-identities/mappings", "/v1/source-identities/resolve", "/v1/source-identities/{source_id}/items/{item_id}"]) {
-  if (!openapi.includes(sourceIdentityPath + ":")) throw new Error(`OpenAPI missing source identity path ${sourceIdentityPath}`);
+if (/^\s+(document_renditions|familiar_material|fit):/m.test(openapi)) {
+  throw new Error("retired document or derived-coaching fields remain in the wire contract");
 }
-for (const sourceIdentityOperation of ["registerSourceIdentityMapping", "resolveSourceIdentity", "resolveSourceIdentityPath"]) {
-  if (!openapi.includes(`operationId: ${sourceIdentityOperation}`)) throw new Error(`OpenAPI missing source identity operationId ${sourceIdentityOperation}`);
+for (const active of ["/v1/speech-synthesis/capability", "/v1/speech-synthesis/cache", "/v1/semantic-embedding/capability", "/v1/corpus/search"]) {
+  if (!paths.includes(active)) throw new Error(`retained listening foundation missing: ${active}`);
 }
-// Package lifecycle surface (3.3.0): three fixed operations with the exact
-// operationIds, matching request/response DTOs, and enum strings.
-for (const packagePath of ["/v1/materials/{material_id}/package-installations", "/v1/materials/{material_id}/editions", "/v1/materials/{material_id}/edition-adoption"]) {
-  if (!openapi.includes(packagePath + ":")) throw new Error(`OpenAPI missing package lifecycle path ${packagePath}`);
+
+for (const operation of ["installMaterialPackage", "listLearningEditions", "deleteLearningEdition", "adoptLearningEdition"]) {
+  if (!operationIds.includes(operation)) throw new Error(`package lifecycle operation missing: ${operation}`);
+  if (!client.includes(`${operation}(`)) throw new Error(`generated package client method missing: ${operation}`);
 }
-for (const packageOperation of ["installMaterialPackage", "listLearningEditions", "adoptLearningEdition"]) {
-  if (!openapi.includes(`operationId: ${packageOperation}`)) throw new Error(`OpenAPI missing package lifecycle operationId ${packageOperation}`);
+for (const component of ["InstallMaterialPackageRequest", "AdoptLearningEditionRequest", "LearningEditionDetails", "LearningEditionResource", "LearningEditionRendition"]) {
+  if (!schemas.includes(component)) throw new Error(`package lifecycle schema missing: ${component}`);
 }
-if (!client.includes("installMaterialPackage(\n    materialId: string,\n    input: InstallMaterialPackageRequest,\n  ): Promise<LearningEditionDetails>")) throw new Error("generated installMaterialPackage signature missing");
-if (!client.includes("listLearningEditions(materialId: string): Promise<LearningEditionDetails[]>")) throw new Error("generated listLearningEditions signature missing");
-if (!client.includes("adoptLearningEdition(\n    materialId: string,\n    input: AdoptLearningEditionRequest,\n  ): Promise<LearningEditionDetails>")) throw new Error("generated adoptLearningEdition signature missing");
-for (const packageSchema of ["InstallMaterialPackageRequest", "AdoptLearningEditionRequest", "LearningEditionDetails", "LearningEditionResource", "LearningEditionRendition"]) {
-  if (!openapi.includes(`    ${packageSchema}:`)) throw new Error(`missing OpenAPI package lifecycle schema ${packageSchema}`);
+if (!schemas.includes("MaterialCapability")) throw new Error("MaterialCapability enum schema missing");
+const componentSchemaBlock = name => {
+  const heading = lines.indexOf(`    ${name}:`);
+  if (heading < 0) throw new Error(`OpenAPI schema not found: ${name}`);
+  let end = heading + 1;
+  while (end < lines.length && !/^    [A-Za-z][A-Za-z0-9_]*:\s*$/.test(lines[end])) end++;
+  return lines.slice(heading, end);
+};
+const schemaProperties = name => {
+  const block = componentSchemaBlock(name);
+  const properties = block.findIndex(line => line === "      properties:");
+  if (properties < 0) return [];
+  return sortedUnique(block.slice(properties + 1).flatMap(line => {
+    const match = line.match(/^        ([A-Za-z][A-Za-z0-9_]*):/);
+    return match ? [match[1]] : [];
+  }));
+};
+const typescriptProperties = name => {
+  const match = client.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`));
+  if (!match) throw new Error(`generated TypeScript interface missing: ${name}`);
+  return sortedUnique([...match[1].matchAll(/^  ([A-Za-z][A-Za-z0-9_]*)\??:/gm)].map(value => value[1]));
+};
+for (const component of ["InstallMaterialPackageRequest", "AdoptLearningEditionRequest", "LearningEditionDetails", "LearningEditionResource", "LearningEditionRendition"]) {
+  assertEqual(typescriptProperties(component), schemaProperties(component), `${component} properties`);
 }
-for (const enumLine of ["role: { enum: [base, assistance] }", "availability: { enum: [available, missing, opaque] }", "review_status: { enum: [unreviewed, machine_checked, human_reviewed] }"]) {
-  if (!openapi.includes(enumLine)) throw new Error(`missing OpenAPI package lifecycle enum ${enumLine}`);
+const materialCapabilityValues = componentSchemaBlock("MaterialCapability")
+  .join("\n")
+  .match(/enum:\s*\[([^\]]+)\]/)?.[1]
+  .split(",")
+  .map(value => value.trim());
+const generatedMaterialCapability = client.match(/export type MaterialCapability = ([^;]+);/)?.[1];
+const generatedMaterialCapabilityValues = generatedMaterialCapability == null
+  ? []
+  : [...generatedMaterialCapability.matchAll(/"([^"]+)"/g)].map(value => value[1]);
+assertEqual(generatedMaterialCapabilityValues, materialCapabilityValues ?? [], "MaterialCapability enum");
+const editionSchema = componentSchemaBlock("LearningEditionDetails");
+if (!editionSchema.some(line => line.trim() === "- available_capabilities" || /required:\s*\[[^\]]*available_capabilities/.test(line))) {
+  throw new Error("LearningEditionDetails.available_capabilities must be required");
 }
-// Package lifecycle error contract (3.3.0): every typed error code must be
-// recorded in the canonical OpenAPI, the fixed public messages and retryable
-// flags must be present, and each operation must formally declare its exact
-// error responses.
-for (const code of ["not_found", "package_installation_invalid", "edition_adoption_conflict", "package_lifecycle_failed"]) {
-  if (!openapi.includes(`code: ${code}`)) throw new Error(`missing OpenAPI package lifecycle error code ${code}`);
+const availableCapabilitiesIndex = editionSchema.indexOf("        available_capabilities:");
+if (availableCapabilitiesIndex < 0) throw new Error("LearningEditionDetails.available_capabilities missing");
+let availableCapabilitiesEnd = availableCapabilitiesIndex + 1;
+while (availableCapabilitiesEnd < editionSchema.length && !(editionSchema[availableCapabilitiesEnd].startsWith("        ") && !editionSchema[availableCapabilitiesEnd].startsWith("          "))) availableCapabilitiesEnd++;
+const availableCapabilitiesSchema = editionSchema.slice(availableCapabilitiesIndex, availableCapabilitiesEnd).join("\n");
+if (!availableCapabilitiesSchema.includes("type: array") || !availableCapabilitiesSchema.includes("#/components/schemas/MaterialCapability")) {
+  throw new Error("LearningEditionDetails.available_capabilities must be an array of MaterialCapability values");
 }
-for (const message of ["package release is invalid or incompatible", "learning edition cannot be adopted", "local package lifecycle operation failed"]) {
-  if (!openapi.includes(message)) throw new Error(`missing OpenAPI package lifecycle error message ${message}`);
+if (!client.includes("available_capabilities: MaterialCapability[];")) {
+  throw new Error("generated LearningEditionDetails must expose available_capabilities as a typed array");
 }
-const installBlock = openapi.slice(openapi.indexOf("operationId: installMaterialPackage"), openapi.indexOf("/v1/materials/{material_id}/editions:"));
-const editionsBlock = openapi.slice(openapi.indexOf("operationId: listLearningEditions"), openapi.indexOf("/v1/materials/{material_id}/edition-adoption:"));
-const adoptionBlock = openapi.slice(openapi.indexOf("operationId: adoptLearningEdition"), openapi.indexOf("/v1/media/{media_id}/material:"));
-for (const status of ['"404"', '"422"', '"500"']) {
-  if (!installBlock.includes(status)) throw new Error(`installMaterialPackage must declare ${status} responses`);
+for (const field of ["adopted_at_ms", "content_language"]) {
+  if (!new RegExp(`^  ${field}: [^\\n]*\\| null;$`, "m").test(client)) {
+    throw new Error(`generated package DTO must preserve nullable ${field}`);
+  }
 }
-for (const status of ['"404"', '"500"']) {
-  if (!editionsBlock.includes(status)) throw new Error(`listLearningEditions must declare ${status} responses`);
+const responseTypes = client.slice(client.indexOf("export interface LearningEditionResource"), client.indexOf("export interface LocalPackageLifecycleApi"));
+if (/^\s*(package_path|media_path|file_path|local_path|manifest|release_json|payload|payload_bytes|payload_blob|bytes|blob|blob_path|digest|size|size_bytes|dependency|dependencies|provenance|tool_id|model_id|provider_id):/m.test(responseTypes)) {
+  throw new Error("package lifecycle response types must not expose private artifact details");
 }
-for (const status of ['"404"', '"409"', '"500"']) {
-  if (!adoptionBlock.includes(status)) throw new Error(`adoptLearningEdition must declare ${status} responses`);
-}
-// Package lifecycle privacy contract (3.3.0): the local package location is a
-// necessary write-only request input. It must exist on
-// InstallMaterialPackageRequest, but no package lifecycle response DTO may
-// declare it or any other private fact.
-if (!client.includes("export interface InstallMaterialPackageRequest {\n  package_path: string;")) throw new Error("InstallMaterialPackageRequest must carry the write-only package_path input");
-// Privacy inspection covers only the package lifecycle response DTO section
-// (LearningEditionDetails, LearningEditionResource, LearningEditionRendition):
-// paths, manifests/release JSON, payloads/bytes/blobs, schemas, digests,
-// sizes, dependency edges, and internal persistence/provenance facts are
-// forbidden there. The request DTOs are exempt by design.
-const packageResponseDtos = client.slice(client.indexOf("export interface LearningEditionResource"), client.indexOf("export interface Progress"));
-if (/^\s*(package_path|media_path|file_path|local_path|manifest|release_json|payload|payload_bytes|payload_blob|bytes|blob|blob_path|schema|digest|size|size_bytes|dependency|dependencies|provenance|tool_id|model_id|provider_id):/m.test(packageResponseDtos)) throw new Error("package lifecycle response DTOs must not declare path/manifest/payload/blob/schema/digest/size/dependency/internal-fact fields");
-for (const materialOperation of ["listLearningMaterials(", "createLearningMaterial(", "readLearningMaterial(", "appendLearningMaterialRevision(", "readLearningMaterialRevision(", "retainLearningMaterial(", "unretainLearningMaterial(", "resolveLearningMaterialForMedia(", "updateSourceAssetAvailability(", "listMaterialCapabilities(", "startMaterialCapabilityAttempt(", "finalizeMaterialCapabilityAttempt(", "registerSourceIdentityMapping(", "resolveSourceIdentity(", "resolveSourceIdentityPath("]) {
-  if (!client.includes(materialOperation)) throw new Error(`generated client material operation missing ${materialOperation}`);
-}
-if (!client.includes("listLearningMaterials(): Promise<MaterialDetails[]>")) throw new Error("generated listLearningMaterials signature missing");
-if (!client.includes("createLearningMaterial(input: CreateLearningMaterial): Promise<MaterialDetails>")) throw new Error("generated createLearningMaterial signature missing");
-if (!client.includes("readLearningMaterial(materialId: string): Promise<MaterialDetails>")) throw new Error("generated readLearningMaterial signature missing");
-if (!client.includes("appendLearningMaterialRevision(\n    materialId: string,\n    input: AppendMaterialRevision,\n  ): Promise<MaterialDetails>")) throw new Error("generated appendLearningMaterialRevision signature missing");
-if (!client.includes("readLearningMaterialRevision(\n    materialId: string,\n    revisionId: string,\n  ): Promise<MaterialRevision>")) throw new Error("generated readLearningMaterialRevision signature missing");
-if (!client.includes("retainLearningMaterial(materialId: string): Promise<MaterialDetails>")) throw new Error("generated retainLearningMaterial signature missing");
-if (!client.includes("unretainLearningMaterial(materialId: string): Promise<MaterialDetails>")) throw new Error("generated unretainLearningMaterial signature missing");
-if (!client.includes("resolveLearningMaterialForMedia(mediaId: string): Promise<MaterialDetails>")) throw new Error("generated resolveLearningMaterialForMedia signature missing");
-for (const materialSchema of ["LearningMaterial", "SourceAsset", "DocumentRendition", "MediaRendition", "MaterialRevision", "MaterialDetails", "SourceAssetInput", "DocumentRenditionInput", "MediaRenditionInput", "CreateLearningMaterial", "AppendMaterialRevision", "MaterialCapabilityProjection", "CapabilityAttempt", "StartCapabilityAttemptRequest", "FinalizeCapabilityAttemptRequest", "SourceIdentityMapping", "SourceItemEvidence", "RegisterSourceIdentityMappingRequest"]) {
-  if (!openapi.includes(`    ${materialSchema}:`)) throw new Error(`missing OpenAPI material schema ${materialSchema}`);
-}
-// The canonical component schemas must declare their required typed columns.
-if (!openapi.includes("    SourceAsset:\n") || !openapi.includes("required: [id, media_type, byte_length, sha256_digest, binding, availability, created_at_ms]")) throw new Error("SourceAsset must require its typed columns");
-if (!openapi.includes("    DocumentRendition:\n") || !openapi.includes("required: [id, origin, media_type, language, digest, byte_size, source_asset_id]")) throw new Error("DocumentRendition must require its typed columns");
-if (!openapi.includes("    MediaRendition:\n") || !openapi.includes("required: [id, origin, kind, media_type, fingerprint, availability, media_id, media_sha256, media_byte_size]")) throw new Error("MediaRendition must require its typed columns");
-// Document rendition inputs bind a Source Asset by index and never carry
-// extracted text.
-if (!openapi.includes("required: [media_type, digest, byte_size, source_asset_index]")) throw new Error("DocumentRenditionInput must require exact byte facts and a Source Asset index");
-for (const retiredWire of ["text_sha256:", "text_byte_size:"]) {
-  if (openapi.includes(retiredWire)) throw new Error(`retired inline document text wire surface ${retiredWire} must stay absent`);
-}
-// Capability attempts have honest terminal states; cancelled and superseded
-// are never failed attempts.
-if (!openapi.includes("status: { enum: [running, succeeded, failed, cancelled, superseded] }")) throw new Error("CapabilityAttempt status must carry the four honest terminal states");
-if (!openapi.includes("status: { enum: [succeeded, failed, cancelled] }")) throw new Error("FinalizeCapabilityAttemptRequest must support cancellation");
-// Adopted composition surface (4.0.0): the single Core-owned composition
-// interface with its typed content reads and stable failure codes.
-for (const compositionPath of ["/v1/materials/{material_id}/composition", "/v1/materials/{material_id}/composition/resources/{resource_id}/payload", "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob"]) {
-  if (!openapi.includes(compositionPath + ":")) throw new Error(`OpenAPI missing composition path ${compositionPath}`);
-}
-for (const compositionOperation of ["readMaterialComposition", "readCompositionResourcePayload", "readCompositionRenditionBlob"]) {
-  if (!openapi.includes(`operationId: ${compositionOperation}`)) throw new Error(`OpenAPI missing composition operationId ${compositionOperation}`);
-}
-for (const compositionSchema of ["AdoptedComposition", "CompositionResource", "CompositionRendition", "CompositionBinding"]) {
-  if (!openapi.includes(`    ${compositionSchema}:`)) throw new Error(`missing OpenAPI composition schema ${compositionSchema}`);
-}
-for (const compositionError of ["composition_integrity_failure", "source_unavailable"]) {
-  if (!openapi.includes(`code: ${compositionError}`)) throw new Error(`missing OpenAPI composition error code ${compositionError}`);
-}
-if (!client.includes("readMaterialComposition(materialId: string): Promise<AdoptedComposition>")) throw new Error("generated readMaterialComposition signature missing");
-if (!client.includes("readCompositionResourcePayload(materialId: string, resourceId: string): Promise<Blob>")) throw new Error("generated readCompositionResourcePayload signature missing");
-if (!client.includes("readCompositionRenditionBlob(materialId: string, renditionId: string): Promise<Blob>")) throw new Error("generated readCompositionRenditionBlob signature missing");
-if (client.includes("text_sha256: string;")) throw new Error("generated DocumentRendition inline text digest must stay absent");
-if (client.includes("text_byte_size: number;")) throw new Error("generated DocumentRendition inline text size must stay absent");
-// The capability projection must be a five-state enum over the known
-// capabilities.
-if (!openapi.includes("enum: [available, derivable, generating, unavailable, failed_attempt]")) throw new Error("MaterialCapabilityProjection must carry the five-state status enum");
-// LearningMaterial must carry required-but-nullable membership evidence in
-// addition to the MediaItem copy (two occurrences total).
-if ((client.match(/retained_at_ms: number \| null;/g) || []).length < 2) throw new Error("generated LearningMaterial retained_at_ms must be nullable");
-// Material DTOs never expose a path: no material interface may declare a
-// path-like field on LearningMaterial, MaterialRevision, MaterialDetails, or
-// either asset shape. Match actual field declarations (line-leading
-// `path:`/`file_path:`/`local_path:` keys) so prose comments that merely say
-// the word "path" cannot trip the gate.
-const materialDtos = client.slice(client.indexOf("export interface LearningMaterial"), client.indexOf("export interface Progress"));
-if (/^\s*(path|file_path|local_path):/m.test(materialDtos)) throw new Error("material DTOs must not expose a path field");
-if (routerSource.includes("/v1/transcription/jobs")) throw new Error("removed transcription jobs route must stay absent from the router");
-const implementedPaths = [...new Set([...routerSource.matchAll(/"((?:\/v1\/)[^"]+)"/g)].map(match => match[1]))].sort();
-const documentedPaths = [...new Set([...openapi.matchAll(/^  (\/v1\/[^:]+):/gm)].map(match => match[1]))].sort();
-const undocumented = implementedPaths.filter(path => !documentedPaths.includes(path));
-const unimplemented = documentedPaths.filter(path => !implementedPaths.includes(path));
-if (undocumented.length || unimplemented.length) {
-  throw new Error(`OpenAPI route drift\nimplemented but undocumented: ${JSON.stringify(undocumented)}\ndocumented but unimplemented: ${JSON.stringify(unimplemented)}`);
-}
-for (const operation of ["health()", "registerMedia(", "importLLTimeline(", "importLLTimelineForMedia(", "updateProgress(", "importSubtitle(", "mediaSubtitles(", "readSubtitle(", "archiveSubtitle(", "restoreSubtitle(", "updateTrackLanguage(", "deleteSubtitle(", "exportSubtitle(", "pronunciationProviders(", "pronunciationLookup(", "analyzeSentencePronunciation(", "pronunciationRules(", "trackPronunciation(", "generateTrackPronunciation(", "trackWordTimings(", "generateTrackWordTimings(", "trackWordTimelines(", "trackWordTimelineSummaries(", "createTrackWordTimeline(", "exportTrackLLTimeline(", "wordTimeline(", "activateWordTimeline(", "publishWordTimeline(", "archiveWordTimeline(", "exportWordTimeline(", "deleteWordTimeline(", "trackPhoneTimelines(", "trackPhoneTimelineSummaries(", "phoneTimeline(", "activatePhoneTimeline(", "archivePhoneTimeline(", "exportPhoneTimeline(", "deletePhoneTimeline(", "speechBatchJobs(", "createSpeechBatchJob(", "speechBatchJob(", "cancelSpeechBatchJob(", "retrySpeechBatchJob(", "listLexicalEntries(", "upsertLexicalEntry(", "normalizeLexical(", "correctLemma(", "phraseCandidates(", "createPracticeSession(", "createPracticeItem(", "submitPracticeAttempt(", "practiceAttempt(", "completeListeningSession(", "createReviewItem(", "listDueReviewItems(", "submitReviewAttempt(", "listUpgradeSuggestions(", "upgradeSuggestionHistory(", "confirmUpgradeSuggestion(", "rejectUpgradeSuggestion(", "reviewItem(", "learningResources(", "installLearningResource(", "removeLearningResource(", "searchSubtitles(", "downloadSubtitle(", "transcriptionProviders(", "transcriptionModels(", "installTranscriptionModel(", "registerCustomTranscriptionModel(", "phoneticAnalysisProviders(", "phoneticAnalysisModels(", "installPhoneticAnalysisModel(", "registerCustomPhoneticAnalysisModel(", "cancelPhoneticAnalysisModelInstall(", "deletePhoneticAnalysisModel(", "phoneticAnalysisJobs(", "createPhoneticAnalysisJob(", "clearTerminalPhoneticAnalysisJobs(", "phoneticAnalysisJob(", "cancelPhoneticAnalysisJob(", "retryPhoneticAnalysisJob(", "trackPhoneticAnalyses(", "phoneticAnalysisFindings(", "updatePhoneticFindingFeedback(", "readLexicalEntries(", "lexicalEntryDetails(", "updateLexicalLearningContent(", "createLexicalObservation(", "listVocabulary(", "exportVocabulary(", "importVocabulary(", "importExternalVocabulary(", "updateMediaAvailability(", "dictionaryLookup(", "listLanguages(", "languageProfile(", "diagnoseSentence(", "listLearningMaterials(", "createLearningMaterial(", "readLearningMaterial(", "appendLearningMaterialRevision(", "readLearningMaterialRevision(", "retainLearningMaterial(", "unretainLearningMaterial(", "resolveLearningMaterialForMedia(", "updateSourceAssetAvailability(", "listMaterialCapabilities(", "startMaterialCapabilityAttempt(", "finalizeMaterialCapabilityAttempt(", "registerSourceIdentityMapping(", "resolveSourceIdentity(", "resolveSourceIdentityPath("]) {
-  if (!client.includes(operation)) throw new Error(`client experiment missing ${operation}`);
-}
-for (const operation of ["transcriptionJobs(", "createTranscriptionJob(", "transcriptionJob(", "cancelTranscriptionJob(", "retryTranscriptionJob(", "archiveTranscriptionJob(", "trackChunkTimelines(", "generateChunkTimeline(", "trackChunkTimelineSummaries(", "chunkTimeline(", "activateChunkTimeline(", "archiveChunkTimeline(", "exportChunkTimeline(", "deleteChunkTimeline("]) {
-  if (client.includes(operation)) throw new Error(`removed client operation ${operation} must stay absent`);
-}
-for (const schema of ["WordTiming", "WordTimeline", "WordTimelineSummary", "CreateWordTimeline", "LLTimelineDocument", "PhoneTimeline", "PhoneTimelineSummary", "DetectedPhone", "PhoneAlignment", "PhoneticFinding", "LexicalEntry", "LexicalEntryDetails", "LexicalNormalization", "ReviewSchedule", "ReviewAttempt", "ReviewCardKind", "ReviewCard", "ReviewQueueEntry", "ReviewSubmission", "UpgradeSuggestionStatus", "UpgradeSuggestion", "LearningResource", "SubtitleSearchRequest", "SubtitleSearchResult", "LearningMaterial", "SourceAsset", "DocumentRendition", "MediaRendition", "MaterialRevision", "MaterialDetails", "SourceAssetInput", "DocumentRenditionInput", "MediaRenditionInput", "CreateLearningMaterial", "AppendMaterialRevision"]) {
-  if (!openapi.includes(`    ${schema}:`)) throw new Error(`missing OpenAPI schema ${schema}`);
-}
-if (!openapi.includes("version: { enum: [5, 6, 7] }")) throw new Error("vocabulary asset versions v5-v7 missing");
-if (!openapi.includes("phonetic_finding_feedback:")) throw new Error("phonetic feedback backup missing");
-if (!openapi.includes("audio_url: { type: [string, \"null\"] }")) throw new Error("provider pronunciation audio missing");
-if (!client.includes("sense_group_analyses?: SenseGroupAnalysis[];")) throw new Error("generated LLTimeline sense-group analyses missing");
-if (!client.includes("active_sense_group_analysis_id?: string | null;")) throw new Error("generated LLTimeline active sense-group id missing");
-if (!client.includes("chunks: ProsodicChunk[];")) throw new Error("generated Prosody declared chunks missing");
-if (client.includes("chunk_timelines")) throw new Error("generated retired chunk timeline fields must stay absent");
-if (client.includes("chunk_timeline")) throw new Error("generated retired chunk timeline identity must stay absent");
 for (const item of examples) {
-  if (item.version !== 1 || (!item.command && !item.event)) throw new Error("invalid example");
+  if (item.version !== 1 || (!item.command && !item.event)) throw new Error("invalid player example");
 }
-console.log(`Validated player, event, and OpenAPI contracts with ${examples.length} examples.`);
+console.log(`Validated player, event, and Core ${version} contracts: ${paths.length} paths, ${operationIds.length} operations, ${schemas.length} schemas, ${examples.length} examples.`);
 ' "$root/contracts/player-adapter/player-contract.schema.json" \
   "$root/contracts/player-adapter/examples.json" \
   "$root/contracts/events/v1.schema.json" \

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
 use domain::ReviewCardState;
@@ -6,27 +6,23 @@ use domain::ReviewCardState;
 use crate::evaluator::{PracticeAnswerEvaluator, practice_result, practice_score};
 use crate::{
     AppServices, ApplicationError, CompleteListeningSessionInput, CorpusIndexRepository,
-    CreatePracticeItem, CreatePracticeSession, CreateReviewItem, DifficultyRepository,
-    DisabledLearningLoopRepository, HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus,
+    CreatePracticeItem, CreatePracticeSession, CreateReviewItem, DisabledLearningLoopRepository,
     HuntingRepository, HuntingTarget, HuntingTargetId, HuntingTargetStatus, LearningEvent,
     LearningEventId, LearningEventKind, LearningEventRepository, LearningEventSubject,
     LearningEventSubjectKind, LearningObservationRepository, LexicalEntryId,
     LexicalLearningUseCases, LexicalNormalizationProvider, LexicalObservation,
-    LexicalObservationId, ListeningComprehensionReport, ListeningInboxItem, ListeningInboxItemId,
-    ListeningInboxRepository, ListeningInboxStatus, MediaRepository, ObservationContext,
-    ObservationOrigin, ObservationResult, PracticeAnchorKind, PracticeAttempt, PracticeAttemptId,
-    PracticeItem, PracticeItemId, PracticeMode, PracticeRepository, PracticeResult,
-    PracticeSession, PracticeSessionId, RecognitionEvidence, RecognitionUpgradeRepository,
-    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewQueueEntry,
-    ReviewQueueRepository, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind,
-    ReviewSubmission, SoundFitCalibration, SubmitPracticeAttempt, SubmitReviewAttempt,
-    SubtitleSentenceId, SubtitleTrackRepository, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, clean_required, now_ms, observation_spec_for_practice,
-    observation_spec_for_review,
+    LexicalObservationId, ListeningInboxItem, ListeningInboxItemId, ListeningInboxRepository,
+    ListeningInboxStatus, MediaRepository, ObservationContext, ObservationOrigin,
+    ObservationResult, PracticeAnchorKind, PracticeAttempt, PracticeAttemptId, PracticeItem,
+    PracticeItemId, PracticeMode, PracticeRepository, PracticeResult, PracticeSession,
+    PracticeSessionId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
+    ReviewQueueEntry, ReviewQueueRepository, ReviewRating, ReviewSchedule, ReviewSource,
+    ReviewSourceKind, ReviewSubmission, SubmitPracticeAttempt, SubmitReviewAttempt,
+    SubtitleSentenceId, SubtitleTrackRepository, clean_required, now_ms,
+    observation_spec_for_practice, observation_spec_for_review,
 };
 
 mod review;
-mod upgrade;
 use review::{
     REVIEW_ALGORITHM, migrate_legacy_schedule, next_review_schedule, preview_review_intervals,
     review_card,
@@ -43,7 +39,6 @@ pub struct PracticeUseCases {
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
-    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) media: Arc<dyn MediaRepository>,
@@ -60,7 +55,6 @@ impl PracticeUseCases {
             learning_events: services.learning_events.clone(),
             learning_observations: services.learning_observations.clone(),
             listening_inbox: services.listening_inbox.clone(),
-            difficulty: services.difficulty.clone(),
             subtitle_tracks: services.subtitle_tracks.clone(),
             corpus: services.corpus.clone(),
             media: services.media.clone(),
@@ -281,15 +275,6 @@ impl PracticeUseCases {
         }
 
         let saved = self.practice.create_practice_attempt(&attempt)?;
-        if saved.result == PracticeResult::Correct {
-            self.lexical_learning()
-                .record_practice_recognition_evidence(&item, &saved, now)?;
-        }
-        // Usage-feedback calibration (Phase 3.5 Slice 7, revised after 3.5.6):
-        // intensive sessions are never "completed" anymore, so scored attempts
-        // fold into the media's sound-fit calibration at submission time. Best
-        // effort by design — fit is decoration, a submission must not fail on it.
-        let _ = self.record_practice_accuracy_feedback(item.session_id.as_ref(), saved.result);
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint(
                 "learning-event",
@@ -341,19 +326,15 @@ impl PracticeUseCases {
         input: CreateReviewItem,
     ) -> Result<ReviewItem, ApplicationError> {
         let prompt_snapshot = clean_required(input.prompt_snapshot, "review prompt")?;
-        if input.source.kind == ReviewSourceKind::LexicalEntry
-            || input.source.kind == ReviewSourceKind::SpeakingAttempt
-        {
+        if input.source.kind == ReviewSourceKind::LexicalEntry {
             let existing = self
                 .review_queue
                 .list_review_items(Some(ReviewItemStatus::Active), 200, 0)?
                 .into_iter()
                 .find(|item| {
-                    (input.source.kind == ReviewSourceKind::LexicalEntry
+                    input.source.kind == ReviewSourceKind::LexicalEntry
                         && item.source.lexical_entry_id == input.source.lexical_entry_id
-                        && item.prompt_snapshot == prompt_snapshot)
-                        || (input.source.kind == ReviewSourceKind::SpeakingAttempt
-                            && item.source.id == input.source.id)
+                        && item.prompt_snapshot == prompt_snapshot
                 });
             if let Some(existing) = existing {
                 return Ok(existing);
@@ -417,23 +398,6 @@ impl PracticeUseCases {
         let mut accepted_new = 0;
         let mut accepted_reviews = 0;
         let mut entries = Vec::new();
-        let mut imported_origins = self
-            .review_queue
-            .list_imported_deck_schedules()?
-            .into_iter()
-            .map(|entry| {
-                (
-                    entry.item_id,
-                    crate::ReviewItemOrigin {
-                        kind: crate::ReviewOriginKind::ImportedAnki,
-                        anki_guid: Some(entry.anki_guid),
-                        deck_id: Some(entry.deck_id),
-                        deck_name: Some(entry.name),
-                        has_listening_enhancements: false,
-                    },
-                )
-            })
-            .collect::<HashMap<_, _>>();
         for (item, schedule) in self.review_queue.list_due_review_items(at_ms, 10_000)? {
             let schedule = migrate_legacy_schedule(&schedule);
             let accepted = match schedule.state() {
@@ -452,8 +416,7 @@ impl PracticeUseCases {
                 ReviewCardState::Learning | ReviewCardState::Relearning => true,
             };
             if accepted {
-                let origin = imported_origins.remove(&item.id);
-                entries.push(review_queue_entry(item, schedule, origin));
+                entries.push(review_queue_entry(item, schedule));
             }
             if entries.len() >= limit.min(100) as usize {
                 break;
@@ -486,60 +449,13 @@ impl PracticeUseCases {
         at_ms: Option<u64>,
     ) -> Result<crate::ReviewDeckOverview, ApplicationError> {
         let at_ms = at_ms.unwrap_or_else(now_ms);
-        let imported = self.review_queue.list_imported_deck_schedules()?;
-        let imported_ids = imported
-            .iter()
-            .map(|entry| entry.item_id.clone())
-            .collect::<HashSet<_>>();
-        let mut channels = [
-            crate::ReviewChannel::Listening,
-            crate::ReviewChannel::Speaking,
-            crate::ReviewChannel::Reading,
-            crate::ReviewChannel::Writing,
-        ]
-        .into_iter()
-        .map(|channel| crate::ReviewChannelCounts {
-            channel,
-            counts: crate::ReviewStateCounts::default(),
-        })
-        .collect::<Vec<_>>();
+        let mut counts = crate::ReviewStateCounts::default();
         for (item, schedule) in self.review_queue.list_review_items_with_schedules(10_000)? {
-            if imported_ids.contains(&item.id) {
-                continue;
-            }
-            let channel = primary_review_channel(&item);
-            let counts = &mut channels
-                .iter_mut()
-                .find(|entry| entry.channel == channel)
-                .expect("all channels are initialized")
-                .counts;
-            add_schedule_count(counts, &migrate_legacy_schedule(&schedule), at_ms);
-        }
-
-        let mut decks =
-            BTreeMap::<(String, String, Option<String>), crate::ReviewStateCounts>::new();
-        for entry in imported {
-            add_schedule_count(
-                decks
-                    .entry((entry.deck_id, entry.name, entry.parent_deck_id))
-                    .or_default(),
-                &migrate_legacy_schedule(&entry.schedule),
-                at_ms,
-            );
+            let _ = item;
+            add_schedule_count(&mut counts, &migrate_legacy_schedule(&schedule), at_ms);
         }
         Ok(crate::ReviewDeckOverview {
-            channels,
-            imported_decks: decks
-                .into_iter()
-                .map(
-                    |((deck_id, name, parent_deck_id), counts)| crate::ImportedDeckCounts {
-                        deck_id,
-                        name,
-                        parent_deck_id,
-                        counts,
-                    },
-                )
-                .collect(),
+            counts,
             limit_status: self.review_limit_status(at_ms)?,
         })
     }
@@ -550,23 +466,6 @@ impl PracticeUseCases {
     ) -> Result<crate::CustomStudyQueue, ApplicationError> {
         let at_ms = request.at_ms.unwrap_or_else(now_ms);
         let limit = request.limit.unwrap_or(20).min(100) as usize;
-        let imported_origins = self
-            .review_queue
-            .list_imported_deck_schedules()?
-            .into_iter()
-            .map(|entry| {
-                (
-                    entry.item_id,
-                    crate::ReviewItemOrigin {
-                        kind: crate::ReviewOriginKind::ImportedAnki,
-                        anki_guid: Some(entry.anki_guid),
-                        deck_id: Some(entry.deck_id),
-                        deck_name: Some(entry.name),
-                        has_listening_enhancements: false,
-                    },
-                )
-            })
-            .collect::<HashMap<_, _>>();
         let mut entries = self
             .review_queue
             .list_review_items_with_schedules(10_000)?
@@ -578,18 +477,11 @@ impl PracticeUseCases {
                     crate::CustomStudyKind::ReviewAhead => {
                         schedule.state() != ReviewCardState::New && schedule.due_at_ms > at_ms
                     }
-                    crate::CustomStudyKind::Channel { channel } => {
-                        !imported_origins.contains_key(&item.id)
-                            && primary_review_channel(&item) == *channel
-                    }
                     crate::CustomStudyKind::Forgotten { minimum_lapses } => {
                         schedule.lapse_count >= minimum_lapses.unwrap_or(2).max(1)
                     }
                 };
-                selected.then(|| {
-                    let origin = imported_origins.get(&item.id).cloned();
-                    review_queue_entry(item, schedule, origin)
-                })
+                selected.then(|| review_queue_entry(item, schedule))
             })
             .collect::<Vec<_>>();
         if matches!(&request.kind, crate::CustomStudyKind::Forgotten { .. }) {
@@ -600,26 +492,6 @@ impl PracticeUseCases {
             entries,
             advances_normal_schedule: matches!(&request.kind, crate::CustomStudyKind::ReviewAhead),
         })
-    }
-
-    pub fn import_anki_package(
-        &self,
-        request: crate::AnkiPackageImportRequest,
-    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError> {
-        if request.package_path.trim().is_empty() || request.media_directory.trim().is_empty() {
-            return Err(ApplicationError::Validation("anki package paths"));
-        }
-        self.review_queue.import_anki_package(&request)
-    }
-
-    pub fn export_anki_package(
-        &self,
-        request: crate::AnkiPackageExportRequest,
-    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError> {
-        if request.package_path.trim().is_empty() {
-            return Err(ApplicationError::Validation("anki export path"));
-        }
-        self.review_queue.export_anki_package(&request)
     }
 
     /// Pure FSRS prediction. It reads the schedule once and performs no
@@ -774,20 +646,11 @@ impl PracticeUseCases {
                 )?;
             }
         }
-        let (generated_observation_ids, hunting_candidate_ids, upgrade_suggestions) =
-            if input.rating == ReviewRating::Again {
-                let (observations, candidates) = self.record_review_failure(&item, now)?;
-                (observations, candidates, Vec::new())
-            } else {
-                let suggestions = if matches!(input.rating, ReviewRating::Good | ReviewRating::Easy)
-                {
-                    self.lexical_learning()
-                        .record_review_recognition_evidence(&item, &attempt, now)?
-                } else {
-                    Vec::new()
-                };
-                (Vec::new(), Vec::new(), suggestions)
-            };
+        let generated_observation_ids = if input.rating == ReviewRating::Again {
+            self.record_review_failure(&item, now)?
+        } else {
+            Vec::new()
+        };
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint("learning-event", &fingerprint),
             occurred_at_ms: now,
@@ -806,14 +669,6 @@ impl PracticeUseCases {
                     .iter()
                     .map(|id| id.as_str())
                     .collect::<Vec<_>>(),
-                "hunting_candidate_ids": hunting_candidate_ids
-                    .iter()
-                    .map(|id| id.as_str())
-                    .collect::<Vec<_>>(),
-                "upgrade_suggestion_ids": upgrade_suggestions
-                    .iter()
-                    .map(|suggestion| suggestion.id.as_str())
-                    .collect::<Vec<_>>(),
             }),
             session_id: None,
         })?;
@@ -821,26 +676,14 @@ impl PracticeUseCases {
             attempt,
             schedule,
             generated_observation_ids,
-            hunting_candidate_ids,
-            upgrade_suggestions,
         })
-    }
-
-    pub fn hunting_candidates(
-        &self,
-        status: Option<HuntingCandidateStatus>,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
-        self.hunting
-            .list_hunting_candidates(status, limit.min(500), offset)
     }
 
     fn record_review_failure(
         &self,
         item: &ReviewItem,
         failed_at_ms: u64,
-    ) -> Result<(Vec<LexicalObservationId>, Vec<HuntingCandidateId>), ApplicationError> {
+    ) -> Result<Vec<LexicalObservationId>, ApplicationError> {
         let mut targets = Vec::<(LexicalEntryId, String, Option<SubtitleSentenceId>)>::new();
         if let Some(lexical_entry_id) = item.source.lexical_entry_id.clone() {
             let matching_anchor = item
@@ -877,7 +720,6 @@ impl PracticeUseCases {
 
         let mut seen = BTreeSet::new();
         let mut generated_observation_ids = Vec::new();
-        let mut hunting_candidate_ids = Vec::new();
         for (lexical_entry_id, target_snapshot, sentence_id) in targets {
             if !seen.insert(lexical_entry_id.as_str().to_owned()) {
                 continue;
@@ -902,33 +744,8 @@ impl PracticeUseCases {
                         })?;
                 generated_observation_ids.push(observation.id);
             }
-
-            let id = HuntingCandidateId::from_fingerprint(
-                "hunting-candidate",
-                &format!("{}:{}", item.id.as_str(), lexical_entry_id.as_str()),
-            );
-            let existing = self.hunting.get_hunting_candidate(&id)?;
-            let candidate = self.hunting.upsert_hunting_candidate(&HuntingCandidate {
-                id,
-                lexical_entry_id,
-                review_item_id: item.id.clone(),
-                sentence_id,
-                media_id: item.source.media_id.clone(),
-                track_id: item.source.track_id.clone(),
-                target_snapshot,
-                prompt_snapshot: item.prompt_snapshot.clone(),
-                failure_count: existing
-                    .as_ref()
-                    .map_or(1, |value| value.failure_count.saturating_add(1)),
-                status: HuntingCandidateStatus::Active,
-                created_at_ms: existing
-                    .as_ref()
-                    .map_or(failed_at_ms, |value| value.created_at_ms),
-                last_failed_at_ms: failed_at_ms,
-            })?;
-            hunting_candidate_ids.push(candidate.id);
         }
-        Ok((generated_observation_ids, hunting_candidate_ids))
+        Ok(generated_observation_ids)
     }
 
     /// Completes an extensive-listening session without projecting obsolete
@@ -961,7 +778,6 @@ impl PracticeUseCases {
                 "only extensive listening sessions can be completed",
             ));
         }
-        let already_completed = session.ended_at_ms.is_some();
         let now = now_ms();
         session.ended_at_ms = Some(now);
         let session = self.practice.create_practice_session(&session)?;
@@ -985,89 +801,11 @@ impl PracticeUseCases {
             }),
             session_id: Some(session.id.clone()),
         })?;
-        // Usage-feedback calibration (Phase 3.5 Slice 7): fold this
-        // session's comprehension self-report and practice accuracy into the
-        // media's durable sound-fit calibration record. Best effort by
-        // design — fit is decoration, so completing a session must never
-        // fail because the calibration store is unavailable, and re-runs of
-        // an already-completed session must not double count.
-        if !already_completed {
-            let _ = self.record_content_fit_feedback(&session, input.comprehension_report);
-        }
         Ok(session)
-    }
-
-    /// Increments the media's recorded calibration counters from one
-    /// completed extensive session's self-report. Scored practice attempts
-    /// join the accuracy counters at submission time instead (see
-    /// [`Self::record_practice_accuracy_feedback`]) because intensive
-    /// sessions no longer complete. The record is durable evidence separate
-    /// from the fit cache; its watermark invalidates cached profiles so the
-    /// next fit read re-derives the band.
-    fn record_content_fit_feedback(
-        &self,
-        session: &PracticeSession,
-        report: Option<ListeningComprehensionReport>,
-    ) -> Result<(), ApplicationError> {
-        let Some(media_id) = session.media_id.as_ref() else {
-            return Ok(());
-        };
-        let Some(report) = report else {
-            return Ok(());
-        };
-        let mut calibration = self
-            .difficulty
-            .get_fit_calibration("media", media_id.as_str())?
-            .unwrap_or_else(|| SoundFitCalibration::new("media", media_id.as_str()));
-        match report {
-            ListeningComprehensionReport::UnderstoodAll => calibration.reports_understood_all += 1,
-            ListeningComprehensionReport::GotTheGist => calibration.reports_got_the_gist += 1,
-            ListeningComprehensionReport::Unclear => calibration.reports_unclear += 1,
-        }
-        calibration.updated_at_ms = now_ms();
-        self.difficulty.save_fit_calibration(&calibration)?;
-        Ok(())
-    }
-
-    /// One scored practice attempt joins its media's calibration counters
-    /// (skips excluded). Attempt-time accounting cannot double count: each
-    /// attempt is folded exactly once, when it is created.
-    fn record_practice_accuracy_feedback(
-        &self,
-        session_id: Option<&PracticeSessionId>,
-        result: PracticeResult,
-    ) -> Result<(), ApplicationError> {
-        if matches!(result, PracticeResult::Completed | PracticeResult::Skipped) {
-            return Ok(());
-        }
-        let Some(session_id) = session_id else {
-            return Ok(());
-        };
-        let Some(session) = self.practice.get_practice_session(session_id)? else {
-            return Ok(());
-        };
-        let Some(media_id) = session.media_id.as_ref() else {
-            return Ok(());
-        };
-        let mut calibration = self
-            .difficulty
-            .get_fit_calibration("media", media_id.as_str())?
-            .unwrap_or_else(|| SoundFitCalibration::new("media", media_id.as_str()));
-        calibration.practice_attempts += 1;
-        if result == PracticeResult::Correct {
-            calibration.practice_correct += 1;
-        }
-        calibration.updated_at_ms = now_ms();
-        self.difficulty.save_fit_calibration(&calibration)?;
-        Ok(())
     }
 }
 
-fn review_queue_entry(
-    item: ReviewItem,
-    schedule: ReviewSchedule,
-    origin: Option<crate::ReviewItemOrigin>,
-) -> ReviewQueueEntry {
+fn review_queue_entry(item: ReviewItem, schedule: ReviewSchedule) -> ReviewQueueEntry {
     let state = schedule.state();
     let card = review_card(&item);
     ReviewQueueEntry {
@@ -1075,30 +813,6 @@ fn review_queue_entry(
         schedule,
         state,
         card,
-        origin: origin.unwrap_or_else(crate::ReviewItemOrigin::native),
-    }
-}
-
-/// Native cards are assigned to one deterministic primary smart deck so a
-/// multi-anchor card is never double-counted. Imported Anki cards are excluded
-/// before this rule and remain in their original deck tree.
-fn primary_review_channel(item: &ReviewItem) -> crate::ReviewChannel {
-    match item.source.kind {
-        ReviewSourceKind::SpeakingAttempt => crate::ReviewChannel::Speaking,
-        ReviewSourceKind::Sentence => crate::ReviewChannel::Reading,
-        ReviewSourceKind::PracticeFailure
-            if item
-                .anchors
-                .iter()
-                .all(|anchor| anchor.kind == PracticeAnchorKind::Sentence) =>
-        {
-            crate::ReviewChannel::Writing
-        }
-        ReviewSourceKind::LexicalEntry
-        | ReviewSourceKind::PracticeFailure
-        | ReviewSourceKind::ListeningInbox
-        | ReviewSourceKind::Chunk
-        | ReviewSourceKind::ConnectedSpeech => crate::ReviewChannel::Listening,
     }
 }
 
@@ -1255,52 +969,9 @@ impl ReviewQueueRepository for DisabledLearningLoopRepository {
     ) -> Result<crate::ReviewDailyLimits, ApplicationError> {
         Err(Self::disabled())
     }
-
-    fn list_imported_deck_schedules(
-        &self,
-    ) -> Result<Vec<crate::ImportedDeckSchedule>, ApplicationError> {
-        Err(Self::disabled())
-    }
-
-    fn import_anki_package(
-        &self,
-        _request: &crate::AnkiPackageImportRequest,
-    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError> {
-        Err(Self::disabled())
-    }
-
-    fn export_anki_package(
-        &self,
-        _request: &crate::AnkiPackageExportRequest,
-    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError> {
-        Err(Self::disabled())
-    }
 }
 
 impl HuntingRepository for DisabledLearningLoopRepository {
-    fn upsert_hunting_candidate(
-        &self,
-        _candidate: &HuntingCandidate,
-    ) -> Result<HuntingCandidate, ApplicationError> {
-        Err(Self::disabled())
-    }
-
-    fn get_hunting_candidate(
-        &self,
-        _id: &HuntingCandidateId,
-    ) -> Result<Option<HuntingCandidate>, ApplicationError> {
-        Err(Self::disabled())
-    }
-
-    fn list_hunting_candidates(
-        &self,
-        _status: Option<HuntingCandidateStatus>,
-        _limit: u32,
-        _offset: u32,
-    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
-        Err(Self::disabled())
-    }
-
     fn upsert_hunting_target(
         &self,
         _target: &HuntingTarget,
@@ -1322,48 +993,6 @@ impl HuntingRepository for DisabledLearningLoopRepository {
         _offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError> {
         Err(Self::disabled())
-    }
-}
-
-impl RecognitionUpgradeRepository for DisabledLearningLoopRepository {
-    fn upsert_recognition_evidence(
-        &self,
-        evidence: &RecognitionEvidence,
-    ) -> Result<RecognitionEvidence, ApplicationError> {
-        Ok(evidence.clone())
-    }
-
-    fn list_recognition_evidence(
-        &self,
-        _lexical_entry_id: &LexicalEntryId,
-        _limit: u32,
-        _offset: u32,
-    ) -> Result<Vec<RecognitionEvidence>, ApplicationError> {
-        Ok(Vec::new())
-    }
-
-    fn save_upgrade_suggestion(
-        &self,
-        suggestion: &UpgradeSuggestion,
-    ) -> Result<UpgradeSuggestion, ApplicationError> {
-        Ok(suggestion.clone())
-    }
-
-    fn get_upgrade_suggestion(
-        &self,
-        _id: &UpgradeSuggestionId,
-    ) -> Result<Option<UpgradeSuggestion>, ApplicationError> {
-        Ok(None)
-    }
-
-    fn list_upgrade_suggestions(
-        &self,
-        _lexical_entry_id: Option<&LexicalEntryId>,
-        _status: Option<UpgradeSuggestionStatus>,
-        _limit: u32,
-        _offset: u32,
-    ) -> Result<Vec<UpgradeSuggestion>, ApplicationError> {
-        Ok(Vec::new())
     }
 }
 

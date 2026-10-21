@@ -6,14 +6,12 @@ import 'package:llplayer_next/services/composition_resolution.dart';
 
 /// The adopted composition's learner content resolves from its exact payload
 /// bytes through Core's composition facts: sentence structure from the
-/// structured reading's anchors, alignment from the alignment payload, and
-/// derived audio from the composition's derived media rendition.
+/// structured reading's anchors and alignment from the AV alignment payload.
 void main() {
-  test('resolves sentences, anchors, alignment, and derived audio', () {
+  test('resolves AV transcript sentences, anchors, and alignment', () {
     final composition = _composition(
       structuredReading: _structuredReadingPayload(),
       alignment: _alignmentPayload(),
-      derivedMedia: true,
     );
 
     final resolved = resolveCompositionContent(
@@ -22,21 +20,20 @@ void main() {
         jsonEncode(_structuredReadingPayload()),
       ),
       alignmentPayload: utf8.encode(jsonEncode(_alignmentPayload())),
-      derivedMediaPath: '/tmp/listen-composition-media/audio.wav',
     );
 
     expect(resolved, isNotNull);
     expect(resolved!.logicalText, 'Hello world. Listen carefully!');
-    expect(
-      resolved.sentences.map((sentence) => sentence.text),
-      ['Hello world.', 'Listen carefully!'],
-    );
-    expect(
-      resolved.anchors.map((anchor) => anchor.kind),
-      ['block', 'sentence', 'sentence'],
-    );
+    expect(resolved.sentences.map((sentence) => sentence.text), [
+      'Hello world.',
+      'Listen carefully!',
+    ]);
+    expect(resolved.anchors.map((anchor) => anchor.kind), [
+      'block',
+      'sentence',
+      'sentence',
+    ]);
     expect(resolved.alignments['anchor-1'], 150);
-    expect(resolved.derivedMediaPath, '/tmp/listen-composition-media/audio.wav');
   });
 
   test('sentence slicing is byte-based for CJK text', () {
@@ -69,10 +66,10 @@ void main() {
     );
 
     expect(resolved, isNotNull);
-    expect(
-      resolved!.sentences.map((sentence) => sentence.text),
-      ['你好世界。', '认真听！'],
-    );
+    expect(resolved!.sentences.map((sentence) => sentence.text), [
+      '你好世界。',
+      '认真听！',
+    ]);
   });
 
   test('a missing structured reading resolves to nothing', () {
@@ -109,11 +106,9 @@ void main() {
 AdoptedComposition _composition({
   required Map<String, dynamic>? structuredReading,
   Map<String, dynamic>? alignment,
-  bool derivedMedia = false,
 }) {
   final resources = <AdoptedCompositionResource>[
-    if (structuredReading != null)
-      _resource('sr-1', 'structured_reading'),
+    if (structuredReading != null) _resource('sr-1', 'structured_reading'),
     if (alignment != null) _resource('align-1', 'anchor_time_alignment'),
   ];
   return AdoptedComposition(
@@ -126,21 +121,7 @@ AdoptedComposition _composition({
     supportLanguages: const [],
     adoptedAtMs: 10,
     resources: resources,
-    renditions: [
-      if (derivedMedia)
-        const AdoptedCompositionRendition(
-          renditionId: 'media-derived-1',
-          kind: 'media',
-          origin: 'derived',
-          mediaType: 'audio/wav',
-          language: 'en',
-          digest: 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-          byteSize: 4,
-          blobAvailable: true,
-          binding: null,
-          producerToolId: 'listen-gen',
-        ),
-    ],
+    renditions: const [],
   );
 }
 
@@ -148,7 +129,8 @@ AdoptedCompositionResource _resource(String resourceId, String kind) =>
     AdoptedCompositionResource(
       resourceId: resourceId,
       kind: kind,
-      schema: 'https://listen.dev/contracts/content-package/v3/payload/'
+      schema:
+          'https://listen.dev/contracts/content-package/v3/payload/'
           'structured-reading.v1.schema.json',
       role: 'base',
       required: true,

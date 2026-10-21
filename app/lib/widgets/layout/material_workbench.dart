@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
-import '../../models/content_channel.dart';
+import '../../models/workbench_study_mode.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
@@ -25,19 +25,14 @@ class MaterialWorkbench extends StatefulWidget {
     required this.mediaFraction,
     required this.onMediaFractionChanged,
     this.onCollapse,
-    this.selectedChannel = ContentChannel.listening,
-    this.immersiveStage,
+    this.studyMode = WorkbenchStudyMode.normal,
     this.subtitleMenu,
     this.studyMenu,
     this.translationMenu,
     this.listeningMenu,
     this.learningEditionAction,
-    this.onShadow,
-    this.canShadow = false,
     this.onOpenSettings,
     this.retentionMenu,
-    this.showShadowAction = true,
-    this.supplementalHeaderActions = const [],
   });
 
   final String materialTitle;
@@ -50,21 +45,14 @@ class MaterialWorkbench extends StatefulWidget {
   final ValueChanged<double> onMediaFractionChanged;
   final VoidCallback? onCollapse;
 
-  /// Which surface owns the body. Only [ContentSettle] reads it now — the
-  /// switch itself moved onto [studyMenu].
-  final ContentChannel selectedChannel;
-
-  /// A channel-native surface that owns the workbench body. Reading and task
-  /// scenes use this instead of pretending to be the media pane of a split.
-  final Widget? immersiveStage;
+  /// The selected listening display, used to animate transcript changes.
+  final WorkbenchStudyMode studyMode;
 
   /// Actions on this media, shown at the end of the session header. Null on
   /// surfaces that have none wired.
   final Widget? subtitleMenu;
 
-  /// Ways of working this material — reading, shadowing, the dictation modes.
-  /// It sits here rather than above the transcript, where it used to be a 2×2
-  /// button wall between the reader and the text.
+  /// Listening display and direct listening exercises.
   final Widget? studyMenu;
 
   /// Switches the transcript between original, bilingual and translation.
@@ -78,16 +66,6 @@ class MaterialWorkbench extends StatefulWidget {
   /// global tools menu.
   final Widget? learningEditionAction;
 
-  /// Shadows the sentence being played — the high-frequency entry the
-  /// reference product keeps in the top bar, distinct from the same mode buried
-  /// in [studyMenu]. Null-safe: when there is no current sentence the header
-  /// still shows the control, disabled with a reason ([canShadow]).
-  final VoidCallback? onShadow;
-
-  /// Whether a sentence is currently playing to shadow. Drives whether the
-  /// header's shadow control is live or shown disabled-with-reason.
-  final bool canShadow;
-
   /// Opens app settings.
   ///
   /// The rail's own settings entry is unreachable while this workbench is up —
@@ -99,15 +77,6 @@ class MaterialWorkbench extends StatefulWidget {
   /// The retention affordance (Keep / reference in place / unretain) for the
   /// current media. Null on surfaces that have none wired.
   final Widget? retentionMenu;
-
-  /// Material-specific actions that sit alongside the shared session menus.
-  /// Documents use this for source/retention/generation state; it does not
-  /// create another workbench or another route.
-  final List<Widget> supplementalHeaderActions;
-
-  /// Pure documents have no current timed sentence until a TTS rendition is
-  /// adopted, so their workbench does not advertise a dead shadow action.
-  final bool showShadowAction;
 
   @override
   State<MaterialWorkbench> createState() => _MaterialWorkbenchState();
@@ -149,10 +118,8 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
       // own opaque ground the rail and whichever page is underneath show
       // straight through the body.
       //
-      // This was invisible while every body happened to paint its own surface
-      // (the media pane's ColoredBox, SidePanel's Material). A document body
-      // paints none, so opening a document rendered the reading pane on top of
-      // a fully legible library page.
+      // The workbench is a full-bleed layer stacked over the shell; content
+      // behind it should not show through.
       color: Theme.of(context).colorScheme.surface,
       child: Column(
         children: [
@@ -164,24 +131,13 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
             translationMenu: widget.translationMenu,
             listeningMenu: widget.listeningMenu,
             learningEditionAction: widget.learningEditionAction,
-            onShadow: widget.onShadow,
-            canShadow: widget.canShadow,
             onOpenSettings: widget.onOpenSettings,
             retentionMenu: widget.retentionMenu,
-            showShadowAction: widget.showShadowAction,
-            supplementalHeaderActions: widget.supplementalHeaderActions,
           ),
           Expanded(
-            // Channel surfaces settle in (#46): switching channels fades the new
-            // surface in with an 8px rise instead of hard-cutting.
-            child: widget.immersiveStage != null
+            child: videoPane == null
                 ? ContentSettle(
-                    settleKey: widget.selectedChannel,
-                    child: widget.immersiveStage!,
-                  )
-                : videoPane == null
-                ? ContentSettle(
-                    settleKey: widget.selectedChannel,
+                    settleKey: widget.studyMode,
                     child: widget.learningPanel,
                   )
                 : LayoutBuilder(
@@ -225,7 +181,7 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
                             ),
                             Expanded(
                               child: ContentSettle(
-                                settleKey: widget.selectedChannel,
+                                settleKey: widget.studyMode,
                                 child: widget.learningPanel,
                               ),
                             ),
@@ -270,7 +226,12 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
                               );
                             },
                           ),
-                          Expanded(child: widget.learningPanel),
+                          Expanded(
+                            child: ContentSettle(
+                              settleKey: widget.studyMode,
+                              child: widget.learningPanel,
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -291,12 +252,8 @@ class _SessionHeader extends StatelessWidget {
     required this.translationMenu,
     required this.listeningMenu,
     required this.learningEditionAction,
-    required this.onShadow,
-    required this.canShadow,
     required this.onOpenSettings,
     required this.retentionMenu,
-    required this.showShadowAction,
-    required this.supplementalHeaderActions,
   });
 
   final String materialTitle;
@@ -306,12 +263,8 @@ class _SessionHeader extends StatelessWidget {
   final Widget? translationMenu;
   final Widget? listeningMenu;
   final Widget? learningEditionAction;
-  final VoidCallback? onShadow;
-  final bool canShadow;
   final VoidCallback? onOpenSettings;
   final Widget? retentionMenu;
-  final bool showShadowAction;
-  final List<Widget> supplementalHeaderActions;
 
   @override
   Widget build(BuildContext context) {
@@ -336,22 +289,8 @@ class _SessionHeader extends StatelessWidget {
             Expanded(child: _Breadcrumb(materialTitle: materialTitle)),
             ?learningEditionAction,
             ?listeningMenu,
-            if (showShadowAction) ...[
-              _gap,
-              IconButton(
-                key: const Key('workbench-shadow'),
-                tooltip: canShadow
-                    ? l.text('workbenchShadowTooltip')
-                    : l.text('workbenchShadowNoCue'),
-                onPressed: canShadow ? onShadow : null,
-                iconSize: ListenIconSize.chrome,
-                color: colors.onSurfaceVariant,
-                icon: const Icon(Icons.mic_none_outlined),
-              ),
-            ],
             if (translationMenu != null) ...[_gap, translationMenu!],
             if (studyMenu != null) ...[_gap, studyMenu!],
-            for (final action in supplementalHeaderActions) ...[_gap, action],
             if (subtitleMenu != null) ...[_gap, subtitleMenu!],
             if (retentionMenu != null) ...[_gap, retentionMenu!],
             _gap,

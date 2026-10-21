@@ -180,7 +180,8 @@ class _LearningEditionDialogState extends State<LearningEditionDialog> {
       final success = await widget.controller.deleteEdition(edition);
       if (success && mounted) {
         setState(() {
-          _selectedReleaseId = widget.controller.adoptedEdition?.releaseId ??
+          _selectedReleaseId =
+              widget.controller.adoptedEdition?.releaseId ??
               widget.controller.editions.firstOrNull?.releaseId;
         });
       }
@@ -190,7 +191,9 @@ class _LearningEditionDialogState extends State<LearningEditionDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: const RoundedRectangleBorder(borderRadius: ListenRadii.panelBorder),
+      shape: const RoundedRectangleBorder(
+        borderRadius: ListenRadii.panelBorder,
+      ),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: const BoxConstraints(
@@ -333,8 +336,7 @@ class _DialogHeader extends StatelessWidget {
             IconButton(
               key: const Key('learning-edition-import'),
               tooltip: l.text('importLearningPackageTooltip'),
-              onPressed:
-                  generating || controller.busy ? null : onImportPackage,
+              onPressed: generating || controller.busy ? null : onImportPackage,
               iconSize: ListenIconSize.control,
               color: colorScheme.onSurfaceVariant,
               icon: const Icon(Icons.file_upload_outlined),
@@ -436,7 +438,8 @@ class _LearningEditionBody extends StatelessWidget {
       );
     }
 
-    final selected = selectedEdition ??
+    final selected =
+        selectedEdition ??
         controller.adoptedEdition ??
         controller.editions.first;
 
@@ -448,7 +451,7 @@ class _LearningEditionBody extends StatelessWidget {
           if (generating || (runView?.busy ?? false)) ...[
             _GenerationStatusCard(
               runView: runView,
-              onCancel: onCancelGeneration,
+              onCancel: runView?.canCancel == true ? onCancelGeneration : null,
             ),
             const SizedBox(height: ListenSpacing.gap16),
           ],
@@ -482,10 +485,7 @@ class _LearningEditionBody extends StatelessWidget {
 }
 
 class _GenerationStatusCard extends StatelessWidget {
-  const _GenerationStatusCard({
-    required this.runView,
-    required this.onCancel,
-  });
+  const _GenerationStatusCard({required this.runView, required this.onCancel});
 
   final CapabilityRunView? runView;
   final Future<void> Function()? onCancel;
@@ -510,9 +510,7 @@ class _GenerationStatusCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.secondaryContainer.withValues(alpha: 0.7),
         borderRadius: ListenRadii.surfaceBorder,
-        border: Border.all(
-          color: colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       padding: ListenPadding.card,
       child: Row(
@@ -594,9 +592,7 @@ class _VersionControlCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: ListenRadii.surfaceBorder,
-        border: Border.all(
-          color: colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       padding: ListenPadding.card,
       child: Column(
@@ -614,7 +610,8 @@ class _VersionControlCard extends StatelessWidget {
                       Icons.layers_outlined,
                       size: ListenIconSize.control,
                     ),
-                    suffixIcon: controller.adoptingReleaseId == null &&
+                    suffixIcon:
+                        controller.adoptingReleaseId == null &&
                             controller.deletingReleaseId == null
                         ? null
                         : const Padding(
@@ -971,8 +968,8 @@ class _CapabilityRow extends StatelessWidget {
                   available
                       ? Icons.check_circle
                       : missing
-                          ? Icons.radio_button_unchecked
-                          : Icons.block_outlined,
+                      ? Icons.radio_button_unchecked
+                      : Icons.block_outlined,
                   size: ListenIconSize.inline,
                   color: available
                       ? colorScheme.primary
@@ -984,8 +981,8 @@ class _CapabilityRow extends StatelessWidget {
                     available
                         ? 'learningResourceAvailable'
                         : missing
-                            ? 'learningResourceMissing'
-                            : 'learningResourceUnavailable',
+                        ? 'learningResourceMissing'
+                        : 'learningResourceUnavailable',
                   ),
                   style: ListenType.caption.copyWith(
                     color: available

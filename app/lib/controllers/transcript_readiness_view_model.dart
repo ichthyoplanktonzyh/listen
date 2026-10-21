@@ -155,6 +155,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   bool _projectionInFlight = false;
   String? _projectionMaterialId;
   String? _projectionFailureCode;
+  ({String materialId, int requestToken})? _ownedPreparation;
 
   TranscriptReadinessState _state = TranscriptReadinessState();
   TranscriptReadinessState get state => _state;
@@ -201,19 +202,19 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
       );
       return;
     }
-    await coordinator.requestCapability(
-      material,
-      MaterialCapability.read,
-      forceProduce: forceRegenerate,
-    );
+    await _requestPreparation(material, forceProduce: forceRegenerate);
     _recompute();
   }
 
   void cancel() {
-    final material = currentMaterial();
-    if (material == null) return;
+    final owned = _ownedPreparation;
+    if (owned == null) return;
     unawaited(
-      coordinator.cancel(material.material.id, MaterialCapability.read),
+      coordinator.cancel(
+        owned.materialId,
+        MaterialCapability.read,
+        requestToken: owned.requestToken,
+      ),
     );
     _recompute();
   }
@@ -223,8 +224,35 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     if (material == null) return;
     _projectionAttempted = false;
     _projectionFailureCode = null;
-    await coordinator.requestCapability(material, MaterialCapability.read);
+    await _requestPreparation(material);
     _recompute();
+  }
+
+  Future<void> _requestPreparation(
+    MaterialDetails material, {
+    bool forceProduce = false,
+  }) async {
+    final materialId = material.material.id;
+    final request = coordinator.requestCapability(
+      material,
+      MaterialCapability.read,
+      forceProduce: forceProduce,
+    );
+    final requestToken = coordinator
+        .runViewFor(materialId, MaterialCapability.read)
+        ?.requestToken;
+    if (requestToken != null) {
+      _ownedPreparation = (materialId: materialId, requestToken: requestToken);
+    }
+    try {
+      await request;
+    } finally {
+      final owned = _ownedPreparation;
+      if (owned?.materialId == materialId &&
+          owned?.requestToken == requestToken) {
+        _ownedPreparation = null;
+      }
+    }
   }
 
   Future<void> importSubtitle() => mediaSession.openSubtitle(secondary: false);
@@ -377,7 +405,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
           ? null
           : ApiFailure(raw: runFailure),
       fingerprintMismatch: false,
-      canCancel: run?.busy ?? false,
+      canCancel: run?.canCancel ?? false,
       canRetry: projectionFailed || run?.phase == CapabilityRunPhase.failed,
       unavailableReason: phase == TranscriptReadinessPhase.unavailable
           ? availability
@@ -408,9 +436,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     if (lower.contains('decoding') || lower.contains('read')) {
       return TranscriptPreparationStage.readingMedia;
     }
-    if (lower.contains('normaliz') ||
-        lower.contains('tts') ||
-        lower.contains('synthesi')) {
+    if (lower.contains('normaliz') || lower.contains('prepar')) {
       return TranscriptPreparationStage.preparingAudio;
     }
     if (lower.contains('validat') || lower.contains('prob')) {
@@ -435,7 +461,19 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
+    final owned = _ownedPreparation;
+    _ownedPreparation = null;
+    if (owned != null) {
+      unawaited(
+        coordinator.cancel(
+          owned.materialId,
+          MaterialCapability.read,
+          requestToken: owned.requestToken,
+        ),
+      );
+    }
     subtitle.store.removeListener(_recompute);
     coordinator.removeListener(_recompute);
     _refreshTrigger?.removeListener(_recompute);

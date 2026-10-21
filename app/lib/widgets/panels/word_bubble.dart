@@ -23,7 +23,6 @@ Future<void> showWordBubble({
   required BuildContext context,
   required Offset anchor,
   required LearningController learning,
-  required ValueChanged<String?> onStatus,
   required VoidCallback onOpenDetails,
   ValueChanged<String>? onPlayPronunciationAudio,
 }) => showDialog<void>(
@@ -38,7 +37,6 @@ Future<void> showWordBubble({
         details: learning.selectedLexicalDetails,
         dictionary: learning.selectedDictionary,
         pronunciation: learning.selectedPronunciation,
-        onStatus: onStatus,
         onOpenDetails: () {
           Navigator.of(context).pop();
           onOpenDetails();
@@ -63,7 +61,6 @@ class WordBubble extends StatelessWidget {
     required this.details,
     required this.dictionary,
     required this.pronunciation,
-    required this.onStatus,
     required this.onOpenDetails,
     this.onPlayPronunciationAudio,
   });
@@ -74,7 +71,6 @@ class WordBubble extends StatelessWidget {
   /// Null while the dictionary round trip is in flight.
   final DictionaryLookupBundle? dictionary;
   final WordPronunciation? pronunciation;
-  final ValueChanged<String?> onStatus;
   final VoidCallback onOpenDetails;
   final ValueChanged<String>? onPlayPronunciationAudio;
 
@@ -120,8 +116,6 @@ class WordBubble extends StatelessWidget {
                   const SizedBox(height: ListenSpacing.gap8),
                   _gloss(context, l),
                   const SizedBox(height: ListenSpacing.gap12),
-                  _statusChoices(context, l, entry),
-                  const SizedBox(height: ListenSpacing.gap8),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
@@ -244,28 +238,6 @@ class WordBubble extends StatelessWidget {
       ),
     );
   }
-
-  Widget _statusChoices(
-    BuildContext context,
-    AppLocalizations l,
-    LexicalEntry entry,
-  ) => Wrap(
-    spacing: ListenSpacing.gap6,
-    runSpacing: ListenSpacing.gap6,
-    children: [
-      for (final value in const [
-        'unknown_meaning',
-        'known_not_recognized',
-        'known_recognized',
-      ])
-        ChoiceChip(
-          key: ValueKey('word-bubble-status-$value'),
-          label: Text(l.status(value)),
-          selected: entry.status == value,
-          onSelected: (_) => onStatus(value),
-        ),
-    ],
-  );
 
   String? _phonetic() {
     for (final result in _results) {

@@ -30,24 +30,14 @@ class PersonalLibraryEntry {
   int get updatedAtMs => details.material.updatedAtMs;
   bool get isRetained => details.isRetained;
 
-  /// Source-rendition document renditions of the current revision, in
-  /// revision order. Immutable.
-  List<DocumentRendition> get documentRenditions => List.unmodifiable(
-    details.currentRevision.documentRenditions.where(
-      (rendition) => rendition.origin == RenditionOrigin.source,
-    ),
-  );
-
   /// The current revision's media renditions, in revision order. Immutable.
-  List<MediaRendition> get mediaRenditions => List.unmodifiable(
-    details.currentRevision.mediaRenditions,
-  );
+  List<MediaRendition> get mediaRenditions =>
+      List.unmodifiable(details.currentRevision.mediaRenditions);
 
   /// The deterministic primary media: the first usable media rendition in
   /// revision order, resolved to its joined registered-media row. Usable
   /// means the rendition and its joined [MediaItem] are both available.
-  /// Null for text-only materials and for materials whose renditions are all
-  /// missing/archived or unresolved.
+  /// Null when the material has no usable rendition or its media is unresolved.
   MediaLibraryEntry? get primaryMedia {
     for (final rendition in mediaRenditions) {
       if (rendition.availability != MediaRenditionAvailability.available) {
@@ -65,20 +55,13 @@ class PersonalLibraryEntry {
     return null;
   }
 
-  /// The primary media's path-bearing row, or null for a text-only material.
+  /// The primary media's path-bearing row, when available.
   MediaItem? get media => primaryMedia?.media;
 
-  /// Triage facts delegated to the primary media; null/false without one.
+  /// Explicit user triage facts delegated to the primary media.
   String? get triageIntent => primaryMedia?.triageIntent;
-  bool get familiarMaterial => primaryMedia?.familiarMaterial ?? false;
-  bool get isGoldenTarget => primaryMedia?.isGoldenTarget ?? false;
-  ContentDifficultyProfile? get fit => primaryMedia?.fit;
 
-  /// Whether this material offers a Read capability: at least one source
-  /// document rendition on the current revision.
-  bool get canRead => documentRenditions.isNotEmpty;
-
-  /// Whether this material offers Listen: a usable primary audio media.
+  /// Whether this material offers listening: a usable primary audio media.
   bool get canListen => primaryMedia?.media.kind == 'audio';
 
   /// Whether this material offers Watch: a usable primary video media.
@@ -86,11 +69,6 @@ class PersonalLibraryEntry {
 
   /// Whether this material offers Listen or Watch: a usable primary media.
   bool get canListenOrWatch => primaryMedia != null;
-
-  /// Queue grouping facts, delegated to the primary media. Text-only rows
-  /// have none: they carry no media to triage, so they land unsorted.
-  String? triageQueue({bool familiarSupply = true}) =>
-      primaryMedia?.triageQueue(familiarSupply: familiarSupply);
 
   /// A copy of this row with [entry] swapped in for the joined row carrying
   /// the same media id. Returns the same row when no joined row matches.

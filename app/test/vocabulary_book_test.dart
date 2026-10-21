@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
-import 'package:llplayer_next/models/practice.dart';
-import 'package:llplayer_next/models/production_corpus.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/theme/spacing.dart';
@@ -136,87 +134,55 @@ void main() {
     expect(selected, same(word));
   });
 
-  test('a row status collapses the four channels into one answer', () {
-    LexicalCapabilityProfile profile(Map<String, String> conclusions) =>
+  test('book status reflects listening assessment only', () {
+    LexicalCapabilityProfile profile({String? listening, String? speaking}) =>
         LexicalCapabilityProfile.fromJson({
           'lexical_entry_id': 'e1',
-          for (final channel in const [
-            'reading',
-            'listening',
-            'speaking',
-            'writing',
-          ])
-            channel: conclusions[channel] == null
-                ? <String, dynamic>{}
-                : <String, dynamic>{
-                    'user_override': {
-                      'conclusion': conclusions[channel],
-                      'source': 'user',
-                      'updated_at_ms': 1,
-                    },
+          'reading': <String, dynamic>{},
+          'listening': listening == null
+              ? <String, dynamic>{}
+              : <String, dynamic>{
+                  'user_override': {
+                    'conclusion': listening,
+                    'source': 'user_explicit',
+                    'updated_at_ms': 1,
                   },
+                },
+          'speaking': speaking == null
+              ? <String, dynamic>{}
+              : <String, dynamic>{
+                  'user_override': {
+                    'conclusion': speaking,
+                    'source': 'user_explicit',
+                    'updated_at_ms': 1,
+                  },
+                },
+          'writing': <String, dynamic>{},
         });
 
-    // Nothing measured anywhere: the word is in the book but no evidence has
-    // been recorded about it — "first seen", not "assessed as unknown".
+    expect(vocabularyRowStatus(null), VocabularyRowStatus.firstSeen);
     expect(
-      vocabularyRowStatus(null, 'listening'),
-      VocabularyRowStatus.firstSeen,
-    );
-    expect(
-      vocabularyRowStatus(profile(const {}), 'listening'),
-      VocabularyRowStatus.firstSeen,
-    );
-    // Under a lens the row reports that channel, so the picker recolours the
-    // whole list.
-    final mixed = profile(const {
-      'listening': 'acquired',
-      'speaking': 'not_acquired',
-    });
-    expect(
-      vocabularyRowStatus(mixed, 'listening'),
-      VocabularyRowStatus.acquired,
-    );
-    expect(
-      vocabularyRowStatus(mixed, 'speaking'),
-      VocabularyRowStatus.notAcquired,
-    );
-    // Measured elsewhere but not here: distinct from "first seen".
-    expect(
-      vocabularyRowStatus(mixed, 'writing'),
+      vocabularyRowStatus(profile(speaking: 'not_acquired')),
       VocabularyRowStatus.unassessed,
     );
-    // No lens: a channel still to practise outranks one already acquired,
-    // because that is the one the user can act on.
-    expect(vocabularyRowStatus(mixed, null), VocabularyRowStatus.notAcquired);
     expect(
-      vocabularyRowStatus(profile(const {'listening': 'acquired'}), null),
+      vocabularyRowStatus(
+        profile(listening: 'acquired', speaking: 'not_acquired'),
+      ),
       VocabularyRowStatus.acquired,
+    );
+    expect(
+      vocabularyRowStatus(profile(listening: 'not_acquired')),
+      VocabularyRowStatus.notAcquired,
     );
   });
 
   testWidgets('vocabulary book leads each row with a status bar, not a ring', (
     tester,
   ) async {
-    final word = vocabularyDetails(
-      displayForm: 'take care of',
-      kind: 'phrase',
-      capabilityProfile: LexicalCapabilityProfile.fromJson({
-        'lexical_entry_id': 'e1',
-        'reading': <String, dynamic>{},
-        'listening': <String, dynamic>{},
-        'speaking': <String, dynamic>{},
-        'writing': <String, dynamic>{},
-      }),
-    );
+    final word = vocabularyDetails(displayForm: 'take care of', kind: 'phrase');
     await tester.pumpWidget(
-      localized(
-        VocabularyBookView(
-          words: [word],
-          onWord: (_) {},
-          focusCapability: 'listening',
-        ),
-      ),
+      localized(VocabularyBookView(words: [word], onWord: (_) {})),
     );
     expect(find.text('take care of'), findsOneWidget);
     // Phrases are surfaced with a kind badge (the book is no longer word-only).
@@ -224,7 +190,6 @@ void main() {
     // The ring is gone from the list: at an inline size its four 2pt arcs were
     // not separable, so a row now carries a single colour bar instead. The
     // ring survives where it has room to mean something — the entry detail.
-    expect(find.byType(CapabilityRing), findsNothing);
 
     final decorated = tester.widget<DecoratedBox>(
       find.byKey(const ValueKey('vocabulary-row-status-entry-take care of')),
@@ -237,7 +202,9 @@ void main() {
     expect(find.byTooltip('First seen'), findsOneWidget);
   });
 
-  testWidgets('the status bar follows the lens channel', (tester) async {
+  testWidgets('the status bar always follows listening assessment', (
+    tester,
+  ) async {
     final word = vocabularyDetails(
       displayForm: 'rather',
       capabilityProfile: LexicalCapabilityProfile.fromJson(const {
@@ -246,67 +213,37 @@ void main() {
         'listening': {
           'user_override': {
             'conclusion': 'acquired',
-            'source': 'user',
+            'source': 'user_explicit',
             'updated_at_ms': 1,
           },
         },
         'speaking': {
           'user_override': {
             'conclusion': 'not_acquired',
-            'source': 'user',
+            'source': 'user_explicit',
             'updated_at_ms': 1,
           },
         },
         'writing': <String, dynamic>{},
       }),
     );
-    Color barColor() {
-      final decorated = tester.widget<DecoratedBox>(
-        find.byKey(const ValueKey('vocabulary-row-status-entry-rather')),
-      );
-      return ((decorated.decoration as BoxDecoration).border! as Border)
-          .left
-          .color;
-    }
-
-    await tester.pumpWidget(
-      localized(
-        VocabularyBookView(
-          words: [word],
-          onWord: (_) {},
-          focusCapability: 'listening',
-        ),
-      ),
+    expect(word.capabilityProfile!.listening.effectiveAssessment, 'acquired');
+    expect(
+      vocabularyRowStatus(word.capabilityProfile),
+      VocabularyRowStatus.acquired,
     );
+    await tester.pumpWidget(
+      localized(VocabularyBookView(words: [word], onWord: (_) {})),
+    );
+
     final colors = Theme.of(tester.element(find.text('rather'))).colorScheme;
-    expect(barColor(), capabilityAssessmentColor(colors, 'acquired'));
+    final decorated = tester.widget<DecoratedBox>(
+      find.byKey(const ValueKey('vocabulary-row-status-entry-rather')),
+    );
+    final border = (decorated.decoration as BoxDecoration).border! as Border;
+    expect(border.left.color, capabilityAssessmentColor(colors, 'acquired'));
     expect(find.byTooltip('Listening: Acquired'), findsOneWidget);
-
-    await tester.pumpWidget(
-      localized(
-        VocabularyBookView(
-          words: [word],
-          onWord: (_) {},
-          focusCapability: 'speaking',
-        ),
-      ),
-    );
-    expect(barColor(), capabilityAssessmentColor(colors, 'not_acquired'));
-    expect(find.byTooltip('Speaking: Not acquired'), findsOneWidget);
-
-    // A channel with no verdict of its own, on a word that has been measured
-    // elsewhere, reads dimmed rather than "first seen".
-    await tester.pumpWidget(
-      localized(
-        VocabularyBookView(
-          words: [word],
-          onWord: (_) {},
-          focusCapability: 'writing',
-        ),
-      ),
-    );
-    expect(barColor(), capabilityAssessmentColor(colors, 'unassessed'));
-    expect(find.byTooltip('Writing: Not yet assessed'), findsOneWidget);
+    expect(find.byTooltip('Speaking: Not acquired'), findsNothing);
   });
 
   testWidgets('empty vocabulary book has an explicit state', (tester) async {
@@ -363,100 +300,58 @@ void main() {
     },
   );
 
-  testWidgets(
-    'evidence history loads lazily, filters by channel, and shows an honest '
-    'empty state',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(900, 1600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final requestedCapabilities = <String?>[];
-      const observations = [
-        LearningObservationView(
-          id: 'obs-1',
-          lexicalEntryId: 'hello',
-          capability: 'listening',
-          taskType: 'context_marking',
-          outcome: 'success',
-          assistance: 'full_text',
-          surfaceForm: 'hello',
-          origin: 'user_marking',
-          occurredAtMs: 1753142400000,
-        ),
-        LearningObservationView(
-          id: 'obs-2',
-          lexicalEntryId: 'hello',
-          capability: 'reading',
-          taskType: 'reading_context_marking',
-          outcome: 'failure',
-          assistance: 'none',
-          surfaceForm: 'hellos',
-          origin: 'user_marking',
-          occurredAtMs: 1753056000000,
-        ),
-      ];
-      await tester.pumpWidget(
-        localized(
-          ListeningDictionaryEntryView(
-            details: const LexicalEntryDetails(
-              entry: LexicalEntry(
-                id: 'hello',
-                normalizedForm: 'hello',
-                displayForm: 'hello',
-                kind: 'word',
-                language: 'en',
-              ),
+  testWidgets('evidence history loads listening facts only when opened', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final requestedCapabilities = <String?>[];
+    const observations = [
+      LearningObservationView(
+        id: 'obs-1',
+        lexicalEntryId: 'hello',
+        capability: 'listening',
+        taskType: 'context_marking',
+        outcome: 'success',
+        assistance: 'full_text',
+        surfaceForm: 'hello',
+        origin: 'user_marking',
+        occurredAtMs: 1753142400000,
+      ),
+    ];
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
             ),
-            onPlay: (_) {},
-            onMark: (_, _) async => true,
-            onLoadEvidenceHistory: ({String? capability, int offset = 0}) {
-              requestedCapabilities.add(capability);
-              return Future.value(
-                capability == null
-                    ? observations
-                    : observations
-                          .where((value) => value.capability == capability)
-                          .toList(growable: false),
-              );
-            },
           ),
+          onPlay: (_) {},
+          onMark: (_, _) async => true,
+          onLoadEvidenceHistory: ({String? capability, int offset = 0}) {
+            requestedCapabilities.add(capability);
+            return Future.value(observations);
+          },
         ),
-      );
+      ),
+    );
 
-      // The entry is stable and visible, but collapsed: nothing is fetched
-      // until the user explicitly comes to look.
-      expect(find.text('Evidence & history'), findsOneWidget);
-      expect(requestedCapabilities, isEmpty);
-      expect(find.text('In-context listening mark'), findsNothing);
+    expect(find.text('Evidence & history'), findsOneWidget);
+    expect(requestedCapabilities, isEmpty);
+    await tester.tap(find.text('Evidence & history'));
+    await tester.pump();
+    await tester.pump();
 
-      await tester.tap(find.text('Evidence & history'));
-      await tester.pump();
-      await tester.pump();
-      expect(requestedCapabilities, [null]);
-      expect(find.text('In-context listening mark'), findsOneWidget);
-      expect(find.text('In-context reading mark'), findsOneWidget);
-      // Assistance is the honest boundary of what a row can prove.
-      expect(find.textContaining('full text visible'), findsOneWidget);
-      expect(find.textContaining('no assistance'), findsOneWidget);
-
-      // The channel filter narrows to reading only.
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Reading'));
-      await tester.pump();
-      await tester.pump();
-      expect(requestedCapabilities, [null, 'reading']);
-      expect(find.text('In-context listening mark'), findsNothing);
-      expect(find.text('In-context reading mark'), findsOneWidget);
-
-      // A channel without evidence says so instead of pretending.
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Writing'));
-      await tester.pump();
-      await tester.pump();
-      expect(requestedCapabilities, [null, 'reading', 'writing']);
-      expect(
-        find.text('No recorded learning evidence here yet.'),
-        findsOneWidget,
-      );
-    },
-  );
+    expect(requestedCapabilities, ['listening']);
+    expect(find.text('In-context listening mark'), findsOneWidget);
+    expect(find.text('In-context reading mark'), findsNothing);
+    expect(find.textContaining('full text visible'), findsOneWidget);
+  });
 
   testWidgets(
     'sense folders stay optional and create through the detail view',
@@ -664,125 +559,64 @@ void main() {
     expect(find.textContaining('≈60 wpm'), findsOneWidget);
   });
 
-  testWidgets('upgrade suggestion banner resolves through its callbacks', (
+  testWidgets('the learner can set or clear listening assessment', (
     tester,
   ) async {
-    const suggestion = UpgradeSuggestion(
-      id: 'suggestion-1',
-      lexicalEntryId: 'hello',
-      lexicalDisplayForm: 'hello',
-      previousStatus: 'known_not_recognized',
-      suggestedStatus: 'known_recognized',
-      status: 'pending',
-      evidenceContextCount: 5,
-      evidenceIds: [],
-      threshold: 5,
-      evidenceClass: 'heuristic_proxy',
-      createdAtMs: 1,
-    );
-    UpgradeSuggestion? confirmed;
-    await tester.pumpWidget(
-      localized(
-        ListeningDictionaryEntryView(
-          details: const LexicalEntryDetails(
-            entry: LexicalEntry(
-              id: 'hello',
-              normalizedForm: 'hello',
-              displayForm: 'hello',
-              kind: 'word',
-              language: 'en',
-            ),
+    final conclusions = <String?>[];
+    LexicalCapabilityProfile profile(String? conclusion) =>
+        LexicalCapabilityProfile.fromJson({
+          'lexical_entry_id': 'hello',
+          'reading': <String, dynamic>{},
+          'listening': conclusion == null
+              ? <String, dynamic>{}
+              : <String, dynamic>{
+                  'user_override': {
+                    'conclusion': conclusion,
+                    'source': 'user_explicit',
+                    'updated_at_ms': 1,
+                  },
+                },
+          'speaking': <String, dynamic>{},
+          'writing': <String, dynamic>{},
+        });
+    Widget view(LexicalCapabilityProfile value) => localized(
+      ListeningDictionaryEntryView(
+        details: LexicalEntryDetails(
+          entry: const LexicalEntry(
+            id: 'hello',
+            normalizedForm: 'hello',
+            displayForm: 'hello',
+            kind: 'word',
+            language: 'en',
           ),
-          onPlay: _ignoreOccurrence,
-          onMark: _ignoreMark,
-          suggestions: const [suggestion],
-          onConfirmSuggestion: (value) async => confirmed = value,
-          onRejectSuggestion: (_) async {},
+          capabilityProfile: value,
         ),
+        onPlay: _ignoreOccurrence,
+        onMark: _ignoreMark,
+        onListeningOverride: (conclusion) async => conclusions.add(conclusion),
       ),
     );
-    expect(find.textContaining('5 contexts'), findsOneWidget);
-    await tester.tap(find.text('Confirm: can hear it'));
-    expect(confirmed, same(suggestion));
+
+    await tester.pumpWidget(view(profile(null)));
+    expect(find.byType(SegmentedButton<String>), findsOneWidget);
+    expect(find.text('Listening'), findsOneWidget);
+    expect(find.text('Speaking'), findsNothing);
+    expect(find.text('Writing'), findsNothing);
+    await tester.ensureVisible(find.text('Acquired'));
+    await tester.tap(find.text('Acquired'));
+    expect(conclusions, ['acquired']);
+
+    await tester.pumpWidget(view(profile('acquired')));
+    final editor = tester.widget<SegmentedButton<String>>(
+      find.byType(SegmentedButton<String>),
+    );
+    expect(editor.selected, {'acquired'});
+    expect(find.byTooltip('Your own call'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Acquired'));
+    await tester.tap(find.text('Acquired'));
+    expect(conclusions, ['acquired', null]);
   });
-
-  testWidgets(
-    'each channel is one segmented either/or, unanswered until it is answered',
-    (tester) async {
-      final records = <(String, String?)>[];
-      Widget view(LexicalCapabilityProfile profile) => localized(
-        ListeningDictionaryEntryView(
-          details: LexicalEntryDetails(
-            entry: const LexicalEntry(
-              id: 'hello',
-              normalizedForm: 'hello',
-              displayForm: 'hello',
-              kind: 'word',
-              language: 'en',
-            ),
-            capabilityProfile: profile,
-          ),
-          onPlay: _ignoreOccurrence,
-          onMark: _ignoreMark,
-          onCapabilityOverride: (capability, conclusion) async =>
-              records.add((capability, conclusion)),
-        ),
-      );
-      LexicalCapabilityProfile profile(String? readingConclusion) =>
-          LexicalCapabilityProfile.fromJson({
-            'lexical_entry_id': 'hello',
-            'reading': readingConclusion == null
-                ? <String, dynamic>{}
-                : <String, dynamic>{
-                    'user_override': {
-                      'conclusion': readingConclusion,
-                      'source': 'user',
-                      'updated_at_ms': 1,
-                    },
-                  },
-            'listening': <String, dynamic>{},
-            'speaking': <String, dynamic>{},
-            'writing': <String, dynamic>{},
-          });
-
-      await tester.pumpWidget(view(profile(null)));
-
-      // One two-sided control per channel — not eight equally weighted
-      // buttons on a 4x2 grid.
-      expect(find.byType(SegmentedButton<String>), findsNWidgets(4));
-      expect(find.text('Acquired'), findsNWidgets(4));
-      expect(find.text('Not acquired'), findsNWidgets(4));
-      // State 1 · unanswered: neither side is lit and the row says so in
-      // words rather than leaving two unpressed buttons to be read as "no".
-      for (final button in tester.widgetList<SegmentedButton<String>>(
-        find.byType(SegmentedButton<String>),
-      )) {
-        expect(button.selected, isEmpty);
-      }
-      expect(find.text('Not yet assessed'), findsNWidgets(4));
-
-      await tester.tap(find.text('Acquired').first);
-      expect(records, [('reading', 'acquired')]);
-
-      // State 2 · answered: exactly one side is lit, the note is gone, and
-      // the verdict is marked as the user's own.
-      await tester.pumpWidget(view(profile('acquired')));
-      final reading = tester
-          .widgetList<SegmentedButton<String>>(
-            find.byType(SegmentedButton<String>),
-          )
-          .first;
-      expect(reading.selected, {'acquired'});
-      expect(find.text('Not yet assessed'), findsNWidgets(3));
-      expect(find.byTooltip('Your own call'), findsOneWidget);
-
-      // State 3 · taking it back: pressing the lit side empties the
-      // selection, which clears the override.
-      records.clear();
-      await tester.tap(find.text('Acquired').first);
-      expect(records, [('reading', null)]);
-    },
-  );
 
   testWidgets('zero-clip state offers external references only as reference', (
     tester,
@@ -936,91 +770,6 @@ void main() {
     },
   );
 
-  testWidgets('dictionary shows submitted output and opens its attempt', (
-    tester,
-  ) async {
-    const document = ProductionCorpusDocumentView(
-      id: 'document-1',
-      language: 'en',
-      channel: 'written',
-      assistance: 'learner_revision',
-      attemptId: 'attempt-1',
-      rubricId: 'rubric-1',
-      responseRevision: 2,
-      activityKind: 'opinion',
-      mediaId: null,
-      startMs: 0,
-      endMs: 1000,
-      responseText: 'This proposal is worth discussing.',
-      producedAtMs: 42,
-    );
-    const hit = ProductionCorpusHitView(
-      document: document,
-      entry: ProductionCorpusEntryView(
-        id: 'entry-1',
-        documentId: 'document-1',
-        normalizedKey: 'proposal',
-        displayText: 'proposal',
-        startChar: 5,
-        endChar: 13,
-      ),
-    );
-    ProductionCorpusHitView? opened;
-
-    await tester.pumpWidget(
-      localized(
-        ListeningDictionaryEntryView(
-          details: vocabularyDetails(displayForm: 'proposal'),
-          showProductionCorpus: true,
-          productionHits: const [hit],
-          onOpenProductionAttempt: (value) => opened = value,
-          onPlay: _ignoreOccurrence,
-          onMark: _ignoreMark,
-        ),
-      ),
-    );
-
-    expect(find.text('My output'), findsOneWidget);
-    expect(
-      find.text('You used this word once in submitted writing.'),
-      findsOneWidget,
-    );
-    expect(find.text('This proposal is worth discussing.'), findsOneWidget);
-    // "My output" is the third anchored section (#82 / V4): built and findable,
-    // but below the fold until scrolled to.
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('production-output-document-1')),
-    );
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('production-output-document-1')),
-    );
-    expect(opened, same(hit));
-  });
-
-  testWidgets('dictionary distinguishes unavailable output from no output', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      localized(
-        ListeningDictionaryEntryView(
-          details: vocabularyDetails(displayForm: 'proposal'),
-          showProductionCorpus: true,
-          productionHits: const [],
-          productionLoadFailed: true,
-          onPlay: _ignoreOccurrence,
-          onMark: _ignoreMark,
-        ),
-      ),
-    );
-
-    expect(
-      find.text('Your writing output is temporarily unavailable.'),
-      findsOneWidget,
-    );
-    expect(find.text('No writing output for this word yet.'), findsNothing);
-  });
-
   testWidgets('status movement removes a word from the previous dynamic book', (
     tester,
   ) async {
@@ -1111,7 +860,7 @@ void main() {
         WordLearningPanel(
           details: _helloDetails,
           dictionary: _helloDictionary,
-          onStatus: (_) {},
+          onListeningOverride: (_) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},
@@ -1135,19 +884,7 @@ void main() {
       tester.widget<ListView>(find.byType(ListView)).padding,
       ListenPadding.card,
     );
-    expect(
-      tester
-          .widget<Padding>(
-            find
-                .ancestor(
-                  of: find.text('Unknown meaning'),
-                  matching: find.byType(Padding),
-                )
-                .first,
-          )
-          .padding,
-      ListenPadding.tight,
-    );
+    expect(find.text('Listening'), findsWidgets);
   });
 
   testWidgets('lemma correction is offered only where a token is selected', (
@@ -1161,7 +898,7 @@ void main() {
         WordLearningPanel(
           details: _helloDetails,
           dictionary: _helloDictionary,
-          onStatus: (_) {},
+          onListeningOverride: (_) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},
@@ -1177,7 +914,7 @@ void main() {
         WordLearningPanel(
           details: _helloDetails,
           dictionary: _helloDictionary,
-          onStatus: (_) {},
+          onListeningOverride: (_) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},
@@ -1203,7 +940,7 @@ void main() {
             details: _helloDetails,
             dictionary: _helloDictionary,
             pronunciation: _helloPronunciation,
-            onStatus: (_) {},
+            onListeningOverride: (_) async {},
             onSave: (value, memo) async {
               definition = value;
               note = memo;
@@ -1255,7 +992,7 @@ void main() {
             details: _coffeeDetails,
             dictionary: _coffeeDictionary,
             languageProfile: _zhPinyinProfile,
-            onStatus: (_) {},
+            onListeningOverride: (_) async {},
             onSave: (_, _) async {},
             onSource: (_) {},
             onHeard: () {},
@@ -1283,7 +1020,7 @@ void main() {
         WordLearningPanel(
           details: _studentDetails,
           dictionary: _studentDictionary,
-          onStatus: (_) {},
+          onListeningOverride: (_) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},

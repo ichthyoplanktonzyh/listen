@@ -79,8 +79,10 @@ This text is a listening foundation, not an independent reading activity.
 With `--subtitle`, the same derivation uses provider `subtitle` and its declared
 digest instead of provider `asr`; subtitle timing and configured forced alignment
 supply the corresponding audio mappings.
-`listen` is already satisfied by the source media. `watch` requires a video
-rendition; an audio-only request is unsupported.
+`listen` is already satisfied by an audio rendition; a video-only request is
+unsupported. `watch` requires a video rendition; an audio-only request is
+unsupported. Video sound plays with `watch`; extracting a separate audio
+rendition is outside the current production scope.
 `synchronized_read_listen` requests media transcription and exact alignment,
 or subtitle-based text and alignment when `--subtitle` is supplied.
 Document-to-reading and document-to-listening derivations are unavailable.

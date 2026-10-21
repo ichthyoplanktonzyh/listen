@@ -28,14 +28,13 @@ impl SemanticEmbeddingIndexRepository for SqliteRepository {
         for record in records {
             tx.execute(
                 "INSERT INTO semantic_embedding_index
-                 (source_kind,source_id,language,channel,text_sha256,model_fingerprint,
+                 (source_kind,source_id,language,text_sha256,model_fingerprint,
                   dimension,vector_f32le,indexed_at_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
                 params![
                     json(&record.source_kind)?,
                     record.source_id,
                     record.language.as_str(),
-                    record.channel.map(|value| json(&value)).transpose()?,
                     record.text_sha256,
                     record.model_fingerprint,
                     record.dimension,
@@ -55,7 +54,7 @@ impl SemanticEmbeddingIndexRepository for SqliteRepository {
         let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
-                "SELECT source_kind,source_id,language,channel,text_sha256,model_fingerprint,
+                "SELECT source_kind,source_id,language,text_sha256,model_fingerprint,
                         dimension,vector_f32le,indexed_at_ms
                  FROM semantic_embedding_index WHERE model_fingerprint=?1
                  ORDER BY source_kind,source_id",
@@ -94,15 +93,11 @@ impl SemanticEmbeddingIndexRepository for SqliteRepository {
 
 fn record_from_row(row: &Row<'_>) -> rusqlite::Result<SemanticEmbeddingIndexRecord> {
     let source_kind: SemanticEmbeddingSourceKind = from_json(&row.get::<_, String>(0)?)?;
-    let channel = row
-        .get::<_, Option<String>>(3)?
-        .map(|value| from_json(&value))
-        .transpose()?;
-    let dimension = row.get::<_, u32>(6)?;
-    let bytes = row.get::<_, Vec<u8>>(7)?;
+    let dimension = row.get::<_, u32>(5)?;
+    let bytes = row.get::<_, Vec<u8>>(6)?;
     let vector = decode_f32le(&bytes).map_err(|message| {
         rusqlite::Error::FromSqlConversionFailure(
-            7,
+            6,
             rusqlite::types::Type::Blob,
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -112,7 +107,7 @@ fn record_from_row(row: &Row<'_>) -> rusqlite::Result<SemanticEmbeddingIndexReco
     })?;
     if vector.len() != dimension as usize {
         return Err(rusqlite::Error::FromSqlConversionFailure(
-            7,
+            6,
             rusqlite::types::Type::Blob,
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -127,12 +122,11 @@ fn record_from_row(row: &Row<'_>) -> rusqlite::Result<SemanticEmbeddingIndexReco
         source_kind,
         source_id: row.get(1)?,
         language: LanguageCode::parse(row.get::<_, String>(2)?).map_err(domain_sql)?,
-        channel,
-        text_sha256: row.get(4)?,
-        model_fingerprint: row.get(5)?,
+        text_sha256: row.get(3)?,
+        model_fingerprint: row.get(4)?,
         dimension,
         vector,
-        indexed_at_ms: row.get(8)?,
+        indexed_at_ms: row.get(7)?,
     })
 }
 

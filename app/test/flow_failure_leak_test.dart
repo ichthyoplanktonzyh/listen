@@ -60,7 +60,7 @@ void main() {
     '127.0.0.1',
     '62645',
     'validation_error',
-    'recording metadata must not be empty',
+    'media metadata must not be empty',
     'uri =',
     'retryable',
     '/v1/',
@@ -232,10 +232,6 @@ final class _DelayedMediaImportRepository implements MediaImportRepository {
   }) => throw UnimplementedError();
 
   @override
-  Future<String?> downloadArticle(String articleUrl, String directory) =>
-      throw UnimplementedError();
-
-  @override
   Future<String> extractTextSubtitle(
     String mediaPath,
     EmbeddedSubtitle subtitle,
@@ -345,13 +341,6 @@ final class _UnavailableManagedStore implements ManagedAssetStoreService {
     String? mediaKind,
   }) => throw const ManagedStoreUnavailable();
   @override
-  Future<ManagedAssetCopy> copyBytesIntoStore({
-    required List<int> bytes,
-    required String mediaKind,
-  }) => throw const ManagedStoreUnavailable();
-  @override
-  Future<List<int>?> readBytes(String path) async => null;
-  @override
   bool contains(String path) => false;
 
   @override
@@ -404,13 +393,6 @@ final class _NoopLearningMaterialRepository
   @override
   Future<MaterialDetails> resolveMaterialForMedia(String mediaId) =>
       throw UnimplementedError();
-
-  @override
-  Future<MaterialRevision> updateSourceAssetAvailability(
-    String materialId,
-    String sourceAssetId,
-    SourceAssetAvailability availability,
-  ) => throw UnimplementedError();
 
   @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(

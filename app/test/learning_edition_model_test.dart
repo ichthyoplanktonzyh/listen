@@ -7,26 +7,24 @@ void main() {
   LearningEdition edition({
     List<LearningEditionRendition> renditions = const [],
     List<LearningEditionResource> resources = const [],
+    List<String> availableCapabilities = const [],
   }) => LearningEdition(
     materialId: 'm1',
     materialRevisionId: 'r1',
     editionId: 'edition:m1',
-    releaseId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    releaseId:
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     title: 'Lesson',
     targetLanguage: 'en',
     supportLanguages: const ['zh'],
     installedAtMs: 1,
     adoptedAtMs: 2,
     adopted: true,
+    availableCapabilities: availableCapabilities,
     resources: resources,
     renditions: renditions,
   );
 
-  const documentRendition = LearningEditionRendition(
-    renditionId: 'd1',
-    kind: 'document',
-    available: true,
-  );
   const mediaRendition = LearningEditionRendition(
     renditionId: 'm2',
     kind: 'media',
@@ -53,19 +51,17 @@ void main() {
     supportLanguages: [],
   );
 
-  test('read is provided by a document rendition or a structured reading', () {
+  test('Core available capabilities, not resource kinds, drive read', () {
     expect(edition().providesRead, isFalse);
     expect(
-      edition(renditions: const [documentRendition]).providesRead,
-      isTrue,
-    );
-    expect(
       edition(resources: const [readingResource]).providesRead,
-      isTrue,
+      isFalse,
+      reason: 'the App must not infer read from a resource kind',
     );
+    expect(edition(availableCapabilities: const ['read']).providesRead, isTrue);
   });
 
-  test('media availability and alignment drive listen surfaces', () {
+  test('Core capability facts and media availability stay distinct', () {
     final plainMedia = edition(renditions: const [mediaRendition]);
     expect(plainMedia.hasAvailableMediaRendition, isTrue);
     expect(plainMedia.providesSynchronizedReadListen, isFalse);
@@ -73,8 +69,17 @@ void main() {
     final synchronized = edition(
       renditions: const [mediaRendition],
       resources: const [alignmentResource],
+      availableCapabilities: const ['synchronized_read_listen'],
     );
     expect(synchronized.providesSynchronizedReadListen, isTrue);
+    expect(
+      edition(
+        renditions: const [mediaRendition],
+        resources: const [alignmentResource],
+      ).providesSynchronizedReadListen,
+      isFalse,
+      reason: 'the App must trust Core instead of inferring from alignment',
+    );
   });
 
   test('an unavailable media rendition is not playable', () {
@@ -96,7 +101,10 @@ void main() {
       resources: const [readingResource, alignmentResource],
     );
     expect(subject.baseResourceOfKind('structured_reading'), readingResource);
-    expect(subject.baseResourceOfKind('anchor_time_alignment'), alignmentResource);
+    expect(
+      subject.baseResourceOfKind('anchor_time_alignment'),
+      alignmentResource,
+    );
     expect(subject.baseResourceOfKind('absent'), isNull);
   });
 
@@ -104,10 +112,27 @@ void main() {
     final subject = edition(
       renditions: const [mediaRendition],
       resources: const [readingResource],
+      availableCapabilities: const ['read'],
     );
     expect(() => subject.supportLanguages.add('ja'), throwsUnsupportedError);
-    expect(() => subject.resources.add(alignmentResource), throwsUnsupportedError);
-    expect(() => subject.renditions.add(documentRendition), throwsUnsupportedError);
+    expect(
+      () => subject.availableCapabilities.add('listen'),
+      throwsUnsupportedError,
+    );
+    expect(
+      () => subject.resources.add(alignmentResource),
+      throwsUnsupportedError,
+    );
+    expect(
+      () => subject.renditions.add(
+        const LearningEditionRendition(
+          renditionId: 'm3',
+          kind: 'media',
+          available: true,
+        ),
+      ),
+      throwsUnsupportedError,
+    );
     expect(subject.supportLanguages, ['zh']);
     expect(subject.resources, [readingResource]);
     expect(subject.renditions, [mediaRendition]);

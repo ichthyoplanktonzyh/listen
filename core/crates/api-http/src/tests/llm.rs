@@ -113,7 +113,7 @@ fn register_body(base_url: &str, secret: Option<&str>) -> serde_json::Value {
         "base_url": base_url,
         "model_id": "m",
         "retention": "unknown",
-        "allowed_uses": ["semantic_judgment"]
+        "allowed_uses": ["sense_group_partition"]
     });
     if let Some(secret) = secret {
         body["secret"] = serde_json::json!(secret);
@@ -327,88 +327,6 @@ async fn delete_removes_provider() {
         .await
         .unwrap();
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);
-}
-
-#[tokio::test]
-async fn generate_rubric_returns_a_draft_without_persisting() {
-    let rubric_json = serde_json::json!({
-        "points": [
-            {
-                "importance": "required",
-                "statement": "A quake happened.",
-                "accepted_paraphrase_notes": null
-            },
-            {
-                "importance": "optional",
-                "statement": "It was near the coast.",
-                "accepted_paraphrase_notes": "coast/shore"
-            }
-        ]
-    })
-    .to_string();
-    let base = spawn_fake_openai(openai_content_envelope(&rubric_json)).await;
-    let app = test_app();
-    let mut provider_body = register_body(&base, Some("sk-x"));
-    provider_body["allowed_uses"] = serde_json::json!(["rubric_generation"]);
-    let (_, view) = post_json(&app, "/v1/llm/providers", provider_body).await;
-    let id = view["id"].as_str().unwrap().to_string();
-
-    let (status, draft) = post_json(
-        &app,
-        &format!("/v1/llm/providers/{id}/rubric"),
-        serde_json::json!({
-            "purpose": "reading_comprehension",
-            "source_language": "en",
-            "response_language": "zh",
-            "transcript_snapshot": "The quake struck at dawn near the coast."
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "generate failed: {draft}");
-    let points = draft["points"].as_array().unwrap();
-    assert_eq!(points.len(), 2);
-    assert_eq!(points[0]["importance"], "required");
-    assert_eq!(points[0]["statement"], "A quake happened.");
-    assert_eq!(points[1]["accepted_paraphrase_notes"], "coast/shore");
-    // Draft only: no rubric identity/version/source is minted by the provider.
-    assert!(draft.get("id").is_none());
-    assert!(draft.get("version").is_none());
-}
-
-#[tokio::test]
-async fn rubric_dispatch_rejects_a_profile_without_the_allowed_use() {
-    let app = test_app();
-    let (_, view) = post_json(
-        &app,
-        "/v1/llm/providers",
-        register_body("http://127.0.0.1:1", None),
-    )
-    .await;
-    let (status, body) = post_json(
-        &app,
-        &format!("/v1/llm/providers/{}/rubric", view["id"].as_str().unwrap()),
-        serde_json::json!({
-            "purpose": "reading_comprehension",
-            "source_language": "en",
-            "response_language": "zh",
-            "transcript_snapshot": "Source"
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert_eq!(body["code"], "invalid_input");
-}
-
-#[tokio::test]
-async fn judge_via_unknown_provider_is_not_found() {
-    let app = test_app();
-    let (status, _) = post_json(
-        &app,
-        "/v1/llm/providers/deadbeef/judge",
-        serde_json::json!({ "attempt_id": "whatever", "response_revision": 1 }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

@@ -15,7 +15,6 @@
         "lexical-observation-cleared",
         "vocabulary-assets-imported",
         "media-availability-changed",
-        "transcription-model-changed",
         "pronunciation-analysis-progress",
         "pronunciation-analysis-completed",
         "word-timings-progress",

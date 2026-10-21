@@ -100,11 +100,10 @@ class DesktopPlayerAdapter {
 
   /// Releases the active playback source without disposing the adapter.
   ///
-  /// A workbench material can have no playable rendition at all (a document
-  /// before TTS). Switching to it must remove the previous material's decoder
-  /// and transport state, but the adapter's streams still belong to the app
-  /// shell and must remain usable when this material later gains derived
-  /// audio. [dispose] is therefore too strong for a material switch.
+  /// A workbench material can have no playable rendition yet. Switching to it
+  /// must remove the previous material's decoder and transport state, but the
+  /// adapter's streams still belong to the app shell. [dispose] is therefore
+  /// too strong for a material switch.
   Future<void> close() async {
     final value = _controller;
     _stopPositionTimer();

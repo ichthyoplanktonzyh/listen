@@ -29,11 +29,10 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 4.0.0 rebuilds the learning-material surface on the canonical Phase 1
-    // model (Source Assets and typed Document/Media Renditions) and adds the
-    // capability, source-asset availability, and source-identity surfaces.
+    // 5.0.0 narrows material processing to audio/video and removes the
+    // document, conversation, production, and coaching surfaces.
     assert!(
-        openapi.contains("version: 4.0.0"),
+        openapi.contains("version: 5.0.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -101,14 +100,13 @@ fn openapi_version_snapshot_and_path_count() {
         "UpdateLexicalLearningContent:",
         "LearningMaterial:",
         "SourceAsset:",
-        "DocumentRendition:",
         "MediaRendition:",
         "MaterialRevision:",
         "MaterialDetails:",
+        "MaterialCapability:",
         "CreateLearningMaterial:",
         "AppendMaterialRevision:",
         "SourceAssetInput:",
-        "DocumentRenditionInput:",
         "MediaRenditionInput:",
         "MaterialCapabilityProjection:",
         "CapabilityAttempt:",
@@ -128,6 +126,48 @@ fn openapi_version_snapshot_and_path_count() {
             "OpenAPI schema missing: {schema}"
         );
     }
+
+    for removed in [
+        "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob:",
+        "/v1/realtime/providers:",
+        "/v1/reading/positions/{track_id}:",
+        "/v1/production-corpus/search:",
+        "/v1/review/anki/import:",
+        "DocumentRendition:",
+        "DocumentRenditionInput:",
+    ] {
+        assert!(
+            !openapi.contains(removed),
+            "retired OpenAPI surface {removed} must stay absent"
+        );
+    }
+}
+
+#[test]
+fn openapi_learning_observation_task_values_match_domain() {
+    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
+    let task_types = [
+        domain::ObservationTaskType::ContextMarking,
+        domain::ObservationTaskType::Cloze,
+        domain::ObservationTaskType::Dictation,
+        domain::ObservationTaskType::SubtitleFade,
+        domain::ObservationTaskType::ReviewRecall,
+    ];
+    let values = task_types
+        .iter()
+        .map(|task_type| {
+            serde_json::to_value(task_type)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    let schema_enum = format!("task_type: {{ enum: [{}] }}", values.join(", "));
+    assert!(
+        openapi.contains(&schema_enum),
+        "LearningObservation.task_type must match the listening task enum: {schema_enum}"
+    );
 }
 
 #[test]
@@ -207,67 +247,6 @@ pub(crate) fn operation_response_block(openapi: &str, operation_id: &str) -> Str
         .map(|(index, _)| index)
         .unwrap_or(rest.lines().count());
     rest.lines().take(end).collect::<Vec<_>>().join("\n")
-}
-
-#[test]
-fn recording_transcription_routes_stay_while_whole_media_jobs_are_absent() {
-    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
-    let router_source = concat!(
-        include_str!("../lib.rs"),
-        include_str!("../routes/router.rs")
-    );
-    let documented = openapi_v1_operations(openapi);
-    let implemented = implemented_v1_operations(router_source);
-
-    // Learner-recording transcription and the provider/model catalog remain part
-    // of the contract and the router.
-    for path in [
-        "/v1/recording-transcriptions",
-        "/v1/recording-transcriptions/{job_id}",
-        "/v1/recording-transcriptions/{job_id}/cancel",
-        "/v1/transcription/providers",
-        "/v1/transcription/models",
-        "/v1/transcription/models/install",
-        "/v1/transcription/models/register-custom",
-        "/v1/transcription/models/{model_id}/cancel-install",
-        "/v1/transcription/models/{model_id}",
-    ] {
-        assert!(
-            implemented
-                .iter()
-                .any(|(_, implemented)| implemented == path),
-            "router missing retained transcription route: {path}"
-        );
-        assert!(
-            documented.iter().any(|(_, documented)| documented == path),
-            "OpenAPI missing retained transcription route: {path}"
-        );
-    }
-
-    // The whole-media job surface stays deleted from both the contract and the
-    // router.
-    for path in [
-        "/v1/transcription/jobs",
-        "/v1/transcription/jobs/{job_id}",
-        "/v1/transcription/jobs/{job_id}/cancel",
-        "/v1/transcription/jobs/{job_id}/retry",
-        "/v1/transcription/jobs/{job_id}/archive",
-    ] {
-        assert!(
-            !documented.iter().any(|(_, documented)| documented == path),
-            "removed OpenAPI path must stay absent: {path}"
-        );
-        assert!(
-            !implemented
-                .iter()
-                .any(|(_, implemented)| implemented == path),
-            "removed router path must stay absent: {path}"
-        );
-    }
-    assert!(
-        !router_source.contains("/v1/transcription/jobs"),
-        "removed transcription jobs route must stay absent from the router"
-    );
 }
 
 #[test]

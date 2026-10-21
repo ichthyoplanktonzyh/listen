@@ -43,11 +43,6 @@ const _brightnessBound = [
   'info',
   'infoSurface',
   'disabled',
-  // Verdict shades (#22) go through the ListenSchemeShades getters.
-  'verdictCovered',
-  'verdictPartial',
-  'darkVerdictCovered',
-  'darkVerdictPartial',
 ];
 
 /// Files exempt from the rule:

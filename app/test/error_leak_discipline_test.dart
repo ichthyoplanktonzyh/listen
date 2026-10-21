@@ -4,7 +4,7 @@
 /// rendered
 ///
 ///     Could not process learner turn: HttpException: {"code":"validation_error",
-///     "message":"…","correlation_id":"api-853"}, uri = http://127.0.0.1:62645/v1/recordings
+///     "message":"…","correlation_id":"api-853"}, uri = http://127.0.0.1:62645/v1/lexical-entries/entry-1/capability/listening
 ///
 /// One string, and it leaked an internal error code, a correlation id, the
 /// sidecar's loopback port and an internal route. The charter's P4 asks for an

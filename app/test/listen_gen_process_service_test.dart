@@ -75,9 +75,7 @@ String _python3Executable() {
   throw StateError('python3 is required to run the process-service tests');
 }
 
-/// A minimal v2 capability request. The process service never inspects the
-/// document — it is written to disk and handed to `package from-capability` —
-/// so the fixture only needs to be a plausible document.
+/// A minimal v2 capability request handed through to Gen unchanged.
 const _request = CapabilityGenerationRequest(
   requestJson: {
     'schema': 'listen_gen.capability-request.v2',
@@ -180,7 +178,14 @@ void main() {
       );
 
       final completed = decode(
-        _event(4, 'completed', extra: ',"package_sha256":"$xDigest"'),
+        _event(
+          4,
+          'completed',
+          extra:
+              ',"package_sha256":"$xDigest"'
+              ',"document_renditions":[],"media_renditions":[],'
+              '"resources":[],"warnings":[]',
+        ),
       );
       completed.remove('resources');
       expect(
@@ -206,7 +211,14 @@ void main() {
 
     test('rejects a malformed completed digest and rendition references', () {
       final badDigest = decode(
-        _event(4, 'completed', extra: ',"package_sha256":"md5:abc"'),
+        _event(
+          4,
+          'completed',
+          extra:
+              ',"package_sha256":"md5:abc"'
+              ',"document_renditions":[],"media_renditions":[],'
+              '"resources":[],"warnings":[]',
+        ),
       );
       expect(
         () => parseListenGenMachineEventV2(
@@ -217,7 +229,14 @@ void main() {
       );
 
       final badRendition = decode(
-        _event(4, 'completed', extra: ',"package_sha256":"$xDigest"'),
+        _event(
+          4,
+          'completed',
+          extra:
+              ',"package_sha256":"$xDigest"'
+              ',"document_renditions":[],"media_renditions":[],'
+              '"resources":[],"warnings":[]',
+        ),
       );
       badRendition['media_renditions'] = [
         {'rendition_id': 'not-a-digest'},
@@ -231,29 +250,70 @@ void main() {
       );
     });
 
-    test('merges document and media renditions and keeps completion fields', () {
-      final event = parseListenGenMachineEventV2(
-        decode(
-          _event(
-            4,
-            'completed',
-            extra:
-                ',"package_sha256":"$xDigest"'
-                ',"document_renditions":[{"rendition_id":"sha256:${'a' * 64}"}]'
-                ',"media_renditions":[{"rendition_id":"sha256:${'b' * 64}"}]'
-                ',"resources":[{"resource_id":"sha256:${'c' * 64}"}]'
-                ',"warnings":[{"code":"w1","message":"m1"}]',
+    test(
+      'accepts the empty document placeholder and returns media outputs',
+      () {
+        final event = parseListenGenMachineEventV2(
+          decode(
+            _event(
+              4,
+              'completed',
+              extra:
+                  ',"package_sha256":"$xDigest"'
+                  ',"document_renditions":[]'
+                  ',"media_renditions":[{"rendition_id":"sha256:${'b' * 64}"}]'
+                  ',"resources":[{"resource_id":"sha256:${'c' * 64}"}]'
+                  ',"warnings":[{"code":"w1","message":"m1"}]',
+            ),
           ),
+          expectedToolVersion: _toolVersion,
+        );
+        expect(event.packageSha256, xDigest);
+        expect(event.producedRenditions, ['sha256:${'b' * 64}']);
+        expect(event.producedResources, ['sha256:${'c' * 64}']);
+        expect(event.completedWarnings, ['w1: m1']);
+      },
+    );
+
+    test('rejects non-empty document rendition outputs', () {
+      final event = decode(
+        _event(
+          4,
+          'completed',
+          extra:
+              ',"package_sha256":"$xDigest"'
+              ',"document_renditions":[{"rendition_id":"sha256:${'a' * 64}"}]'
+              ',"media_renditions":[],"resources":[],"warnings":[]',
         ),
-        expectedToolVersion: _toolVersion,
       );
-      expect(event.packageSha256, xDigest);
-      expect(event.producedRenditions, [
-        'sha256:${'a' * 64}',
-        'sha256:${'b' * 64}',
-      ]);
-      expect(event.producedResources, ['sha256:${'c' * 64}']);
-      expect(event.completedWarnings, ['w1: m1']);
+
+      expect(
+        () => parseListenGenMachineEventV2(
+          event,
+          expectedToolVersion: _toolVersion,
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test('requires the empty document rendition placeholder', () {
+      final event = decode(
+        _event(
+          4,
+          'completed',
+          extra:
+              ',"package_sha256":"$xDigest"'
+              ',"media_renditions":[],"resources":[],"warnings":[]',
+        ),
+      );
+
+      expect(
+        () => parseListenGenMachineEventV2(
+          event,
+          expectedToolVersion: _toolVersion,
+        ),
+        throwsFormatException,
+      );
     });
 
     test('exposes a terminal for completed, failed, and cancelled events', () {

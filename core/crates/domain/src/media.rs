@@ -23,6 +23,16 @@ pub enum MediaAvailability {
     Archived,
 }
 
+/// Explicit learner-selected organization for one listening source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaTriageIntent {
+    PinExtensive,
+    PinIntensive,
+    Defer,
+    Graduated,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaItem {
     pub id: MediaId,

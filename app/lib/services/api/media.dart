@@ -63,8 +63,8 @@ extension MediaApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  /// Media library for triage: every registered media with
-  /// cached fit facts, user triage intent, and familiar-material mark.
+  /// Media library for triage: every registered media with cached fit facts
+  /// and the learner's explicit triage intent.
   Future<List<MediaLibraryEntry>> listMediaLibrary() async =>
       ((await _request('GET', '/v1/media')) as List<dynamic>)
           .map(

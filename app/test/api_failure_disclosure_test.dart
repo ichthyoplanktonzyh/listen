@@ -15,16 +15,16 @@ void main() {
   /// it: the body is the envelope, and `raw` additionally carries the URI the
   /// `HttpException`'s own `toString` appended.
   final failure = ApiFailure.parse(
-    '{"code":"validation_error","message":"recording metadata must not be '
-    'empty","correlation_id":"api-853","retryable":false}',
+    '{"code":"validation_error","message":"listening status was '
+    'rejected","correlation_id":"api-853","retryable":false}',
   );
 
   /// `ApiFailure.parse` keeps the body as `raw`; production also appends the
   /// URI, so pin the worse of the two shapes.
   const rawWithUri =
-      '{"code":"validation_error","message":"recording metadata must not be '
-      'empty","correlation_id":"api-853","retryable":false}, uri = '
-      'http://127.0.0.1:62645/v1/recordings';
+      '{"code":"validation_error","message":"listening status was '
+      'rejected","correlation_id":"api-853","retryable":false}, uri = '
+      'http://127.0.0.1:62645/v1/lexical-entries/entry-1/capability/listening';
 
   /// Everything `raw` carries that no surface may render, expanded or not.
   const neverRendered = [
@@ -73,15 +73,15 @@ void main() {
     await tester.pumpWidget(
       host(
         ApiFailureNotice(
-          message: 'Could not load the AI providers',
+          message: 'Could not save listening status',
           failure: failure,
         ),
       ),
     );
 
-    expect(find.text('Could not load the AI providers'), findsOneWidget);
+    expect(find.text('Could not save listening status'), findsOneWidget);
     // The backend's operator English is not on screen until asked for.
-    expect(find.text('recording metadata must not be empty'), findsNothing);
+    expect(find.text('listening status was rejected'), findsNothing);
     expect(find.text('Details'), findsOneWidget);
     expectNoRawAnywhere(tester);
   });
@@ -92,7 +92,7 @@ void main() {
     await tester.pumpWidget(
       host(
         ApiFailureNotice(
-          message: 'Could not load the AI providers',
+          message: 'Could not save listening status',
           failure: failure,
         ),
       ),
@@ -103,7 +103,7 @@ void main() {
 
     // What a bug report can actually be matched against a backend log line.
     expect(find.text('Reference api-853'), findsOneWidget);
-    expect(find.text('recording metadata must not be empty'), findsOneWidget);
+    expect(find.text('listening status was rejected'), findsOneWidget);
     expect(find.text('Hide details'), findsOneWidget);
     // And the loopback port / internal route still are not anywhere.
     expectNoRawAnywhere(tester);

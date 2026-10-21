@@ -42,40 +42,18 @@ void main() {
     expect(entry.mediaEntries.map((e) => e.media.id), ['media-2', 'media-1']);
   });
 
-  test('includes text-only materials with no media rows', () {
+  test('projects title, shape and updated time from its material', () {
     final entry = PersonalLibraryEntry(
-      details: _details(
-        title: 'Reading text',
-        shape: MaterialShape.text,
-        documentRenditions: [_textAsset('Hello')],
-      ),
-      mediaEntries: [_mediaEntry('media-1')],
-    );
-
-    expect(entry.title, 'Reading text');
-    expect(entry.shape, MaterialShape.text);
-    expect(entry.mediaEntries, isEmpty);
-    expect(entry.primaryMedia, isNull);
-    expect(entry.documentRenditions.single.digest, isNotEmpty);
-  });
-
-  test('projects title, shape, updated time and document assets', () {
-    final entry = PersonalLibraryEntry(
-      details: _details(
-        title: 'Episode 5',
-        updatedAtMs: 4242,
-        documentRenditions: [_textAsset('A'), _textAsset('B')],
-      ),
+      details: _details(title: 'Episode 5', updatedAtMs: 4242),
       mediaEntries: const [],
     );
 
     expect(entry.materialId, 'material-1');
     expect(entry.currentRevisionId, 'revision-1');
     expect(entry.title, 'Episode 5');
-    expect(entry.shape, MaterialShape.mixed);
+    expect(entry.shape, MaterialShape.audio);
     expect(entry.updatedAtMs, 4242);
     expect(entry.isRetained, isTrue);
-    expect(entry.documentRenditions.map((asset) => asset.digest), isNotEmpty);
   });
 
   test('chooses the first usable rendition in revision order', () {
@@ -153,7 +131,6 @@ void main() {
 
     expect(entry.primaryMedia, isNull);
     expect(entry.triageIntent, isNull);
-    expect(entry.familiarMaterial, isFalse);
   });
 
   test('delegates triage facts to the primary media', () {
@@ -164,15 +141,14 @@ void main() {
 
     expect(entry.triageIntent, 'pin_intensive');
     expect(entry.media?.id, 'media-1');
-    expect(entry.isGoldenTarget, isFalse);
+    expect(entry.canListen, isFalse);
+    expect(entry.canWatch, isTrue);
+    expect(entry.canListenOrWatch, isTrue);
   });
 
   test('exposes unmodifiable collections', () {
     final entry = PersonalLibraryEntry(
-      details: _details(
-        mediaRenditions: [_rendition('r1', 'media-1')],
-        documentRenditions: [_textAsset('Hello')],
-      ),
+      details: _details(mediaRenditions: [_rendition('r1', 'media-1')]),
       mediaEntries: [_mediaEntry('media-1')],
     );
 
@@ -183,15 +159,6 @@ void main() {
     );
     expect(
       () => entry.mediaEntries[0] = _mediaEntry('media-9'),
-      throwsUnsupportedError,
-    );
-    expect(entry.documentRenditions.clear, throwsUnsupportedError);
-    expect(
-      () => entry.documentRenditions.add(_textAsset('More')),
-      throwsUnsupportedError,
-    );
-    expect(
-      () => entry.documentRenditions[0] = _textAsset('Other'),
       throwsUnsupportedError,
     );
     expect(
@@ -244,7 +211,6 @@ void main() {
 MediaLibraryEntry _mediaEntry(
   String id, {
   String? triageIntent,
-  bool familiarMaterial = false,
   String availability = 'available',
 }) => MediaLibraryEntry(
   media: MediaItem(
@@ -259,9 +225,7 @@ MediaLibraryEntry _mediaEntry(
     updatedAtMs: 0,
   ),
   primaryTrackId: null,
-  fit: null,
   triageIntent: triageIntent,
-  familiarMaterial: familiarMaterial,
 );
 
 MediaRendition _rendition(
@@ -277,19 +241,11 @@ MediaRendition _rendition(
   availability: availability,
 );
 
-DocumentRendition _textAsset(String text) => documentRendition(
-  id: 'text-$text',
-  digest: text.hashCode.abs().toRadixString(16).padLeft(64, 'a'),
-  byteSize: text.length,
-);
-
 MaterialDetails _details({
   String materialId = 'material-1',
   String title = 'Sample',
   int updatedAtMs = 100,
-  MaterialShape shape = MaterialShape.mixed,
-  List<SourceAsset> sourceAssets = const [],
-  List<DocumentRendition> documentRenditions = const [],
+  MaterialShape shape = MaterialShape.audio,
   List<MediaRendition> mediaRenditions = const [],
 }) => MaterialDetails(
   material: LearningMaterial(
@@ -303,8 +259,6 @@ MaterialDetails _details({
     id: 'revision-1',
     materialId: materialId,
     title: title,
-    sourceAssets: sourceAssets,
-    documentRenditions: documentRenditions,
     mediaRenditions: mediaRenditions,
     createdAtMs: 1,
   ),

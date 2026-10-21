@@ -221,6 +221,42 @@ void main() {
       },
     );
 
+    test('adopting remains preparing but cannot be cancelled', () async {
+      final subject = _readinessViewModel(
+        tracks: const [],
+        canAutoPrepare: true,
+        resolveComposition: (_) async => _formalResolvedComposition(),
+      );
+      addTearDown(subject.vm.dispose);
+      final adoption = Completer<LearningEdition>();
+      final adoptionStarted = Completer<void>();
+      subject.repository.adoption = adoption;
+      subject.repository.adoptionStarted = adoptionStarted;
+
+      final request = subject.vm.prepareLearningTranscript();
+      await _waitForRun(subject.coordinator, subject.repository.genService);
+      final run = subject.repository.genService.lastRun!;
+      run
+        ..emitProtocol()
+        ..emitAccepted(attemptId: run.attemptId)
+        ..emitCompleted();
+      await adoptionStarted.future.timeout(const Duration(seconds: 2));
+
+      final view = subject.coordinator.runViewFor(
+        'material-1',
+        MaterialCapability.read,
+      )!;
+      expect(view.phase, CapabilityRunPhase.adopting);
+      expect(view.busy, isTrue);
+      expect(view.canCancel, isFalse);
+      expect(subject.vm.state.phase, TranscriptReadinessPhase.preparing);
+      expect(subject.vm.state.canCancel, isFalse);
+
+      adoption.complete(_edition);
+      await request;
+      expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
+    });
+
     test(
       'completed Gen projects tokenized composition into the workbench',
       () async {
@@ -397,9 +433,114 @@ void main() {
       await request;
 
       expect(run.cancelled, isTrue);
-      expect(subject.repository.finalizedFailures, contains('cancelled'));
+      expect(subject.repository.finalizedFailures, isEmpty);
+      expect(subject.repository.cancelledAttemptIds, ['attempt-1']);
       expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
     });
+
+    test(
+      'disposing after a media switch cancels this VM’s delayed preparation',
+      () async {
+        var currentMaterial = _mediaOnlyMaterial;
+        final resolvedMaterialIds = <String>[];
+        final subject = _readinessViewModel(
+          tracks: const [],
+          canAutoPrepare: true,
+          currentMaterial: () => currentMaterial,
+          resolveComposition: (materialId) async {
+            resolvedMaterialIds.add(materialId);
+            return _formalResolvedComposition();
+          },
+        );
+        final generator = subject.repository.genService..holdNextStart = true;
+        final request = subject.vm.prepareLearningTranscript();
+        await generator.heldStartCalled.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final oldProcess = generator.heldRun!;
+        currentMaterial = _mediaOnlyMaterialFor('material-2');
+        subject.vm.dispose();
+        generator.releaseHeldStart();
+        await request.timeout(const Duration(seconds: 2));
+
+        expect(oldProcess.cancelled, isTrue);
+        expect(oldProcess.cleanUpCount, 1);
+        expect(subject.repository.finalizedFailures, isEmpty);
+        expect(subject.repository.cancelledAttemptIds, ['attempt-1']);
+        expect(
+          subject.coordinator
+              .runViewFor('material-1', MaterialCapability.read)
+              ?.phase,
+          CapabilityRunPhase.cancelled,
+        );
+        expect(
+          subject.coordinator.runViewFor('material-2', MaterialCapability.read),
+          isNull,
+          reason: 'the old ViewModel must not create a run for the new media',
+        );
+        expect(resolvedMaterialIds, isEmpty);
+        expect(subject.subtitle.primaryTrack, isNull);
+      },
+    );
+
+    test(
+      'disposing an old VM does not cancel a later request for the same material',
+      () async {
+        var currentMaterial = _mediaOnlyMaterial;
+        final resolvedMaterialIds = <String>[];
+        final subject = _readinessViewModel(
+          tracks: const [],
+          canAutoPrepare: true,
+          currentMaterial: () => currentMaterial,
+          resolveComposition: (materialId) async {
+            resolvedMaterialIds.add(materialId);
+            return _formalResolvedComposition();
+          },
+        );
+        final generator = subject.repository.genService..holdNextStart = true;
+        final oldVmRequest = subject.vm.prepareLearningTranscript();
+        await generator.heldStartCalled.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final oldProcess = generator.heldRun!;
+
+        final independentRequest = subject.coordinator.requestCapability(
+          _mediaOnlyMaterial,
+          MaterialCapability.read,
+        );
+        await _waitForRun(subject.coordinator, generator);
+        final independentRun = generator.lastRun!;
+        expect(independentRun, isNot(same(oldProcess)));
+        expect(
+          subject.coordinator
+              .runViewFor('material-1', MaterialCapability.read)
+              ?.requestToken,
+          2,
+        );
+
+        currentMaterial = _mediaOnlyMaterialFor('material-2');
+        subject.vm.dispose();
+        expect(independentRun.cancelled, isFalse);
+
+        generator.releaseHeldStart();
+        await oldVmRequest.timeout(const Duration(seconds: 2));
+        expect(oldProcess.cancelled, isTrue);
+        expect(oldProcess.cleanUpCount, 1);
+
+        independentRun
+          ..emitProtocol()
+          ..emitAccepted(attemptId: independentRun.attemptId)
+          ..emitCompleted();
+        expect(
+          await independentRequest.timeout(const Duration(seconds: 2)),
+          isA<CapabilityAvailable>(),
+        );
+        expect(independentRun.cancelled, isFalse);
+        expect(resolvedMaterialIds, isEmpty);
+        expect(subject.subtitle.primaryTrack, isNull);
+      },
+    );
 
     test(
       'an already-completed capability run without a formal Core transcript fails',
@@ -445,6 +586,7 @@ void main() {
 _readinessViewModel({
   required List<SubtitleTrack> tracks,
   required bool canAutoPrepare,
+  MaterialDetails? Function()? currentMaterial,
   Future<ResolvedComposition?> Function(String materialId)? resolveComposition,
 }) {
   final harness = _coordinatorHarness(tracks);
@@ -471,7 +613,7 @@ _readinessViewModel({
         ? TranscriptPreparationAvailability.ready
         : TranscriptPreparationAvailability.generatorUnavailable,
     coordinator: coordinator,
-    currentMaterial: () => _mediaOnlyMaterial,
+    currentMaterial: currentMaterial ?? () => _mediaOnlyMaterial,
     resolveComposition: resolveComposition,
   )..bind(text: (key) => key);
   return (
@@ -571,6 +713,12 @@ final class _FakeGenService implements ListenGenProcessService {
   _FakeGenService();
 
   _FakeGenRun? lastRun;
+  _FakeGenRun? heldRun;
+  int startCount = 0;
+  bool holdNextStart = false;
+  final Completer<void> heldStartCalled = Completer<void>();
+  final Completer<ListenGenProcessRun> _heldStartGate =
+      Completer<ListenGenProcessRun>();
 
   @override
   bool get isConfigured => true;
@@ -579,9 +727,22 @@ final class _FakeGenService implements ListenGenProcessService {
   ContentGeneratorState get state => ContentGeneratorState.ready;
 
   @override
-  Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) async {
+  Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) {
+    startCount++;
     final run = _FakeGenRun(request);
     lastRun = run;
+    if (holdNextStart) {
+      holdNextStart = false;
+      heldRun = run;
+      heldStartCalled.complete();
+      return _heldStartGate.future;
+    }
+    return Future.value(run);
+  }
+
+  _FakeGenRun releaseHeldStart() {
+    final run = heldRun!;
+    _heldStartGate.complete(run);
     return run;
   }
 }
@@ -596,6 +757,7 @@ final class _FakeGenRun implements ListenGenProcessRun {
       StreamController<GenMachineEvent>();
   final Completer<String> _packagePath = Completer<String>();
   bool cancelled = false;
+  int cleanUpCount = 0;
   bool packagePathCompleted = false;
   int _sequence = 0;
   final String attemptId = 'attempt-1';
@@ -620,7 +782,14 @@ final class _FakeGenRun implements ListenGenProcessRun {
 
   @override
   Future<void> cleanUp() async {
-    if (!_events.isClosed) await _events.close();
+    cleanUpCount++;
+    if (_events.isClosed) return;
+    final close = _events.close();
+    if (_events.hasListener) {
+      await close;
+    } else {
+      unawaited(close);
+    }
   }
 
   void emitProtocol() => _events.add(
@@ -692,7 +861,10 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   List<LearningEdition> editions = [];
   int finalizedSucceeded = 0;
   final List<String> finalizedFailures = [];
+  final List<String> cancelledAttemptIds = [];
   final List<String> adoptedReleases = [];
+  Completer<LearningEdition>? adoption;
+  Completer<void>? adoptionStarted;
 
   @override
   ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
@@ -724,19 +896,22 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   Future<CapabilityAttempt> finalizeAttempt({
     required String materialId,
     required String attemptId,
-    required bool succeeded,
+    required CapabilityAttemptFinalStatus status,
     String? failureReason,
     String? toolId,
     String? toolVersion,
   }) async {
-    if (succeeded) {
-      finalizedSucceeded++;
-    } else {
-      finalizedFailures.add(failureReason ?? 'unknown');
+    switch (status) {
+      case CapabilityAttemptFinalStatus.succeeded:
+        finalizedSucceeded++;
+      case CapabilityAttemptFinalStatus.failed:
+        finalizedFailures.add(failureReason ?? 'unknown');
+      case CapabilityAttemptFinalStatus.cancelled:
+        cancelledAttemptIds.add(attemptId);
     }
     return CapabilityAttempt(
       attemptId: attemptId,
-      status: succeeded ? 'succeeded' : 'failed',
+      status: status.name,
       startedAtMs: 1,
       finishedAtMs: 2,
       failureReason: failureReason,
@@ -754,13 +929,6 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     String materialId,
     String resourceId,
   ) async => throw const ApiFailure(raw: 'payload not found');
-
-  @override
-  Future<List<int>> readCompositionRenditionBlob(
-    String materialId,
-    String renditionId,
-  ) async => throw StateError('unexpected readCompositionRenditionBlob');
-
   @override
   Future<LearningEdition> installPackage(
     String materialId,
@@ -776,6 +944,11 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     String materialId,
     String releaseId,
   ) async {
+    final adoptionFuture = adoption;
+    if (adoptionFuture != null) {
+      adoptionStarted?.complete();
+      return adoptionFuture.future;
+    }
     adoptedReleases.add(releaseId);
     return _edition;
   }
@@ -804,6 +977,7 @@ final _edition = LearningEdition(
   installedAtMs: 1,
   adoptedAtMs: 2,
   adopted: true,
+  availableCapabilities: const ['read'],
   resources: [
     LearningEditionResource(
       resourceId:
@@ -820,37 +994,41 @@ final _edition = LearningEdition(
   renditions: [],
 );
 
-final _mediaOnlyMaterial = MaterialDetails(
-  material: const LearningMaterial(
-    id: 'material-1',
-    currentRevisionId: 'revision-1',
-    retainedAtMs: 1,
-    createdAtMs: 0,
-    updatedAtMs: 0,
-  ),
-  currentRevision: MaterialRevision(
-    id: 'revision-1',
-    materialId: 'material-1',
-    title: 'Lesson',
-    sourceAssets: const [],
-    documentRenditions: const [],
-    mediaRenditions: const [
-      MediaRendition(
-        id: 'media-rendition-1',
-        origin: RenditionOrigin.source,
-        kind: MediaRenditionKind.audio,
-        mediaType: 'audio/wav',
-        fingerprint: 'fingerprint',
-        availability: MediaRenditionAvailability.available,
-        mediaId: 'media-1',
-        mediaSha256: null,
-        mediaByteSize: null,
-      ),
-    ],
-    createdAtMs: 0,
-  ),
-  shape: MaterialShape.audio,
-);
+MaterialDetails _mediaOnlyMaterialFor(String materialId) {
+  final revisionId = '$materialId-revision';
+  final mediaId = 'media-${materialId.substring('material-'.length)}';
+  return MaterialDetails(
+    material: LearningMaterial(
+      id: materialId,
+      currentRevisionId: revisionId,
+      retainedAtMs: 1,
+      createdAtMs: 0,
+      updatedAtMs: 0,
+    ),
+    currentRevision: MaterialRevision(
+      id: revisionId,
+      materialId: materialId,
+      title: 'Lesson',
+      mediaRenditions: [
+        MediaRendition(
+          id: '$mediaId-rendition',
+          origin: RenditionOrigin.source,
+          kind: MediaRenditionKind.audio,
+          mediaType: 'audio/wav',
+          fingerprint: '$mediaId-fingerprint',
+          availability: MediaRenditionAvailability.available,
+          mediaId: mediaId,
+          mediaSha256: null,
+          mediaByteSize: null,
+        ),
+      ],
+      createdAtMs: 0,
+    ),
+    shape: MaterialShape.audio,
+  );
+}
+
+final _mediaOnlyMaterial = _mediaOnlyMaterialFor('material-1');
 
 const _usableTrackA = SubtitleTrack(
   id: 'track-a',
@@ -951,9 +1129,6 @@ final class _FakeResourceRepository implements ResourceRepository {
   bool get isAvailable => true;
   @override
   ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
-  @override
-  Future<ContentDifficultyProfile> contentFit(String trackId) async =>
-      throw UnimplementedError();
   @override
   Future<List<SubtitleTrack>> mediaSubtitles(String mediaId) async => tracks;
   @override
@@ -1069,13 +1244,6 @@ final class _UnavailableManagedStore implements ManagedAssetStoreService {
     String? mediaKind,
   }) => throw const ManagedStoreUnavailable();
   @override
-  Future<ManagedAssetCopy> copyBytesIntoStore({
-    required List<int> bytes,
-    required String mediaKind,
-  }) => throw const ManagedStoreUnavailable();
-  @override
-  Future<List<int>?> readBytes(String path) async => null;
-  @override
   bool contains(String path) => false;
 
   @override
@@ -1128,13 +1296,6 @@ final class _NoopLearningMaterialRepository
   @override
   Future<MaterialDetails> resolveMaterialForMedia(String mediaId) =>
       throw UnimplementedError();
-
-  @override
-  Future<MaterialRevision> updateSourceAssetAvailability(
-    String materialId,
-    String sourceAssetId,
-    SourceAssetAvailability availability,
-  ) => throw UnimplementedError();
 
   @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(

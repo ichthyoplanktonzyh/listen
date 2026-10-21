@@ -6,14 +6,13 @@ import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/settings/llm_provider_settings.dart';
-import 'package:llplayer_next/widgets/settings/realtime_provider_settings.dart';
 import 'package:llplayer_next/widgets/settings/syntax_capability_settings.dart';
 
-/// The three settings panels, each driven by a request that really fails.
+/// The retained settings panels, each driven by a request that really fails.
 ///
 /// All three held one `String? _error` filled with `'$error'` and rendered it
-/// verbatim — a red `Text` for the two provider panels, a `ListenErrorNotice`
-/// for the syntax one. So a settings page could print an internal error code,
+/// verbatim — a red `Text` for the provider panel, a `ListenErrorNotice`
+/// for syntax. So a settings page could print an internal error code,
 /// a `correlation_id`, the sidecar's loopback port and an internal route.
 ///
 /// Every scenario below fails a **real** request through the **real**
@@ -25,8 +24,8 @@ import 'package:llplayer_next/widgets/settings/syntax_capability_settings.dart';
 void main() {
   /// The body the field actually reported, verbatim.
   const envelope =
-      '{"code":"validation_error","message":"recording metadata must not be '
-      'empty","correlation_id":"api-853","retryable":false}';
+      '{"code":"validation_error","message":"listening setting was '
+      'rejected","correlation_id":"api-853","retryable":false}';
 
   /// Everything the exchange carried that a settings panel is not a place for.
   const leaks = [
@@ -37,7 +36,7 @@ void main() {
     '127.0.0.1',
     '62645',
     'validation_error',
-    'recording metadata must not be empty',
+    'listening setting was rejected',
     'uri =',
     'retryable',
     '/v1/',
@@ -117,29 +116,6 @@ void main() {
 
     expectNoLeak(tester, from: 'the AI provider panel');
     expect(find.text('Could not load the AI providers'), findsOneWidget);
-  });
-
-  testWidgets('the speech provider list failing to load names the failure', (
-    tester,
-  ) async {
-    // GET /v1/realtime/providers → 503 with the envelope.
-    await pump(
-      tester,
-      RealtimeProviderSettings(
-        viewModel: RealtimeProviderSettingsViewModel(
-          LocalRealtimeProviderRepository(
-            api(
-              fail: (method, path) => path.contains('/v1/realtime/providers')
-                  ? (statusCode: 503, body: envelope)
-                  : null,
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expectNoLeak(tester, from: 'the speech provider panel');
-    expect(find.text('Could not load the speech providers'), findsOneWidget);
   });
 
   testWidgets('a sentence-analysis action the backend rejects names the '

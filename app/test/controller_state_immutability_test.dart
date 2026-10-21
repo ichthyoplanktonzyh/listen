@@ -1,20 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/controllers/coach_dashboard_controller.dart';
-import 'package:llplayer_next/controllers/cold_start_marking_view_model.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
 import 'package:llplayer_next/controllers/hunting_session_controller.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
-import 'package:llplayer_next/controllers/reading_controller.dart';
-import 'package:llplayer_next/controllers/reading_diff_controller.dart';
-import 'package:llplayer_next/controllers/reading_task_controller.dart';
-import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/controllers/review_controller.dart';
 import 'package:llplayer_next/controllers/semantic_search_view_model.dart';
-import 'package:llplayer_next/controllers/speaking_task_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/controllers/vocabulary_view_model.dart';
-import 'package:llplayer_next/controllers/writing_task_controller.dart';
+import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/models/timeline.dart';
 
 void main() {
@@ -23,17 +16,10 @@ void main() {
       final lists = <List<Object?>>[
         LearningState().phraseCandidates,
         PlayerState().audioTracks,
-        ReadingState().paragraphs,
-        DiffSide().adjudications,
-        ReadingTaskState().draftPoints,
-        RealtimeConversationState().items,
         ReviewState().queue,
         SemanticSearchState().hits,
         SubtitleState().subtitleResources,
         VocabularyState().words,
-        WritingTaskState().findings,
-        ColdStartMarkingState().candidates,
-        CoachEvidenceFeed().items,
         HuntingState().targets,
         HuntingSessionState().occurrences,
       ];
@@ -43,20 +29,13 @@ void main() {
       }
     });
 
-    test('do not expose mutable map or set fields', () {
+    test('do not expose mutable maps or sets', () {
       final maps = <Map<Object?, Object?>>[
         LearningState().wordEntries,
-        ReadingState().slicePlayCounts,
-        ReadingTaskState().draftVerdicts,
         SubtitleState().pronunciationBySentence,
-        WritingTaskState().decisions,
-        CoachDashboardState().evidence,
         HuntingSessionState().perTargetPromptCount,
       ];
-      final sets = <Set<Object?>>[
-        SpeakingTaskState().confirmedTargetIds,
-        HuntingSessionState().handledOccurrenceIds,
-      ];
+      final sets = <Set<Object?>>[HuntingSessionState().handledOccurrenceIds];
 
       for (final values in maps) {
         expect(values.clear, throwsUnsupportedError);
@@ -66,7 +45,7 @@ void main() {
       }
     });
 
-    test('protect nested collection values', () {
+    test('protects nested subtitle analysis collections', () {
       final state = SubtitleState(
         timingsBySentence: {'sentence': []},
         senseGroupsBySentence: {'sentence': []},
@@ -86,20 +65,25 @@ void main() {
       final tracks = <SubtitleTrack>[
         const SubtitleTrack(id: 'track', cues: []),
       ];
-      final translations = <String, String>{'cue': 'translation'};
-      final confirmedIds = <String>{'target'};
+      final words = <String, LexicalEntry>{
+        'word': const LexicalEntry(
+          id: 'word',
+          normalizedForm: 'word',
+          displayForm: 'word',
+          kind: 'word',
+          status: 'known_recognized',
+          language: 'en',
+        ),
+      };
 
       final subtitle = SubtitleState(subtitleResources: tracks);
-      final reading = ReadingState(translationByAnchor: translations);
-      final speaking = SpeakingTaskState(confirmedTargetIds: confirmedIds);
+      final learning = LearningState(wordEntries: words);
 
       tracks.clear();
-      translations.clear();
-      confirmedIds.clear();
+      words.clear();
 
       expect(subtitle.subtitleResources, hasLength(1));
-      expect(reading.translationByAnchor, {'cue': 'translation'});
-      expect(speaking.confirmedTargetIds, {'target'});
+      expect(learning.wordEntries, contains('word'));
     });
 
     test('defensively copies nested constructor collections', () {

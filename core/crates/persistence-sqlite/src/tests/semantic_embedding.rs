@@ -61,7 +61,6 @@ fn services(repo: &Arc<SqliteRepository>, fingerprint: &'static str) -> AppServi
         repo.clone(),
     )
     .with_corpus_index_repository(repo.clone())
-    .with_production_corpus_repository(repo.clone())
     .with_semantic_embedding(repo.clone(), Arc::new(FixtureProvider { fingerprint }))
 }
 
@@ -96,7 +95,7 @@ async fn semantic_index_rebuild_search_and_model_stale_are_read_only() {
     assert_eq!(capability.indexed_source_count, 1);
 
     let result = semantic
-        .search("an enormous interior", Some("en"), None, None, 5)
+        .search("an enormous interior", Some("en"), None, 5)
         .await
         .unwrap();
     assert_eq!(result.hits[0].source.source_id, "media-large");
@@ -126,7 +125,6 @@ fn semantic_index_replacement_is_atomic_and_rejects_mixed_spaces() {
         source_kind: SemanticEmbeddingSourceKind::MediaCorpus,
         source_id: "source".into(),
         language: LanguageCode::parse("en").unwrap(),
-        channel: None,
         text_sha256: "text".into(),
         model_fingerprint: "space-a".into(),
         dimension: 2,
@@ -156,20 +154,14 @@ fn semantic_index_replacement_is_atomic_and_rejects_mixed_spaces() {
 
 fn writer_counts(repo: &SqliteRepository) -> Vec<u32> {
     let connection = repo.connection.lock();
-    [
-        "learning_observations",
-        "recognition_evidence",
-        "capability_proposals",
-        "review_items",
-        "production_corpus_documents",
-    ]
-    .into_iter()
-    .map(|table| {
-        connection
-            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                row.get(0)
-            })
-            .unwrap_or(0)
-    })
-    .collect()
+    ["learning_observations", "review_items", "practice_attempts"]
+        .into_iter()
+        .map(|table| {
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap_or(0)
+        })
+        .collect()
 }

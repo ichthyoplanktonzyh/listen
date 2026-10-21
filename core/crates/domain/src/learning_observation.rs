@@ -17,17 +17,7 @@ pub enum ObservationTaskType {
     Cloze,
     Dictation,
     SubtitleFade,
-    Shadowing,
     ReviewRecall,
-    UpgradeConfirmation,
-    /// Explicit "understood / didn't understand while reading" mark from the
-    /// reading posture (Phase 3.13). Reading-channel counterpart of
-    /// [`ObservationTaskType::ContextMarking`]; never written by paragraph
-    /// task results — only by a direct user act on one word.
-    ReadingContextMarking,
-    /// User-confirmed literal production of an explicitly selected lexical
-    /// target inside a completed L2 retelling or role reply.
-    SpeakingProduction,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -127,39 +117,6 @@ pub fn observation_spec_for_marking(result: ObservationResult) -> ObservationSpe
     }
 }
 
-/// Reading-posture word marking (Phase 3.13). Assistance records whether a
-/// translation was visible at marking time: only `None`-assistance reading
-/// observations can later support a reading `acquired` conclusion on their
-/// own, mirroring the listening invariant.
-pub fn observation_spec_for_reading_marking(
-    understood: bool,
-    translation_visible: bool,
-) -> ObservationSpec {
-    ObservationSpec {
-        task_type: ObservationTaskType::ReadingContextMarking,
-        capability: LexicalCapability::Reading,
-        assistance: if translation_visible {
-            AssistanceLevel::FullText
-        } else {
-            AssistanceLevel::None
-        },
-        outcome: if understood {
-            ObservationOutcome::Success
-        } else {
-            ObservationOutcome::Failure
-        },
-    }
-}
-
-pub fn observation_spec_for_speaking_production(assistance: AssistanceLevel) -> ObservationSpec {
-    ObservationSpec {
-        task_type: ObservationTaskType::SpeakingProduction,
-        capability: LexicalCapability::Speaking,
-        assistance,
-        outcome: ObservationOutcome::Success,
-    }
-}
-
 /// Returns `None` for skipped and non-evaluated completed attempts: neither is
 /// capability evidence.
 pub fn observation_spec_for_practice(
@@ -188,11 +145,6 @@ pub fn observation_spec_for_practice(
             LexicalCapability::Listening,
             AssistanceLevel::PartialText,
         ),
-        PracticeKind::Shadowing => (
-            ObservationTaskType::Shadowing,
-            LexicalCapability::Speaking,
-            AssistanceLevel::FullText,
-        ),
     };
     Some(ObservationSpec {
         task_type,
@@ -200,17 +152,6 @@ pub fn observation_spec_for_practice(
         assistance,
         outcome,
     })
-}
-
-/// The user accepting an upgrade suggestion is itself a declaration-grade
-/// success signal for the suggested capability (ADR 0017 decision 4).
-pub fn observation_spec_for_upgrade_confirmation(capability: LexicalCapability) -> ObservationSpec {
-    ObservationSpec {
-        task_type: ObservationTaskType::UpgradeConfirmation,
-        capability,
-        assistance: AssistanceLevel::None,
-        outcome: ObservationOutcome::Success,
-    }
 }
 
 pub fn observation_spec_for_review(rating: ReviewRating) -> ObservationSpec {
@@ -313,17 +254,8 @@ mod tests {
         assert_eq!(fade.assistance, AssistanceLevel::PartialText);
         assert_eq!(fade.outcome, ObservationOutcome::Failure);
 
-        let shadowing =
-            observation_spec_for_practice(PracticeKind::Shadowing, PracticeResult::Correct)
-                .unwrap();
-        assert_eq!(shadowing.capability, LexicalCapability::Speaking);
-
         assert!(
             observation_spec_for_practice(PracticeKind::Cloze, PracticeResult::Skipped).is_none()
-        );
-        assert!(
-            observation_spec_for_practice(PracticeKind::Shadowing, PracticeResult::Completed)
-                .is_none()
         );
     }
 

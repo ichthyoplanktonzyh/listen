@@ -68,7 +68,6 @@ pub struct CapabilityFilter {
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityProjectionSource {
     LegacyLearningStatusMigration,
-    EvidenceProjection,
     Import,
 }
 
@@ -285,7 +284,7 @@ mod tests {
     fn a_user_override_takes_precedence_without_deleting_projection() {
         let projection = CapabilityProjection {
             conclusion: CapabilityConclusion::Acquired,
-            source: CapabilityProjectionSource::EvidenceProjection,
+            source: CapabilityProjectionSource::Import,
             algorithm_version: "projection-v1".into(),
             confidence: None,
             evidence_as_of_ms: None,
@@ -397,7 +396,7 @@ mod tests {
 
     #[test]
     fn projection_seam_fields_default_to_none_and_stay_out_of_json() {
-        let legacy_json = r#"{"conclusion":"acquired","source":"evidence_projection","algorithm_version":"v1","updated_at_ms":5}"#;
+        let legacy_json = r#"{"conclusion":"acquired","source":"import","algorithm_version":"v1","updated_at_ms":5}"#;
         let projection: CapabilityProjection = serde_json::from_str(legacy_json).unwrap();
         assert_eq!(projection.confidence, None);
         assert_eq!(projection.evidence_as_of_ms, None);

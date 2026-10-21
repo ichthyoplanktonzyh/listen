@@ -1,8 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:crypto/crypto.dart';
-
 import '../data/repositories/capability_repository.dart';
 import '../data/repositories/resource_repository.dart';
 import '../models/adopted_composition.dart';
@@ -13,7 +8,7 @@ import 'composition_resolution.dart';
 
 /// Resolves what the adopted-composition surface needs to render: the adopted
 /// composition (through Core's single composition interface) and its learner
-/// content — the structured reading, the alignment, and the derived audio.
+/// content — the structured transcript, alignment, and audio-linked resources.
 ///
 /// The App never re-parses a `.listenpkg` to read adopted content; every
 /// payload and blob comes back through Core, re-verified by it. Package
@@ -58,25 +53,12 @@ class CompositionSessionService {
           structuredReading.resourceId,
         );
 
-    // The derived audio rendition's embedded blob is downloaded so the player
-    // can play the produced speech; its bytes stay re-verified by Core.
-    final media = adopted.derivedMediaRendition;
-    String? derivedMediaPath;
-    if (media != null) {
-      final blob = await repository.readCompositionRenditionBlob(
-        materialId,
-        media.renditionId,
-      );
-      derivedMediaPath = _writeMediaBlob(media, blob);
-    }
-
     final projected = await _readWorkbenchResources(adopted);
 
     return resolveCompositionContent(
       composition: adopted,
       structuredReadingPayload: structuredReadingPayload,
       alignmentPayload: alignmentPayload,
-      derivedMediaPath: derivedMediaPath,
       transcript: projected.transcript,
       enhancements: projected.enhancements,
       llTimelineDocument: projected.timeline,
@@ -141,7 +123,11 @@ class CompositionSessionService {
         // The formal Core transcript remains usable when an optional export
         // family is unavailable.
       }
-      return (enhancements: enhancements, transcript: track, timeline: timeline);
+      return (
+        enhancements: enhancements,
+        transcript: track,
+        timeline: timeline,
+      );
     } on Object {
       return (
         enhancements: const CompositionResourceProjection(),
@@ -180,41 +166,5 @@ class CompositionSessionService {
       }
     }
     return null;
-  }
-
-  /// Writes the exact derived audio bytes to a temporary file for the player.
-  static String _writeMediaBlob(
-    AdoptedCompositionRendition media,
-    List<int> bytes,
-  ) {
-    final extension = switch (media.mediaType) {
-      'audio/mp4' => 'm4a',
-      'audio/mpeg' => 'mp3',
-      'audio/wav' => 'wav',
-      final other when other.startsWith('audio/') => other.substring(
-        'audio/'.length,
-      ),
-      _ => 'bin',
-    };
-    final directory = Directory(
-      '${Directory.systemTemp.path}/listen-composition-media/'
-      '${_safeName(media.renditionId)}',
-    );
-    directory.createSync(recursive: true);
-    final path = '${directory.path}/${_safeName(media.renditionId)}.$extension';
-    File(path).writeAsBytesSync(bytes, flush: true);
-    return path;
-  }
-
-  static String _safeName(String value) {
-    final digest = sha256Hex(value);
-    return '${value.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')}-$digest';
-  }
-
-  static String sha256Hex(String value) {
-    // SHA-256 over the UTF-8 bytes of the rendition id: a deterministic,
-    // collision-safe temporary name. The id is already a Core digest, but a
-    // plain substring would leak unrelated id bytes into the file name.
-    return sha256.convert(utf8.encode(value)).toString();
   }
 }

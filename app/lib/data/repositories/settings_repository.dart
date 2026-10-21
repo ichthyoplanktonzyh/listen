@@ -1,6 +1,5 @@
 import '../../models/api_failure.dart';
 import '../../models/llm_provider.dart';
-import '../../models/realtime_conversation.dart';
 import '../../models/syntax_capability.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
@@ -66,58 +65,6 @@ class LocalLlmProviderRepository implements LlmProviderRepository {
   @override
   Future<LlmProbeResult> probe(String id) =>
       _request(() => _api.probeLlmProvider(id));
-}
-
-class RealtimeProviderDraft {
-  const RealtimeProviderDraft({
-    required this.displayName,
-    required this.adapterKind,
-    required this.baseUrl,
-    required this.modelId,
-    required this.voice,
-    required this.secret,
-  });
-
-  final String displayName;
-  final String adapterKind;
-  final String baseUrl;
-  final String modelId;
-  final String voice;
-  final String secret;
-}
-
-abstract class RealtimeProviderRepository {
-  /// Every failed operation throws an [ApiFailure], never a transport error.
-  Future<List<RealtimeProviderProfileView>> list();
-  Future<RealtimeProviderProfileView> register(RealtimeProviderDraft draft);
-  Future<void> delete(String id);
-}
-
-class LocalRealtimeProviderRepository implements RealtimeProviderRepository {
-  LocalRealtimeProviderRepository(this._api);
-
-  final LocalApi _api;
-
-  @override
-  Future<List<RealtimeProviderProfileView>> list() =>
-      _request(_api.realtimeProfiles);
-
-  @override
-  Future<RealtimeProviderProfileView> register(RealtimeProviderDraft draft) =>
-      _request(
-        () => _api.registerRealtimeProfile(
-          displayName: draft.displayName,
-          adapterKind: draft.adapterKind,
-          baseUrl: draft.baseUrl,
-          modelId: draft.modelId,
-          voice: draft.voice,
-          secret: draft.secret,
-        ),
-      );
-
-  @override
-  Future<void> delete(String id) =>
-      _request(() => _api.deleteRealtimeProfile(id));
 }
 
 abstract class SyntaxCapabilityRepository {

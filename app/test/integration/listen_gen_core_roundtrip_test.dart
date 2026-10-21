@@ -11,7 +11,6 @@ import 'package:llplayer_next/data/repositories/capability_repository.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/services/api_service.dart';
-import 'package:llplayer_next/services/capability_file_resolver.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
@@ -107,6 +106,16 @@ void main() {
       final fixtureManifest =
           jsonDecode(await File('$fixtureRoot/manifest.json').readAsString())
               as Map<String, dynamic>;
+      expect(
+        fixtureManifest['schema'],
+        'listen_app.content-package-roundtrip-fixture.v3',
+      );
+      expect(fixtureManifest['source_repository'], 'ichthyoplanktonzyh/listen');
+      expect(
+        (fixtureManifest['media_streams']
+            as Map<String, dynamic>)['sample-media.wav'],
+        ['audio'],
+      );
       final files = fixtureManifest['files'] as Map<String, dynamic>;
       for (final entry in files.entries) {
         final bytes = await File('$fixtureRoot/${entry.key}').readAsBytes();
@@ -150,23 +159,25 @@ void main() {
                 .cast<String>();
 
       final api = await LocalApi.connect(databasePath: dbPath);
+      MaterialCapabilityCoordinator? coordinator;
       try {
         // Register the fixture media, then resolve the material Core bound to
         // it. The material id and current revision anchor the round trip.
         final media = await api.registerMedia(mediaPath, retain: false);
         final material = await api.resolveMaterialForMedia(media.id);
 
-        final coordinator = MaterialCapabilityCoordinator(
+        final activeCoordinator = MaterialCapabilityCoordinator(
           repository: LocalCapabilityRepository(() => api),
           generator: generator,
           mediaFilePath: (rendition) async =>
               rendition.mediaId == media.id ? mediaPath : null,
           providerArguments: () => providerArguments,
         );
+        coordinator = activeCoordinator;
 
         // The fresh material has no adopted composition and no derivable
         // projection yet: the coordinator must resolve through production.
-        final outcome = await coordinator.requestCapability(
+        final outcome = await activeCoordinator.requestCapability(
           material,
           MaterialCapability.read,
         );
@@ -190,8 +201,19 @@ void main() {
         // structured reading and time alignment resources.
         expect(edition.providesRead, isTrue);
         expect(
+          edition.availableCapabilities,
+          contains('read'),
+          reason:
+              'Core must expose the projected read capability on the edition',
+        );
+        expect(
           edition.renditions.map((rendition) => rendition.kind),
           contains('media'),
+        );
+        expect(
+          edition.renditions.every((rendition) => rendition.kind == 'media'),
+          isTrue,
+          reason: 'Gen releases material only as audio/video renditions',
         );
         final resourceKinds = edition.resources
             .map((resource) => resource.kind)
@@ -215,7 +237,7 @@ void main() {
 
         // Re-requesting resolves through the adopted composition: no new
         // attempt is opened and the same edition comes back.
-        final replay = await coordinator.requestCapability(
+        final replay = await activeCoordinator.requestCapability(
           material,
           MaterialCapability.read,
         );
@@ -224,134 +246,13 @@ void main() {
           (replay as CapabilityAvailable).edition!.releaseId,
           edition.releaseId,
         );
-        coordinator.dispose();
       } finally {
+        coordinator?.dispose();
         await api.close();
       }
     },
     skip: runE2e
         ? false
         : 'Set LISTEN_PACKAGE_E2E=1 for the real monorepo round trip',
-  );
-
-  test(
-    'a document material produces listen through the fake TTS provider and '
-    'its derived audio resolves from the adopted composition through Core',
-    () async {
-      HttpOverrides.global = null;
-
-      final release = await releaseForProbeManifest();
-      final verified = await release.verify();
-      expect(verified.toolVersion, isNotEmpty);
-
-      final generator = LocalListenGenProcessService(
-        pythonExecutable: _python3Executable,
-        releaseService: release,
-      );
-      final dbPath = scratchDatabasePath('roundtrip-listen');
-      final api = await LocalApi.connect(databasePath: dbPath);
-      final managedRoot = await Directory.systemTemp.createTemp(
-        'roundtrip-managed',
-      );
-      final coordinator = MaterialCapabilityCoordinator(
-        repository: LocalCapabilityRepository(() => api),
-        generator: generator,
-        providerArguments: () => const ['--tts-provider', 'fake'],
-        fileResolver: LocalCapabilityFileResolver(
-          // The managed store is content-addressed: the learner-authorized
-          // bytes live at <root>/<digest>, exactly as the App stores them.
-          managedStorePath: (SourceAsset asset) =>
-              '${managedRoot.path}/${asset.sha256Digest}',
-        ),
-      );
-      try {
-        final sourceBytes = utf8.encode('Listen, carefully! Words matter.');
-        final digest = sha256.convert(sourceBytes).toString();
-        await File('${managedRoot.path}/$digest').writeAsBytes(sourceBytes);
-        final created = await api.createLearningMaterial(
-          CreateLearningMaterialInput(
-            title: 'Document listen lesson',
-            sourceAssets: [
-              SourceAssetInput(
-                mediaType: 'text/plain',
-                byteLength: sourceBytes.length,
-                sha256Digest: sha256.convert(sourceBytes).toString(),
-                binding: const SourceAssetBinding(
-                  type: SourceAssetBindingType.managed,
-                ),
-              ),
-            ],
-            documentRenditions: [
-              DocumentRenditionInput(
-                mediaType: 'text/plain',
-                digest: sha256.convert(sourceBytes).toString(),
-                byteSize: sourceBytes.length,
-                language: 'en',
-                sourceAssetIndex: 0,
-              ),
-            ],
-            mediaRenditions: const [],
-          ),
-        );
-
-        final outcome = await coordinator.requestCapability(
-          created,
-          MaterialCapability.listen,
-        );
-        if (outcome is CapabilityFailed) {
-          final error = outcome.error;
-          if (error is ListenGenProcessFailure) {
-            fail('listen failed: ${error.code} ${error.message}');
-          }
-          fail('listen failed: $error');
-        }
-        expect(outcome, isA<CapabilityAvailable>());
-        final edition = (outcome as CapabilityAvailable).edition!;
-        expect(edition.adopted, isTrue);
-
-        // The fake TTS derivation produced a playable media rendition and the
-        // synchronized alignment resources.
-        expect(edition.hasAvailableMediaRendition, isTrue);
-        expect(edition.providesSynchronizedReadListen, isTrue);
-        expect(
-          edition.resources.map((resource) => resource.kind),
-          containsAll(const ['structured_reading', 'anchor_time_alignment']),
-        );
-
-        // The adopted composition resolves through Core's composition
-        // interface — never through an app-side retained carrier: the reading
-        // structure, the alignment, and the produced audio come back from
-        // Core, re-verified by it.
-        final repository = LocalCapabilityRepository(() => api);
-        final adopted = await repository.readAdoptedComposition(
-          created.material.id,
-        );
-        expect(adopted.releaseId, edition.releaseId);
-        final sr = adopted.resourceOfKind('structured_reading');
-        expect(sr, isNotNull);
-        final srPayload = await repository.readCompositionResourcePayload(
-          created.material.id,
-          sr!.resourceId,
-        );
-        final srJson =
-            jsonDecode(utf8.decode(srPayload)) as Map<String, dynamic>;
-        expect(srJson['text'], isNotEmpty);
-        final media = adopted.derivedMediaRendition;
-        expect(media, isNotNull);
-        final blob = await repository.readCompositionRenditionBlob(
-          created.material.id,
-          media!.renditionId,
-        );
-        expect(blob, isNotEmpty);
-
-        coordinator.dispose();
-      } finally {
-        await managedRoot.delete(recursive: true);
-        await api.close();
-      }
-    },
-    skip: runE2e
-        ? false
-        : 'Set LISTEN_PACKAGE_E2E=1 for the real three-repository round trip',
   );
 }

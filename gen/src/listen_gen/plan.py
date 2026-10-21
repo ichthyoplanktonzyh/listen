@@ -10,8 +10,8 @@ empty plan (a minimal package still documents the available source), and a
 capability that no supported derivation can produce raises
 :class:`UnsupportedCapability` before anything runs.
 
-The only derivation is media-to-structured-reading. Listen is satisfied by
-audio or video media; watch requires video media.
+The only derivation is media-to-structured-reading. Listen requires an audio
+rendition; watch requires a video rendition.
 """
 
 from __future__ import annotations
@@ -102,8 +102,9 @@ def plan(
 
     Deterministic and side-effect free. Raises :class:`UnsupportedCapability`
     when no supported derivation can produce the requested capability.
-    Listen requires audio or video media; watch requires video media. Both
-    capabilities are already satisfied when their required media is present.
+    Listen requires an audio rendition; watch requires a video rendition.
+    Both capabilities are already satisfied when their required media is
+    present.
     """
     capability = request.requested_capability
     derivations: list[Derivation] = []
@@ -132,9 +133,9 @@ def plan(
         return ProductionPlan(tuple(derivations), capability)
 
     if capability == "listen":
-        if request.media_renditions:
+        if any(entry.media_kind == "audio" for entry in request.media_renditions):
             return ProductionPlan((), capability)
-        raise UnsupportedCapability("listen requires audio or video media")
+        raise UnsupportedCapability("listen requires an audio rendition")
 
     if capability == "watch":
         if not any(entry.media_kind == "video" for entry in request.media_renditions):

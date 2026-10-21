@@ -8,8 +8,8 @@ import 'package:llplayer_next/models/adopted_composition.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/learning_edition.dart';
 import 'package:llplayer_next/models/learning_material.dart';
+import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/timeline.dart';
-import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/composition_session_service.dart';
 import 'package:llplayer_next/services/core_timeline_export.dart';
 
@@ -225,7 +225,6 @@ AdoptedCompositionRendition _sourceMediaRendition() =>
       kind: 'media',
       origin: 'source',
       mediaType: 'audio/mpeg',
-      language: 'en',
       digest: 'd' * 64,
       byteSize: 1,
       blobAvailable: false,
@@ -331,12 +330,6 @@ final class _CompositionRepository implements CapabilityRepository {
   }
 
   @override
-  Future<List<int>> readCompositionRenditionBlob(
-    String materialId,
-    String renditionId,
-  ) async => throw StateError('unexpected rendition blob read');
-
-  @override
   ApiFailure failureDetail(Object error) =>
       error is ApiFailure ? error : ApiFailure(raw: '$error', code: '$error');
 
@@ -359,7 +352,7 @@ final class _CompositionRepository implements CapabilityRepository {
   Future<CapabilityAttempt> finalizeAttempt({
     required String materialId,
     required String attemptId,
-    required bool succeeded,
+    required CapabilityAttemptFinalStatus status,
     String? failureReason,
     String? toolId,
     String? toolVersion,
@@ -382,10 +375,8 @@ final class _CompositionRepository implements CapabilityRepository {
   ) async => throw StateError('unexpected adoptEdition');
 
   @override
-  Future<void> deleteEdition(
-    String materialId,
-    String releaseId,
-  ) async => throw StateError('unexpected deleteEdition');
+  Future<void> deleteEdition(String materialId, String releaseId) async =>
+      throw StateError('unexpected deleteEdition');
 }
 
 /// Composition tests that never reach Core's subtitle/analysis endpoints.
@@ -406,11 +397,6 @@ final class _NoopWorkbenchResources implements ResourceRepository {
   @override
   Future<CoreTimelineExport> exportTimelineJson(String trackId) async =>
       throw StateError('unexpected exportTimelineJson');
-
-  @override
-  Future<ContentDifficultyProfile> contentFit(String trackId) async =>
-      throw StateError('unexpected contentFit');
-
   @override
   Future<List<WordTiming>> wordTimings(String trackId) async =>
       throw StateError('unexpected wordTimings');
@@ -694,11 +680,6 @@ final class _CoreWorkbenchResources implements ResourceRepository {
   @override
   Future<CoreTimelineExport> exportTimelineJson(String trackId) async =>
       CoreTimelineExport(_documentJson);
-
-  @override
-  Future<ContentDifficultyProfile> contentFit(String trackId) async =>
-      throw StateError('unexpected contentFit');
-
   @override
   Future<List<WordTiming>> wordTimings(String trackId) async =>
       throw StateError('unexpected wordTimings');

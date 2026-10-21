@@ -129,11 +129,9 @@ class MediaSessionCoordinator {
   /// Leaves the current registered-media session for a different kind of
   /// material on the same workbench.
   ///
-  /// A document is not a modal laid over the current video: it replaces the
-  /// active material. The old decoder, media identity, transcript, timeline
-  /// and analysis therefore all have to leave together. If the document later
-  /// gains TTS, the shell can open that derived rendition on the same adapter
-  /// without registering a second Material.
+  /// Opening a new media source replaces the current workbench identity, so
+  /// the old decoder, media identity, transcript, timeline and analysis leave
+  /// together.
   Future<void> deactivateForMaterialSwitch() async {
     ++_sessionEpoch;
     final previousMediaId = player.mediaId;
@@ -160,7 +158,7 @@ class MediaSessionCoordinator {
         await repository.saveProgress(previousMediaId, previousPosition);
       } on Object {
         // Progress persistence is best-effort during a material switch. The
-        // new document must remain openable even when Core cannot save the old
+        // new media source must remain openable even when Core cannot save the old
         // playback position.
       }
     }

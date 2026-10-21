@@ -260,18 +260,13 @@ const _rawTransportMapBaseline = <String, int>{
   'lib/controllers/learning_assets_view_models.dart': 3,
   'lib/controllers/learning_controller.dart': 1,
   'lib/controllers/learning_flow_view_models.dart': 3,
-  'lib/controllers/learning_workflow_controller.dart': 6,
+  'lib/controllers/learning_workflow_controller.dart': 5,
   'lib/controllers/media_session_coordinator.dart': 3,
   'lib/controllers/occurrence_media_resolver.dart': 2,
   'lib/controllers/playback_actions_coordinator.dart': 1,
-  'lib/controllers/practice_actions_coordinator.dart': 1,
-  'lib/controllers/reading_channel_coordinator.dart': 2,
-  'lib/controllers/realtime_conversation_controller.dart': 2,
   'lib/controllers/slice_player_controller.dart': 2,
   'lib/controllers/vocabulary_actions_coordinator.dart': 1,
   'lib/controllers/vocabulary_view_model.dart': 2,
-  'lib/controllers/writing_channel_coordinator.dart': 2,
-  'lib/controllers/writing_task_controller.dart': 1,
   'lib/data/repositories/core_session_repository.dart': 2,
   'lib/data/repositories/external_vocabulary_repository.dart': 2,
   'lib/data/repositories/learning_assets_repository.dart': 2,
@@ -279,15 +274,9 @@ const _rawTransportMapBaseline = <String, int>{
   'lib/data/repositories/lexical_repository.dart': 2,
   'lib/data/repositories/media_session_repository.dart': 2,
   'lib/data/repositories/playback_repository.dart': 3,
-  'lib/data/repositories/reading_task_repository.dart': 2,
-  'lib/data/repositories/realtime_conversation_repository.dart': 7,
-  'lib/data/repositories/speaking_task_repository.dart': 2,
-  'lib/data/repositories/writing_task_repository.dart': 4,
-  'lib/screens/vocabulary_screen.dart': 2,
-  'lib/widgets/channels/reading_channel.dart': 1,
+  'lib/screens/vocabulary_screen.dart': 1,
   'lib/widgets/flows/learning_flows.dart': 2,
   'lib/widgets/layout/side_panel.dart': 1,
-  'lib/widgets/panels/reading_word_inspector.dart': 1,
   'lib/widgets/panels/word_learning_panel.dart': 1,
   'lib/widgets/vocabulary/vocabulary_details_view.dart': 4,
 };
@@ -298,32 +287,15 @@ const _modelWireCouplingBaseline = <String, int>{
   // is gone. The app prepares transcripts through the pinned listen-gen package
   // journey and no longer parses Core's transcription-job SSE envelopes.
   'lib/models/backend_event.dart': 23,
-  'lib/models/coach_dashboard.dart': 32,
   'lib/models/listening.dart': 12,
   'lib/models/llm_provider.dart': 14,
-  'lib/models/personal_expression.dart': 33,
-  // 138, up from 132: contract 1.1.0 makes `state` and `origin` required
-  // fields of ReviewQueueEntry. The card head has to read the scheduler's own
-  // state rather than infer one from `interval_days`/`lapse_count`, and the
-  // session has to read `origin.has_listening_enhancements` rather than assume
-  // every card was born here. That is two parsed types, each costing a
-  // `fromJson` declaration plus its call site. Deliberate: the alternative was
-  // less wire coupling and two wrong claims on screen.
-  'lib/models/practice.dart': 138,
-  // The review surfaces contract 1.1.0 added — deck counts, daily budget,
-  // interval prediction, custom study and Anki interop. Eleven wire types in
-  // their own file rather than piled onto practice.dart, which is why this is
-  // a new entry and not another jump in the number above.
-  'lib/models/review_deck.dart': 51,
-  'lib/models/production_corpus.dart': 26,
-  'lib/models/projection_review.dart': 10,
-  'lib/models/reading.dart': 2,
-  'lib/models/realtime_conversation.dart': 10,
+  // Listening review DTOs no longer carry removed study channels.
+  'lib/models/practice.dart': 84,
+  'lib/models/review_deck.dart': 35,
   // 28, down from 30: the whole-media TranscriptionJobView wire model is gone
   // along with the Core transcription-job surface it decoded.
-  'lib/models/runtime_resources.dart': 28,
+  'lib/models/runtime_resources.dart': 18,
   'lib/models/semantic_embedding.dart': 18,
-  'lib/models/semantic_task.dart': 67,
   'lib/models/speech_synthesis.dart': 12,
   'lib/models/syntax_capability.dart': 4,
   'lib/models/timeline/display.dart': 6,
@@ -341,7 +313,7 @@ const _modelWireCouplingBaseline = <String, int>{
   'lib/models/types/diagnosis.dart': 26,
   'lib/models/types/dictionary.dart': 46,
   'lib/models/types/lexical.dart': 91,
-  'lib/models/types/media_fit.dart': 56,
+  'lib/models/types/media_fit.dart': 11,
   'lib/models/types/pronunciation.dart': 60,
   'lib/models/vocabulary_transfer.dart': 7,
 };

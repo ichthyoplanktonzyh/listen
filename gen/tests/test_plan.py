@@ -13,23 +13,28 @@ from listen_gen.package_v3 import sha256_of_bytes
 
 
 def media_request(
-    capability: str = "read", *, media: bool = True, media_kind: str = "audio"
+    capability: str = "read",
+    *,
+    media: bool = True,
+    media_kind: str = "audio",
+    additional_media_kinds: tuple[str, ...] = (),
 ) -> CapabilityRequest:
     renditions: list[dict[str, object]] = []
     if media:
-        renditions.append({
-            "kind": "media",
-            "rendition_id": "sha256:" + "1" * 64,
-            "media_kind": media_kind,
-            "media_type": "audio/wav" if media_kind == "audio" else "video/mp4",
-            "media_id": "media-1",
-            "fingerprint": "media-fingerprint",
-            "blob": {
-                "digest": "sha256:" + "2" * 64,
-                "size_bytes": 10,
-                "path": "/tmp/media.wav",
-            },
-        })
+        for index, kind in enumerate((media_kind, *additional_media_kinds)):
+            renditions.append({
+                "kind": "media",
+                "rendition_id": "sha256:" + str(index + 1) * 64,
+                "media_kind": kind,
+                "media_type": "audio/wav" if kind == "audio" else "video/mp4",
+                "media_id": f"media-{index + 1}",
+                "fingerprint": f"media-fingerprint-{index + 1}",
+                "blob": {
+                    "digest": "sha256:" + str(index + 2) * 64,
+                    "size_bytes": 10,
+                    "path": "/tmp/media.wav" if kind == "audio" else "/tmp/media.mp4",
+                },
+            })
     return CapabilityRequest.from_document({
         "schema": "listen_gen.capability-request.v2",
         "version": 2,
@@ -81,10 +86,17 @@ class PlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "subtitle_sha256"):
             plan(media_request(), subtitle_sha256="/private/local/path.srt")
 
-    def test_listen_is_satisfied_by_audio_or_video_source(self) -> None:
-        for media_kind in ("audio", "video"):
-            with self.subTest(media_kind=media_kind):
-                self.assertTrue(plan(media_request("listen", media_kind=media_kind)).empty)
+    def test_listen_requires_an_audio_rendition(self) -> None:
+        self.assertTrue(plan(media_request("listen", media_kind="audio")).empty)
+        self.assertTrue(
+            plan(
+                media_request(
+                    "listen", media_kind="audio", additional_media_kinds=("video",)
+                )
+            ).empty
+        )
+        with self.assertRaisesRegex(UnsupportedCapability, "listen requires an audio rendition"):
+            plan(media_request("listen", media_kind="video"))
 
     def test_watch_is_satisfied_only_by_video_source(self) -> None:
         self.assertTrue(plan(media_request("watch", media_kind="video")).empty)

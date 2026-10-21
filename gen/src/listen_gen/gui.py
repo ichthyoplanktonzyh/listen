@@ -959,6 +959,16 @@ def _validate_produce_payload(req_data: dict[str, Any], payload: dict[str, Any])
         })
     if not has_media:
         problems.append({"field": "input", "message": "需要音频或视频素材"})
+    elif capability == "listen" and not any(
+        isinstance(r, dict)
+        and r.get("kind") == "media"
+        and r.get("media_kind") == "audio"
+        for r in renditions
+    ):
+        problems.append({
+            "field": "requested_capability",
+            "message": "listen 需要已有的 audio rendition；video-only 素材不会转换为独立音频",
+        })
     return problems
 
 

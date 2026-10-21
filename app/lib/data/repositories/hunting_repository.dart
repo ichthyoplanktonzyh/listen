@@ -10,7 +10,6 @@ class HuntingRepositoryFailure implements Exception {
 abstract interface class HuntingRepository {
   bool get isAvailable;
   Future<List<HuntingTarget>> targets();
-  Future<List<HuntingCandidate>> candidates();
   Future<HuntingTarget> createTarget({
     required String lexicalEntryId,
     required String sourceKind,
@@ -51,9 +50,6 @@ class LocalHuntingRepository implements HuntingRepository {
   @override
   Future<List<HuntingTarget>> targets() =>
       _request((api) => api.huntingTargets());
-  @override
-  Future<List<HuntingCandidate>> candidates() =>
-      _request((api) => api.huntingCandidates());
   @override
   Future<HuntingTarget> createTarget({
     required String lexicalEntryId,
@@ -106,8 +102,6 @@ class UnavailableHuntingRepository implements HuntingRepository {
   bool get isAvailable => false;
   @override
   Future<void> archiveTarget(String id) => _unavailable();
-  @override
-  Future<List<HuntingCandidate>> candidates() => _unavailable();
   @override
   Future<HuntingTarget> createTarget({
     required String lexicalEntryId,

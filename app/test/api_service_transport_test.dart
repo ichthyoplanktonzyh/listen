@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/models/material_capability.dart';
+import 'package:llplayer_next/models/review_deck.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 /// Exercises the A1 transport seam: `LocalApi.withTransport` lets the client be
@@ -75,6 +77,49 @@ void main() {
       expect(seenPath, '/v1/media/m1/progress');
       expect(jsonDecode(seenBody!), {'position_ms': 5000});
     });
+
+    test(
+      'finalizes a cancelled capability attempt with cancelled status only',
+      () async {
+        Map<String, dynamic>? requestBody;
+        String? requestPath;
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) async {
+            expect(method, 'PUT');
+            requestPath = path;
+            requestBody = jsonDecode(body!) as Map<String, dynamic>;
+            return (
+              statusCode: 200,
+              body: jsonEncode({
+                'attempt_id': 'attempt/1',
+                'status': requestBody!['status'],
+                'started_at_ms': 1,
+                'finished_at_ms': 2,
+                'failure_reason': null,
+                'producer_tool_id': null,
+                'producer_tool_version': null,
+              }),
+            );
+          },
+        );
+
+        final attempt = await api.finalizeCapabilityAttempt(
+          materialId: 'material/1',
+          attemptId: 'attempt/1',
+          status: CapabilityAttemptFinalStatus.cancelled,
+        );
+
+        expect(
+          requestPath,
+          '/v1/materials/material%2F1/capability-attempts/attempt%2F1',
+        );
+        expect(requestBody, {'status': 'cancelled'});
+        expect(attempt.status, 'cancelled');
+        expect(attempt.failureReason, isNull);
+      },
+    );
 
     test('builds syntax lifecycle and force-rebuild requests', () async {
       final seen = <String>[];
@@ -196,179 +241,7 @@ void main() {
       );
     });
 
-    test('production corpus search builds the query and decodes hits', () async {
-      String? seenPath;
-      final api = LocalApi.withTransport(
-        baseUrl: 'http://test',
-        token: 'tok',
-        transport: (method, path, body) async {
-          seenPath = path;
-          return (
-            statusCode: 200,
-            body: jsonEncode([
-              {
-                'document': {
-                  'id': 'document-1',
-                  'language': 'en',
-                  'channel': 'written',
-                  'assistance': 'content_anchored',
-                  'attempt_id': 'attempt-1',
-                  'rubric_id': 'rubric-1',
-                  'response_revision': 1,
-                  'task_kind': 'opinion',
-                  'media_id': null,
-                  'start_ms': 0,
-                  'end_ms': 1000,
-                  'response_text': 'A useful proposal.',
-                  'produced_at_ms': 42,
-                },
-                'entry': {
-                  'id': 'entry-1',
-                  'document_id': 'document-1',
-                  'normalized_key': 'proposal',
-                  'display_text': 'proposal',
-                  'start_char': 9,
-                  'end_char': 17,
-                },
-              },
-            ]),
-          );
-        },
-      );
-
-      final hits = await api.searchProductionCorpus(
-        language: 'en',
-        query: 'useful proposal',
-      );
-
-      expect(
-        seenPath,
-        '/v1/production-corpus/search?language=en&query=useful+proposal&limit=50&offset=0',
-      );
-      expect(hits.single.document.responseText, 'A useful proposal.');
-      expect(hits.single.entry!.normalizedKey, 'proposal');
-    });
-
-    test('production gap review decodes starter and ranked target', () async {
-      String? seenPath;
-      final api = LocalApi.withTransport(
-        baseUrl: 'http://test',
-        token: 'tok',
-        transport: (method, path, body) async {
-          seenPath = path;
-          return (
-            statusCode: 200,
-            body: jsonEncode({
-              'language': 'en',
-              'channel': 'written',
-              'readiness': 'starter',
-              'document_count': 1,
-              'token_count': 4,
-              'lemma_count': 4,
-              'candidate_count': 1,
-              'ranking_version': 'production-gap-ranking-v1',
-              'targets': [
-                {
-                  'lexical_entry_id': 'entry-enjoy',
-                  'normalized_key': 'enjoy',
-                  'display_form': 'enjoy',
-                  'frequency_rank': 685,
-                  'frequency_band': 1,
-                  'evidence_strength': 3,
-                  'recency_band': 2,
-                  'reading_acquired': true,
-                  'listening_acquired': false,
-                  'reading_successes': 0,
-                  'listening_successes': 0,
-                  'recognition_contexts': 0,
-                  'latest_receptive_at_ms': 42,
-                  'explanation': ['BNC frequency rank 685'],
-                },
-              ],
-            }),
-          );
-        },
-      );
-
-      final review = await api.productionGapReview(language: 'en');
-
-      expect(
-        seenPath,
-        '/v1/production-gap/review?language=en&channel=written&limit=10',
-      );
-      expect(review.readiness, 'starter');
-      expect(review.targets.single.frequencyRank, 685);
-    });
-
-    test('semantic gap enrichment remains additive to the v1 review', () async {
-      final api = LocalApi.withTransport(
-        baseUrl: 'http://test',
-        token: 'tok',
-        transport: (method, path, body) async => (
-          statusCode: 200,
-          body: jsonEncode({
-            'review': {
-              'language': 'en',
-              'channel': 'written',
-              'readiness': 'starter',
-              'document_count': 1,
-              'token_count': 4,
-              'lemma_count': 4,
-              'candidate_count': 1,
-              'ranking_version': 'production-gap-ranking-v1',
-              'targets': [
-                {
-                  'lexical_entry_id': 'entry-big',
-                  'normalized_key': 'big',
-                  'display_form': 'big',
-                  'frequency_rank': 100,
-                  'frequency_band': 1,
-                  'evidence_strength': 3,
-                  'recency_band': 2,
-                  'reading_acquired': true,
-                  'listening_acquired': false,
-                  'reading_successes': 0,
-                  'listening_successes': 0,
-                  'recognition_contexts': 0,
-                  'latest_receptive_at_ms': 42,
-                  'explanation': ['BNC frequency rank 100'],
-                },
-              ],
-            },
-            'semantic_capability': {
-              'status': 'ready',
-              'indexed_source_count': 3,
-            },
-            'threshold': 0.7,
-            'enrichments': [
-              {
-                'lexical_entry_id': 'entry-big',
-                'target_normalized_key': 'big',
-                'matches': [
-                  {
-                    'normalized_key': 'enormous',
-                    'similarity': 0.81,
-                    'model_fingerprint': 'space-a',
-                    'explanation': 'model clue only',
-                  },
-                ],
-              },
-            ],
-          }),
-        ),
-      );
-
-      final result = await api.semanticProductionGapReview(language: 'en');
-
-      expect(result.review.targets.single.normalizedKey, 'big');
-      expect(
-        result.matchesByTarget['entry-big']!.single.normalizedKey,
-        'enormous',
-      );
-      expect(result.threshold, 0.7);
-    });
-
-    test('semantic search keeps capability and provenance typed', () async {
+    test('semantic search queries only the listening corpus', () async {
       String? seenPath;
       final api = LocalApi.withTransport(
         baseUrl: 'http://test',
@@ -414,184 +287,66 @@ void main() {
         language: 'en',
       );
 
-      expect(
-        seenPath,
-        '/v1/semantic-search?query=a+very+big+room&language=en&source=all&channel=all&limit=20',
-      );
+      expect(seenPath, contains('/v1/semantic-search?query=a+very+big+room'));
+      expect(seenPath, contains('language=en'));
+      expect(seenPath, isNot(contains('source=')));
+      expect(seenPath, isNot(contains('channel=')));
       expect(result.capability.canSearch, isTrue);
       expect(result.hits.single.source.text, 'An enormous hall.');
       expect(result.hits.single.similarity, closeTo(0.82, 0.001));
     });
 
     test(
-      'short recording transcription keeps raw ASR and provenance typed',
+      'custom study sends listening only and rejects other channels early',
       () async {
-        String? seenBody;
+        final calls = <String>[];
         final api = LocalApi.withTransport(
           baseUrl: 'http://test',
           token: 'tok',
           transport: (method, path, body) async {
-            seenBody = body;
+            calls.add('$method $path');
+            expect(jsonDecode(body!), {
+              'kind': 'channel',
+              'channel': 'listening',
+              'limit': 10,
+            });
             return (
               statusCode: 200,
               body: jsonEncode({
-                'id': 'rt-1',
-                'recording_asset_id': 'recording-1',
-                'status': 'completed',
-                'raw_transcript': 'hello there',
-                'segments': [
-                  {'start_ms': 0, 'end_ms': 800, 'text': 'hello there'},
-                ],
-                'provenance': {
-                  'provider_id': 'whisper.cpp',
-                  'provider_version': 'whisper-cli',
-                  'runtime_id': 'whisper.cpp-cli',
-                  'runtime_version': 'whisper-cli',
-                  'model_id': 'base.en',
-                  'model_revision': 'pinned',
-                  'model_checksum_sha256': 'model-sha',
-                  'recording_content_sha256': 'recording-sha',
-                  'requested_language': 'en',
-                  'detected_language': 'en',
-                },
-                'error_code': null,
-                'error_message': null,
-                'created_at_ms': 10,
-                'started_at_ms': 12,
-                'completed_at_ms': 42,
-                'latency_ms': 30,
+                'entries': <Object>[],
+                'advances_normal_schedule': false,
               }),
             );
           },
         );
 
-        final job = await api.createRecordingTranscription(
-          recordingId: 'recording-1',
-          modelId: 'base.en',
-          language: 'en',
+        await expectLater(
+          api.customStudy(
+            const CustomStudyRequest(
+              kind: CustomStudyKind.channel,
+              channel: 'speaking',
+              limit: 10,
+            ),
+          ),
+          throwsArgumentError,
+        );
+        expect(calls, isEmpty);
+
+        final queue = await api.customStudy(
+          const CustomStudyRequest(
+            kind: CustomStudyKind.channel,
+            channel: 'listening',
+            limit: 10,
+          ),
         );
 
-        expect(jsonDecode(seenBody!), {
-          'recording_id': 'recording-1',
-          'model_id': 'base.en',
-          'language': 'en',
-        });
-        expect(job.rawTranscript, 'hello there');
-        expect(job.segments.single.endMs, 800);
-        expect(job.provenance.detectedLanguage, 'en');
-        expect(job.latencyMs, 30);
+        expect(calls, ['POST /v1/review/custom-study']);
+        expect(queue.entries, isEmpty);
+        expect(queue.advancesNormalSchedule, isFalse);
       },
     );
 
-    test(
-      'spoken attempt keeps raw and corrected transcripts separate',
-      () async {
-        Map<String, dynamic>? request;
-        final api = LocalApi.withTransport(
-          baseUrl: 'http://test',
-          token: 'tok',
-          transport: (method, path, body) async {
-            request = jsonDecode(body!) as Map<String, dynamic>;
-            return (
-              statusCode: 200,
-              body: jsonEncode({...request!, 'id': 'attempt-speaking-1'}),
-            );
-          },
-        );
-
-        final attempt = await api.createSpokenSemanticAttempt(
-          kind: 'pattern_production',
-          target: {
-            'kind': 'segment',
-            'id': 'segment-1',
-            'sentence_id': null,
-            'chunk_id': null,
-            'start_ms': 0,
-            'end_ms': 8000,
-          },
-          rubricId: 'rubric-pattern-1',
-          rubricVersion: 1,
-          audioPlayCount: 1,
-          speakingAssistance: 'keywords',
-          speakingRecall: 'immediate',
-          promptSnapshot: 'Reply to the shop clerk',
-          recordingAssetId: 'recording-1',
-          rawTranscript: 'I need two ticket',
-          correctedTranscript: 'I need two tickets',
-          asrReliability: 'suspect',
-          responseLanguage: 'en',
-          startedAtMs: 10,
-          endedAtMs: 20,
-        );
-
-        final response =
-            (request!['responses'] as List<dynamic>).single
-                as Map<String, dynamic>;
-        expect(response['raw_transcript'], 'I need two ticket');
-        expect(response['transcript'], 'I need two tickets');
-        expect(response['recording_asset_id'], 'recording-1');
-        expect(
-          request!['conditions'],
-          containsPair('speaking_assistance', 'keywords'),
-        );
-        expect(
-          request!['conditions'],
-          containsPair('speaking_recall', 'immediate'),
-        );
-        expect(attempt.responses.single.rawTranscript, 'I need two ticket');
-        expect(attempt.responses.single.transcript, 'I need two tickets');
-      },
-    );
-
-    test(
-      'realtime provider secret is write-only and socket URI stays local',
-      () async {
-        Map<String, dynamic>? request;
-        final api = LocalApi.withTransport(
-          baseUrl: 'http://127.0.0.1:4321',
-          token: 'local-token',
-          transport: (method, path, body) async {
-            expect(method, 'POST');
-            expect(path, '/v1/realtime/providers');
-            request = jsonDecode(body!) as Map<String, dynamic>;
-            return (
-              statusCode: 200,
-              body: jsonEncode({
-                'id': 'profile-1',
-                'display_name': 'QA',
-                'adapter_kind': 'open_ai_realtime',
-                'base_url': 'wss://api.openai.com/v1/realtime',
-                'model_id': 'gpt-realtime',
-                'voice': 'marin',
-                'has_credential': true,
-                'timeout_ms': 30000,
-              }),
-            );
-          },
-        );
-        final profile = await api.registerRealtimeProfile(
-          displayName: 'QA',
-          adapterKind: 'open_ai_realtime',
-          baseUrl: 'wss://api.openai.com/v1/realtime',
-          modelId: 'gpt-realtime',
-          voice: 'marin',
-          secret: 'write-only-secret',
-        );
-        expect(request!['secret'], 'write-only-secret');
-        expect(profile.hasCredential, isTrue);
-        final socket = api.realtimeSocketUri(
-          profileId: profile.id,
-          language: 'en',
-          instructions: 'Discuss this source',
-        );
-        expect(socket.scheme, 'ws');
-        expect(socket.host, '127.0.0.1');
-        expect(socket.queryParameters['profile_id'], 'profile-1');
-        expect(socket.toString(), isNot(contains('write-only-secret')));
-      },
-    );
-
-    group('Core 3.1 retention contract', () {
+    group('Core 5.0 media membership contract', () {
       late Directory temp;
       late String mediaPath;
 

@@ -102,46 +102,41 @@ fn file_database_persists_across_reopen() {
 }
 
 #[test]
-fn backup_created_when_migration_upgrades_existing_database() {
+fn historical_database_is_rejected_without_backup_or_mutation() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("old.sqlite");
     let backup_path = dir.path().join("old.sqlite.pre-migration.bak");
 
-    // Create a database at version 1 (only the first migration applied)
+    // Make a disposable historical-shaped database.
     {
         let conn = rusqlite::Connection::open(&db_path).expect("create");
-        conn.execute_batch(include_str!("../migrations/0001_media.sql"))
-            .expect("apply migration 1");
+        conn.execute_batch("CREATE TABLE learner_facts(id TEXT PRIMARY KEY); INSERT INTO learner_facts VALUES ('kept');")
+            .expect("create sentinel data");
         conn.pragma_update(None, "user_version", 1)
             .expect("set version");
     }
+    let original = std::fs::read(&db_path).unwrap();
     assert!(!backup_path.exists());
 
-    // Open with SqliteRepository — should migrate and create backup
-    {
-        let repo = SqliteRepository::open(&db_path).expect("open old");
-        assert_eq!(
-            repo.schema_version().expect("version"),
-            persistence_sqlite::MIGRATION_VERSION
-        );
-    }
+    assert!(SqliteRepository::open(&db_path).is_err());
+    assert_eq!(std::fs::read(&db_path).unwrap(), original);
+    assert!(!backup_path.exists());
+    assert!(!std::path::PathBuf::from(format!("{}.lock", db_path.display())).exists());
+}
 
-    // Backup file must exist
+#[test]
+fn a_database_has_one_live_repository_owner() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("db.sqlite");
+    let first = SqliteRepository::open(&path).expect("first owner");
+
     assert!(
-        backup_path.exists(),
-        "expected backup at {}",
-        backup_path.display()
+        SqliteRepository::open(&path).is_err(),
+        "another process/repository must not promote live secret reservations"
     );
 
-    // Reopening the backup should show the OLD version (v1)
-    let backup_version: u32 = rusqlite::Connection::open(&backup_path)
-        .expect("open backup")
-        .query_row("PRAGMA user_version", [], |r| r.get(0))
-        .expect("read backup version");
-    assert_eq!(
-        backup_version, 1,
-        "backup should preserve old schema version"
-    );
+    drop(first);
+    SqliteRepository::open(&path).expect("lock is released with repository");
 }
 
 #[test]

@@ -5,15 +5,13 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/navigation/pane_segments.dart';
 
-/// Two destinations hold several surfaces as segments — "listen" (discovery /
-/// media library) and "my language" (vocabulary / expressions / review).
+/// The language destination keeps vocabulary and listening review under one
+/// selection so both remain available from the saved material context.
 ///
 /// The rule these cases pin: a segmented pane is **controlled**. The shell
-/// owns the selection, so a caller that has to reach a specific surface — the
-/// coach's suggestions land on review, on vocabulary, on expressions — can
+/// owns the selection, so a caller that has to reach a specific surface can
 /// open the pane there. A pane that owned its own selection could only ever
-/// be entered at its first segment, which would put the coach's doors back
-/// where this restructure found them: pointing at a page and hoping.
+/// be entered at its first segment.
 Widget _harness({
   required LanguageSegment selected,
   required ValueChanged<LanguageSegment> onSelected,
@@ -38,11 +36,6 @@ Widget _harness({
           builder: (context) => const Text('vocabulary body'),
         ),
         PaneSegment(
-          value: LanguageSegment.expressions,
-          label: 'Expressions',
-          builder: (context) => const Text('expressions body'),
-        ),
-        PaneSegment(
           value: LanguageSegment.review,
           label: 'Review',
           builder: (context) => const Text('review body'),
@@ -57,8 +50,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    // The coach's "review this" suggestion has to arrive at review, not at
-    // whichever segment happens to be first.
+    // A direct route entry to review must select the requested segment.
     await tester.pumpWidget(
       _harness(selected: LanguageSegment.review, onSelected: (_) {}),
     );
@@ -66,7 +58,6 @@ void main() {
 
     expect(find.text('review body'), findsOneWidget);
     expect(find.text('vocabulary body'), findsNothing);
-    expect(find.text('expressions body'), findsNothing);
   });
 
   testWidgets('only the selected segment is built', (tester) async {
@@ -74,8 +65,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     // Switching disposes the previous body, which is what the route-scoped
-    // controller hosts expect: build on entry, dispose on leave. Building all
-    // three would keep three sets of controllers alive on a page showing one.
+    // controller hosts expect: build on entry, dispose on leave.
     await tester.pumpWidget(
       _harness(selected: LanguageSegment.vocabulary, onSelected: (_) {}),
     );

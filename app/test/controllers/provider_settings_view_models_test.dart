@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/provider_settings_view_models.dart';
 import 'package:llplayer_next/data/repositories/settings_repository.dart';
-import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/llm_provider.dart';
-import 'package:llplayer_next/models/realtime_conversation.dart';
 import 'package:llplayer_next/models/syntax_capability.dart';
 
 void main() {
@@ -44,7 +42,7 @@ void main() {
         adapterKind: 'openai_chat_completions',
         baseUrl: 'https://example.test/v1',
         modelId: 'model',
-        allowedUses: ['semantic_judgment'],
+        allowedUses: ['sense_group_partition'],
         secret: 'write-only',
       );
 
@@ -54,22 +52,6 @@ void main() {
       expect(viewModel.state.submitting, isFalse);
       viewModel.dispose();
     });
-  });
-
-  test('realtime provider failure is exposed as a named state', () async {
-    final repository = _RealtimeRepository()
-      ..loadError = const ApiFailure(
-        raw: 'down',
-        code: 'temporarily_unavailable',
-      );
-    final viewModel = RealtimeProviderSettingsViewModel(repository);
-
-    await viewModel.load();
-
-    expect(viewModel.state.loading, isFalse);
-    expect(viewModel.state.failure?.messageKey, 'realtimeProvidersLoadFailed');
-    expect(viewModel.state.failure?.detail?.code, 'temporarily_unavailable');
-    viewModel.dispose();
   });
 
   test('ready syntax capability analyzes the current track once', () async {
@@ -98,7 +80,7 @@ LlmProviderProfileView _llmProvider(String id) => LlmProviderProfileView(
   timeoutMs: 1000,
   maxRetries: 0,
   retention: 'unknown',
-  allowedUses: const ['semantic_judgment'],
+  allowedUses: const ['sense_group_partition'],
   capability: const LlmProviderCapability(
     structuredOutput: LlmCapabilityClaim(state: 'unknown'),
     streaming: LlmCapabilityClaim(state: 'unknown'),
@@ -132,23 +114,6 @@ class _LlmRepository implements LlmProviderRepository {
   Future<LlmProbeResult> probe(String id) async => const LlmProbeResult(
     structuredOutput: LlmCapabilityClaim(state: 'probed', supported: true),
   );
-}
-
-class _RealtimeRepository implements RealtimeProviderRepository {
-  Object? loadError;
-
-  @override
-  Future<List<RealtimeProviderProfileView>> list() async {
-    if (loadError case final error?) throw error;
-    return const [];
-  }
-
-  @override
-  Future<RealtimeProviderProfileView> register(RealtimeProviderDraft draft) =>
-      throw UnimplementedError();
-
-  @override
-  Future<void> delete(String id) async {}
 }
 
 class _SyntaxRepository implements SyntaxCapabilityRepository {

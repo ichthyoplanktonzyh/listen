@@ -47,7 +47,7 @@ void main() {
 
     final state = vm.state;
     expect(state.loading, isFalse);
-    expect(state.sources, hasLength(9));
+    expect(state.sources, hasLength(8));
     expect(state.selectedSourceId, 'c-bbc-learning');
     expect(state.selectedSource?.name, 'BBC Learning English');
     expect(state.entries, hasLength(3));
@@ -224,14 +224,19 @@ void main() {
         );
 
         expect(path?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
-        expect(imports.downloadedUrls, ['https://www.youtube.com/watch?v=i-bbc-1']);
+        expect(imports.downloadedUrls, [
+          'https://www.youtube.com/watch?v=i-bbc-1',
+        ]);
         expect(
           vm.state.acquisitionStateOf('i-bbc-1'),
           DiscoveryItemState.available,
         );
         expect(vm.localPathFor('i-bbc-1'), path?.mediaPath);
         expect(vm.durationMsFor('i-bbc-1'), 400660);
-        expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.available);
+        expect(
+          vm.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
+        );
       },
     );
 
@@ -264,19 +269,28 @@ void main() {
 
       final pending = vm.acquireForLearning('i-bbc-1');
       await tester.pump();
-      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquiring);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquiring,
+      );
 
       vm.cancelDownload('i-bbc-1');
       final path = await tester.runAsync(() => pending);
       expect(path, isNull);
-      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquirable,
+      );
 
       // The subprocess wins the race and reports success anyway; the late
       // completion must not adopt the media or open anything.
       imports.completers['i-bbc-1']!.complete('/path/to/[i-bbc-1].mp4');
       await tester.pump(const Duration(seconds: 2));
 
-      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquirable,
+      );
       expect(vm.localPathFor('i-bbc-1'), isNull);
       expect(
         vm.state.acquisitionStateOf('i-bbc-1'),
@@ -335,10 +349,10 @@ void main() {
 
         expect(path?.mediaPath, '/path/to/[i-bbc-1].mp4');
         expect(imports.downloadedUrls, hasLength(1));
-      expect(
-        vm.state.acquisitionStateOf('i-bbc-1'),
-        DiscoveryItemState.available,
-      );
+        expect(
+          vm.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
+        );
       },
     );
 
@@ -355,7 +369,10 @@ void main() {
           // and the controller is in `downloading` before the intent exists.
           // A second `startDownload` at this point must join, never relaunch.
           await vm.startDownload('i-bbc-1');
-          expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquiring);
+          expect(
+            vm.state.acquisitionStateOf('i-bbc-1'),
+            DiscoveryItemState.acquiring,
+          );
 
           return vm.acquireForLearning('i-bbc-1');
         });
@@ -364,7 +381,8 @@ void main() {
         expect(
           imports.downloadedUrls,
           hasLength(1),
-          reason: 'the intent must join the established download, not start '
+          reason:
+              'the intent must join the established download, not start '
               'a second one',
         );
         expect(imports.enclosureRequests, isEmpty);
@@ -404,7 +422,10 @@ void main() {
       });
 
       expect(result, isNull);
-      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquirable,
+      );
       expect(vm.localPathFor('i-bbc-1'), isNull);
       expect(
         vm.state.acquisitionStateOf('i-bbc-1'),
@@ -451,7 +472,10 @@ void main() {
         DiscoveryItemState.available,
       );
       expect(vm.localPathFor('i-bbc-1'), '/library/[i-bbc-1].mp4');
-      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.available);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.available,
+      );
 
       // The library row disappears (folder emptied, file gone from Core).
       library.clearEntries();
@@ -508,7 +532,8 @@ void main() {
       expect(
         unacquirable.state.acquisitionStateOf('i-notes'),
         DiscoveryItemState.discoverable,
-        reason: 'a source item with nothing to acquire is discoverable, not '
+        reason:
+            'a source item with nothing to acquire is discoverable, not '
             'acquirable',
       );
       expect(unacquirable.state.acquisitionSnapshots, isEmpty);
@@ -553,7 +578,10 @@ void main() {
 
       vm.startDownload('i-bbc-1');
       await tester.pump();
-      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquiring);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquiring,
+      );
 
       // The retry really re-runs, so this attempt fails on its own terms.
       await tester.pump(const Duration(milliseconds: 120));
@@ -584,16 +612,25 @@ void main() {
 
     vm.startDownload('i-bbc-1');
     await tester.pump();
-    expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquiring);
+    expect(
+      vm.state.acquisitionStateOf('i-bbc-1'),
+      DiscoveryItemState.acquiring,
+    );
 
     vm.cancelDownload('i-bbc-1');
-    expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
+    expect(
+      vm.state.acquisitionStateOf('i-bbc-1'),
+      DiscoveryItemState.acquirable,
+    );
 
     // The subprocess wins the race and reports success anyway.
     imports.completers['i-bbc-1']!.complete('/path/to/[i-bbc-1].mp4');
     await tester.pump(const Duration(seconds: 2));
 
-    expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
+    expect(
+      vm.state.acquisitionStateOf('i-bbc-1'),
+      DiscoveryItemState.acquirable,
+    );
   });
 
   testWidgets('startDownload simulates progress until done', (tester) async {
@@ -602,7 +639,10 @@ void main() {
 
     vm.startDownload('i-bbc-1');
     await tester.pump();
-    expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquiring);
+    expect(
+      vm.state.acquisitionStateOf('i-bbc-1'),
+      DiscoveryItemState.acquiring,
+    );
 
     await tester.pump(const Duration(milliseconds: 480));
     final progress = vm.state.downloadProgressOf('i-bbc-1');
@@ -610,7 +650,10 @@ void main() {
     expect(progress, lessThan(1));
 
     await tester.pump(const Duration(seconds: 2));
-    expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.available);
+    expect(
+      vm.state.acquisitionStateOf('i-bbc-1'),
+      DiscoveryItemState.available,
+    );
     expect(vm.state.downloadProgressOf('i-bbc-1'), 1);
   });
 
@@ -625,10 +668,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     vm.cancelDownload('i-bbc-1');
-    expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
+    expect(
+      vm.state.acquisitionStateOf('i-bbc-1'),
+      DiscoveryItemState.acquirable,
+    );
 
     await tester.pump(const Duration(seconds: 2));
-    expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
+    expect(
+      vm.state.acquisitionStateOf('i-bbc-1'),
+      DiscoveryItemState.acquirable,
+    );
   });
 
   testWidgets(
@@ -659,21 +708,23 @@ void main() {
       final vm = DiscoveryViewModel(
         repository,
         importRepository: importRepository ?? TestMediaImportRepository(),
-        mediaLibraryRepository: libraryRepository ?? TestMediaLibraryRepository(),
+        mediaLibraryRepository:
+            libraryRepository ?? TestMediaLibraryRepository(),
         fileService: TestMediaFileService(),
       );
       addTearDown(vm.dispose);
       return vm;
     }
 
-    TestDiscoveryRepository twoChannels({List<DiscoveryItem> second = const []}) =>
-        TestDiscoveryRepository(
-          sources: [testContentSource('c-one'), testContentSource('c-two')],
-          entries: {
-            'c-one': [testDiscoveryItem('e-one', 'c-one')],
-            'c-two': second,
-          },
-        );
+    TestDiscoveryRepository twoChannels({
+      List<DiscoveryItem> second = const [],
+    }) => TestDiscoveryRepository(
+      sources: [testContentSource('c-one'), testContentSource('c-two')],
+      entries: {
+        'c-one': [testDiscoveryItem('e-one', 'c-one')],
+        'c-two': second,
+      },
+    );
 
     test(
       'switching to an empty channel drops the previous selection',
@@ -792,37 +843,37 @@ void main() {
       },
     );
 
-    test('refreshSelectedMediaAvailability rechecks the selected entry', () async {
-      final library = TestMediaLibraryRepository(available: false);
-      final vm = viewModelFor(
-        twoChannels(),
-        libraryRepository: library,
-      );
-      await vm.load();
-      await pumpEventQueue();
-      expect(
-        vm.state.acquisitionStateOf('e-one'),
-        DiscoveryItemState.unavailable,
-      );
+    test(
+      'refreshSelectedMediaAvailability rechecks the selected entry',
+      () async {
+        final library = TestMediaLibraryRepository(available: false);
+        final vm = viewModelFor(twoChannels(), libraryRepository: library);
+        await vm.load();
+        await pumpEventQueue();
+        expect(
+          vm.state.acquisitionStateOf('e-one'),
+          DiscoveryItemState.unavailable,
+        );
 
-      // Core comes up: a fresh connected generation is the meaningful
-      // invalidation, and the recheck must turn the stale answer around.
-      library.available = true;
-      library.addEntry(
-        TestMediaLibraryRepository.entry(
-          id: 'media-e-one',
-          path: '/library/[e-one].mp4',
-          retained: true,
-        ),
-      );
-      await vm.refreshSelectedMediaAvailability();
+        // Core comes up: a fresh connected generation is the meaningful
+        // invalidation, and the recheck must turn the stale answer around.
+        library.available = true;
+        library.addEntry(
+          TestMediaLibraryRepository.entry(
+            id: 'media-e-one',
+            path: '/library/[e-one].mp4',
+            retained: true,
+          ),
+        );
+        await vm.refreshSelectedMediaAvailability();
 
-      expect(
-        vm.state.acquisitionStateOf('e-one'),
-        DiscoveryItemState.available,
-      );
-      expect(vm.localPathFor('e-one'), '/library/[e-one].mp4');
-    });
+        expect(
+          vm.state.acquisitionStateOf('e-one'),
+          DiscoveryItemState.available,
+        );
+        expect(vm.localPathFor('e-one'), '/library/[e-one].mp4');
+      },
+    );
 
     testWidgets('switching channels abandons the previous duration workers', (
       tester,

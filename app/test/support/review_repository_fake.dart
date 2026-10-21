@@ -7,9 +7,8 @@ import 'package:llplayer_next/models/types.dart';
 /// exactly the calls its case makes and an unexpected call fails loudly
 /// instead of quietly returning an empty success.
 ///
-/// It exists because contract 1.1.0 turned `ReviewRepository` from four
-/// methods into thirteen: without a shared base, each fake carried nine stubs
-/// of noise that hid which calls the test actually cared about.
+/// Each test overrides only the calls its case makes, while an unexpected
+/// call still fails loudly instead of quietly returning an empty success.
 abstract class FakeReviewRepositoryBase implements ReviewRepository {
   @override
   Future<ReviewQueue> queue({int limit = 20}) =>
@@ -43,26 +42,8 @@ abstract class FakeReviewRepositoryBase implements ReviewRepository {
   }) => throw UnimplementedError('submitCustomStudyRating');
 
   @override
-  Future<AnkiPackageImportSummary> importAnkiPackage({
-    required String packagePath,
-    required String mediaDirectory,
-  }) => throw UnimplementedError('importAnkiPackage');
-
-  @override
-  Future<AnkiPackageExportSummary> exportAnkiPackage(
-    AnkiPackageExportRequest request,
-  ) => throw UnimplementedError('exportAnkiPackage');
-
-  @override
-  Future<List<UpgradeSuggestion>> pendingUpgradeSuggestions() async => const [];
-
-  @override
   Future<ReviewSubmission> submitRating(String itemId, String rating) =>
       throw UnimplementedError('submitRating');
-
-  @override
-  Future<void> resolveUpgradeSuggestion(String id, {required bool confirm}) =>
-      throw UnimplementedError('resolveUpgradeSuggestion');
 
   @override
   Future<MediaItem> readMedia(String mediaId) =>

@@ -32,19 +32,11 @@ pub enum ApplicationError {
     /// the honest failure instead of re-reading a carrier.
     #[error("adopted composition content is missing or fails integrity verification")]
     CompositionIntegrity,
-    /// A referenced Source Asset behind an adopted composition cannot be
-    /// reached. The Material and its adoption stay untouched.
-    #[error("a referenced source asset is unavailable")]
-    SourceUnavailable,
     /// A vendor LLM provider failed. Carries the standardized, secret-free
     /// taxonomy so HTTP/UI can degrade honestly without ever echoing a
     /// credential (Phase 3.12).
     #[error(transparent)]
     Provider(#[from] domain::LlmProviderError),
-    /// A native realtime provider failed through the provider-neutral
-    /// application seam. The taxonomy is secret-free by construction.
-    #[error(transparent)]
-    RealtimeProvider(#[from] domain::RealtimeProviderError),
     #[error(transparent)]
     SecretStore(#[from] crate::SecretStoreError),
 }

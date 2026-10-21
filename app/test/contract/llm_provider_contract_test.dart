@@ -17,7 +17,7 @@ void main() {
         'timeout_ms': 30000,
         'max_retries': 1,
         'retention': 'unknown',
-        'allowed_uses': ['semantic_judgment'],
+        'allowed_uses': ['sense_group_partition'],
         'capability': {
           'structured_output': {
             'state': 'probed',
@@ -35,7 +35,7 @@ void main() {
       expect(view.displayName, 'My OpenAI');
       expect(view.adapterKind, 'openai_chat_completions');
       expect(view.hasCredential, isTrue);
-      expect(view.allowedUses, ['semantic_judgment']);
+      expect(view.allowedUses, ['sense_group_partition']);
       expect(view.capability.structuredOutput.isProbedSupported, isTrue);
       expect(view.capability.streaming.state, 'unknown');
     });

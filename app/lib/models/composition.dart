@@ -44,9 +44,8 @@ class CompositionAnchor {
 }
 
 /// The learner-facing content of one adopted Composition, resolved through
-/// Core's composition interface: the exact logical text and sentence
-/// structure, the reading anchors, the anchor-to-time alignment, and the
-/// derived audio (when the composition carries one).
+/// Core's composition interface: structured transcript text, its anchors and
+/// alignment to the source audio or video.
 class ResolvedComposition {
   ResolvedComposition({
     required this.releaseId,
@@ -55,7 +54,6 @@ class ResolvedComposition {
     required List<CompositionSentence> sentences,
     required List<CompositionAnchor> anchors,
     required this.alignments,
-    this.derivedMediaPath,
     this.transcript,
     this.enhancements = const CompositionResourceProjection(),
     this.llTimelineDocument,
@@ -73,14 +71,9 @@ class ResolvedComposition {
   /// anchor id → media time in milliseconds.
   final Map<String, int> alignments;
 
-  /// Local path of the downloaded derived audio, when the composition carries
-  /// one with embedded bytes.
-  final String? derivedMediaPath;
-
   /// The package's exact timed text track, when one was selected into the
   /// adopted composition. This is the shape the existing workbench transcript
-  /// already consumes; keeping it here lets text→TTS use that same right-hand
-  /// panel instead of a second, simplified sentence renderer.
+  /// already consumes.
   final SubtitleTrack? transcript;
 
   /// Whether the timed text can drive the app's actual learning interactions,

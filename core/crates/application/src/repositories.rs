@@ -1,33 +1,21 @@
 use domain::{
-    CapabilityFilter, CapabilityOverride, CapabilityProjection, ContentDifficultyProfile,
-    CorpusOccurrence, CorpusOccurrenceId, DictionaryEntry, HuntingCandidate, HuntingCandidateId,
-    HuntingCandidateStatus, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
-    JudgmentAdjudication, LLTimelineArtifact, LLTimelineMetadata, LanguageCode, LearnerProfile,
-    LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventKind,
-    LearningEventSubjectKind, LearningObservation, LearningStatus, LexicalCapability,
-    LexicalCapabilityHistory, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
-    LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalOccurrenceId, LexicalSenseFolder,
-    LexicalSenseId, ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus,
-    LlmProviderProfile, LlmProviderProfileId, MediaAvailability, MediaId, MediaItem,
-    MediaTriageIntent, PhoneTimeline, PhoneTimelineId, PhoneticAnalysis, PhoneticAnalysisId,
-    PhoneticAnalysisJob, PhoneticAnalysisJobId, PhoneticAnalysisModelDescriptor,
-    PhoneticAnalysisModelId, PhoneticFindingFeedback, PhoneticFindingId, PracticeAttempt,
-    PracticeAttemptId, PracticeItem, PracticeItemId, PracticeSession, PracticeSessionId,
-    ProductionCorpusDocument, ProductionCorpusEntry, ProductionCorpusHit, ProductionCorpusSummary,
-    ProductionGapCandidateFacts, ProjectionDecision, ProjectionProposal, ProjectionProposalId,
-    ProsodyAnalysis, ProsodyAnalysisId, ReadingPosition, RealtimeConversationSession,
-    RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
-    RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecordingAsset,
-    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
-    ReviewSchedule, SecretRef, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
-    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
-    SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord,
-    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
-    SubtitleTrackStatus, TimeMs, TranscriptionModelDescriptor, TranscriptionModelId,
-    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
-    WordPronunciation, WordTimeline, WordTimelineId, WordTiming, WritingDraft,
-    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
-    WritingFindingDispositionId,
+    CapabilityFilter, CapabilityOverride, CapabilityProjection, CorpusOccurrence,
+    CorpusOccurrenceId, DictionaryEntry, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
+    LLTimelineArtifact, LLTimelineMetadata, LanguageCode, LearnerProfile, LearnerProfileId,
+    LearningChangeSource, LearningEvent, LearningEventKind, LearningEventSubjectKind,
+    LearningObservation, LearningStatus, LexicalCapability, LexicalCapabilityHistory,
+    LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
+    LexicalObservation, LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId,
+    ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus, LlmProviderProfile,
+    LlmProviderProfileId, MediaAvailability, MediaId, MediaItem, MediaTriageIntent, PhoneTimeline,
+    PhoneTimelineId, PhoneticAnalysis, PhoneticAnalysisId, PhoneticAnalysisJob,
+    PhoneticAnalysisJobId, PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId,
+    PhoneticFindingFeedback, PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem,
+    PracticeItemId, PracticeSession, PracticeSessionId, ProsodyAnalysis, ProsodyAnalysisId,
+    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
+    SecretRef, SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, SubtitleSentence,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
+    VocabularyAssetBundle, WordPronunciation, WordTimeline, WordTimelineId, WordTiming,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -410,25 +398,6 @@ pub trait LexicalCapabilityRepository: Send + Sync {
         lexical_entry_id: &LexicalEntryId,
         sense_id: Option<&LexicalSenseId>,
     ) -> Result<Vec<LexicalCapabilityHistory>, ApplicationError>;
-    fn save_projection_proposal(
-        &self,
-        proposal: &ProjectionProposal,
-    ) -> Result<ProjectionProposal, ApplicationError>;
-    fn projection_proposal(
-        &self,
-        id: &ProjectionProposalId,
-    ) -> Result<Option<ProjectionProposal>, ApplicationError>;
-    fn list_projection_proposals(
-        &self,
-        lexical_entry_id: &LexicalEntryId,
-        capability: Option<LexicalCapability>,
-    ) -> Result<Vec<ProjectionProposal>, ApplicationError>;
-    fn resolve_projection_proposal(
-        &self,
-        decision: &ProjectionDecision,
-        proposal: &ProjectionProposal,
-        confirmed_projection: Option<CapabilityProjection>,
-    ) -> Result<(), ApplicationError>;
 }
 
 /// Lexical identity, lookup, normalization overrides, and vocabulary
@@ -649,35 +618,10 @@ pub trait ReviewQueueRepository: Send + Sync {
         &self,
         limits: crate::ReviewDailyLimits,
     ) -> Result<crate::ReviewDailyLimits, ApplicationError>;
-    fn list_imported_deck_schedules(
-        &self,
-    ) -> Result<Vec<crate::ImportedDeckSchedule>, ApplicationError>;
-    fn import_anki_package(
-        &self,
-        request: &crate::AnkiPackageImportRequest,
-    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError>;
-    fn export_anki_package(
-        &self,
-        request: &crate::AnkiPackageExportRequest,
-    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError>;
 }
 
-/// Hunting candidates and targets evolve together as one discovery workflow.
+/// Explicit listening targets and their check history are one workflow.
 pub trait HuntingRepository: Send + Sync {
-    fn upsert_hunting_candidate(
-        &self,
-        candidate: &HuntingCandidate,
-    ) -> Result<HuntingCandidate, ApplicationError>;
-    fn get_hunting_candidate(
-        &self,
-        id: &HuntingCandidateId,
-    ) -> Result<Option<HuntingCandidate>, ApplicationError>;
-    fn list_hunting_candidates(
-        &self,
-        status: Option<HuntingCandidateStatus>,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<HuntingCandidate>, ApplicationError>;
     fn upsert_hunting_target(
         &self,
         target: &HuntingTarget,
@@ -692,35 +636,6 @@ pub trait HuntingRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError>;
-}
-
-/// Recognition evidence and upgrade suggestions share the promotion invariant.
-pub trait RecognitionUpgradeRepository: Send + Sync {
-    fn upsert_recognition_evidence(
-        &self,
-        evidence: &RecognitionEvidence,
-    ) -> Result<RecognitionEvidence, ApplicationError>;
-    fn list_recognition_evidence(
-        &self,
-        lexical_entry_id: &LexicalEntryId,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<RecognitionEvidence>, ApplicationError>;
-    fn save_upgrade_suggestion(
-        &self,
-        suggestion: &UpgradeSuggestion,
-    ) -> Result<UpgradeSuggestion, ApplicationError>;
-    fn get_upgrade_suggestion(
-        &self,
-        id: &UpgradeSuggestionId,
-    ) -> Result<Option<UpgradeSuggestion>, ApplicationError>;
-    fn list_upgrade_suggestions(
-        &self,
-        lexical_entry_id: Option<&LexicalEntryId>,
-        status: Option<UpgradeSuggestionStatus>,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<UpgradeSuggestion>, ApplicationError>;
 }
 
 pub trait LearningEventRepository: Send + Sync {
@@ -746,89 +661,6 @@ pub trait LearningEventRepository: Send + Sync {
         kind: LearningEventKind,
         subject_kind: LearningEventSubjectKind,
     ) -> Result<Vec<String>, ApplicationError>;
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CoachDashboardFacts {
-    pub practice_attempts: u64,
-    pub correct_practice_attempts: u64,
-    pub review_attempts: u64,
-    pub successful_review_attempts: u64,
-    pub extensive_sessions: u64,
-    pub extensive_listening_ms: u64,
-    pub due_review_items: u64,
-    pub active_hunting_candidates: u64,
-    pub l1_difficulty_hits: u64,
-    pub listening_capability_changes: u64,
-    pub channels: Vec<CoachChannelFacts>,
-    pub cross_modal_gap_count: u64,
-    pub personal_expression_asset_count: u64,
-    pub llm_provider_profile_count: u64,
-    pub materials: Vec<CoachMaterialFact>,
-}
-
-/// Read-only, already-layered facts for one capability channel. Counts remain
-/// separate so the Coach cannot collapse attempts, supporting judgments,
-/// proposals, confirmed projections, overrides, and effective assessment into
-/// a second capability truth.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CoachChannelFacts {
-    pub channel: String,
-    pub completed_attempts: u64,
-    pub supporting_judgments: u64,
-    pub adjudications: u64,
-    pub observations: u64,
-    pub projection_proposals: u64,
-    pub confirmed_projections: u64,
-    pub capability_changes: u64,
-    pub personal_expression_attempts: u64,
-    pub acquired_entries: u64,
-    pub not_acquired_entries: u64,
-    pub unassessed_entries: u64,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CoachMaterialFact {
-    pub media_id: String,
-    pub title: String,
-    pub report_count: u64,
-    pub first_report: Option<String>,
-    pub latest_report: Option<String>,
-    pub reports_understood_all: u64,
-    pub reports_got_the_gist: u64,
-    pub reports_unclear: u64,
-    pub practice_attempts: u64,
-    pub practice_correct: u64,
-    pub triage_intent: Option<String>,
-}
-
-pub trait CoachDashboardRepository: Send + Sync {
-    fn coach_dashboard_facts(
-        &self,
-        language: &LanguageCode,
-        period_start_ms: u64,
-        period_end_ms: u64,
-        as_of_ms: u64,
-    ) -> Result<CoachDashboardFacts, ApplicationError>;
-    fn coach_evidence(
-        &self,
-        metric: &str,
-        period_start_ms: u64,
-        period_end_ms: u64,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<CoachEvidenceFact>, ApplicationError>;
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CoachEvidenceFact {
-    pub id: String,
-    pub occurred_at_ms: u64,
-    pub result: String,
-    pub source_kind: String,
-    pub snapshot: String,
-    pub source_available: bool,
-    pub unavailable_reason: Option<String>,
 }
 
 pub trait ListeningInboxRepository: Send + Sync {
@@ -908,110 +740,6 @@ pub trait CorpusIndexRepository: Send + Sync {
 /// immutable semantic attempts. Rows mint no identity and are always safe to
 /// delete and regenerate; the repository therefore only offers whole-rubric
 /// replacement, never row patching.
-pub trait ProductionCorpusRepository: Send + Sync {
-    /// Atomically replaces every projection row derived from one rubric's
-    /// attempts (a rubric groups all attempts over one source/task).
-    fn replace_production_entries_for_rubric(
-        &self,
-        rubric_id: &SemanticRubricId,
-        documents: &[ProductionCorpusDocument],
-        entries: &[ProductionCorpusEntry],
-    ) -> Result<(), ApplicationError>;
-    /// Atomically replaces the complete projection after all source attempts
-    /// have been derived successfully. A failed rebuild leaves the previous
-    /// readable projection intact.
-    fn replace_all_production_entries(
-        &self,
-        documents: &[ProductionCorpusDocument],
-        entries: &[ProductionCorpusEntry],
-    ) -> Result<(), ApplicationError>;
-    fn replace_production_entries_for_realtime_turn(
-        &self,
-        turn_id: &RealtimeConversationTurnId,
-        documents: &[ProductionCorpusDocument],
-        entries: &[ProductionCorpusEntry],
-    ) -> Result<(), ApplicationError>;
-    /// Exact lemma lookup, newest first.
-    fn list_production_entries_by_key(
-        &self,
-        language: &LanguageCode,
-        normalized_key: &str,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError>;
-    /// FTS phrase lookup over one-copy-per-revision response documents.
-    fn search_production_documents(
-        &self,
-        language: &LanguageCode,
-        query: &str,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError>;
-    fn production_corpus_summary(
-        &self,
-        language: &LanguageCode,
-        channel: domain::ProductionChannel,
-    ) -> Result<ProductionCorpusSummary, ApplicationError>;
-    fn list_production_gap_candidates(
-        &self,
-        language: &LanguageCode,
-        channel: domain::ProductionChannel,
-    ) -> Result<Vec<ProductionGapCandidateFacts>, ApplicationError>;
-    /// Rebuild input for semantic document search. These rows are already a
-    /// projection of immutable learner attempts/local-authoritative turns.
-    fn list_production_documents(&self) -> Result<Vec<ProductionCorpusDocument>, ApplicationError> {
-        Ok(Vec::new())
-    }
-    /// Distinct actually-produced lemmas used only to enrich the existing
-    /// read-only gap result. This never manufactures a gap candidate.
-    fn list_production_lexemes(
-        &self,
-        language: &LanguageCode,
-        channel: domain::ProductionChannel,
-    ) -> Result<Vec<String>, ApplicationError> {
-        let _ = (language, channel);
-        Ok(Vec::new())
-    }
-}
-
-/// Phase 3.16 durable user-owned patterns. Unlike production corpus and
-/// embedding indexes, these rows are authoritative assets and are never
-/// rebuildable projections.
-pub trait PersonalExpressionRepository: Send + Sync {
-    fn create_pattern(
-        &self,
-        asset: &domain::UserSentencePatternAsset,
-    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
-    fn append_pattern_version(
-        &self,
-        pattern_id: &domain::UserSentencePatternId,
-        version: &domain::UserSentencePatternVersion,
-        updated_at_ms: u64,
-    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
-    fn get_pattern(
-        &self,
-        id: &domain::UserSentencePatternId,
-    ) -> Result<Option<domain::UserSentencePatternAsset>, ApplicationError>;
-    fn list_patterns(
-        &self,
-        language: Option<&LanguageCode>,
-        query: Option<&str>,
-    ) -> Result<Vec<domain::UserSentencePatternAsset>, ApplicationError>;
-    fn list_pattern_versions(
-        &self,
-        id: &domain::UserSentencePatternId,
-    ) -> Result<Vec<domain::UserSentencePatternVersion>, ApplicationError>;
-    fn delete_pattern(&self, id: &domain::UserSentencePatternId) -> Result<bool, ApplicationError>;
-    fn save_personal_expression_attempt(
-        &self,
-        attempt: &domain::PersonalExpressionAttempt,
-    ) -> Result<domain::PersonalExpressionAttempt, ApplicationError>;
-    fn list_personal_expression_attempts(
-        &self,
-        id: &domain::UserSentencePatternId,
-    ) -> Result<Vec<domain::PersonalExpressionAttempt>, ApplicationError>;
-}
-
 pub trait SemanticEmbeddingIndexRepository: Send + Sync {
     /// Atomically replaces the whole model-specific read model. A failed
     /// rebuild must leave the previous index readable.
@@ -1028,29 +756,6 @@ pub trait SemanticEmbeddingIndexRepository: Send + Sync {
     fn delete_semantic_embedding_index(&self) -> Result<(), ApplicationError>;
 }
 
-pub trait DifficultyRepository: Send + Sync {
-    fn save_difficulty_profile(
-        &self,
-        profile: &ContentDifficultyProfile,
-    ) -> Result<ContentDifficultyProfile, ApplicationError>;
-    fn get_difficulty_profile(
-        &self,
-        subject_kind: &str,
-        subject_id: &str,
-    ) -> Result<Option<ContentDifficultyProfile>, ApplicationError>;
-    /// Durable usage-feedback record (Phase 3.5 Slice 7) — evidence, not
-    /// cache: it must survive profile recomputes and cache invalidation.
-    fn save_fit_calibration(
-        &self,
-        calibration: &SoundFitCalibration,
-    ) -> Result<SoundFitCalibration, ApplicationError>;
-    fn get_fit_calibration(
-        &self,
-        subject_kind: &str,
-        subject_id: &str,
-    ) -> Result<Option<SoundFitCalibration>, ApplicationError>;
-}
-
 pub trait LearnerProfileRepository: Send + Sync {
     fn save_learner_profile(
         &self,
@@ -1064,147 +769,6 @@ pub trait LearnerProfileRepository: Send + Sync {
 
 /// Reading cursor persistence (Phase 3.13). Upsert semantics: the position
 /// is a cursor, not evidence, so overwriting is the intended behavior.
-pub trait ReadingPositionRepository: Send + Sync {
-    fn save_reading_position(
-        &self,
-        position: &ReadingPosition,
-    ) -> Result<ReadingPosition, ApplicationError>;
-    fn get_reading_position(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<ReadingPosition>, ApplicationError>;
-}
-
-pub trait RecordingRepository: Send + Sync {
-    fn save_recording_asset(
-        &self,
-        asset: &RecordingAsset,
-    ) -> Result<RecordingAsset, ApplicationError>;
-    fn get_recording_asset(
-        &self,
-        id: &RecordingAssetId,
-    ) -> Result<Option<RecordingAsset>, ApplicationError>;
-    fn delete_recording_asset(
-        &self,
-        id: &RecordingAssetId,
-    ) -> Result<Option<RecordingAsset>, ApplicationError>;
-    fn save_shadowing_analysis(
-        &self,
-        record: &ShadowingAnalysisRecord,
-    ) -> Result<ShadowingAnalysisRecord, ApplicationError>;
-    fn latest_shadowing_analysis(
-        &self,
-        recording_id: &RecordingAssetId,
-    ) -> Result<Option<ShadowingAnalysisRecord>, ApplicationError>;
-}
-
-/// Phase 3.11 semantic task fact layer (ADR 0021). Submitted facts are append-only end to end:
-/// there are intentionally no update or delete methods, and implementations
-/// must not add them — corrections are new rows. The explicitly named draft
-/// methods are the sole mutable crash-recovery projection and are not evidence.
-pub trait SemanticTaskRepository: Send + Sync {
-    fn save_semantic_rubric(
-        &self,
-        rubric: &SemanticRubric,
-    ) -> Result<SemanticRubric, ApplicationError>;
-    fn get_semantic_rubric(
-        &self,
-        id: &SemanticRubricId,
-        version: u32,
-    ) -> Result<Option<SemanticRubric>, ApplicationError>;
-    fn latest_semantic_rubric(
-        &self,
-        id: &SemanticRubricId,
-    ) -> Result<Option<SemanticRubric>, ApplicationError>;
-    /// Latest rubric version matching one source identity tuple. Read-side
-    /// lookup so clients can find an existing rubric without re-deriving the
-    /// server-minted fingerprint id (Phase 3.13).
-    #[allow(clippy::too_many_arguments)]
-    fn find_semantic_rubric_by_source(
-        &self,
-        media_id: Option<&MediaId>,
-        start_ms: u64,
-        end_ms: u64,
-        purpose: SemanticTaskKind,
-        response_language: &LanguageCode,
-        source_sha256: &str,
-    ) -> Result<Option<SemanticRubric>, ApplicationError>;
-    fn save_semantic_attempt(
-        &self,
-        attempt: &SemanticTaskAttempt,
-    ) -> Result<SemanticTaskAttempt, ApplicationError>;
-    fn get_semantic_attempt(
-        &self,
-        id: &SemanticTaskAttemptId,
-    ) -> Result<Option<SemanticTaskAttempt>, ApplicationError>;
-    fn list_semantic_attempts_for_rubric(
-        &self,
-        rubric_id: &SemanticRubricId,
-    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError>;
-    /// Every attempt of the given kinds, oldest first — the full-rebuild feed
-    /// for kind-scoped projections (Phase 3.15.5 production corpus).
-    fn list_semantic_attempts_by_kinds(
-        &self,
-        kinds: &[SemanticTaskKind],
-    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError>;
-    fn save_semantic_judgment(
-        &self,
-        judgment: &SemanticJudgment,
-    ) -> Result<SemanticJudgment, ApplicationError>;
-    fn get_semantic_judgment(
-        &self,
-        id: &SemanticJudgmentId,
-    ) -> Result<Option<SemanticJudgment>, ApplicationError>;
-    fn list_semantic_judgments_for_attempt(
-        &self,
-        attempt_id: &SemanticTaskAttemptId,
-    ) -> Result<Vec<SemanticJudgment>, ApplicationError>;
-    fn save_judgment_adjudication(
-        &self,
-        adjudication: &JudgmentAdjudication,
-    ) -> Result<JudgmentAdjudication, ApplicationError>;
-    fn list_judgment_adjudications(
-        &self,
-        judgment_id: &SemanticJudgmentId,
-    ) -> Result<Vec<JudgmentAdjudication>, ApplicationError>;
-    fn save_writing_feedback_finding(
-        &self,
-        finding: &WritingFeedbackFinding,
-    ) -> Result<WritingFeedbackFinding, ApplicationError>;
-    fn get_writing_feedback_finding(
-        &self,
-        id: &WritingFeedbackFindingId,
-    ) -> Result<Option<WritingFeedbackFinding>, ApplicationError>;
-    fn list_writing_feedback_findings(
-        &self,
-        attempt_id: &SemanticTaskAttemptId,
-    ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError>;
-    fn save_writing_finding_disposition(
-        &self,
-        disposition: &WritingFindingDisposition,
-    ) -> Result<WritingFindingDisposition, ApplicationError>;
-    fn get_writing_finding_disposition(
-        &self,
-        id: &WritingFindingDispositionId,
-    ) -> Result<Option<WritingFindingDisposition>, ApplicationError>;
-    fn list_writing_finding_dispositions(
-        &self,
-        finding_id: &WritingFeedbackFindingId,
-    ) -> Result<Vec<WritingFindingDisposition>, ApplicationError>;
-    fn upsert_writing_draft(&self, draft: &WritingDraft) -> Result<WritingDraft, ApplicationError>;
-    fn get_writing_draft(
-        &self,
-        rubric_id: &SemanticRubricId,
-    ) -> Result<Option<WritingDraft>, ApplicationError>;
-    fn delete_writing_draft(&self, rubric_id: &SemanticRubricId) -> Result<(), ApplicationError>;
-}
-
-/// Phase 3.12 provider profiles. Unlike append-only semantic facts, a provider
-/// configuration is mutable: it may be edited or removed. Only routing metadata
-/// and an opaque `auth_ref` are stored; secrets live in the OS keychain.
-/// Durable outbox for removing opaque secret-store references. Profile
-/// mutations enqueue cleanup in the same database transaction; deletion from
-/// the OS keychain is retried until this outbox entry can be acknowledged.
 pub trait SecretCleanupRepository: Send + Sync {
     fn reserve_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
     fn schedule_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
@@ -1245,63 +809,6 @@ pub trait LlmProviderProfileRepository: SecretCleanupRepository {
 /// Realtime provider config plus local session/turn facts. Provider events may
 /// update live transcript fields, but finalized local learner transcripts are
 /// immutable and repository implementations must reject divergent rewrites.
-pub trait RealtimeConversationRepository: SecretCleanupRepository {
-    fn upsert_realtime_profile(
-        &self,
-        profile: &RealtimeProviderProfile,
-    ) -> Result<RealtimeProviderProfile, ApplicationError>;
-    fn get_realtime_profile(
-        &self,
-        id: &RealtimeProviderProfileId,
-    ) -> Result<Option<RealtimeProviderProfile>, ApplicationError>;
-    fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError>;
-    fn delete_realtime_profile(
-        &self,
-        id: &RealtimeProviderProfileId,
-    ) -> Result<(), ApplicationError>;
-    /// Persists profile settings without changing an existing credential.
-    ///
-    /// A missing write-only secret means "keep the current credential" for an
-    /// existing profile and "create a keyless profile" for a new profile.
-    fn upsert_realtime_profile_preserving_credential(
-        &self,
-        profile: &RealtimeProviderProfile,
-    ) -> Result<RealtimeProviderProfile, ApplicationError>;
-    /// Atomically commits the profile mutation and any stale credential's
-    /// durable cleanup-outbox entry.
-    fn upsert_realtime_profile_and_schedule_cleanup(
-        &self,
-        profile: &RealtimeProviderProfile,
-    ) -> Result<RealtimeProviderProfile, ApplicationError>;
-    /// Atomically removes the profile and records its credential for retryable
-    /// cleanup.
-    fn delete_realtime_profile_and_schedule_cleanup(
-        &self,
-        id: &RealtimeProviderProfileId,
-    ) -> Result<(), ApplicationError>;
-    fn save_realtime_session(
-        &self,
-        session: &RealtimeConversationSession,
-    ) -> Result<RealtimeConversationSession, ApplicationError>;
-    fn get_realtime_session(
-        &self,
-        id: &RealtimeConversationSessionId,
-    ) -> Result<Option<RealtimeConversationSession>, ApplicationError>;
-    fn list_realtime_sessions(&self) -> Result<Vec<RealtimeConversationSession>, ApplicationError>;
-    fn save_realtime_turn(
-        &self,
-        turn: &RealtimeConversationTurn,
-    ) -> Result<RealtimeConversationTurn, ApplicationError>;
-    fn get_realtime_turn(
-        &self,
-        id: &RealtimeConversationTurnId,
-    ) -> Result<Option<RealtimeConversationTurn>, ApplicationError>;
-    fn list_realtime_turns(
-        &self,
-        session_id: &RealtimeConversationSessionId,
-    ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError>;
-}
-
 pub trait DictionaryCacheRepository: Send + Sync {
     fn put(&self, entry: &DictionaryEntry) -> Result<(), ApplicationError>;
     fn get(
@@ -1315,19 +822,6 @@ pub trait DictionaryCacheRepository: Send + Sync {
 pub trait PlaybackProgressRepository: Send + Sync {
     fn load(&self, media_id: &MediaId) -> Result<Option<TimeMs>, ApplicationError>;
     fn save(&self, media_id: &MediaId, position: TimeMs) -> Result<(), ApplicationError>;
-}
-
-pub trait TranscriptionRepository: Send + Sync {
-    fn upsert_model(
-        &self,
-        model: &TranscriptionModelDescriptor,
-    ) -> Result<TranscriptionModelDescriptor, ApplicationError>;
-    fn list_models(&self) -> Result<Vec<TranscriptionModelDescriptor>, ApplicationError>;
-    fn get_model(
-        &self,
-        id: &TranscriptionModelId,
-    ) -> Result<Option<TranscriptionModelDescriptor>, ApplicationError>;
-    fn delete_model(&self, id: &TranscriptionModelId) -> Result<(), ApplicationError>;
 }
 
 pub trait PhoneticAnalysisRepository: Send + Sync {
