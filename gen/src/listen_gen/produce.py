@@ -7,15 +7,9 @@ deterministic Content Package v3 carrier. Provider selection and secrets
 never enter the request; they are supplied as adapters here.
 
 Honesty rules implemented here:
-- a document with no extractable text abstains (an honest capability result,
-  never an import failure);
-- every derivation emits exactly one self-contained Structured Reading
-  resource; a compatible available reading is reused instead of regenerated,
-  and an incompatible one never suppresses generation;
-- TTS consumes only the exact logical text of a Structured Reading through a
-  production input projection, never the raw document;
+- every media derivation emits one self-contained Structured Reading resource;
 - exact alignment that cannot be produced abstains the alignment resource
-  while the audio still succeeds; timing is never fabricated;
+  while the transcript still succeeds; timing is never fabricated;
 - provider failures (start, timeout, invalid output) are terminal failures,
   distinct from abstention;
 - an empty plan (the capability is already satisfied) completes without an
@@ -42,16 +36,6 @@ from .asr import AsrAdapter, AsrTranscript, _tokens
 from .media import FfmpegAudioPreprocessor
 from .capability import (
     CapabilityRequest,
-    AvailableDocumentRendition,
-    AvailableMediaRendition,
-)
-from .document import (
-    DecodedDocument,
-    DocumentDecodeError,
-    NoTextLayer,
-    OcrProvider,
-    build_reading_structure,
-    decode_document,
 )
 from .package import ConversionError
 from .package_v3 import (
@@ -60,8 +44,6 @@ from .package_v3 import (
     V3Release,
     blob_declaration,
     canonical_json,
-    compatibility,
-    PackageDocumentRendition,
     PackageMediaRendition,
     PackageResource,
     producer_declaration,
@@ -71,10 +53,6 @@ from .package_v3 import (
     write_v3_package,
 )
 from .plan import Derivation, DerivationKind, ProductionPlan, plan
-from .production_input_projection import (
-    project_plain_text_for_speech,
-    sentences_from_structured_reading,
-)
 from .rich import RichContext
 from .rich_stages import (
     RichStages,
@@ -84,14 +62,20 @@ from .rich_stages import (
     build_word_timeline_resource,
     run_rich_stages,
 )
-from .subtitle import SubtitleBlock, parse_subtitle
+from .subtitle import parse_subtitle_bytes, read_subtitle_source
 from .sentence_assembly import (
     ASSEMBLY_CONFIG_SHA256,
     AssembledSentence,
     assemble_asr_transcript,
     assemble_subtitle_blocks,
 )
-from .tts import AnchorAlignment, TtsAdapter, TtsProviderError, _wav_duration_ms
+from .structured_reading import (
+    Paragraph,
+    Sentence,
+    StructuredText,
+    build_reading_structure,
+    text_from_segments,
+)
 
 
 class ProductionFailure(ConversionError):
@@ -125,12 +109,9 @@ class DerivedStructuredReading:
 
 
 @dataclass(frozen=True)
-class DerivedAudio:
-    bytes: bytes
-    media_type: str
-    alignment: tuple[AnchorAlignment, ...] | None
-    duration_ms: int | None
-    provider: dict[str, object]
+class AnchorAlignment:
+    anchor_id: str
+    media_time_ms: int
 
 
 @dataclass(frozen=True)
@@ -143,12 +124,11 @@ class ProduceOutcome:
 
 @dataclass(frozen=True)
 class ProduceConfig:
-    tts: TtsAdapter | None = None
-    ocr: OcrProvider | None = None
     asr: AsrAdapter | None = None
     asr_preprocessor: FfmpegAudioPreprocessor | None = None
     rich: "RichStages | None" = None
     subtitle: Path | None = None
+    subtitle_sha256: str | None = None
 
 
 def _blob_source_bytes(blob) -> bytes:
@@ -192,9 +172,7 @@ def _reading_resource(
     return DerivedStructuredReading(resource=resource, bytes=payload_bytes), payload_bytes
 
 
-def _language_for(request: CapabilityRequest, rendition) -> str:
-    if getattr(rendition, "language", None):
-        return rendition.language
+def _language_for(request: CapabilityRequest) -> str:
     return request.edition.target_language
 
 
@@ -233,94 +211,6 @@ def _producer_facts(
         provider=provider,
         model=model,
         config_sha256=config_sha256,
-    )
-
-
-def _run_document_derivation(
-    request: CapabilityRequest,
-    derivation: Derivation,
-    *,
-    ocr: OcrProvider | None,
-    created_at_ms: int,
-    package_rendition_id: str,
-    progress: Progress | None,
-) -> tuple[DecodedDocument, DerivedStructuredReading]:
-    rendition = next(
-        entry
-        for entry in request.document_renditions
-        if entry.rendition_id == derivation.input_rendition_ids[0]
-    )
-    raw = _blob_source_bytes(rendition.blob)
-    if progress:
-        progress(f"decoding {rendition.media_type}")
-    try:
-        decoded = decode_document(raw, rendition.media_type, ocr=ocr)
-    except NoTextLayer as error:
-        raise ProductionAbstained(
-            "document_text_unavailable",
-            "the document has no text layer and no OCR provider could produce text",
-        ) from error
-    except DocumentDecodeError as error:
-        raise ProductionAbstained(
-            "document_text_unavailable", str(error)
-        ) from error
-    language = _language_for(request, rendition)
-    structure = build_reading_structure(
-        decoded, language=language, rendition_id=package_rendition_id
-    )
-    subject = _subject(request, rendition_ids=(package_rendition_id,))
-    derived, _ = _reading_resource(
-        language=language,
-        payload=structure.structured_reading,
-        subject=subject,
-        provenance_document=provenance(
-            created_at_ms,
-            input_rendition_ids=[package_rendition_id],
-        ),
-    )
-    return decoded, derived
-
-
-def _run_tts_derivation(
-    request: CapabilityRequest,
-    structured_reading: dict[str, object],
-    *,
-    tts: TtsAdapter,
-    created_at_ms: int,
-    progress: Progress | None,
-) -> DerivedAudio:
-    projection = project_plain_text_for_speech(structured_reading)
-    sentence_anchors = sentences_from_structured_reading(structured_reading)
-    if progress:
-        progress(f"running the {tts.name} TTS provider")
-    try:
-        result = tts.synthesize(projection.text, sentence_anchors)
-    except TtsProviderError as error:
-        raise ProductionFailure(
-            "tts_provider_failed", str(error)
-        ) from error
-    combined_config = "sha256:" + sha256_of_bytes(
-        canonical_json(
-            {
-                "projection": projection.config_sha256,
-                "tts": result.config_sha256,
-            }
-        )
-    ).removeprefix("sha256:")
-    provider = _producer_facts(
-        created_at_ms,
-        provider_id=result.provider_id,
-        provider_version=result.provider_version,
-        model_id=result.model_id,
-        model_version=result.model_version,
-        config_sha256=combined_config,
-    )
-    return DerivedAudio(
-        bytes=result.audio_bytes,
-        media_type=result.media_type,
-        alignment=result.alignment,
-        duration_ms=result.duration_ms,
-        provider=provider,
     )
 
 
@@ -364,10 +254,10 @@ def _run_media_derivation(
         # boundaries.  Assemble them once here; every downstream resource
         # receives this same sentence identity and remapped word coordinates.
         transcript = assemble_asr_transcript(transcript)
-        decoded = _transcript_document(transcript)
+        decoded = _transcript_reading(transcript)
         language = transcript.language
         structure = build_reading_structure(
-            decoded, language=language, rendition_id=package_rendition_id
+            decoded, language=language
         )
         producer = _producer_facts(
             created_at_ms,
@@ -394,61 +284,16 @@ def _run_media_derivation(
     return derived, alignment, producer, transcript, raw
 
 
-def _subtitle_document(
+def _subtitle_reading(
     assembled: tuple[AssembledSentence, ...],
-) -> DecodedDocument:
-    """Render a subtitle track as the extracted reading text.
-
-    The caller supplies the already assembled result; this function does not
-    re-segment or infer a second sentence identity. Character offsets
-    accumulate over the joined text so reading anchors and subtitle timing
-    agree.
-    """
-    from .document import ExtractedText, Paragraph, Sentence, _blocks_from_paragraphs
-
-    sentences: list[Sentence] = []
-    cursor = 0
-    sentence_count = len(assembled)
-    for index, sentence in enumerate(assembled):
-        text = sentence.text
-        start = cursor
-        if index < sentence_count - 1:
-            cursor += len(text) + 1
-            end = cursor
-            sentence_text = text + "\n"
-        else:
-            cursor += len(text)
-            end = cursor
-            sentence_text = text
-        sentences.append(
-            Sentence(
-                id=f"sentence-{index}",
-                index=index,
-                start_char=start,
-                end_char=end,
-                text=sentence_text,
-            )
+) -> StructuredText:
+    """Build reading anchors from the subtitle's assembled sentence text."""
+    decoded = text_from_segments(tuple(sentence.text for sentence in assembled))
+    if not decoded.text.strip():
+        raise ProductionAbstained(
+            "subtitle_text_unavailable", "the subtitle track contains no text"
         )
-    joined = "".join(sentence.text for sentence in sentences)
-    paragraphs = [
-        Paragraph(
-            id=f"block-{index}",
-            index=index,
-            start_char=sentence.start_char,
-            end_char=sentence.end_char - 1 if index < sentence_count - 1 else sentence.end_char,
-            sentence_ids=(sentence.id,),
-        )
-        for index, sentence in enumerate(sentences)
-    ]
-    blocks_out = _blocks_from_paragraphs(paragraphs, sentences)
-    return DecodedDocument(
-        media_type="application/vnd.listen.subtitle",
-        text=joined,
-        paragraphs=tuple(paragraphs),
-        sentences=tuple(sentences),
-        blocks=blocks_out,
-        byte_identical=False,
-    )
+    return decoded
 
 
 def _run_subtitle_derivation(
@@ -480,14 +325,30 @@ def _run_subtitle_derivation(
     if progress:
         progress("parsing the subtitle track")
     try:
-        blocks = parse_subtitle(config.subtitle)
+        subtitle_bytes = read_subtitle_source(config.subtitle)
+        subtitle_sha256 = sha256_of_bytes(subtitle_bytes)
+        if subtitle_sha256 != derivation.subtitle_sha256:
+            raise ProductionFailure(
+                "input_changed", "the subtitle input changed after planning"
+            )
+        blocks = parse_subtitle_bytes(subtitle_bytes)
+    except ProductionFailure:
+        raise
     except ConversionError as error:
         raise ProductionFailure("subtitle_unavailable", str(error)) from error
+    subtitle_config_sha256 = sha256_of_bytes(
+        canonical_json(
+            {
+                "assembly_config_sha256": ASSEMBLY_CONFIG_SHA256,
+                "subtitle_sha256": subtitle_sha256,
+            }
+        )
+    )
     assembled = assemble_subtitle_blocks(blocks)
-    decoded = _subtitle_document(assembled)
-    language = _language_for(request, rendition)
+    decoded = _subtitle_reading(assembled)
+    language = _language_for(request)
     structure = build_reading_structure(
-        decoded, language=language, rendition_id=package_rendition_id
+        decoded, language=language
     )
     subject = _subject(request, rendition_ids=(package_rendition_id,))
     derived, _ = _reading_resource(
@@ -497,7 +358,7 @@ def _run_subtitle_derivation(
         provenance_document=provenance(
             created_at_ms,
             input_rendition_ids=[package_rendition_id],
-            config_sha256=ASSEMBLY_CONFIG_SHA256,
+            config_sha256=subtitle_config_sha256,
         ),
     )
     alignment = tuple(
@@ -508,66 +369,19 @@ def _run_subtitle_derivation(
     # Keep the subtitle blocks argument shape for rich-stage duration
     # calculation, but return assembled sentence windows so no downstream
     # consumer can accidentally recover the old block/sentence identity.
-    return derived, alignment, {"config_sha256": ASSEMBLY_CONFIG_SHA256}, assembled, raw
+    return derived, alignment, {"config_sha256": subtitle_config_sha256}, assembled, raw
 
 
-def _transcript_document(transcript: AsrTranscript) -> DecodedDocument:
-    """Render an ASR transcript as the extracted reading text.
-
-    Segments are the exact sentence units; character offsets accumulate over
-    the joined text so reading anchors and the transcript timing agree. The
-    newline between segments belongs to the preceding sentence, so the
-    sentence units cover the whole text without gaps.
-    """
-    from .document import ExtractedText, Paragraph, Sentence, _blocks_from_paragraphs
-
-    sentences: list[Sentence] = []
-    cursor = 0
-    segment_count = len(transcript.segments)
-    for index, segment in enumerate(transcript.segments):
-        text = segment.display_text or segment.text
-        start = cursor
-        if index < segment_count - 1:
-            cursor += len(text) + 1
-            end = cursor
-            sentence_text = text + "\n"
-        else:
-            cursor += len(text)
-            end = cursor
-            sentence_text = text
-        sentences.append(
-            Sentence(
-                id=f"sentence-{index}",
-                index=index,
-                start_char=start,
-                end_char=end,
-                text=sentence_text,
-            )
-        )
-    joined = "".join(sentence.text for sentence in sentences)
-    if not joined.strip():
-        raise ProductionAbstained(
-            "document_text_unavailable", "the transcript contains no text"
-        )
-    paragraphs = [
-        Paragraph(
-            id=f"block-{index}",
-            index=index,
-            start_char=sentence.start_char,
-            end_char=sentence.end_char - 1 if index < segment_count - 1 else sentence.end_char,
-            sentence_ids=(sentence.id,),
-        )
-        for index, sentence in enumerate(sentences)
-    ]
-    blocks = _blocks_from_paragraphs(paragraphs, sentences)
-    return DecodedDocument(
-        media_type="application/vnd.listen.transcript",
-        text=joined,
-        paragraphs=tuple(paragraphs),
-        sentences=tuple(sentences),
-        blocks=blocks,
-        byte_identical=False,
+def _transcript_reading(transcript: AsrTranscript) -> StructuredText:
+    """Build reading anchors from the assembled ASR sentence text."""
+    decoded = text_from_segments(
+        tuple(segment.display_text or segment.text for segment in transcript.segments)
     )
+    if not decoded.text.strip():
+        raise ProductionAbstained(
+            "transcript_text_unavailable", "the transcript contains no text"
+        )
+    return decoded
 
 
 def _transcript_alignment(
@@ -581,21 +395,6 @@ def _transcript_alignment(
     return tuple(
         AnchorAlignment(anchor_id=f"sentence-{index}", media_time_ms=segment.start_ms)
         for index, segment in enumerate(transcript.segments)
-    )
-
-
-def _source_document_renditions(
-    request: CapabilityRequest,
-) -> tuple[PackageDocumentRendition, ...]:
-    return tuple(
-        PackageDocumentRendition(
-            media_type=entry.media_type,
-            language=entry.language,
-            text_blob=blob_declaration(entry.blob.digest, entry.blob.size_bytes, False),
-            origin="source",
-            source_asset_id=entry.source_asset_id,
-        )
-        for entry in request.document_renditions
     )
 
 
@@ -689,42 +488,6 @@ def _sentence_ids_and_times(
         for alignment in alignments:
             times[alignment.anchor_id] = alignment.media_time_ms
     return tuple(sentence_ids), times
-
-
-def _transcript_matches_reading(
-    transcript: AsrTranscript,
-    reading_payload: dict[str, object],
-) -> bool:
-    """Prove a re-transcription has the source reading's sentence identity.
-
-    TTS re-transcription is only a word-timing fallback.  It must never define
-    or shift the source document's sentence identity.  Exact token tuples are
-    compared after the transcript has undergone the same timed assembly used
-    by media input; any count or lexical/punctuation mismatch abstains the
-    complete ASR-word rich chain.
-    """
-    try:
-        source_sentences = alignment_sentences_from(
-            reading_payload=reading_payload,
-            sentence_times_ms={},
-            audio_duration_ms=None,
-        )
-    except ConversionError:
-        return False
-    if len(transcript.segments) != len(source_sentences):
-        return False
-    for segment, source_sentence in zip(transcript.segments, source_sentences):
-        transcript_tokens = tuple(
-            (token["kind"], token["text"], token["normalized"])
-            for token in _tokens(segment.display_text or segment.text)
-        )
-        source_tokens = tuple(
-            (token.kind, token.text, token.normalized)
-            for token in source_sentence.tokens
-        )
-        if transcript_tokens != source_tokens:
-            return False
-    return True
 
 
 def _attach_rich_resources(
@@ -849,166 +612,6 @@ def _attach_rich_resources(
     bytes_by_digest.update(rich_bytes)
     warnings.extend(rich_warnings)
     return resources, bytes_by_digest, warnings
-
-
-def _available_reading_payload(
-    request: CapabilityRequest, resource_id: str
-) -> tuple[dict[str, object], str]:
-    """Read and validate an available Structured Reading payload for reuse."""
-    entry = next(
-        candidate
-        for candidate in request.resources
-        if candidate.resource_id == resource_id
-    )
-    raw = _blob_source_bytes(entry.blob)
-    try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ProductionFailure(
-            "resource_invalid",
-            "the available resource payload is not valid JSON",
-        ) from error
-    if not isinstance(payload, dict):
-        raise ProductionFailure(
-            "resource_invalid", "the available resource payload is invalid"
-        )
-    if not payload.get("text") or not isinstance(payload.get("anchors"), list):
-        raise ProductionFailure(
-            "resource_invalid",
-            "the available resource is not a qualified structured reading",
-        )
-    return payload, entry.content_language or request.edition.target_language
-
-
-
-
-def _tts_rich_stages(
-    *,
-    request: CapabilityRequest,
-    config: ProduceConfig,
-    audio_bytes: bytes,
-    audio_duration_ms: int | None,
-    reading_payload: dict[str, object],
-    alignments: tuple[AnchorAlignment, ...],
-    producer: dict[str, object],
-    anchor_resource_id: str,
-    language: str,
-    subject: dict[str, object],
-    rendition_id: str,
-    created_at_ms: int,
-    progress: Progress | None,
-) -> tuple[list[PackageResource], dict[str, bytes], list[Warning]]:
-    """Derived TTS audio joins the same rich pipeline.
-
-    The source text is already known and every sentence's audio window is
-    measured (per-sentence synthesis), so a forced aligner produces the exact
-    word timeline directly. Without an aligner, a ``tts_aligner`` ASR adapter
-    re-transcribes the derived audio as the honest fallback, but its assembled
-    transcript must exactly match the source reading's sentence/token
-    sequence before any word timing is accepted. Without either qualified
-    path, the document path produces no word-level resources.
-    """
-    stages = config.rich
-    if stages is None or (stages.aligner is None and stages.tts_aligner is None):
-        return [], {}, []
-    sentence_ids, sentence_times = _sentence_ids_and_times(
-        reading_payload, alignments
-    )
-    context = RichContext(
-        language=language,
-        subject=subject,
-        anchor_resource_id=anchor_resource_id,
-        rendition_id=rendition_id,
-        created_at_ms=created_at_ms,
-    )
-    with tempfile.TemporaryDirectory(prefix="listen-gen-rich-") as directory:
-        audio_path = Path(directory) / "tts-audio.bin"
-        audio_path.write_bytes(audio_bytes)
-        warnings: list[Warning] = []
-        aligned_result = None
-        align_segments: tuple[AlignSegment, ...] = ()
-        transcript: AsrTranscript | None = None
-        asr_input: Path | None = audio_path
-        stream_index: int | None = None
-        if stages.aligner is not None:
-            if audio_duration_ms is None:
-                try:
-                    audio_duration_ms = _wav_duration_ms(audio_path)
-                except ConversionError:
-                    audio_duration_ms = None
-            sentences = alignment_sentences_from(
-                reading_payload=reading_payload,
-                sentence_times_ms=sentence_times,
-                audio_duration_ms=audio_duration_ms,
-            )
-            segments = alignment_segments_from(sentences)
-            if segments:
-                try:
-                    aligned_result = stages.aligner.align(
-                        AlignmentRequest(audio_path, segments, language=language)
-                    )
-                    align_segments = segments
-                except ConversionError as error:
-                    warnings.append(
-                        _warning(
-                            "aligner_degraded",
-                            f"forced alignment failed; falling back to "
-                            f"re-transcription: {error}",
-                        )
-                    )
-            else:
-                warnings.append(
-                    _warning(
-                        "aligner_abstained",
-                        "the reading carries no sentence text to align",
-                    )
-                )
-        if aligned_result is None and stages.tts_aligner is not None:
-            asr_input = audio_path
-            stream_index = None
-            if config.asr_preprocessor is not None:
-                with config.asr_preprocessor.prepare(
-                    audio_path, audio_stream_index=None
-                ) as prepared:
-                    raw_transcript = stages.tts_aligner.transcribe(prepared.path)
-                stream_index = prepared.stream_index
-                asr_input = prepared.path
-            else:
-                raw_transcript = stages.tts_aligner.transcribe(audio_path)
-            if raw_transcript.segments:
-                assembled_transcript = assemble_asr_transcript(raw_transcript)
-                if _transcript_matches_reading(assembled_transcript, reading_payload):
-                    transcript = assembled_transcript
-                else:
-                    # Re-transcription is only an evidence source.  A
-                    # fragment count or lexical mismatch must not bind its
-                    # local token indexes to a different source sentence.
-                    warnings.append(
-                        _warning(
-                            "word_timeline_abstained",
-                            "TTS re-transcription did not exactly match the source "
-                            "reading sentences; word-level rich resources are not produced",
-                        )
-                    )
-            else:
-                transcript = None
-        resources, bytes_by_digest, attach_warnings = _attach_rich_resources(
-            config=config,
-            context=context,
-            reading_payload=reading_payload,
-            sentence_ids=sentence_ids,
-            sentence_times_ms=sentence_times,
-            transcript=transcript,
-            aligned_result=aligned_result,
-            align_segments=align_segments,
-            audio_duration_ms=audio_duration_ms,
-            producer=producer,
-            audio_path=asr_input,
-            audio_stream_index=stream_index,
-            progress=progress,
-        )
-        attach_warnings[:0] = warnings
-        return resources, bytes_by_digest, attach_warnings
 
 
 def _media_rich_stages(
@@ -1152,17 +755,32 @@ def produce(
     package's own declarations.
     """
     created_at_ms = request.created_at_ms
-    source_document_renditions = _source_document_renditions(request)
     source_media_renditions = _source_media_renditions(request)
-    document_id_map = {
-        entry.rendition_id: package.rendition_id
-        for entry, package in zip(request.document_renditions, source_document_renditions)
-    }
     media_id_map = {
         entry.rendition_id: package.rendition_id
         for entry, package in zip(request.media_renditions, source_media_renditions)
     }
-    production_plan: ProductionPlan = plan(request)
+    subtitle_sha256 = config.subtitle_sha256
+    if config.subtitle is None:
+        if subtitle_sha256 is not None:
+            raise ProductionFailure(
+                "invalid_request", "subtitle_sha256 requires a subtitle input"
+            )
+    else:
+        try:
+            current_subtitle_sha256 = sha256_of_bytes(
+                read_subtitle_source(config.subtitle)
+            )
+        except ConversionError as error:
+            raise ProductionFailure("subtitle_unavailable", str(error)) from error
+        if subtitle_sha256 is not None and current_subtitle_sha256 != subtitle_sha256:
+            raise ProductionFailure(
+                "input_changed", "the subtitle input changed after planning"
+            )
+        subtitle_sha256 = current_subtitle_sha256
+    production_plan: ProductionPlan = plan(
+        request, subtitle_sha256=subtitle_sha256
+    )
     if check_cancelled:
         check_cancelled()
     if production_plan.empty:
@@ -1170,154 +788,12 @@ def produce(
 
     warnings: list[Warning] = []
     embedded_bytes: dict[str, bytes] = {}
-    derived_media_renditions: list[PackageMediaRendition] = []
     resources: list[PackageResource] = []
     resource_bytes: dict[str, bytes] = {}
-    generated_reading: dict[str, object] | None = None
-    generated_reading_resource: PackageResource | None = None
-
     for derivation in production_plan.derivations:
         if check_cancelled:
             check_cancelled()
-        if derivation.kind == DerivationKind.DOCUMENT_READ:
-            _, derived = _run_document_derivation(
-                request,
-                derivation,
-                ocr=config.ocr,
-                created_at_ms=created_at_ms,
-                package_rendition_id=document_id_map[derivation.input_rendition_ids[0]],
-                progress=progress,
-            )
-            resources.append(derived.resource)
-            resource_bytes[derived.resource.payload_blob["digest"]] = derived.bytes
-            generated_reading = json.loads(derived.bytes.decode("utf-8"))
-            generated_reading_resource = derived.resource
-        elif derivation.kind == DerivationKind.DOCUMENT_LISTEN:
-            if config.tts is None:
-                raise ProductionFailure(
-                    "provider_not_configured", "no TTS provider is configured"
-                )
-            input_rendition_ids = [
-                document_id_map[derivation.input_rendition_ids[0]]
-            ]
-            if derivation.input_resource_ids:
-                reading_payload, language = _available_reading_payload(
-                    request, derivation.input_resource_ids[0]
-                )
-                derived, _ = _reading_resource(
-                    language=language,
-                    payload=reading_payload,
-                    subject=_subject(
-                        request, rendition_ids=input_rendition_ids
-                    ),
-                    provenance_document=provenance(
-                        created_at_ms,
-                        input_rendition_ids=input_rendition_ids,
-                        input_resource_ids=list(derivation.input_resource_ids),
-                    ),
-                )
-                resources.append(derived.resource)
-                resource_bytes[derived.resource.payload_blob["digest"]] = (
-                    derived.bytes
-                )
-                anchor_resource_id = derived.resource.resource_id
-                subject = _subject(
-                    request,
-                    rendition_ids=input_rendition_ids,
-                    anchor_resource_ids=[anchor_resource_id],
-                )
-            else:
-                if generated_reading is None:
-                    _, derived = _run_document_derivation(
-                        request,
-                        derivation,
-                        ocr=config.ocr,
-                        created_at_ms=created_at_ms,
-                        package_rendition_id=input_rendition_ids[0],
-                        progress=progress,
-                    )
-                    resources.append(derived.resource)
-                    resource_bytes[derived.resource.payload_blob["digest"]] = (
-                        derived.bytes
-                    )
-                    generated_reading = json.loads(derived.bytes.decode("utf-8"))
-                    generated_reading_resource = derived.resource
-                reading_payload = generated_reading
-                anchor_resource_id = generated_reading_resource.resource_id
-                language = generated_reading_resource.content_language
-                subject = _subject(
-                    request,
-                    rendition_ids=input_rendition_ids,
-                    anchor_resource_ids=[anchor_resource_id],
-                )
-            audio = _run_tts_derivation(
-                request,
-                reading_payload,
-                tts=config.tts,
-                created_at_ms=created_at_ms,
-                progress=progress,
-            )
-            audio_blob = blob_declaration(
-                sha256_of_bytes(audio.bytes), len(audio.bytes), True
-            )
-            embedded_bytes[audio_blob["digest"]] = audio.bytes
-            compatibility_verified = [
-                {"rendition_id": input_rendition_ids[0], "resource_id": anchor_resource_id}
-            ]
-            audio_rendition = PackageMediaRendition(
-                kind="audio",
-                media_type=audio.media_type,
-                media_blob=audio_blob,
-                fingerprint=sha256_of_bytes(audio.bytes),
-                origin="derived",
-                producer=audio.provider,
-                compatibility=compatibility(
-                    [f"provider:{audio.provider.get('provider', {}).get('id', 'unknown')}"],
-                    compatibility_verified,
-                ),
-            )
-            derived_media_renditions.append(audio_rendition)
-            if audio.alignment:
-                alignment_resource, alignment_bytes = _alignment_resource(
-                    anchor_resource_id=anchor_resource_id,
-                    rendition_id=audio_rendition.rendition_id,
-                    alignments=audio.alignment,
-                    created_at_ms=created_at_ms,
-                    language=language,
-                    subject=subject,
-                    producer=audio.provider,
-                )
-                resources.append(alignment_resource)
-                resource_bytes[alignment_resource.payload_blob["digest"]] = (
-                    alignment_bytes
-                )
-                rich_resources, rich_bytes, rich_warnings = _tts_rich_stages(
-                    request=request,
-                    config=config,
-                    audio_bytes=audio.bytes,
-                    audio_duration_ms=audio.duration_ms,
-                    reading_payload=reading_payload,
-                    alignments=audio.alignment,
-                    producer=audio.provider,
-                    anchor_resource_id=anchor_resource_id,
-                    language=language,
-                    subject=subject,
-                    rendition_id=audio_rendition.rendition_id,
-                    created_at_ms=created_at_ms,
-                    progress=progress,
-                )
-                resources.extend(rich_resources)
-                resource_bytes.update(rich_bytes)
-                warnings.extend(rich_warnings)
-            else:
-                warnings.append(
-                    _warning(
-                        "alignment_abstained",
-                        "exact anchor timing could not be produced; audio is "
-                        "available but synchronized reading is not",
-                    )
-                )
-        elif derivation.kind == DerivationKind.MEDIA_READ:
+        if derivation.kind == DerivationKind.MEDIA_READ:
             subtitle_blocks: tuple[AssembledSentence, ...] = ()
             if config.subtitle is not None:
                 derived, alignment, producer, subtitle_blocks, source_media_bytes = (
@@ -1415,17 +891,14 @@ def produce(
             "material_revision_id": request.material.material_revision_id,
             "title": request.material.title,
         },
-        document_renditions=source_document_renditions,
-        media_renditions=_source_media_renditions(request)
-        + tuple(derived_media_renditions),
+        document_renditions=(),
+        media_renditions=source_media_renditions,
         resources=tuple(resources),
         payload_bytes=resource_bytes,
         embedded_bytes=embedded_bytes,
         referenced_digests=frozenset(
-            entry.blob.digest
-            for entry in request.document_renditions
-        )
-        | frozenset(entry.blob.digest for entry in request.media_renditions),
+            entry.blob.digest for entry in request.media_renditions
+        ),
     )
     if check_cancelled:
         check_cancelled()

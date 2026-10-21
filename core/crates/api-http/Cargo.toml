@@ -18,7 +18,6 @@ domain = { path = "../domain" }
 embedding-provider = { path = "../embedding-provider" }
 hex.workspace = true
 llm-provider = { path = "../llm-provider" }
-realtime-provider = { path = "../realtime-provider" }
 local-runtime = { path = "../local-runtime" }
 persistence-sqlite = { path = "../persistence-sqlite" }
 rand.workspace = true

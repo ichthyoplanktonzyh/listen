@@ -5,8 +5,8 @@ import 'media_import_repository.dart';
 
 /// Presents several source families as one catalog.
 ///
-/// Each family answers for its own sources: a feed (podcast or article/blog)
-/// is fetched and parsed here in the app, a YouTube channel goes through its
+/// Each family answers for its own sources: a podcast feed is fetched and
+/// parsed here in the app, a YouTube channel goes through its
 /// own Atom feed and, for acquisition, an external tool. Keeping them behind
 /// separate repositories is what makes it possible to change one family's
 /// policy — or switch it off — without touching the journey above.

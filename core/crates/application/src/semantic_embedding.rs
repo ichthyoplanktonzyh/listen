@@ -3,16 +3,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use domain::{
-    EmbeddingModelDescriptor, EmbeddingPurpose, NearSemanticProductionMatch, ProductionChannel,
-    ProductionGapSemanticEnrichment, SemanticEmbeddingCapability, SemanticEmbeddingIndexRecord,
-    SemanticEmbeddingSource, SemanticEmbeddingSourceKind, SemanticEmbeddingStatus,
-    SemanticSearchHit, SemanticSearchResult, SemanticallyEnrichedProductionGapReview,
+    EmbeddingModelDescriptor, EmbeddingPurpose, SemanticEmbeddingCapability,
+    SemanticEmbeddingIndexRecord, SemanticEmbeddingSource, SemanticEmbeddingSourceKind,
+    SemanticEmbeddingStatus, SemanticSearchHit, SemanticSearchResult,
 };
 use sha2::{Digest, Sha256};
 
 use crate::{
-    AppServices, ApplicationError, CorpusIndexRepository, ProductionCorpusRepository,
-    SemanticEmbeddingIndexRepository, now_ms,
+    AppServices, ApplicationError, CorpusIndexRepository, SemanticEmbeddingIndexRepository, now_ms,
 };
 
 #[async_trait]
@@ -56,20 +54,16 @@ impl EmbeddingProvider for UnavailableEmbeddingProvider {
 #[derive(Clone)]
 pub struct SemanticEmbeddingUseCases {
     corpus: Arc<dyn CorpusIndexRepository>,
-    production: Arc<dyn ProductionCorpusRepository>,
     index: Arc<dyn SemanticEmbeddingIndexRepository>,
     provider: Arc<dyn EmbeddingProvider>,
-    gap_review: crate::ProductionCorpusUseCases,
 }
 
 impl SemanticEmbeddingUseCases {
     pub(crate) fn from_services(services: &AppServices) -> Self {
         Self {
             corpus: services.corpus.clone(),
-            production: services.production_corpus.clone(),
             index: services.semantic_embedding_index.clone(),
             provider: services.embedding_provider.clone(),
-            gap_review: crate::ProductionCorpusUseCases::from_services(services),
         }
     }
 
@@ -138,7 +132,6 @@ impl SemanticEmbeddingUseCases {
                 source_kind: source.kind,
                 source_id: source.source_id.clone(),
                 language: source.language.clone(),
-                channel: source.channel,
                 text_sha256: hex::encode(Sha256::digest(source.text.as_bytes())),
                 model_fingerprint: descriptor.model_fingerprint.clone(),
                 dimension: descriptor.dimension,
@@ -156,7 +149,6 @@ impl SemanticEmbeddingUseCases {
         query: &str,
         language: Option<&str>,
         source_kind: Option<SemanticEmbeddingSourceKind>,
-        channel: Option<ProductionChannel>,
         limit: u32,
     ) -> Result<SemanticSearchResult, ApplicationError> {
         let query = query.trim();
@@ -196,7 +188,6 @@ impl SemanticEmbeddingUseCases {
             .into_iter()
             .filter(|record| language.is_none_or(|value| record.language.as_str() == value))
             .filter(|record| source_kind.is_none_or(|value| record.source_kind == value))
-            .filter(|record| channel.is_none_or(|value| record.channel == Some(value)))
             .filter_map(|record| {
                 let source = sources
                     .get(&(record.source_kind, record.source_id.clone()))?
@@ -221,95 +212,13 @@ impl SemanticEmbeddingUseCases {
         })
     }
 
-    pub async fn enrich_gap_review(
-        &self,
-        language: &str,
-        channel: ProductionChannel,
-        limit: u32,
-    ) -> Result<SemanticallyEnrichedProductionGapReview, ApplicationError> {
-        const THRESHOLD: f32 = 0.70;
-        let review = self
-            .gap_review
-            .production_gap_review(language, channel, limit)?;
-        let capability = self.capability()?;
-        let Some(descriptor) = capability.descriptor.clone() else {
-            return Ok(SemanticallyEnrichedProductionGapReview {
-                review,
-                semantic_capability: capability,
-                enrichments: Vec::new(),
-                threshold: THRESHOLD,
-            });
-        };
-        if capability.status != SemanticEmbeddingStatus::Ready || review.targets.is_empty() {
-            return Ok(SemanticallyEnrichedProductionGapReview {
-                review,
-                semantic_capability: capability,
-                enrichments: Vec::new(),
-                threshold: THRESHOLD,
-            });
-        }
-        let target_texts = review
-            .targets
-            .iter()
-            .map(|target| target.display_form.clone())
-            .collect::<Vec<_>>();
-        let target_vectors = self
-            .provider
-            .embed(EmbeddingPurpose::Query, &target_texts)
-            .await?;
-        validate_vectors(&descriptor, target_texts.len(), &target_vectors)?;
-        let records = self
-            .index
-            .list_semantic_embedding_records(&descriptor.model_fingerprint)?;
-        let source_lookup = self
-            .sources()?
-            .into_iter()
-            .map(|source| ((source.kind, source.source_id.clone()), source))
-            .collect::<HashMap<_, _>>();
-        let lexeme_records = records
-            .into_iter()
-            .filter(|record| {
-                record.source_kind == SemanticEmbeddingSourceKind::ProductionLexeme
-                    && record.language.as_str() == language
-                    && record.channel == Some(channel)
-            })
-            .collect::<Vec<_>>();
-        let enrichments = review.targets.iter().zip(target_vectors).map(|(target, vector)| {
-            let mut matches = lexeme_records.iter().filter_map(|record| {
-                let similarity = cosine(&vector, &record.vector);
-                (similarity >= THRESHOLD).then(|| NearSemanticProductionMatch {
-                    normalized_key: source_lookup
-                        .get(&(record.source_kind, record.source_id.clone()))
-                        .map(|source| source.text.clone())
-                        .unwrap_or_else(|| record.source_id.clone()),
-                    similarity,
-                    model_fingerprint: descriptor.model_fingerprint.clone(),
-                    explanation: format!("Your corpus contains ‘{}’; this model ranks it semantically near ‘{}’ at {:.3}. This is a practice clue, not a synonym or capability claim.", source_lookup.get(&(record.source_kind, record.source_id.clone())).map(|source| source.text.as_str()).unwrap_or(&record.source_id), target.display_form, similarity),
-                })
-            }).collect::<Vec<_>>();
-            matches.sort_by(|a, b| b.similarity.total_cmp(&a.similarity).then_with(|| a.normalized_key.cmp(&b.normalized_key)));
-            matches.truncate(3);
-            ProductionGapSemanticEnrichment {
-                lexical_entry_id: target.lexical_entry_id.as_str().to_owned(),
-                target_normalized_key: target.normalized_key.clone(),
-                matches,
-            }
-        }).collect();
-        Ok(SemanticallyEnrichedProductionGapReview {
-            review,
-            semantic_capability: capability,
-            enrichments,
-            threshold: THRESHOLD,
-        })
-    }
-
     pub fn delete_index(&self) -> Result<SemanticEmbeddingCapability, ApplicationError> {
         self.index.delete_semantic_embedding_index()?;
         self.capability()
     }
 
     fn sources(&self) -> Result<Vec<SemanticEmbeddingSource>, ApplicationError> {
-        let mut sources = self
+        let sources = self
             .corpus
             .list_semantic_corpus_occurrences()?
             .into_iter()
@@ -317,64 +226,14 @@ impl SemanticEmbeddingUseCases {
                 kind: SemanticEmbeddingSourceKind::MediaCorpus,
                 source_id: item.id.as_str().to_owned(),
                 language: item.language,
-                channel: None,
                 text: item.display_text,
                 media_id: item.media_id,
                 track_id: item.track_id,
                 sentence_id: item.sentence_id,
                 start_ms: item.start_ms,
                 end_ms: item.end_ms,
-                produced_at_ms: None,
             })
             .collect::<Vec<_>>();
-        let documents = self.production.list_production_documents()?;
-        let mut languages_and_channels = Vec::new();
-        for document in documents {
-            if !languages_and_channels.contains(&(document.language.clone(), document.channel)) {
-                languages_and_channels.push((document.language.clone(), document.channel));
-            }
-            sources.push(SemanticEmbeddingSource {
-                kind: SemanticEmbeddingSourceKind::ProductionDocument,
-                source_id: document.id.as_str().to_owned(),
-                language: document.language,
-                channel: Some(document.channel),
-                text: document.response_text,
-                media_id: document.media_id,
-                track_id: None,
-                sentence_id: None,
-                start_ms: document.start_ms,
-                end_ms: document.end_ms,
-                produced_at_ms: Some(document.produced_at_ms),
-            });
-        }
-        for (language, channel) in languages_and_channels {
-            for lexeme in self
-                .production
-                .list_production_lexemes(&language, channel)?
-            {
-                sources.push(SemanticEmbeddingSource {
-                    kind: SemanticEmbeddingSourceKind::ProductionLexeme,
-                    source_id: format!(
-                        "{}:{}:{}",
-                        language.as_str(),
-                        match channel {
-                            ProductionChannel::Written => "written",
-                            ProductionChannel::Spoken => "spoken",
-                        },
-                        lexeme
-                    ),
-                    language: language.clone(),
-                    channel: Some(channel),
-                    text: lexeme,
-                    media_id: None,
-                    track_id: None,
-                    sentence_id: None,
-                    start_ms: 0,
-                    end_ms: 0,
-                    produced_at_ms: None,
-                });
-            }
-        }
         Ok(sources)
     }
 

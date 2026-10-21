@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/downloads_controller.dart';
-import '../../controllers/material_capability_coordinator.dart';
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
 import '../../models/api_failure.dart';
-import '../../models/learning_material.dart';
 import '../../models/personal_library.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/spacing.dart';
@@ -17,7 +15,7 @@ import 'personal_library_section.dart';
 enum LibraryView { all, recent, offline }
 
 /// Material kinds are filters on one library, never separate destinations.
-enum LibraryTypeFilter { all, article, audio, video }
+enum LibraryTypeFilter { all, audio, video }
 
 /// The learner's retained materials, regardless of whether their usable form
 /// is text, audio, video, or a mixture of them.
@@ -31,12 +29,10 @@ class ListeningHome extends StatefulWidget {
     super.key,
     required this.onOpenMedia,
     required this.onOpenOnline,
-    this.onOpenDocument,
     this.personalLibrary,
     this.personalLibraryFailure,
     this.onRetryLibrary,
     this.offlineEntries,
-    this.familiarSupplyEnabled = true,
     this.scan,
     this.onScanRefresh,
     this.onScanCancel,
@@ -46,10 +42,6 @@ class ListeningHome extends StatefulWidget {
     this.onStartExtensiveEntry,
     this.onStartIntensiveEntry,
     this.onSetLibraryIntent,
-    this.onToggleFamiliarSupply,
-    this.capabilityCoordinator,
-    this.onRequestCapability,
-    this.onCancelCapability,
     this.downloads,
     this.downloadsFailure,
     this.onOpenDownload,
@@ -67,9 +59,6 @@ class ListeningHome extends StatefulWidget {
   final void Function(DownloadedMedia entry)? onOpenDownload;
   final void Function(DownloadedMedia entry)? onDeleteDownload;
 
-  /// The primary "Open document" action, opening the direct document session.
-  final VoidCallback? onOpenDocument;
-
   /// The authoritative library: retained materials projected with their media
   /// rows. Membership, order, and titles come from here; the raw media
   /// snapshot is not a library authority for the UI.
@@ -77,11 +66,10 @@ class ListeningHome extends StatefulWidget {
   final ApiFailure? personalLibraryFailure;
   final VoidCallback? onRetryLibrary;
 
-  /// The offline subset of [personalLibrary] (rows whose document rendition
-  /// bytes or local media file is available). Offline used to be its own
+  /// The offline subset of [personalLibrary] (rows whose local media file is
+  /// available). Offline used to be its own
   /// sidebar destination; it is a filter on the library now.
   final List<PersonalLibraryEntry>? offlineEntries;
-  final bool familiarSupplyEnabled;
 
   /// Folder-scan state, or null on a surface that has no scan wired. The scan
   /// is the only thing that can tell an empty library apart from a library
@@ -99,21 +87,6 @@ class ListeningHome extends StatefulWidget {
   final void Function(PersonalLibraryEntry entry)? onStartIntensiveEntry;
   final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
-  final void Function(bool enabled)? onToggleFamiliarSupply;
-
-  /// Capability completion wiring for library rows (optional: without it rows
-  /// render today's actions only).
-  final MaterialCapabilityCoordinator? capabilityCoordinator;
-  final void Function(
-    PersonalLibraryEntry entry,
-    MaterialCapability capability,
-  )?
-  onRequestCapability;
-  final void Function(
-    PersonalLibraryEntry entry,
-    MaterialCapability capability,
-  )?
-  onCancelCapability;
 
   @override
   State<ListeningHome> createState() => _ListeningHomeState();
@@ -134,11 +107,13 @@ class _ListeningHomeState extends State<ListeningHome> {
         ? widget.offlineEntries
         : widget.personalLibrary;
     if (source == null) return null;
+    final mediaEntries = source
+        .where((entry) => entry.primaryMedia != null)
+        .toList(growable: false);
     final filtered = switch (_type) {
-      LibraryTypeFilter.all => source,
-      LibraryTypeFilter.article => source.where((entry) => entry.canRead),
-      LibraryTypeFilter.audio => source.where((entry) => entry.canListen),
-      LibraryTypeFilter.video => source.where((entry) => entry.canWatch),
+      LibraryTypeFilter.all => mediaEntries,
+      LibraryTypeFilter.audio => mediaEntries.where((entry) => entry.canListen),
+      LibraryTypeFilter.video => mediaEntries.where((entry) => entry.canWatch),
     }.toList(growable: false);
     if (_view == LibraryView.recent) {
       filtered.sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
@@ -156,7 +131,6 @@ class _ListeningHomeState extends State<ListeningHome> {
           compact: compact,
           onOpenMedia: widget.onOpenMedia,
           onOpenOnline: widget.onOpenOnline,
-          onOpenDocument: widget.onOpenDocument,
           view: _view,
           onViewChanged: (value) => setState(() => _view = value),
           type: _type,
@@ -164,7 +138,6 @@ class _ListeningHomeState extends State<ListeningHome> {
           personalLibrary: _visibleEntries(),
           personalLibraryFailure: widget.personalLibraryFailure,
           onRetryLibrary: widget.onRetryLibrary,
-          familiarSupplyEnabled: widget.familiarSupplyEnabled,
           scan: widget.scan,
           onScanRefresh: widget.onScanRefresh,
           onScanCancel: widget.onScanCancel,
@@ -174,10 +147,6 @@ class _ListeningHomeState extends State<ListeningHome> {
           onStartExtensiveEntry: widget.onStartExtensiveEntry,
           onStartIntensiveEntry: widget.onStartIntensiveEntry,
           onSetLibraryIntent: widget.onSetLibraryIntent,
-          onToggleFamiliarSupply: widget.onToggleFamiliarSupply,
-          capabilityCoordinator: widget.capabilityCoordinator,
-          onRequestCapability: widget.onRequestCapability,
-          onCancelCapability: widget.onCancelCapability,
           downloads: widget.downloads,
           downloadsFailure: widget.downloadsFailure,
           onOpenDownload: widget.onOpenDownload,
@@ -193,7 +162,6 @@ class _HomeContent extends StatelessWidget {
     required this.compact,
     required this.onOpenMedia,
     required this.onOpenOnline,
-    required this.onOpenDocument,
     required this.view,
     required this.onViewChanged,
     required this.type,
@@ -201,7 +169,6 @@ class _HomeContent extends StatelessWidget {
     required this.personalLibrary,
     required this.personalLibraryFailure,
     required this.onRetryLibrary,
-    required this.familiarSupplyEnabled,
     required this.scan,
     required this.onScanRefresh,
     required this.onScanCancel,
@@ -211,10 +178,6 @@ class _HomeContent extends StatelessWidget {
     required this.onStartExtensiveEntry,
     required this.onStartIntensiveEntry,
     required this.onSetLibraryIntent,
-    required this.onToggleFamiliarSupply,
-    this.capabilityCoordinator,
-    this.onRequestCapability,
-    this.onCancelCapability,
     this.downloads,
     this.downloadsFailure,
     this.onOpenDownload,
@@ -224,7 +187,6 @@ class _HomeContent extends StatelessWidget {
   final bool compact;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
-  final VoidCallback? onOpenDocument;
 
   /// The library's offline filter: offline used to be a sidebar destination
   /// sharing one data source with this section, so it reads as a view on the
@@ -237,7 +199,6 @@ class _HomeContent extends StatelessWidget {
   final List<PersonalLibraryEntry>? personalLibrary;
   final ApiFailure? personalLibraryFailure;
   final VoidCallback? onRetryLibrary;
-  final bool familiarSupplyEnabled;
   final MediaLibraryScanState? scan;
   final VoidCallback? onScanRefresh;
   final VoidCallback? onScanCancel;
@@ -248,18 +209,6 @@ class _HomeContent extends StatelessWidget {
   final void Function(PersonalLibraryEntry entry)? onStartIntensiveEntry;
   final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
-  final void Function(bool enabled)? onToggleFamiliarSupply;
-  final MaterialCapabilityCoordinator? capabilityCoordinator;
-  final void Function(
-    PersonalLibraryEntry entry,
-    MaterialCapability capability,
-  )?
-  onRequestCapability;
-  final void Function(
-    PersonalLibraryEntry entry,
-    MaterialCapability capability,
-  )?
-  onCancelCapability;
   final List<DownloadedMedia>? downloads;
   final ApiFailure? downloadsFailure;
   final void Function(DownloadedMedia entry)? onOpenDownload;
@@ -271,9 +220,8 @@ class _HomeContent extends StatelessWidget {
     return SingleChildScrollView(
       // One page role per window width, instead of four different numbers in
       // four directions (24|48 / 28|44 / 24|48 / 40, three of them off any
-      // ladder). This is the inset the coach dashboard and the vocabulary
-      // detail already use, so the home page finally measures its margin the
-      // same way the rest of the app does.
+      // ladder). The vocabulary detail already uses this inset, so the home
+      // page measures its margin the same way as the rest of the app.
       padding: compact ? ListenPadding.pageCompact : ListenPadding.page,
       child: Align(
         alignment: Alignment.topCenter,
@@ -313,7 +261,6 @@ class _HomeContent extends StatelessWidget {
                   ),
                   const SizedBox(width: ListenSpacing.gap16),
                   _UnifiedImportAction(
-                    onOpenDocument: onOpenDocument,
                     onOpenMedia: onOpenMedia,
                     onOpenOnline: onOpenOnline,
                   ),
@@ -323,8 +270,7 @@ class _HomeContent extends StatelessWidget {
                   onOpenLibraryEntry != null &&
                   onStartExtensiveEntry != null &&
                   onStartIntensiveEntry != null &&
-                  onSetLibraryIntent != null &&
-                  onToggleFamiliarSupply != null) ...[
+                  onSetLibraryIntent != null) ...[
                 const SizedBox(height: ListenSpacing.gap24),
                 Text(
                   l.text('libraryStatusFilter'),
@@ -373,12 +319,6 @@ class _HomeContent extends StatelessWidget {
                       onSelected: (_) => onTypeChanged(LibraryTypeFilter.all),
                     ),
                     ChoiceChip(
-                      label: Text(l.text('libraryTypeArticle')),
-                      selected: type == LibraryTypeFilter.article,
-                      onSelected: (_) =>
-                          onTypeChanged(LibraryTypeFilter.article),
-                    ),
-                    ChoiceChip(
                       label: Text(l.text('libraryTypeAudio')),
                       selected: type == LibraryTypeFilter.audio,
                       onSelected: (_) => onTypeChanged(LibraryTypeFilter.audio),
@@ -394,19 +334,13 @@ class _HomeContent extends StatelessWidget {
                 PersonalLibrarySection(
                   entries: personalLibrary,
                   showHeader: false,
-                  groupByQueue: false,
                   simplifiedRows: true,
-                  familiarSupplyEnabled: familiarSupplyEnabled,
                   sidecarSubtitlePaths:
                       scan?.sidecarSubtitlePaths ?? const <String>{},
                   onOpen: onOpenLibraryEntry!,
                   onStartExtensive: onStartExtensiveEntry!,
                   onStartIntensive: onStartIntensiveEntry!,
                   onSetIntent: onSetLibraryIntent!,
-                  onToggleFamiliarSupply: onToggleFamiliarSupply!,
-                  capabilityCoordinator: capabilityCoordinator,
-                  onRequestCapability: onRequestCapability,
-                  onCancelCapability: onCancelCapability,
                 ),
               ] else if (personalLibraryFailure != null) ...[
                 const SizedBox(height: ListenSpacing.gap24),
@@ -471,12 +405,10 @@ class _HomeContent extends StatelessWidget {
 
 class _UnifiedImportAction extends StatelessWidget {
   const _UnifiedImportAction({
-    required this.onOpenDocument,
     required this.onOpenMedia,
     required this.onOpenOnline,
   });
 
-  final VoidCallback? onOpenDocument;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
 
@@ -485,12 +417,6 @@ class _UnifiedImportAction extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return MenuAnchor(
       menuChildren: [
-        if (onOpenDocument != null)
-          MenuItemButton(
-            onPressed: onOpenDocument,
-            leadingIcon: const Icon(Icons.description_outlined),
-            child: Text(l.text('openDocument')),
-          ),
         MenuItemButton(
           onPressed: onOpenMedia,
           leadingIcon: const Icon(Icons.video_file_outlined),

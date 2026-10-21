@@ -57,31 +57,6 @@ void main() {
     expect(controller.mediaKind, 'video');
   });
 
-  test('derived document audio has transport state but no media identity', () {
-    final controller = PlayerController()
-      ..setMedia(
-        id: 'old-media',
-        path: '/tmp/old.mp4',
-        title: 'Old media',
-        fingerprint: 'old-fingerprint',
-        kind: 'video',
-      );
-    addTearDown(controller.dispose);
-
-    controller.setMaterialPlaybackSource(
-      path: '/tmp/generated.m4a',
-      title: 'The document',
-      kind: 'audio',
-    );
-
-    expect(controller.mediaPath, '/tmp/generated.m4a');
-    expect(controller.mediaTitle, 'The document');
-    expect(controller.mediaKind, 'audio');
-    expect(controller.mediaId, isNull);
-    expect(controller.mediaFingerprint, isNull);
-    expect(controller.mediaRetained, isNull);
-  });
-
   test('player controller exposes strongly typed track lists from startup', () {
     final controller = PlayerController();
     const track = PlayerTrack(index: 0, id: 'audio-0');

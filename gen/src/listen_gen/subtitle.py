@@ -61,13 +61,29 @@ def _block_text(lines: list[str]) -> str:
     return text
 
 
-def parse_subtitle(path: Path) -> tuple[SubtitleBlock, ...]:
-    """Parse an SRT or WebVTT file into timed text blocks."""
+def read_subtitle_source(path: Path) -> bytes:
+    """Read one bounded SRT or WebVTT input snapshot."""
     if not path.is_file():
         raise ConversionError("subtitle input is not a regular file")
     try:
-        raw = path.read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeDecodeError) as error:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise ConversionError("subtitle input could not be read") from error
+    if len(raw) > _SUBTITLE_MAX_TEXT:
+        raise ConversionError("subtitle input is too large")
+    return raw
+
+
+def parse_subtitle(path: Path) -> tuple[SubtitleBlock, ...]:
+    """Parse an SRT or WebVTT file into timed text blocks."""
+    return parse_subtitle_bytes(read_subtitle_source(path))
+
+
+def parse_subtitle_bytes(raw_bytes: bytes) -> tuple[SubtitleBlock, ...]:
+    """Parse a bounded SRT or WebVTT byte snapshot into timed text blocks."""
+    try:
+        raw = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
         raise ConversionError("subtitle input could not be read") from error
     if len(raw) > _SUBTITLE_MAX_TEXT:
         raise ConversionError("subtitle input is too large")

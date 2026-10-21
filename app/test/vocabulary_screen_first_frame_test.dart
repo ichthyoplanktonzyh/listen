@@ -24,9 +24,6 @@ void main() {
           if (method == 'GET' && path.startsWith('/v1/hunting/targets?')) {
             return (statusCode: 200, body: '[]');
           }
-          if (method == 'GET' && path.startsWith('/v1/hunting/candidates?')) {
-            return (statusCode: 200, body: '[]');
-          }
           throw StateError('unexpected $method $path');
         },
       );
@@ -95,7 +92,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
       expect(vocabularyViewModel.state.loading, isFalse);
-      expect(vocabularyViewModel.state.gapLoading, isFalse);
       expect(hunting.state.busy, isFalse);
     },
   );

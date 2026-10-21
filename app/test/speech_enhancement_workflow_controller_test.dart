@@ -23,7 +23,7 @@ void main() {
         transport: (method, path, body) async => (
           statusCode: 500,
           body:
-              '{"code":"validation_error","message":"recording metadata must '
+              '{"code":"validation_error","message":"media metadata must '
               'not be empty","correlation_id":"api-853","retryable":false}',
         ),
       );

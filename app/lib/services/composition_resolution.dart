@@ -17,7 +17,6 @@ ResolvedComposition? resolveCompositionContent({
   required AdoptedComposition composition,
   required List<int> structuredReadingPayload,
   List<int>? alignmentPayload,
-  String? derivedMediaPath,
   SubtitleTrack? transcript,
   CompositionResourceProjection enhancements =
       const CompositionResourceProjection(),
@@ -86,7 +85,6 @@ ResolvedComposition? resolveCompositionContent({
     sentences: sentences,
     anchors: anchors,
     alignments: alignments,
-    derivedMediaPath: derivedMediaPath,
     transcript: transcript,
     enhancements: enhancements,
     llTimelineDocument: llTimelineDocument,

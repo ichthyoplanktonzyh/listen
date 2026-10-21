@@ -110,8 +110,6 @@ class _TokenSheet extends StatelessWidget {
               for (final (label, ink) in [
                 ('disabled', colors.disabledForeground),
                 ('pressed', colors.pressedPrimary),
-                ('covered', colors.verdictCovered),
-                ('partial', colors.verdictPartial),
                 ('missing', colors.error),
                 ('月白', ListenColors.moonWhite),
                 ('月蓝', ListenColors.moonBlue),

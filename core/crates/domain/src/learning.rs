@@ -41,7 +41,6 @@ pub enum ObservationResult {
 pub enum LearningChangeSource {
     UserSelection,
     Import,
-    UpgradeSuggestionConfirmation,
     CapabilityOverrideSync,
 }
 

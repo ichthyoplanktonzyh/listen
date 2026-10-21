@@ -10,19 +10,20 @@
 use std::sync::Arc;
 
 use application::{
-    AppServices, ApplicationError, MaterialRepository, PackageLifecycleRepository,
+    AppServices, ApplicationError, MaterialRepository, MediaRepository, PackageLifecycleRepository,
     PreparedPackageInstallation, PreparedRenditionBlob, PreparedResourcePayload,
 };
 use domain::{
-    AdoptionCommitPlan, DocumentRendition, ExclusiveSelection, LanguageCode, LearningEdition,
-    LearningMaterial, LearningMaterialId, MaterialRevision, MaterialRevisionId,
-    PackageInstallation, PackageReleaseId, PackageRenditionFact, PackageResourceAvailability,
-    PackageResourceFact, PackageResourceProvenance, PackageResourceRole, PackageReviewStatus,
-    Rendition, RenditionOrigin, adoption_commit_plan, initial_material_id,
+    AdoptionCommitPlan, ExclusiveSelection, LanguageCode, LearningEdition, LearningMaterial,
+    LearningMaterialId, MaterialRevision, MaterialRevisionId, MediaAvailability, MediaId,
+    MediaItem, MediaKind, MediaRendition, PackageInstallation, PackageReleaseId,
+    PackageRenditionFact, PackageResourceAvailability, PackageResourceFact,
+    PackageResourceProvenance, PackageResourceRole, PackageReviewStatus, Rendition,
+    RenditionOrigin, TimeMs, adoption_commit_plan,
 };
 
 use super::*;
-use crate::package_lifecycle::query_payloads;
+use crate::package_lifecycle::{query_payloads, query_rendition_blobs};
 use sha2::{Digest as _, Sha256};
 
 fn sha256_id(bytes: &[u8]) -> String {
@@ -166,17 +167,17 @@ fn prepared(
     }
 }
 
-fn text_prepared(
+fn structured_reading_prepared(
     material: &LearningMaterial,
     revision: &MaterialRevision,
     release_id: &str,
     edition_id: &str,
 ) -> PreparedPackageInstallation {
-    let bytes = b"fixture document payload bytes".to_vec();
+    let bytes = b"fixture structured reading payload bytes".to_vec();
     let digest = sha256_id(&bytes);
     let fact = resource_fact(
-        "resource-document",
-        "document_text",
+        "resource-reading",
+        "structured_reading",
         PackageResourceAvailability::Available,
         &digest,
         bytes.len() as u64,
@@ -187,65 +188,49 @@ fn text_prepared(
         release_id,
         edition_id,
         vec![fact],
-        vec![payload("resource-document", "document_text", bytes)],
+        vec![payload("resource-reading", "structured_reading", bytes)],
     )
 }
 
-fn text_asset(text: &str) -> domain::SourceAsset {
-    domain::SourceAsset::new(
-        "text/plain",
-        text.len() as u64,
-        hex::encode(Sha256::digest(text.as_bytes())),
-        domain::SourceAssetBinding::Managed,
-        domain::SourceAssetAvailability::Available,
-        1,
-    )
-    .unwrap()
-}
-
-fn seed_material(repo: &Arc<SqliteRepository>, text: &str) -> (LearningMaterial, MaterialRevision) {
-    let asset = text_asset(text);
-    let rendition = Rendition::Document(
-        DocumentRendition::new(
-            RenditionOrigin::Source,
-            "text/plain",
-            Some(language("en")),
-            asset.sha256_digest.clone(),
-            asset.byte_length,
-            Some(asset.id.clone()),
-            None,
-            None,
-        )
-        .unwrap(),
-    );
-    let material_id = initial_material_id(
-        std::slice::from_ref(&asset),
-        std::slice::from_ref(&rendition),
-    )
-    .unwrap();
-    let revision = MaterialRevision::new(
-        material_id.clone(),
-        "Material",
-        vec![asset],
-        vec![rendition],
-        1,
-    )
-    .unwrap();
-    let material = LearningMaterial::new(&revision, None, 1, 1).unwrap();
-    MaterialRepository::create_material(repo.as_ref(), &material, &revision).unwrap();
+fn seed_material(repo: &Arc<SqliteRepository>, seed: &str) -> (LearningMaterial, MaterialRevision) {
+    let digest = sha256_id(seed.as_bytes());
+    let short = digest[7..23].to_owned();
+    let media_id = MediaId::parse(format!("media-{short}")).unwrap();
+    let media = MediaItem {
+        id: media_id.clone(),
+        path: format!("/tmp/{short}.mp3"),
+        fingerprint: digest,
+        title: "Listening material".into(),
+        kind: MediaKind::Audio,
+        duration: Some(TimeMs::new(2_000)),
+        availability: MediaAvailability::Available,
+        retained_at_ms: Some(1),
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    MediaRepository::upsert(repo.as_ref(), &media).unwrap();
+    let material = MaterialRepository::material_for_media(repo.as_ref(), &media_id)
+        .unwrap()
+        .unwrap();
+    let revision = MaterialRepository::get_revision(repo.as_ref(), &material.current_revision_id)
+        .unwrap()
+        .unwrap();
     (material, revision)
 }
 
-fn document_rendition(text: &str) -> Rendition {
-    let asset = text_asset(text);
-    Rendition::Document(
-        DocumentRendition::new(
+fn media_rendition(seed: &str) -> Rendition {
+    let digest = sha256_id(seed.as_bytes());
+    let short = digest[7..23].to_owned();
+    Rendition::Media(
+        MediaRendition::new(
             RenditionOrigin::Source,
-            "text/plain",
-            Some(language("en")),
-            asset.sha256_digest.clone(),
-            asset.byte_length,
-            Some(asset.id),
+            MediaKind::Audio,
+            "audio/mpeg",
+            digest,
+            MediaAvailability::Available,
+            Some(MediaId::parse(format!("media-{short}")).unwrap()),
+            None,
+            None,
             None,
             None,
         )
@@ -285,7 +270,7 @@ fn services(repo: &Arc<SqliteRepository>) -> AppServices {
 fn save_installation_round_trips_facts_and_exact_payload_bytes() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let input = text_prepared(&material, &revision, "sha256:release-a", "edition-a");
+    let input = structured_reading_prepared(&material, &revision, "sha256:release-a", "edition-a");
     assert_eq!(
         input.installation.installed_at_ms, 0,
         "the caller hands a zero timestamp"
@@ -322,18 +307,21 @@ fn save_installation_round_trips_facts_and_exact_payload_bytes() {
     let stored =
         query_payloads(&conn, material.id.as_str(), persisted.release_id.as_str()).unwrap();
     assert_eq!(stored.len(), 1);
-    assert_eq!(stored[0].resource_id, "resource-document");
-    assert_eq!(stored[0].kind, "document_text");
+    assert_eq!(stored[0].resource_id, "resource-reading");
+    assert_eq!(stored[0].kind, "structured_reading");
     assert_eq!(
         stored[0].schema, input.payloads[0].schema,
         "the payload fact's schema is stored verbatim"
     );
     assert_eq!(
         stored[0].digest,
-        sha256_id(b"fixture document payload bytes")
+        sha256_id(b"fixture structured reading payload bytes")
     );
-    assert_eq!(stored[0].size_bytes, 30);
-    assert_eq!(stored[0].bytes, b"fixture document payload bytes");
+    assert_eq!(
+        stored[0].size_bytes,
+        b"fixture structured reading payload bytes".len() as u64
+    );
+    assert_eq!(stored[0].bytes, b"fixture structured reading payload bytes");
 }
 
 #[test]
@@ -351,8 +339,8 @@ fn known_and_present_opaque_payloads_persist_exactly() {
         "edition-mixed",
         vec![
             resource_fact(
-                "resource-document",
-                "document_text",
+                "resource-reading",
+                "structured_reading",
                 PackageResourceAvailability::Available,
                 &doc_digest,
                 doc_bytes.len() as u64,
@@ -366,7 +354,7 @@ fn known_and_present_opaque_payloads_persist_exactly() {
             ),
         ],
         vec![
-            payload("resource-document", "document_text", doc_bytes.clone()),
+            payload("resource-reading", "structured_reading", doc_bytes.clone()),
             payload("resource-opaque", "future_analysis", opaque_bytes.clone()),
         ],
     );
@@ -381,8 +369,22 @@ fn known_and_present_opaque_payloads_persist_exactly() {
     )
     .unwrap();
     assert_eq!(stored.len(), 2);
-    assert_eq!(stored[0].bytes, doc_bytes);
-    assert_eq!(stored[1].bytes, opaque_bytes);
+    assert_eq!(
+        stored
+            .iter()
+            .find(|payload| payload.resource_id == "resource-reading")
+            .unwrap()
+            .bytes,
+        doc_bytes
+    );
+    assert_eq!(
+        stored
+            .iter()
+            .find(|payload| payload.resource_id == "resource-opaque")
+            .unwrap()
+            .bytes,
+        opaque_bytes
+    );
 }
 
 #[test]
@@ -399,8 +401,8 @@ fn missing_resource_has_no_payload_row_and_reads_back_unavailable() {
         "edition-missing",
         vec![
             resource_fact(
-                "resource-document",
-                "document_text",
+                "resource-reading",
+                "structured_reading",
                 PackageResourceAvailability::Available,
                 &digest,
                 bytes.len() as u64,
@@ -413,7 +415,7 @@ fn missing_resource_has_no_payload_row_and_reads_back_unavailable() {
                 0,
             ),
         ],
-        vec![payload("resource-document", "document_text", bytes)],
+        vec![payload("resource-reading", "structured_reading", bytes)],
     );
 
     PackageLifecycleRepository::save_installation(repo.as_ref(), &input).unwrap();
@@ -445,7 +447,7 @@ fn installations_survive_reopening_a_file_database() {
     let (material_id, release_id, installed_at_ms) = {
         let repo = Arc::new(SqliteRepository::open(&path).unwrap());
         let (material, revision) = seed_material(&repo, "Hello world.");
-        let input = text_prepared(
+        let input = structured_reading_prepared(
             &material,
             &revision,
             "sha256:release-reopen",
@@ -473,14 +475,14 @@ fn installations_survive_reopening_a_file_database() {
     let conn = reopened.connection.lock();
     let stored = query_payloads(&conn, material_id.as_str(), release_id.as_str()).unwrap();
     assert_eq!(stored.len(), 1);
-    assert_eq!(stored[0].bytes, b"fixture document payload bytes");
+    assert_eq!(stored[0].bytes, b"fixture structured reading payload bytes");
 }
 
 #[test]
 fn equal_reinstall_keeps_one_installation_and_the_original_installed_at_ms() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let first = text_prepared(
+    let first = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-equal",
@@ -492,7 +494,7 @@ fn equal_reinstall_keeps_one_installation_and_the_original_installed_at_ms() {
 
     // The caller produces a fresh timestamp on retry; it must not become part
     // of the equality or rewrite the stored value.
-    let mut retry = text_prepared(
+    let mut retry = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-equal",
@@ -517,7 +519,7 @@ fn adapter_stamps_installed_at_ms_at_first_persist() {
         let (material, revision) = seed_material(&repo, "Hello world.");
         // a. The caller hands `installed_at_ms = 0`; the candidate timestamp
         // must never be persisted.
-        let input = text_prepared(
+        let input = structured_reading_prepared(
             &material,
             &revision,
             "sha256:release-stamp",
@@ -579,12 +581,13 @@ fn adapter_stamps_installed_at_ms_at_first_persist() {
 fn unequal_facts_under_the_same_identity_fail_closed() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let first = text_prepared(&material, &revision, "sha256:release-conflict", "edition-a");
+    let first =
+        structured_reading_prepared(&material, &revision, "sha256:release-conflict", "edition-a");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &first).unwrap();
 
     // Different edition identity under the same (material_id, release_id).
     let mut conflicting =
-        text_prepared(&material, &revision, "sha256:release-conflict", "edition-b");
+        structured_reading_prepared(&material, &revision, "sha256:release-conflict", "edition-b");
     conflicting.installation.edition = edition("edition-b");
     let error = PackageLifecycleRepository::save_installation(repo.as_ref(), &conflicting)
         .expect_err("unequal facts must fail closed");
@@ -609,7 +612,7 @@ fn unequal_facts_under_the_same_identity_fail_closed() {
 fn unequal_payload_bytes_or_metadata_fail_closed() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let first = text_prepared(
+    let first = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-payload-conflict",
@@ -618,7 +621,7 @@ fn unequal_payload_bytes_or_metadata_fail_closed() {
     PackageLifecycleRepository::save_installation(repo.as_ref(), &first).unwrap();
 
     // Same facts, different payload bytes.
-    let mut byte_conflict = text_prepared(
+    let mut byte_conflict = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-payload-conflict",
@@ -632,7 +635,7 @@ fn unequal_payload_bytes_or_metadata_fail_closed() {
     assert!(matches!(error, ApplicationError::Repository(_)));
 
     // Same facts and bytes, different payload metadata (digest).
-    let mut metadata_conflict = text_prepared(
+    let mut metadata_conflict = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-payload-conflict",
@@ -652,14 +655,14 @@ fn unequal_payload_bytes_or_metadata_fail_closed() {
         first.installation.release_id.as_str(),
     )
     .unwrap();
-    assert_eq!(stored[0].bytes, b"fixture document payload bytes");
+    assert_eq!(stored[0].bytes, b"fixture structured reading payload bytes");
 }
 
 #[test]
 fn invalid_prepared_payload_associations_are_rejected_with_zero_writes() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let base = text_prepared(
+    let base = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-rejects",
@@ -682,7 +685,7 @@ fn invalid_prepared_payload_associations_are_rejected_with_zero_writes() {
     let mut extra_wrong = base.clone();
     extra_wrong.payloads.push(payload(
         "resource-ghost",
-        "document_text",
+        "structured_reading",
         b"ghost".to_vec(),
     ));
 
@@ -740,8 +743,8 @@ fn a_payload_insert_failure_rolls_back_facts_and_all_payloads() {
         "edition-trigger",
         vec![
             resource_fact(
-                "resource-document",
-                "document_text",
+                "resource-reading",
+                "structured_reading",
                 PackageResourceAvailability::Available,
                 &doc_digest,
                 doc_bytes.len() as u64,
@@ -755,7 +758,7 @@ fn a_payload_insert_failure_rolls_back_facts_and_all_payloads() {
             ),
         ],
         vec![
-            payload("resource-document", "document_text", doc_bytes),
+            payload("resource-reading", "structured_reading", doc_bytes),
             payload("resource-timeline", "word_timeline", timeline_bytes),
         ],
     );
@@ -795,7 +798,7 @@ fn duplicate_resource_or_rendition_facts_are_rejected_with_zero_writes() {
     // Two resource facts with the same resource id, sharing one valid
     // payload: the duplicate identity must be rejected explicitly, never
     // covered by a map overwrite.
-    let mut duplicate_resource = text_prepared(
+    let mut duplicate_resource = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-dup-resource",
@@ -810,18 +813,18 @@ fn duplicate_resource_or_rendition_facts_are_rejected_with_zero_writes() {
     assert!(matches!(error, ApplicationError::Repository(_)));
     let error_text = format!("{error:?}");
     assert!(
-        !error_text.contains("resource-document"),
+        !error_text.contains("resource-reading"),
         "the error must not leak the duplicate fact identity"
     );
     assert!(
-        !error_text.contains("fixture document payload bytes"),
+        !error_text.contains("fixture structured reading payload bytes"),
         "the error must not leak payload bytes"
     );
     assert_eq!(count(&repo, "package_installations"), 0);
     assert_eq!(count(&repo, "package_resource_payloads"), 0);
 
     // Two rendition facts with the same rendition id: rejected the same way.
-    let mut duplicate_rendition = text_prepared(
+    let mut duplicate_rendition = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-dup-rendition",
@@ -859,7 +862,7 @@ fn duplicate_resource_or_rendition_facts_are_rejected_with_zero_writes() {
 fn stale_or_foreign_revision_is_rejected_inside_the_adapter_transaction() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, v1) = seed_material(&repo, "Hello world.");
-    let first = text_prepared(&material, &v1, "sha256:release-v1", "edition-v1");
+    let first = structured_reading_prepared(&material, &v1, "sha256:release-v1", "edition-v1");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &first).unwrap();
 
     // A newer revision becomes current; installing for the stale v1 must be
@@ -868,13 +871,14 @@ fn stale_or_foreign_revision_is_rejected_inside_the_adapter_transaction() {
         material.id.clone(),
         "Material v2",
         Vec::new(),
-        vec![document_rendition("second text")],
+        vec![media_rendition("second text")],
         2,
     )
     .unwrap();
     MaterialRepository::append_revision(repo.as_ref(), &material.id, &v2, 2).unwrap();
 
-    let stale = text_prepared(&material, &v1, "sha256:release-stale", "edition-stale");
+    let stale =
+        structured_reading_prepared(&material, &v1, "sha256:release-stale", "edition-stale");
     let error = PackageLifecycleRepository::save_installation(repo.as_ref(), &stale)
         .expect_err("a stale revision must be rejected");
     assert!(matches!(error, ApplicationError::Invalid(_)));
@@ -884,7 +888,7 @@ fn stale_or_foreign_revision_is_rejected_inside_the_adapter_transaction() {
     // installation claims this material but points at the other material's
     // revision.
     let (other, other_revision) = seed_material(&repo, "other material text");
-    let foreign = text_prepared(
+    let foreign = structured_reading_prepared(
         &material,
         &other_revision,
         "sha256:release-foreign",
@@ -897,7 +901,7 @@ fn stale_or_foreign_revision_is_rejected_inside_the_adapter_transaction() {
     assert_eq!(count(&repo, "package_installations"), 1);
 
     // A missing revision and a missing material are not found, not written.
-    let mut missing_revision = text_prepared(
+    let mut missing_revision = structured_reading_prepared(
         &material,
         &v1,
         "sha256:release-missing-rev",
@@ -911,7 +915,7 @@ fn stale_or_foreign_revision_is_rejected_inside_the_adapter_transaction() {
         error,
         ApplicationError::NotFound("material revision")
     ));
-    let mut missing_material = text_prepared(
+    let mut missing_material = structured_reading_prepared(
         &material,
         &v1,
         "sha256:release-missing-mat",
@@ -929,7 +933,7 @@ fn stale_or_foreign_revision_is_rejected_inside_the_adapter_transaction() {
 fn list_installations_is_deterministic_and_includes_historical_revisions() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, v1) = seed_material(&repo, "Hello world.");
-    let release_a = text_prepared(&material, &v1, "sha256:release-aaa", "edition-a");
+    let release_a = structured_reading_prepared(&material, &v1, "sha256:release-aaa", "edition-a");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_a).unwrap();
 
     // v2 becomes current; the v1 installation stays listed for its revision.
@@ -937,12 +941,12 @@ fn list_installations_is_deterministic_and_includes_historical_revisions() {
         material.id.clone(),
         "Material v2",
         Vec::new(),
-        vec![document_rendition("second text")],
+        vec![media_rendition("second text")],
         2,
     )
     .unwrap();
     MaterialRepository::append_revision(repo.as_ref(), &material.id, &v2, 2).unwrap();
-    let release_b = text_prepared(&material, &v2, "sha256:release-zzz", "edition-b");
+    let release_b = structured_reading_prepared(&material, &v2, "sha256:release-zzz", "edition-b");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_b).unwrap();
 
     let listed =
@@ -976,13 +980,13 @@ fn text_adoption(
 }
 
 #[test]
-fn valid_text_only_adoption_persists_and_survives_reopen() {
+fn listening_resource_adoption_persists_and_survives_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("adoption-reopen.db");
     let (material_id, revision_id, adopted_at_ms) = {
         let repo = Arc::new(SqliteRepository::open(&path).unwrap());
         let (material, revision) = seed_material(&repo, "Hello world.");
-        let input = text_prepared(
+        let input = structured_reading_prepared(
             &material,
             &revision,
             "sha256:release-adopt",
@@ -1004,13 +1008,13 @@ fn valid_text_only_adoption_persists_and_survives_reopen() {
     assert_eq!(restored.material_revision_id, revision_id);
     assert_eq!(
         restored.selected_resource_ids,
-        vec!["resource-document".to_owned()]
+        vec!["resource-reading".to_owned()]
     );
     assert_eq!(
         restored.exclusive_selections,
         vec![ExclusiveSelection {
-            family: "exclusive:document_text".into(),
-            resource_id: "resource-document".into(),
+            family: "exclusive:structured_reading".into(),
+            resource_id: "resource-reading".into(),
         }]
     );
 }
@@ -1030,8 +1034,8 @@ fn media_resource_selection_plan_round_trips_completely() {
         "edition-full",
         vec![
             resource_fact(
-                "resource-document",
-                "document_text",
+                "resource-reading",
+                "structured_reading",
                 PackageResourceAvailability::Available,
                 &doc_digest,
                 doc_bytes.len() as u64,
@@ -1052,7 +1056,7 @@ fn media_resource_selection_plan_round_trips_completely() {
             ),
         ],
         vec![
-            payload("resource-document", "document_text", doc_bytes),
+            payload("resource-reading", "structured_reading", doc_bytes),
             payload("resource-timeline", "word_timeline", timeline_bytes),
         ],
     );
@@ -1075,14 +1079,27 @@ fn media_resource_selection_plan_round_trips_completely() {
             video_bytes.len() as u64,
         ),
     ];
-    input.rendition_blobs = vec![rendition_blob("rendition-1", "audio", audio_bytes)];
+    input.rendition_blobs = vec![rendition_blob("rendition-1", "audio", audio_bytes.clone())];
     PackageLifecycleRepository::save_installation(repo.as_ref(), &input).unwrap();
+
+    let conn = repo.connection.lock();
+    let stored_blobs = query_rendition_blobs(
+        &conn,
+        material.id.as_str(),
+        input.installation.release_id.as_str(),
+    )
+    .unwrap();
+    assert_eq!(stored_blobs.len(), 1);
+    assert_eq!(stored_blobs[0].rendition_id, "rendition-1");
+    assert_eq!(stored_blobs[0].kind, "audio");
+    assert_eq!(stored_blobs[0].bytes, audio_bytes);
+    drop(conn);
 
     let plan = text_adoption(&repo, &material, "sha256:release-full");
     assert_eq!(
         plan.selected_resource_ids,
         vec![
-            "resource-document".to_owned(),
+            "resource-reading".to_owned(),
             "resource-timeline".to_owned()
         ]
     );
@@ -1101,7 +1118,7 @@ fn media_resource_selection_plan_round_trips_completely() {
 fn forged_or_incomplete_selection_plans_are_rejected_without_an_adoption() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let input = text_prepared(
+    let input = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-forge",
@@ -1159,7 +1176,7 @@ fn forged_or_incomplete_selection_plans_are_rejected_without_an_adoption() {
 fn missing_selected_resource_backing_fails_without_an_adoption() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let input = text_prepared(
+    let input = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-backing",
@@ -1174,7 +1191,7 @@ fn missing_selected_resource_backing_fails_without_an_adoption() {
             params![
                 material.id.as_str(),
                 "sha256:release-backing",
-                "resource-document",
+                "resource-reading",
             ],
         )
         .unwrap();
@@ -1194,7 +1211,7 @@ fn missing_selected_resource_backing_fails_without_an_adoption() {
 fn tampered_payload_blob_fails_adoption_closed() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let input = text_prepared(
+    let input = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-tamper",
@@ -1248,7 +1265,7 @@ fn tampered_payload_blob_fails_adoption_closed() {
 fn readopt_of_the_same_release_preserves_the_original_adoption() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let input = text_prepared(
+    let input = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-readopt",
@@ -1296,7 +1313,7 @@ fn readopt_of_the_same_release_preserves_the_original_adoption() {
 fn readopt_fails_closed_when_the_stored_adoption_row_was_tampered() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let input = text_prepared(
+    let input = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-tampered-adoption",
@@ -1337,7 +1354,7 @@ fn readopt_fails_closed_when_the_stored_adoption_row_was_tampered() {
     assert!(matches!(error, ApplicationError::Repository(_)));
     let error_text = format!("{error:?}");
     assert!(
-        !error_text.contains("resource-other") && !error_text.contains("resource-document"),
+        !error_text.contains("resource-other") && !error_text.contains("resource-reading"),
         "the error must not leak the adoption plan JSON"
     );
 
@@ -1370,8 +1387,10 @@ fn readopt_fails_closed_when_the_stored_adoption_row_was_tampered() {
 fn switching_to_another_installed_release_replaces_the_adoption_atomically() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let release_a = text_prepared(&material, &revision, "sha256:release-switch-a", "edition-a");
-    let release_b = text_prepared(&material, &revision, "sha256:release-switch-b", "edition-b");
+    let release_a =
+        structured_reading_prepared(&material, &revision, "sha256:release-switch-a", "edition-a");
+    let release_b =
+        structured_reading_prepared(&material, &revision, "sha256:release-switch-b", "edition-b");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_a).unwrap();
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_b).unwrap();
     let plan_a = text_adoption(&repo, &material, "sha256:release-switch-a");
@@ -1397,13 +1416,13 @@ fn switching_to_another_installed_release_replaces_the_adoption_atomically() {
 fn an_adoption_write_failure_preserves_the_previous_adoption_and_selections() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let release_a = text_prepared(
+    let release_a = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-trigger-a",
         "edition-a",
     );
-    let release_b = text_prepared(
+    let release_b = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-trigger-b",
@@ -1444,7 +1463,8 @@ fn an_adoption_write_failure_preserves_the_previous_adoption_and_selections() {
 fn a_stale_current_revision_switch_fails_and_preserves_the_previous_adoption() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, v1) = seed_material(&repo, "Hello world.");
-    let release_a = text_prepared(&material, &v1, "sha256:release-stale-a", "edition-a");
+    let release_a =
+        structured_reading_prepared(&material, &v1, "sha256:release-stale-a", "edition-a");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_a).unwrap();
     let plan_a = text_adoption(&repo, &material, "sha256:release-stale-a");
     PackageLifecycleRepository::commit_adoption(repo.as_ref(), &plan_a).unwrap();
@@ -1453,7 +1473,7 @@ fn a_stale_current_revision_switch_fails_and_preserves_the_previous_adoption() {
         material.id.clone(),
         "Material v2",
         Vec::new(),
-        vec![document_rendition("second text")],
+        vec![media_rendition("second text")],
         2,
     )
     .unwrap();
@@ -1479,7 +1499,7 @@ fn a_stale_current_revision_switch_fails_and_preserves_the_previous_adoption() {
 fn adoption_never_touches_learner_owned_tables() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let input = text_prepared(
+    let input = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-learner",
@@ -1541,7 +1561,7 @@ fn error_messages_never_leak_payload_bytes_snapshots_paths_or_sql_parameters() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
     let marker = b"MARKER-SECRET-PAYLOAD-BYTES-987654321".to_vec();
-    let mut input = text_prepared(
+    let mut input = structured_reading_prepared(
         &material,
         &revision,
         "sha256:release-marker",
@@ -1573,7 +1593,7 @@ fn error_messages_never_leak_payload_bytes_snapshots_paths_or_sql_parameters() {
             .expect_err("inconsistent");
     let inconsistent_text = format!("{inconsistent_error:?} {inconsistent_error}");
     assert!(!inconsistent_text.contains("MARKER"));
-    assert!(!inconsistent_text.contains("resource-document"));
+    assert!(!inconsistent_text.contains("resource-reading"));
     assert!(!inconsistent_text.contains("listen.payload"));
 
     // A corrupt-backing adoption error after tampering the stored body with
@@ -1613,7 +1633,12 @@ fn package_lifecycle_seam_survives_a_database_reopen() {
     let (material_id, installed_at_ms, adopted_at_ms) = {
         let repo = Arc::new(SqliteRepository::open(&path).unwrap());
         let (material, revision) = seed_material(&repo, "Hello world.");
-        let input = text_prepared(&material, &revision, "sha256:release-seam", "edition-seam");
+        let input = structured_reading_prepared(
+            &material,
+            &revision,
+            "sha256:release-seam",
+            "edition-seam",
+        );
         let persisted =
             PackageLifecycleRepository::save_installation(repo.as_ref(), &input).unwrap();
         let services = services(&repo);
@@ -1672,13 +1697,13 @@ fn package_lifecycle_seam_survives_a_database_reopen() {
     assert_eq!(plan.release_id.as_str(), "sha256:release-seam");
     assert_eq!(
         plan.selected_resource_ids,
-        vec!["resource-document".to_owned()]
+        vec!["resource-reading".to_owned()]
     );
     assert_eq!(
         plan.exclusive_selections,
         vec![ExclusiveSelection {
-            family: "exclusive:document_text".into(),
-            resource_id: "resource-document".into(),
+            family: "exclusive:structured_reading".into(),
+            resource_id: "resource-reading".into(),
         }]
     );
     assert_eq!(plan.selected_rendition_ids, Vec::<String>::new());
@@ -1698,8 +1723,10 @@ fn package_lifecycle_seam_survives_a_database_reopen() {
 fn delete_installation_deletes_facts_payloads_and_rejects_adopted() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let (material, revision) = seed_material(&repo, "Hello world.");
-    let release_a = text_prepared(&material, &revision, "sha256:release-a", "edition-a");
-    let release_b = text_prepared(&material, &revision, "sha256:release-b", "edition-b");
+    let release_a =
+        structured_reading_prepared(&material, &revision, "sha256:release-a", "edition-a");
+    let release_b =
+        structured_reading_prepared(&material, &revision, "sha256:release-b", "edition-b");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_a).unwrap();
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_b).unwrap();
 
@@ -1730,7 +1757,7 @@ fn delete_installation_deletes_facts_payloads_and_rejects_adopted() {
         repo.as_ref(),
         &material.id,
         &release_b_id,
-        "resource-document",
+        "resource-reading",
     )
     .unwrap();
     assert_eq!(payload, None);

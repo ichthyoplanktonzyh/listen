@@ -40,7 +40,7 @@ fn sample_profile(auth_ref: Option<LlmAuthRef>) -> LlmProviderProfile {
         batch_policy: LlmBatchPolicy::default(),
         cost_budget: None,
         retention: DataRetentionPreference::Unknown,
-        allowed_uses: vec![LlmUse::SemanticJudgment],
+        allowed_uses: vec![LlmUse::SenseGroupPartition],
         capability: ProviderCapability::unknown(),
         created_at_ms: 1_800_000_000_000,
     }

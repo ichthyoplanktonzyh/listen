@@ -35,9 +35,7 @@ Map<String, dynamic> _libraryEntryJson({
     'updated_at_ms': 0,
   },
   'primary_track_id': null,
-  'fit': null,
   'triage_intent': triageIntent,
-  'familiar_material': false,
 };
 
 MediaLibraryEntry _libraryEntry({
@@ -45,13 +43,13 @@ MediaLibraryEntry _libraryEntry({
   String path = '/nonexistent/media.mp4',
 }) => MediaLibraryEntry.fromJson(_libraryEntryJson(id: id, path: path));
 
-/// A Core 4.0 `/v1/materials` row: one retained learning material with its
-/// current revision. Defaults to a mixed-shape material with no renditions.
+/// A `/v1/materials` row: one retained AV learning material with its current
+/// revision. Defaults to audio shape with no registered media binding.
 Map<String, dynamic> _materialDetailsJson({
   String materialId = 'material-1',
   String revisionId = 'revision-1',
   String title = 'Sample material',
-  String shape = 'mixed',
+  String shape = 'audio',
   int updatedAtMs = 100,
   List<Map<String, dynamic>> mediaRenditions = const [],
 }) => {
@@ -66,8 +64,6 @@ Map<String, dynamic> _materialDetailsJson({
     'id': revisionId,
     'material_id': materialId,
     'title': title,
-    'source_assets': <Map<String, dynamic>>[],
-    'document_renditions': <Map<String, dynamic>>[],
     'media_renditions': mediaRenditions,
     'created_at_ms': 0,
   },
@@ -94,8 +90,6 @@ Map<String, dynamic> _mediaRenditionJson({
 MaterialDetails _materialDetails({
   String materialId = 'material-1',
   String title = 'Sample material',
-  List<SourceAsset> sourceAssets = const [],
-  List<DocumentRendition> documentRenditions = const [],
   List<MediaRendition> mediaRenditions = const [],
 }) => MaterialDetails(
   material: LearningMaterial(
@@ -109,12 +103,10 @@ MaterialDetails _materialDetails({
     id: 'revision-1',
     materialId: materialId,
     title: title,
-    sourceAssets: sourceAssets,
-    documentRenditions: documentRenditions,
     mediaRenditions: mediaRenditions,
     createdAtMs: 0,
   ),
-  shape: MaterialShape.mixed,
+  shape: MaterialShape.audio,
 );
 
 /// A [PersonalLibraryEntry] whose revision binds [mediaEntry] as an available
@@ -243,30 +235,6 @@ _wire(
 }
 
 void main() {
-  test(
-    'a retained document is published even when the full library cannot load',
-    () async {
-      final api = _fakeApi(
-        (method, path, body) => (statusCode: 500, body: 'corrupt old row'),
-      );
-      final w = _wire(() => api);
-      final retainedDocument = _materialDetails(
-        materialId: 'saved-document',
-        title: 'Saved text material',
-        documentRenditions: [documentRenditionForText('Saved body')],
-      );
-
-      await w.coordinator.reconcileMembership(retainedDocument);
-
-      expect(w.coordinator.personalLibrary, hasLength(1));
-      expect(
-        w.coordinator.personalLibrary!.single.title,
-        'Saved text material',
-      );
-      expect(w.coordinator.personalLibrary!.single.canRead, isTrue);
-    },
-  );
-
   test(
     'loadMediaLibrary publishes material rows joined to the media snapshot',
     () async {
@@ -796,12 +764,6 @@ void main() {
                   _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
                 ],
               ),
-              _materialDetailsJson(
-                materialId: 'material-text',
-                revisionId: 'revision-text',
-                title: 'Text only',
-                shape: 'text',
-              ),
             ]),
           );
         }
@@ -814,12 +776,10 @@ void main() {
 
       await w.coordinator.loadMediaLibrary();
 
-      // All retained materials publish even though the media snapshot failed;
-      // text-only rows carry no media and still show up.
-      expect(w.coordinator.personalLibrary, hasLength(2));
+      // The retained material still publishes even though the media snapshot
+      // failed; the known material/media binding remains joined.
+      expect(w.coordinator.personalLibrary, hasLength(1));
       expect(w.coordinator.personalLibrary!.first.title, 'Sample material');
-      expect(w.coordinator.personalLibrary!.last.title, 'Text only');
-      expect(w.coordinator.personalLibrary!.last.mediaEntries, isEmpty);
       // No previous raw snapshot existed, so it stays null — never a fake
       // "nothing is registered".
       expect(w.coordinator.mediaLibrary, isNull);
@@ -864,21 +824,6 @@ void main() {
     },
   );
 
-  test('offlineLibrary keeps document rows offline without any media', () {
-    final w = _wire(() => null);
-    final textOnly = PersonalLibraryEntry(
-      details: _materialDetails(
-        documentRenditions: [documentRendition(id: 'text-1')],
-      ),
-      mediaEntries: const [],
-    );
-    w.coordinator.personalLibrary = [textOnly];
-
-    // A document rendition's bytes are resolvable (managed or referenced):
-    // no file exists to check, so the row is offline by itself.
-    expect(w.coordinator.offlineLibrary, hasLength(1));
-  });
-
   test('offlineLibrary keeps media rows only when the local file exists', () {
     final file = File(
       '${Directory.systemTemp.createTempSync('mlc').path}/m.mp4',
@@ -894,29 +839,6 @@ void main() {
       w.coordinator.offlineLibrary!.single.primaryMedia?.media.path,
       file.path,
     );
-  });
-
-  test('offlineLibrary keeps a mixed row with only its document rendition', () {
-    final w = _wire(() => null);
-    final mixed = PersonalLibraryEntry(
-      details: _materialDetails(
-        documentRenditions: [documentRendition(id: 'text-1')],
-        mediaRenditions: [
-          mediaRendition(
-            id: 'asset-1',
-            mediaId: 'media-gone',
-            kind: MediaRenditionKind.audio,
-            fingerprint: 'fp',
-          ),
-        ],
-      ),
-      mediaEntries: [_libraryEntry(id: 'media-gone')],
-    );
-    w.coordinator.personalLibrary = [mixed];
-
-    // The media file is gone but the document rendition's bytes are still
-    // resolvable: mixed rows need just one working capability to be offline.
-    expect(w.coordinator.offlineLibrary, hasLength(1));
   });
 
   test('setLibraryTriageIntent keeps the authoritative list in sync', () async {
@@ -985,21 +907,6 @@ void main() {
     expect(w.openedPaths, [file.path]);
   });
 
-  test('openLibraryEntry ignores a text-only row', () async {
-    final w = _wire(() => null);
-    final textOnly = PersonalLibraryEntry(
-      details: _materialDetails(
-        documentRenditions: [documentRenditionForText('Hello', id: 'text-1')],
-      ),
-      mediaEntries: const [],
-    );
-
-    await w.coordinator.openLibraryEntry(textOnly);
-
-    expect(w.openedPaths, isEmpty);
-    expect(w.player.status, isNot('mediaFileMissing'));
-  });
-
   test('startIntensiveFromLibrary guards a missing media file', () async {
     final w = _wire(() => null);
 
@@ -1032,25 +939,6 @@ void main() {
 
     expect(w.coordinator.mediaLibrary!.first.triageIntent, 'pin_intensive');
     expect(w.rebuilds, isNotEmpty);
-  });
-
-  test('setLibraryTriageIntent ignores a text-only row', () async {
-    final w = _wire(() => null);
-    final textOnly = PersonalLibraryEntry(
-      details: _materialDetails(
-        documentRenditions: [documentRenditionForText('Hello', id: 'text-1')],
-      ),
-      mediaEntries: const [],
-    );
-
-    await w.coordinator.setLibraryTriageIntent(textOnly, 'defer');
-
-    // Text materials have no media to triage: the status line stays untouched
-    // (no core-unavailable complaint), no rebuild, and the media library stays
-    // as it was.
-    expect(w.player.status, 'Starting local core...');
-    expect(w.rebuilds, isEmpty);
-    expect(w.coordinator.mediaLibrary, isNull);
   });
 
   test('setLibraryTriageIntent without a core reports it', () async {

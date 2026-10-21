@@ -1,15 +1,12 @@
 """Rich stage orchestration for the capability production engine.
 
 Optional analysis stages derive word-level, chunk, sense-group, prosody and
-phone resources on top of the Structured Reading and its anchor timing. Both
-input directions converge here:
+phone resources on top of the Structured Reading and its anchor timing. Media
+transcripts and subtitle tracks converge on the same reading and alignment
+representations:
 
 - media -> structured reading: the ASR transcript carries word timings
   (``AsrWord``) that qualify into the exact word timeline resource;
-- document -> listen: when a ``tts_aligner`` ASR adapter is configured, the
-  derived TTS audio is transcribed again, producing the same word timeline
-  shape — the TTS path then continues through exactly the same rich stages as
-  the media path.
 
 Every stage is optional and degrades honestly: a failing stage preserves the
 already-qualified upstream resources and reports a stable typed warning.
@@ -25,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .align import AlignSegment, AlignmentResult, build_word_timeline_from_alignment
-from .asr import AsrAdapter, AsrTranscript, AsrWord, _tokens
+from .asr import AsrTranscript, AsrWord, _tokens
 from .package import ConversionError
 from .package_v3 import (
     SUBTITLE_TEXT_TRACK_SCHEMA_V1,
@@ -70,9 +67,7 @@ class RichStages:
     the audio rendition (they never receive the word timeline);
     ``acoustics_preprocessor`` normalizes the media window every audio
     extractor receives; an ``aligner`` forced-aligns known sentence text plus
-    its time windows into exact word timings; a ``tts_aligner`` ASR adapter
-    re-transcribes derived TTS audio when no aligner is configured (an honest
-    fallback).
+    its time windows into exact word timings.
     """
 
     sense_groups: Any | None = None
@@ -83,7 +78,6 @@ class RichStages:
     prosody: Any | None = None
     phone: Any | None = None
     aligner: Any | None = None
-    tts_aligner: AsrAdapter | None = None
 
 
 def _byte_slice(text: str, start: int, end: int) -> str:
@@ -277,11 +271,9 @@ def _words_from_transcript(
             "ASR transcript carries more assembled sentences than reading anchors"
         )
     # ``sentence_ids`` is the explicit identity mapping established by the
-    # assembled transcript.  The media path has equal counts; the TTS path
-    # proves equal count and lexical identity before reaching this function.
-    # Extra transcript sentences are never silently dropped. Do not infer
-    # identity from a provider segment index: raw ASR segments may have been
-    # merged or split upstream.
+    # assembled media transcript. Extra transcript sentences are never
+    # silently dropped. Do not infer identity from a provider segment index:
+    # raw ASR segments may have been merged or split upstream.
     for sentence_id, segment in zip(sentence_ids, transcript.segments):
         if not segment.words:
             continue

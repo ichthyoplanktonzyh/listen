@@ -1,4 +1,4 @@
-//! Package lifecycle HTTP surface (contract `3.3.0`): Package Installation,
+//! Package lifecycle HTTP surface (contract `5.0.0`): Package Installation,
 //! Edition Listing, and Learning Edition Adoption.
 //!
 //! This module contains wire adaptation only: explicit request/response DTOs
@@ -19,16 +19,16 @@ use application::{PackageEditionView, PackageRenditionView, PackageResourceView}
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use domain::LearningMaterialId;
+use domain::{LearningMaterialId, MaterialCapability};
 use serde::{Deserialize, Serialize};
 
 use crate::{ApiError, ApiState, ApplicationError};
 
 /// POST /v1/materials/{material_id}/package-installations — one local Content
-/// Package v2 carrier path.
+/// Package v3 carrier path.
 #[derive(Debug, Deserialize)]
 pub(crate) struct InstallMaterialPackageRequest {
-    /// Local absolute path to a Content Package v2 carrier. Required; the
+    /// Local absolute path to a Content Package v3 carrier. Required; the
     /// empty/whitespace string is rejected. The path itself never appears in
     /// any response or public error text.
     pub package_path: String,
@@ -59,6 +59,7 @@ pub(crate) struct LearningEditionDetails {
     /// when this release is currently adopted, null otherwise.
     pub adopted_at_ms: Option<u64>,
     pub adopted: bool,
+    pub available_capabilities: Vec<MaterialCapability>,
     pub resources: Vec<LearningEditionResource>,
     pub renditions: Vec<LearningEditionRendition>,
 }
@@ -102,6 +103,7 @@ impl From<PackageEditionView> for LearningEditionDetails {
             installed_at_ms: value.installed_at_ms,
             adopted_at_ms: value.adopted_at_ms,
             adopted: value.adopted,
+            available_capabilities: value.available_capabilities,
             resources: value
                 .resources
                 .into_iter()
@@ -174,7 +176,7 @@ fn review_status_string(status: domain::PackageReviewStatus) -> &'static str {
 }
 
 /// POST /v1/materials/{material_id}/package-installations — install one local
-/// Content Package v2 release for the Material's current revision. Candidate
+/// Content Package v3 release for the Material's current revision. Candidate
 /// only: the release is validated, prepared, and durably persisted as
 /// candidate Learning Resources; nothing is adopted. A fresh install and an
 /// equal retry both return 200 with the LearningEditionDetails.

@@ -40,16 +40,12 @@ extension SemanticEmbeddingApi on LocalApi {
   Future<SemanticSearchResultView> semanticSearch({
     required String query,
     required String language,
-    String source = 'all',
-    String channel = 'all',
     int limit = 20,
   }) async {
     final params = Uri(
       queryParameters: {
         'query': query,
         'language': language,
-        'source': source,
-        'channel': channel,
         'limit': '$limit',
       },
     ).query;

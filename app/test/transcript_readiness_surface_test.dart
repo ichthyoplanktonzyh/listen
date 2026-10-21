@@ -123,7 +123,7 @@ void main() {
       final stageLabels = {
         TranscriptPreparationStage.starting: 'Preparing learning transcript…',
         TranscriptPreparationStage.checkingMedia: 'Checking media…',
-        TranscriptPreparationStage.readingMedia: 'Reading media info…',
+        TranscriptPreparationStage.readingMedia: 'Inspecting media…',
         TranscriptPreparationStage.preparingAudio: 'Preparing audio…',
         TranscriptPreparationStage.transcribing:
             'Generating learning transcript…',

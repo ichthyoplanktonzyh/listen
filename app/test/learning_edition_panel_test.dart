@@ -108,9 +108,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final regenerateBtn = find.byKey(
-      const Key('learning-edition-regenerate'),
-    );
+    final regenerateBtn = find.byKey(const Key('learning-edition-regenerate'));
     expect(regenerateBtn, findsOneWidget);
     await tester.tap(regenerateBtn);
     await tester.pumpAndSettle();
@@ -163,9 +161,7 @@ void main() {
     expect(controller.editions.length, 1);
   });
 
-  testWidgets('import package picks file and installs edition', (
-    tester,
-  ) async {
+  testWidgets('import package picks file and installs edition', (tester) async {
     final repository = _FakeCapabilityRepository([
       _edition(
         releaseId: 'release-1',
@@ -240,9 +236,44 @@ void main() {
     expect(cancelled, isTrue);
   });
 
-  testWidgets('an absent package offers generation and import', (
-    tester,
-  ) async {
+  testWidgets('adopting status does not offer cancellation', (tester) async {
+    final repository = _FakeCapabilityRepository([
+      _edition(
+        releaseId: 'release-1',
+        adopted: true,
+        resourceKinds: learningResourceKinds,
+      ),
+    ]);
+    final controller = LearningEditionController(repository: repository);
+    addTearDown(controller.dispose);
+    await controller.load('material-1');
+
+    var cancelled = false;
+    const runView = CapabilityRunView(
+      materialId: 'material-1',
+      capability: MaterialCapability.read,
+      phase: CapabilityRunPhase.adopting,
+      stage: 'adopting package',
+    );
+
+    await tester.pumpWidget(
+      _app(
+        LearningEditionDialog(
+          controller: controller,
+          isGenerating: () => true,
+          runView: () => runView,
+          onCancelGeneration: () async => cancelled = true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Adopting learning edition...'), findsOneWidget);
+    expect(find.text('Cancel generation'), findsNothing);
+    expect(cancelled, isFalse);
+  });
+
+  testWidgets('an absent package offers generation and import', (tester) async {
     var generations = 0;
     final repository = _FakeCapabilityRepository(const []);
     final controller = LearningEditionController(repository: repository);
@@ -265,7 +296,10 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('learning-edition-import-empty')), findsOneWidget);
+    expect(
+      find.byKey(const Key('learning-edition-import-empty')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('learning-edition-generate')));
     await tester.pumpAndSettle();
@@ -300,7 +334,10 @@ void main() {
     await loadFuture;
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('learning-edition-regenerate')), findsOneWidget);
+    expect(
+      find.byKey(const Key('learning-edition-regenerate')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('learning-edition-import')), findsOneWidget);
     expect(find.byKey(const Key('learning-edition-refresh')), findsOneWidget);
   });
@@ -343,6 +380,7 @@ LearningEdition _edition({
   installedAtMs: 1,
   adoptedAtMs: adopted ? 2 : null,
   adopted: adopted,
+  availableCapabilities: const ['read'],
   resources: [
     for (final kind in resourceKinds)
       LearningEditionResource(
@@ -371,6 +409,7 @@ LearningEdition _copyWithAdopted(LearningEdition edition, bool adopted) =>
       installedAtMs: edition.installedAtMs,
       adoptedAtMs: adopted ? 2 : null,
       adopted: adopted,
+      availableCapabilities: edition.availableCapabilities,
       resources: edition.resources,
       renditions: edition.renditions,
     );

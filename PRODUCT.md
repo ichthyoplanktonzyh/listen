@@ -3,6 +3,12 @@
 This document describes product direction. Current scope and execution priority
 are defined in [STATE.md](STATE.md) and [ROADMAP.md](ROADMAP.md).
 
+The active implementation is restricted to audio/video listening, requested
+contextual help, intentional collection, Personal Corpus re-entry, and listening
+review. Document materials, independent reading/writing/speaking activities,
+AI conversation, and learning-coach policies are deferred to separate branches.
+The broader model below does not require those implementations in the product.
+
 > Status: owner-approved semantic baseline, revision 7, 2026-09-08.
 
 This document defines what Listen is, why it exists, and the durable product
@@ -21,8 +27,9 @@ Language Slices and learning history in a Personal Corpus, and using those
 experiences to develop independent reading, listening, speaking, and writing
 capabilities.
 
-Listening is the product's strongest current emphasis. Listen remains a
-four-dimensional language-learning system rather than a listening-only player.
+Listening is the current implementation focus. The domain can describe four
+independent capability dimensions without implementing four activity systems
+at the same time.
 
 ## Product statement
 
@@ -86,8 +93,9 @@ segmentation, form, and meaning. Reading, listening, speaking, and writing
 remain independent learner capabilities. Success in one never silently proves
 another.
 
-The product may deepen listening first while preserving acquisition experience
-spaces for reading, speaking, and writing.
+The product currently deepens listening. Reading, speaking, and writing remain
+conceptually independent; their deferred implementations do not add controls,
+background work, or requirements to the current listening experience.
 
 ### Speech analysis must become perceptual guidance
 

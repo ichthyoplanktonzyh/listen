@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/spacing.dart';
 
-/// Segments of the "my language" destination. Vocabulary, expressions and
-/// review share one identity — the language the learner has collected, and
-/// the practice on it — so review is an action on the collection rather than
-/// its neighbour in the rail.
-enum LanguageSegment { vocabulary, expressions, review }
+/// Segments of the language destination: the listening vocabulary and its
+/// scheduled review.
+enum LanguageSegment { vocabulary, review }
 
 /// One segment of a [SegmentedPane]: its label and the body it shows.
 class PaneSegment<T> {
@@ -30,9 +28,8 @@ class PaneSegment<T> {
 /// row on top, the selected surface below.
 ///
 /// Controlled, not stateful: the shell owns the selection so it can be set
-/// from outside — the coach's suggestions have to land on a *specific*
-/// segment, and a pane that hid its selection could only ever be opened at
-/// its first one.
+/// from outside, and a pane that hid its selection could only ever be opened
+/// at its first one.
 ///
 /// Only the selected segment is built. Switching therefore disposes the
 /// previous body, which is what the route-scoped controller hosts already

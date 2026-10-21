@@ -6,23 +6,17 @@ import 'package:crypto/crypto.dart';
 
 import '../models/adopted_composition.dart';
 import '../models/api_failure.dart';
-import '../models/coach_dashboard.dart';
 import '../models/discovery.dart';
 import '../models/learning_edition.dart';
 import '../models/learning_material.dart';
 import '../models/listening.dart';
 import '../models/llm_provider.dart';
-import '../models/personal_expression.dart';
+import '../models/material_capability.dart';
 import '../models/practice.dart';
-import '../models/production_corpus.dart';
-import '../models/projection_review.dart';
-import '../models/reading.dart';
 import '../models/review_deck.dart';
-import '../models/realtime_conversation.dart';
 import '../models/saved_vocabulary_count.dart';
 import '../models/runtime_resources.dart';
 import '../models/semantic_embedding.dart';
-import '../models/semantic_task.dart';
 import '../models/source_identity.dart';
 import '../models/speech_synthesis.dart';
 import '../models/syntax_capability.dart';
@@ -34,17 +28,10 @@ part 'api/media.dart';
 part 'api/subtitles.dart';
 part 'api/timelines.dart';
 part 'api/speech.dart';
-part 'api/transcription.dart';
 part 'api/lexical.dart';
 part 'api/practice.dart';
-part 'api/production_corpus.dart';
-part 'api/projection_review.dart';
-part 'api/personal_expression.dart';
 part 'api/listening_hunting.dart';
-part 'api/coach_llm.dart';
-part 'api/reading.dart';
-part 'api/realtime.dart';
-part 'api/semantic.dart';
+part 'api/llm_corpus_resources.dart';
 part 'api/semantic_embedding.dart';
 part 'api/materials.dart';
 part 'api/capability_attempts.dart';
@@ -111,11 +98,8 @@ typedef ApiTransport =
 /// The pluggable transport behind [LocalApi]'s raw-byte reads (composition
 /// rendition blobs). Defaults to the real [HttpClient]; tests inject a fake
 /// alongside [ApiTransport].
-typedef ApiBlobTransport = Future<ApiBlobResponse> Function(
-  String method,
-  String path,
-  String? body,
-);
+typedef ApiBlobTransport =
+    Future<ApiBlobResponse> Function(String method, String path, String? body);
 
 typedef ApiBlobResponse = ({int statusCode, List<int> bytes});
 
@@ -159,10 +143,7 @@ class LocalApi {
     final process = await Process.start(
       binary,
       const [],
-      environment: {
-        ...Platform.environment,
-        'LLPLAYERNEXT_DB': ?databasePath,
-      },
+      environment: {...Platform.environment, 'LLPLAYERNEXT_DB': ?databasePath},
     );
     try {
       final lines = process.stdout
@@ -355,14 +336,11 @@ class LocalApi {
 }
 
 const supportedApiVersion = 1;
-// Phase 1 Slice 1 establishes the canonical Core contract 4.0.0, which the
-// App consumes (Source Assets, typed Document/Media Renditions, capabilities,
-// package lifecycle). The API generation remains 1.
-const supportedContractMajor = 4;
-// The App consumes the Core 4.0 learning-material surface, so a sidecar must
-// present contract >= 4.0.0 within the supported major. Older sidecars are
-// rejected here instead of connecting and then failing on the first material
-// call.
+// The listening product consumes Core's media-only 5.0 material, capability,
+// package-lifecycle, and composition surfaces. API generation remains v1.
+const supportedContractMajor = 5;
+// A sidecar must present at least 5.0.0 within the supported major. Older
+// contracts are rejected here instead of failing on the first material call.
 const supportedContractMinor = 0;
 
 void validateSidecarHandshake(Map<String, dynamic> handshake) {

@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../controllers/material_capability_coordinator.dart';
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
 import '../../models/learning_material.dart';
-import '../../models/material_capability.dart';
 import '../../models/personal_library.dart';
-import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -14,39 +11,29 @@ import '../../utils/format_duration.dart';
 import '../common/api_failure_disclosure.dart';
 import '../common/listen_loading.dart';
 
-/// Home Personal Library grouped by triage queue.
+/// Home Personal Library for retained audio/video materials.
 ///
-/// One list renders text-only, media-only, and mixed materials together: Read
-/// and Listen/Watch are capabilities of the same retained material, not
-/// separate library objects. Queue grouping is a pure suggestion derived from
-/// the row's primary media; text-only rows carry no media facts and land
-/// unsorted.
+/// Manual triage intent stays attached to each media row. It never reorders or
+/// recommends materials automatically.
 ///
 /// Every row has exactly one primary action: Open. Which projection of the
-/// material that lands on — the document, the media, the adopted composition —
-/// is the workbench's business, not a question the library asks first.
+/// material lands on is the workbench's business, not a question the library
+/// asks first.
 class PersonalLibrarySection extends StatelessWidget {
   const PersonalLibrarySection({
     super.key,
     required this.entries,
-    required this.familiarSupplyEnabled,
     this.sidecarSubtitlePaths = const <String>{},
     required this.onOpen,
     required this.onStartExtensive,
     required this.onStartIntensive,
     required this.onSetIntent,
-    required this.onToggleFamiliarSupply,
     this.showHeader = true,
-    this.groupByQueue = true,
     this.simplifiedRows = false,
-    this.capabilityCoordinator,
-    this.onRequestCapability,
-    this.onCancelCapability,
   });
 
   /// Null while the first load is in flight; empty when the library is empty.
   final List<PersonalLibraryEntry>? entries;
-  final bool familiarSupplyEnabled;
 
   /// Library paths the last folder scan saw next to a subtitle file. Reported
   /// as a fact about the folder — pairing them into a learnable resource is a
@@ -60,35 +47,14 @@ class PersonalLibrarySection extends StatelessWidget {
   final void Function(PersonalLibraryEntry entry) onStartExtensive;
   final void Function(PersonalLibraryEntry entry) onStartIntensive;
   final void Function(PersonalLibraryEntry entry, String? intent) onSetIntent;
-  final void Function(bool enabled) onToggleFamiliarSupply;
   final bool showHeader;
-  final bool groupByQueue;
   final bool simplifiedRows;
-
-  /// When present, rows surface the capability completion states (derivable,
-  /// generating with progress, failed attempt) and their request/retry/
-  /// cancel actions.
-  final MaterialCapabilityCoordinator? capabilityCoordinator;
-  final void Function(
-    PersonalLibraryEntry entry,
-    MaterialCapability capability,
-  )?
-  onRequestCapability;
-  final void Function(
-    PersonalLibraryEntry entry,
-    MaterialCapability capability,
-  )?
-  onCancelCapability;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final loaded = entries;
     if (loaded == null) return const SizedBox.shrink();
-    final groups = groupByQueue ? _groupEntries(loaded) : const <_QueueGroup>[];
-    final requestCapability = onRequestCapability;
-    final cancelCapability = onCancelCapability;
-    final coordinator = capabilityCoordinator;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -102,26 +68,6 @@ class PersonalLibrarySection extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-              PopupMenuButton<String>(
-                tooltip: l.text('settings'),
-                icon: Icon(
-                  Icons.tune_outlined,
-                  size: ListenIconSize.control,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                onSelected: (value) {
-                  if (value == 'familiar_supply') {
-                    onToggleFamiliarSupply(!familiarSupplyEnabled);
-                  }
-                },
-                itemBuilder: (context) => [
-                  CheckedPopupMenuItem(
-                    value: 'familiar_supply',
-                    checked: familiarSupplyEnabled,
-                    child: Text(l.text('familiarSuggestionsToggle')),
-                  ),
-                ],
               ),
             ],
           ),
@@ -149,74 +95,21 @@ class PersonalLibrarySection extends StatelessWidget {
             const SizedBox(height: ListenSpacing.gap8),
           ]
         else
-          for (final group in groups) ...[
-            _QueueHeader(queue: group.queue, count: group.entries.length),
+          for (final entry in loaded) ...[
+            _LibraryRow(
+              entry: entry,
+              hasSidecarSubtitle:
+                  entry.primaryMedia != null &&
+                  sidecarSubtitlePaths.contains(entry.primaryMedia!.media.path),
+              onOpen: () => onOpen(entry),
+              onStartExtensive: () => onStartExtensive(entry),
+              onStartIntensive: () => onStartIntensive(entry),
+              onSetIntent: (intent) => onSetIntent(entry, intent),
+            ),
             const SizedBox(height: ListenSpacing.gap6),
-            for (final entry in group.entries) ...[
-              _LibraryRow(
-                entry: entry,
-                familiarSupplyEnabled: familiarSupplyEnabled,
-                hasSidecarSubtitle:
-                    entry.primaryMedia != null &&
-                    sidecarSubtitlePaths.contains(
-                      entry.primaryMedia!.media.path,
-                    ),
-                onOpen: () => onOpen(entry),
-                onStartExtensive: () => onStartExtensive(entry),
-                onStartIntensive: () => onStartIntensive(entry),
-                onSetIntent: (intent) => onSetIntent(entry, intent),
-                readRun: coordinator?.runViewFor(
-                  entry.materialId,
-                  MaterialCapability.read,
-                ),
-                listenRun: coordinator?.runViewFor(
-                  entry.materialId,
-                  MaterialCapability.listen,
-                ),
-                onRequestCapability: requestCapability == null
-                    ? null
-                    : (capability) => requestCapability(entry, capability),
-                onCancelCapability: cancelCapability == null
-                    ? null
-                    : (capability) => cancelCapability(entry, capability),
-              ),
-              const SizedBox(height: ListenSpacing.gap6),
-            ],
-            const SizedBox(height: ListenSpacing.gap8),
           ],
       ],
     );
-  }
-
-  /// Groups by derived queue, ordered intensive → extensive → deferred →
-  /// unsorted, with golden targets pinned to the top of their group. Empty
-  /// groups are omitted entirely.
-  List<_QueueGroup> _groupEntries(List<PersonalLibraryEntry> loaded) {
-    final byQueue = <String?, List<PersonalLibraryEntry>>{};
-    for (final entry in loaded) {
-      byQueue
-          .putIfAbsent(
-            entry.triageQueue(familiarSupply: familiarSupplyEnabled),
-            () => [],
-          )
-          .add(entry);
-    }
-    final groups = <_QueueGroup>[];
-    for (final queue in const [
-      TriageQueue.intensive,
-      TriageQueue.extensive,
-      TriageQueue.deferred,
-      TriageQueue.graduated,
-      null,
-    ]) {
-      final members = byQueue[queue];
-      if (members == null || members.isEmpty) continue;
-      // Stable sort: golden targets first, material-listing order otherwise.
-      final golden = members.where((entry) => entry.isGoldenTarget).toList();
-      final rest = members.where((entry) => !entry.isGoldenTarget).toList();
-      groups.add(_QueueGroup(queue: queue, entries: [...golden, ...rest]));
-    }
-    return groups;
   }
 }
 
@@ -247,7 +140,7 @@ class _UnifiedLibraryRow extends StatelessWidget {
         ? (Icons.movie_outlined, l.text('libraryTypeVideo'))
         : entry.canListen
         ? (Icons.audiotrack_outlined, l.text('libraryTypeAudio'))
-        : (Icons.article_outlined, l.text('libraryTypeArticle'));
+        : (Icons.movie_outlined, l.text('libraryTypeVideo'));
 
     return Material(
       color: colors.surfaceContainerLowest,
@@ -367,79 +260,17 @@ class _UnifiedLibraryRow extends StatelessWidget {
   }
 }
 
-class _QueueGroup {
-  const _QueueGroup({required this.queue, required this.entries});
-
-  final String? queue;
-  final List<PersonalLibraryEntry> entries;
-}
-
-class _QueueHeader extends StatelessWidget {
-  const _QueueHeader({required this.queue, required this.count});
-
-  final String? queue;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final colors = Theme.of(context).colorScheme;
-    final (label, icon) = switch (queue) {
-      TriageQueue.intensive => (
-        l.text('queueIntensive'),
-        Icons.headphones_outlined,
-      ),
-      TriageQueue.extensive => (
-        l.text('queueExtensive'),
-        Icons.play_circle_outline,
-      ),
-      TriageQueue.deferred => (l.text('queueDeferred'), Icons.snooze_outlined),
-      TriageQueue.graduated => (
-        l.text('queueGraduated'),
-        Icons.check_circle_outline,
-      ),
-      _ => (l.text('queueUnsorted'), Icons.help_outline),
-    };
-    return Row(
-      children: [
-        Icon(icon, size: ListenIconSize.inline, color: colors.onSurfaceVariant),
-        const SizedBox(width: ListenSpacing.gap6),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: colors.onSurfaceVariant,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(width: ListenSpacing.gap6),
-        Text(
-          '$count',
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
-        ),
-      ],
-    );
-  }
-}
-
 class _LibraryRow extends StatelessWidget {
   const _LibraryRow({
     required this.entry,
-    required this.familiarSupplyEnabled,
     required this.hasSidecarSubtitle,
     required this.onOpen,
     required this.onStartExtensive,
     required this.onStartIntensive,
     required this.onSetIntent,
-    this.readRun,
-    this.listenRun,
-    this.onRequestCapability,
-    this.onCancelCapability,
   });
 
   final PersonalLibraryEntry entry;
-  final bool familiarSupplyEnabled;
   final bool hasSidecarSubtitle;
 
   /// Activates this material's workbench session. One action for every shape
@@ -448,20 +279,13 @@ class _LibraryRow extends StatelessWidget {
   final VoidCallback onStartExtensive;
   final VoidCallback onStartIntensive;
   final void Function(String? intent) onSetIntent;
-  final CapabilityRunView? readRun;
-  final CapabilityRunView? listenRun;
-  final void Function(MaterialCapability capability)? onRequestCapability;
-  final void Function(MaterialCapability capability)? onCancelCapability;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final primaryMedia = entry.primaryMedia;
-    final fit = entry.fit;
     final duration = primaryMedia?.media.durationMs;
-    final requestCapability = onRequestCapability;
-    final cancelCapability = onCancelCapability;
     return Material(
       color: colors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(
@@ -481,9 +305,7 @@ class _LibraryRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                entry.canRead
-                    ? Icons.description_outlined
-                    : primaryMedia?.media.kind == 'audio'
+                primaryMedia?.media.kind == 'audio'
                     ? Icons.audiotrack_outlined
                     : Icons.movie_outlined,
                 size: ListenIconSize.control,
@@ -514,16 +336,6 @@ class _LibraryRow extends StatelessWidget {
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(color: colors.onSurfaceVariant),
                           ),
-                        if (fit != null) ...[
-                          _MiniFitChip(
-                            label: l.text('contentFitMeaning'),
-                            fit: fit.meaning.fit,
-                          ),
-                          _MiniFitChip(
-                            label: l.text('contentFitSound'),
-                            fit: fit.sound.fit,
-                          ),
-                        ],
                         if (hasSidecarSubtitle)
                           // States what the folder holds, nothing more: the
                           // subtitle file is not imported yet, so this must
@@ -531,24 +343,6 @@ class _LibraryRow extends StatelessWidget {
                           _Badge(
                             icon: Icons.subtitles_outlined,
                             label: l.text('sidecarSubtitleBadge'),
-                            color: colors.onSurfaceVariant,
-                          ),
-                        if (entry.canRead)
-                          _Badge(
-                            icon: Icons.description_outlined,
-                            label: l.text('documentReadCapability'),
-                            color: colors.primary,
-                          ),
-                        if (entry.isGoldenTarget)
-                          _Badge(
-                            icon: Icons.headphones_outlined,
-                            label: l.text('goldenTargetBadge'),
-                            color: colors.primary,
-                          ),
-                        if (entry.familiarMaterial && familiarSupplyEnabled)
-                          _Badge(
-                            icon: Icons.replay_outlined,
-                            label: l.text('familiarRelistenBadge'),
                             color: colors.onSurfaceVariant,
                           ),
                       ],
@@ -616,33 +410,6 @@ class _LibraryRow extends StatelessWidget {
                       ],
                     ),
                   ],
-                  if (requestCapability != null &&
-                      !entry.canRead &&
-                      entry.canListenOrWatch)
-                    _CapabilityAction(
-                      run: readRun,
-                      requestLabel: l.text('capabilityRequestRead'),
-                      onRequest: () =>
-                          requestCapability(MaterialCapability.read),
-                      onCancel: cancelCapability == null
-                          ? null
-                          : () => cancelCapability(MaterialCapability.read),
-                      onRetry: () => requestCapability(MaterialCapability.read),
-                    ),
-                  if (requestCapability != null &&
-                      !entry.canListen &&
-                      entry.canRead)
-                    _CapabilityAction(
-                      run: listenRun,
-                      requestLabel: l.text('capabilityRequestListen'),
-                      onRequest: () =>
-                          requestCapability(MaterialCapability.listen),
-                      onCancel: cancelCapability == null
-                          ? null
-                          : () => cancelCapability(MaterialCapability.listen),
-                      onRetry: () =>
-                          requestCapability(MaterialCapability.listen),
-                    ),
                 ],
               ),
             ],
@@ -653,142 +420,9 @@ class _LibraryRow extends StatelessWidget {
   }
 }
 
-/// One capability completion action on a library row: request when derivable,
-/// progress + cancel while generating, retry after a failed attempt. Rendered
-/// only for derivable directions (a media-only row's Read, a document-only
-/// row's Listen).
-///
-/// A completed run shows nothing. It used to offer "open the generated
-/// result", which was a second door to a material the learner could already
-/// open: adoption refreshes the workbench in place, and the row's own
-/// capabilities are what change.
-class _CapabilityAction extends StatelessWidget {
-  const _CapabilityAction({
-    required this.run,
-    required this.requestLabel,
-    required this.onRequest,
-    this.onCancel,
-    this.onRetry,
-  });
-
-  final CapabilityRunView? run;
-  final String requestLabel;
-  final VoidCallback onRequest;
-  final VoidCallback? onCancel;
-  final VoidCallback? onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final run = this.run;
-    if (run == null || run.phase == CapabilityRunPhase.idle) {
-      return TextButton(
-        key: const Key('capability-request'),
-        onPressed: onRequest,
-        child: Text(requestLabel),
-      );
-    }
-    switch (run.phase) {
-      case CapabilityRunPhase.resolving ||
-          CapabilityRunPhase.generating ||
-          CapabilityRunPhase.installing ||
-          CapabilityRunPhase.adopting:
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              run.stage ?? l.text('capabilityInProgress'),
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (onCancel != null) ...[
-              const SizedBox(width: ListenSpacing.gap4),
-              IconButton(
-                key: const Key('capability-cancel'),
-                tooltip: l.text('cancel'),
-                visualDensity: VisualDensity.compact,
-                iconSize: ListenIconSize.control,
-                onPressed: onCancel,
-                icon: Icon(
-                  Icons.close,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ],
-        );
-      case CapabilityRunPhase.failed:
-        return TextButton(
-          key: const Key('capability-retry'),
-          onPressed: onRetry ?? onRequest,
-          child: Text(l.text('retry')),
-        );
-      case CapabilityRunPhase.completed:
-        return const SizedBox.shrink();
-      case CapabilityRunPhase.cancelled:
-      case CapabilityRunPhase.idle:
-        return TextButton(
-          key: const Key('capability-request'),
-          onPressed: onRequest,
-          child: Text(requestLabel),
-        );
-    }
-  }
-}
-
 /// Compact per-row rendition of the fit chips from the content fit card:
 /// same band vocabulary (`fit_*` keys), smaller footprint. Bands only —
 /// never raw densities (invariant 18).
-class _MiniFitChip extends StatelessWidget {
-  const _MiniFitChip({required this.label, required this.fit});
-
-  final String label;
-  final String fit;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final colors = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.secondaryContainer.withValues(alpha: 0.55),
-        borderRadius: ListenRadii.pillBorder,
-      ),
-      child: Padding(
-        padding: ListenPadding.tight,
-        // Flexible children let a chip ellipsize instead of overflowing when
-        // the row is narrow: the chip is a label, not a hard minimum.
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(width: ListenSpacing.gap4),
-            Flexible(
-              child: Text(
-                l.text('fit_$fit'),
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: colors.onSecondaryContainer,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// The managed asset store scan as the "my media" surface shows it.
 ///
 /// Every outcome gets its own sentence, because they ask for different things

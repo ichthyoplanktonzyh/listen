@@ -61,28 +61,6 @@ extension ListeningHuntingApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<List<HuntingCandidate>> huntingCandidates({
-    String status = 'active',
-    int limit = 100,
-    int offset = 0,
-  }) async {
-    final query = Uri(
-      queryParameters: {
-        'status': status,
-        'limit': '$limit',
-        'offset': '$offset',
-      },
-    ).query;
-    final values =
-        (await _request('GET', '/v1/hunting/candidates?$query'))
-            as List<dynamic>;
-    return values
-        .map(
-          (value) => HuntingCandidate.fromJson(value as Map<String, dynamic>),
-        )
-        .toList(growable: false);
-  }
-
   Future<List<HuntingTarget>> huntingTargets({
     String status = 'active',
     int limit = 100,

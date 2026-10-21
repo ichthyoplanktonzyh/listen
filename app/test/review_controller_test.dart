@@ -38,13 +38,6 @@ ReviewQueueEntry _entry(String id) => ReviewQueueEntry.fromJson({
   },
   'state': 'new',
   'card': {'kind': 'word_recognition', 'answer': id},
-  'origin': {
-    'kind': 'native',
-    'anki_guid': null,
-    'deck_id': null,
-    'deck_name': null,
-    'has_listening_enhancements': true,
-  },
 });
 
 class _ControlledReviewRepository extends FakeReviewRepositoryBase {
@@ -152,13 +145,6 @@ void main() {
                       'answer': 'I would have gone',
                       'target': 'would have',
                     },
-                    'origin': {
-                      'kind': 'native',
-                      'anki_guid': null,
-                      'deck_id': null,
-                      'deck_name': null,
-                      'has_listening_enhancements': true,
-                    },
                   },
                 ],
                 'limit_status': limitStatusJson,
@@ -184,10 +170,6 @@ void main() {
               ]),
             );
           }
-          if (path ==
-              '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-            return (statusCode: 200, body: '[]');
-          }
           if (path == '/v1/review/attempts') {
             return (
               statusCode: 200,
@@ -210,17 +192,6 @@ void main() {
                   'lapse_count': 0,
                 },
                 'generated_observation_ids': const <dynamic>[],
-                'hunting_candidate_ids': const <dynamic>[],
-                'upgrade_suggestions': [upgradeSuggestionJson],
-              }),
-            );
-          }
-          if (path == '/v1/review/upgrade-suggestions/suggestion-1/confirm') {
-            return (
-              statusCode: 200,
-              body: jsonEncode({
-                ...upgradeSuggestionJson,
-                'status': 'accepted',
               }),
             );
           }
@@ -247,23 +218,8 @@ void main() {
       expect(await controller.rate('hard'), isTrue);
       expect(controller.state.completedCount, 1);
       expect(controller.state.finished, isTrue);
-      expect(
-        controller.state.upgradeSuggestions.single.lexicalDisplayForm,
-        'would have',
-      );
       expect(requests.last.body, {'item_id': 'review-1', 'rating': 'hard'});
-      expect(
-        await controller.resolveUpgradeSuggestion(
-          'suggestion-1',
-          confirm: true,
-        ),
-        isTrue,
-      );
-      expect(controller.state.upgradeSuggestions, isEmpty);
-      expect(
-        requests.last.path,
-        '/v1/review/upgrade-suggestions/suggestion-1/confirm',
-      );
+      expect(requests.last.path, '/v1/review/attempts');
     },
   );
 }
@@ -274,20 +230,4 @@ const limitStatusJson = <String, dynamic>{
   'reviews_completed': 0,
   'new_limit_reached': false,
   'review_limit_reached': false,
-};
-
-const upgradeSuggestionJson = <String, dynamic>{
-  'id': 'suggestion-1',
-  'lexical_entry_id': 'lexical-1',
-  'lexical_display_form': 'would have',
-  'previous_status': 'known_not_recognized',
-  'suggested_status': 'known_recognized',
-  'status': 'pending',
-  'evidence_context_count': 5,
-  'evidence_ids': ['evidence-1'],
-  'threshold': 5,
-  'evidence_class': 'heuristic_proxy',
-  'created_at_ms': 1,
-  'resolved_at_ms': null,
-  'cooldown_until_ms': null,
 };

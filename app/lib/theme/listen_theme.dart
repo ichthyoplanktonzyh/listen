@@ -87,16 +87,6 @@ abstract final class ListenColors {
   /// learner has never studied.
   static const moonBlue = Color(0xff6db3ff);
 
-  // Judgment verdict shades (#22). Covered/partial labels render as 12px w700
-  // text — below the WCAG large-text exemption — so each tone must clear
-  // 4.5:1 against every chrome surface of its brightness (surface, fog,
-  // sidebar; asserted pairwise in listen_theme_test.dart). Read them through
-  // [ListenSchemeShades], never directly.
-  static const verdictCovered = Color(0xff27702b);
-  static const verdictPartial = Color(0xffa04d00);
-  static const darkVerdictCovered = Color(0xff5cc389);
-  static const darkVerdictPartial = Color(0xffefa05c);
-
   /// The stage ground is half a stop darker than the
   /// quiet room, so the shell reads as "lights off" and only the content
   /// glows. Stage mode dims the room under *both* themes — it is
@@ -150,17 +140,6 @@ extension ListenSchemeShades on ColorScheme {
   Color get pressedPrimary => brightness == Brightness.light
       ? ListenColors.primaryPressed
       : ListenColors.darkPrimaryPressed;
-
-  /// Label color for a "covered / fully met" judgment verdict (#22).
-  /// The third verdict, missing, reads [error] — it already has a slot.
-  Color get verdictCovered => brightness == Brightness.light
-      ? ListenColors.verdictCovered
-      : ListenColors.darkVerdictCovered;
-
-  /// Label color for a "partially met" judgment verdict (#22).
-  Color get verdictPartial => brightness == Brightness.light
-      ? ListenColors.verdictPartial
-      : ListenColors.darkVerdictPartial;
 }
 
 abstract final class ListenTheme {

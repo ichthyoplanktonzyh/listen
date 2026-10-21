@@ -65,7 +65,7 @@ void main() {
             'voice_id': 'voice-en',
             'language': 'en',
             'rate_words_per_minute': 180,
-            'purpose': 'writing_readback',
+            'purpose': 'dictionary_pronunciation_fallback',
             'content_hash': 'abc',
             'cache_hit': false,
             'synthetic': true,
@@ -80,9 +80,9 @@ void main() {
     );
 
     final asset = await controller.speak(
-      'My own draft.',
+      'Hello.',
       language: 'en',
-      purpose: 'writing_readback',
+      purpose: 'dictionary_pronunciation_fallback',
       acquireAudioFocus: () async => events.add('focus'),
     );
 
@@ -90,7 +90,7 @@ void main() {
     expect(asset?.synthetic, isTrue);
     expect(controller.asset?.providerId, 'local-test');
     expect(playback.localPath, '/tmp/voice.aiff');
-    expect(jsonDecode(requestBody!), containsPair('text', 'My own draft.'));
+    expect(jsonDecode(requestBody!), containsPair('text', 'Hello.'));
     controller.dispose();
   });
 

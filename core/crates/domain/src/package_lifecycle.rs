@@ -159,14 +159,6 @@ pub struct AdoptedComposition {
     pub selected_rendition_ids: Vec<String>,
 }
 
-impl AdoptedComposition {
-    pub fn has_selected_structured_reading(&self) -> bool {
-        self.resources
-            .iter()
-            .any(|resource| resource.kind == "structured_reading")
-    }
-}
-
 /// Projects the adopted composition from an installed release and its
 /// adoption commit plan. Deterministic: selection is taken from the plan's
 /// exact id lists and the facts are sorted by id.

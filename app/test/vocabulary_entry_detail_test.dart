@@ -17,8 +17,7 @@ import 'package:llplayer_next/screens/vocabulary_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/vocabulary/listening_dictionary_entry_view.dart';
 
-/// S4 (#82): the entry detail is an identity card plus five anchored sections,
-/// and each decoration source waits on its own clock.
+/// S4 (#82): the entry detail is an identity card plus four anchored sections; pronunciation can load separately.
 
 Widget _localized(Widget child) => MaterialApp(
   locale: const Locale('en'),
@@ -45,7 +44,7 @@ const _occurrence = LexicalOccurrence(
   sentenceId: 'sentence-1',
 );
 
-/// The detail with every section wired, so all five anchors exist.
+/// The detail with every listening section wired, so all four anchors exist.
 Widget _fullDetail() => ListeningDictionaryEntryView(
   details: const LexicalEntryDetails(
     entry: LexicalEntry(
@@ -57,8 +56,6 @@ Widget _fullDetail() => ListeningDictionaryEntryView(
     ),
     occurrences: [_occurrence],
   ),
-  showProductionCorpus: true,
-  productionHits: const [],
   onPlay: (_) {},
   onMark: (_, _) async => true,
   onLoadEvidenceHistory: ({String? capability, int offset = 0}) async =>
@@ -81,7 +78,7 @@ Map<String, dynamic> _entryWire(String id, String form) => {
 };
 
 void main() {
-  testWidgets('the detail offers five section anchors, not tabs', (
+  testWidgets('the detail offers four section anchors, not tabs', (
     tester,
   ) async {
     await tester.pumpWidget(_localized(_fullDetail()));
@@ -91,7 +88,6 @@ void main() {
       ('evidence', 'Evidence'),
       // The clips anchor carries its inventory count ("Clips 1").
       ('clips', 'Clips 1'),
-      ('output', 'Output'),
       ('senses', 'Meanings'),
       ('notes', 'Notes'),
     ]) {
@@ -101,7 +97,7 @@ void main() {
           matching: find.byKey(Key('entry-section-anchor-${anchor.$1}')),
         ),
         findsOneWidget,
-        reason: '${anchor.$1} should be one of the five section anchors',
+        reason: '${anchor.$1} should be one of the four section anchors',
       );
       expect(
         find.descendant(
@@ -115,7 +111,6 @@ void main() {
     // section stays built and co-visible in one scroll view.
     expect(find.byType(TabBar), findsNothing);
     expect(find.text('Your source clips'), findsOneWidget);
-    expect(find.text('My output'), findsOneWidget);
     expect(find.text('Meaning folders'), findsOneWidget);
     expect(find.text('My definition & note'), findsOneWidget);
   });
@@ -185,7 +180,7 @@ void main() {
     );
   });
 
-  testWidgets('slow decorations never hold back the identity card', (
+  testWidgets('the identity card does not wait for pronunciation lookup', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1.0;
@@ -193,27 +188,15 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    // Every decoration source hangs; only the entry itself resolves.
-    final suggestionsGate = Completer<void>();
-    final dictionaryGate = Completer<void>();
-    final productionGate = Completer<void>();
+    final pronunciationGate = Completer<void>();
     final words = [_entryWire('entry-gist', 'gist')];
-
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'tok',
       transport: (method, path, body) async {
-        if (path.startsWith('/v1/review/upgrade-suggestions')) {
-          await suggestionsGate.future;
-          return (statusCode: 200, body: '[]');
-        }
         if (path.startsWith('/v1/dictionary')) {
-          await dictionaryGate.future;
+          await pronunciationGate.future;
           return (statusCode: 200, body: jsonEncode({'results': <dynamic>[]}));
-        }
-        if (path.startsWith('/v1/production-corpus/search')) {
-          await productionGate.future;
-          return (statusCode: 200, body: '[]');
         }
         if (path.startsWith('/v1/vocabulary?')) {
           return (statusCode: 200, body: jsonEncode(words));
@@ -230,9 +213,7 @@ void main() {
     final audio = AuxiliaryAudioController();
     addTearDown(audio.dispose);
     addTearDown(() async {
-      for (final gate in [suggestionsGate, dictionaryGate, productionGate]) {
-        if (!gate.isCompleted) gate.complete();
-      }
+      if (!pronunciationGate.isCompleted) pronunciationGate.complete();
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
     });
@@ -240,9 +221,6 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        // The waiting mark breathes forever by design; reduce motion halts it
-        // so `pumpAndSettle` can reach a resting frame (and the degradation
-        // itself is what the charter requires).
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
           child: child!,
@@ -275,29 +253,9 @@ void main() {
     await tester.tap(find.text('gist').first);
     await tester.pumpAndSettle();
 
-    // The identity card is on screen while all three decorations are still in
-    // flight (V6: serial waiting is dead).
-    expect(suggestionsGate.isCompleted, isFalse);
-    expect(dictionaryGate.isCompleted, isFalse);
-    expect(productionGate.isCompleted, isFalse);
+    expect(pronunciationGate.isCompleted, isFalse);
     expect(find.byKey(const Key('dictionary-identity-card')), findsOneWidget);
     expect(find.byKey(const Key('entry-section-anchors')), findsOneWidget);
-
-    // Each slow source says so where it lives, on its own.
-    expect(
-      find.byKey(const Key('dictionary-suggestions-loading')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('dictionary-output-loading')), findsOneWidget);
-
-    // One decoration finishing does not wait for the others.
-    productionGate.complete();
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('dictionary-output-loading')), findsNothing);
-    expect(find.text('No writing output for this word yet.'), findsOneWidget);
-    expect(
-      find.byKey(const Key('dictionary-suggestions-loading')),
-      findsOneWidget,
-    );
+    expect(find.text('My definition & note'), findsOneWidget);
   });
 }

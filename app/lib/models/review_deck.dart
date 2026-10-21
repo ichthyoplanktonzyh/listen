@@ -1,8 +1,8 @@
 import 'practice.dart';
 
 /// The review surfaces contract 1.1.0 added around the card session: the deck
-/// overview, the daily-limit budget, the FSRS interval prediction, custom
-/// study, and Anki package interop.
+/// overview, the daily-limit budget, the FSRS interval prediction and custom
+/// study.
 ///
 /// These live apart from `practice.dart` because they are a different shape of
 /// fact — counts, budgets and predictions *about* the queue rather than the
@@ -84,7 +84,7 @@ class ReviewQueue {
   final ReviewLimitStatus limitStatus;
 }
 
-/// Anki's three classic per-deck numbers.
+/// The new, learning, and due counts for a listening review deck.
 class ReviewStateCounts {
   const ReviewStateCounts({
     required this.newCards,
@@ -106,8 +106,7 @@ class ReviewStateCounts {
   int get total => newCards + learning + due;
 }
 
-/// A native deck: one of the four capability channels, faceted automatically
-/// rather than filed by hand.
+/// The native listening deck returned with its listening review counts.
 class ReviewChannelDeck {
   const ReviewChannelDeck({required this.channel, required this.counts});
 
@@ -123,38 +122,8 @@ class ReviewChannelDeck {
   final ReviewStateCounts counts;
 }
 
-/// A deck that came in from an `.apkg`, keeping the tree the learner already
-/// built in Anki instead of being scattered across the four channels.
-class ReviewImportedDeck {
-  const ReviewImportedDeck({
-    required this.deckId,
-    required this.name,
-    required this.parentDeckId,
-    required this.counts,
-  });
-
-  factory ReviewImportedDeck.fromJson(Map<String, dynamic> json) =>
-      ReviewImportedDeck(
-        deckId: json['deck_id'] as String,
-        name: json['name'] as String,
-        parentDeckId: json['parent_deck_id'] as String?,
-        counts: ReviewStateCounts.fromJson(
-          json['counts'] as Map<String, dynamic>,
-        ),
-      );
-
-  final String deckId;
-  final String name;
-  final String? parentDeckId;
-  final ReviewStateCounts counts;
-}
-
 class ReviewDeckOverview {
-  const ReviewDeckOverview({
-    required this.channels,
-    required this.importedDecks,
-    required this.limitStatus,
-  });
+  const ReviewDeckOverview({required this.channels, required this.limitStatus});
 
   factory ReviewDeckOverview.fromJson(Map<String, dynamic> json) =>
       ReviewDeckOverview(
@@ -164,22 +133,15 @@ class ReviewDeckOverview {
                   ReviewChannelDeck.fromJson(value as Map<String, dynamic>),
             )
             .toList(growable: false),
-        importedDecks: ((json['imported_decks'] as List<dynamic>?) ?? const [])
-            .map(
-              (value) =>
-                  ReviewImportedDeck.fromJson(value as Map<String, dynamic>),
-            )
-            .toList(growable: false),
         limitStatus: ReviewLimitStatus.fromJson(
           json['limit_status'] as Map<String, dynamic>,
         ),
       );
 
   final List<ReviewChannelDeck> channels;
-  final List<ReviewImportedDeck> importedDecks;
   final ReviewLimitStatus limitStatus;
 
-  int get dueTotal => nativeCounts.total + importedCounts.total;
+  int get dueTotal => nativeCounts.total;
 
   /// Every native card as one deck. The backend still files each card under a
   /// channel, and that stays useful for *picking* extra practice — but it is
@@ -187,9 +149,6 @@ class ReviewDeckOverview {
   /// queue of its own and so splitting the rows changed nothing a learner
   /// could act on.
   ReviewStateCounts get nativeCounts => _sum(channels.map((d) => d.counts));
-
-  ReviewStateCounts get importedCounts =>
-      _sum(importedDecks.map((d) => d.counts));
 
   static ReviewStateCounts _sum(Iterable<ReviewStateCounts> counts) =>
       counts.fold(
@@ -281,113 +240,4 @@ class CustomStudyQueue {
 
   final List<ReviewQueueEntry> entries;
   final bool advancesNormalSchedule;
-}
-
-class AnkiPackageImportSummary {
-  const AnkiPackageImportSummary({
-    required this.importedCards,
-    required this.updatedCards,
-    required this.skippedCards,
-    required this.importedDecks,
-    required this.importedRevlogEntries,
-    required this.importedMediaFiles,
-    required this.warnings,
-  });
-
-  factory AnkiPackageImportSummary.fromJson(Map<String, dynamic> json) =>
-      AnkiPackageImportSummary(
-        importedCards: json['imported_cards'] as int,
-        updatedCards: json['updated_cards'] as int,
-        skippedCards: json['skipped_cards'] as int,
-        importedDecks: json['imported_decks'] as int,
-        importedRevlogEntries: json['imported_revlog_entries'] as int,
-        importedMediaFiles: json['imported_media_files'] as int,
-        warnings: ((json['warnings'] as List<dynamic>?) ?? const [])
-            .cast<String>()
-            .toList(growable: false),
-      );
-
-  final int importedCards;
-  final int updatedCards;
-  final int skippedCards;
-  final int importedDecks;
-  final int importedRevlogEntries;
-  final int importedMediaFiles;
-  final List<String> warnings;
-}
-
-/// What an export could not carry across. Every number here is measured by the
-/// exporter, so the disclosure the learner confirms is the real boundary of
-/// the file they are about to get, not a generic warning.
-class AnkiExportFidelity {
-  const AnkiExportFidelity({
-    required this.cardsWithMediaSlices,
-    required this.videoSlicesRenderedAsAudio,
-    required this.mediaRenderFailures,
-    required this.omittedCapabilities,
-  });
-
-  factory AnkiExportFidelity.fromJson(Map<String, dynamic> json) =>
-      AnkiExportFidelity(
-        cardsWithMediaSlices: json['cards_with_media_slices'] as int,
-        videoSlicesRenderedAsAudio:
-            json['video_slices_rendered_as_audio'] as int,
-        mediaRenderFailures: json['media_render_failures'] as int,
-        omittedCapabilities:
-            ((json['omitted_capabilities'] as List<dynamic>?) ?? const [])
-                .cast<String>()
-                .toList(growable: false),
-      );
-
-  final int cardsWithMediaSlices;
-  final int videoSlicesRenderedAsAudio;
-  final int mediaRenderFailures;
-  final List<String> omittedCapabilities;
-}
-
-class AnkiPackageExportRequest {
-  const AnkiPackageExportRequest({
-    required this.packagePath,
-    this.deckIds = const [],
-    this.channels = const [],
-  });
-
-  final String packagePath;
-  final List<String> deckIds;
-  final List<String> channels;
-
-  Map<String, dynamic> toJson() => {
-    'package_path': packagePath,
-    if (deckIds.isNotEmpty) 'deck_ids': deckIds,
-    if (channels.isNotEmpty) 'channels': channels,
-  };
-}
-
-class AnkiPackageExportSummary {
-  const AnkiPackageExportSummary({
-    required this.exportedCards,
-    required this.exportedRevlogEntries,
-    required this.exportedMediaFiles,
-    required this.fidelity,
-    required this.warnings,
-  });
-
-  factory AnkiPackageExportSummary.fromJson(Map<String, dynamic> json) =>
-      AnkiPackageExportSummary(
-        exportedCards: json['exported_cards'] as int,
-        exportedRevlogEntries: json['exported_revlog_entries'] as int,
-        exportedMediaFiles: json['exported_media_files'] as int,
-        fidelity: AnkiExportFidelity.fromJson(
-          json['fidelity'] as Map<String, dynamic>,
-        ),
-        warnings: ((json['warnings'] as List<dynamic>?) ?? const [])
-            .cast<String>()
-            .toList(growable: false),
-      );
-
-  final int exportedCards;
-  final int exportedRevlogEntries;
-  final int exportedMediaFiles;
-  final AnkiExportFidelity fidelity;
-  final List<String> warnings;
 }

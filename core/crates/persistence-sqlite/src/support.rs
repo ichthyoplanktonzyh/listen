@@ -8,6 +8,12 @@ pub enum PersistenceError {
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(
+        "database schema version {found} is unsupported; this build requires a fresh listening store (schema version {expected})"
+    )]
+    UnsupportedSchemaVersion { found: u32, expected: u32 },
+    #[error("database has no schema version but already contains data; refusing to modify it")]
+    NonEmptyUnversionedDatabase,
 }
 
 pub(crate) fn json<T: serde::Serialize + ?Sized>(value: &T) -> Result<String, ApplicationError> {

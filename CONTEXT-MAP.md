@@ -5,6 +5,11 @@ in [MODEL.md](MODEL.md). All current modules live in one Git repository.
 It describes durable seams, not detailed source directories,
 transport shapes, or current implementation completeness.
 
+The active scope is audio/video listening, as defined in [STATE.md](STATE.md)
+and [JOURNEYS.md](JOURNEYS.md). Responsibilities below do not require deferred
+document, conversation, output-training, or coach implementations to remain in
+the runtime.
+
 ## Contexts
 
 ### Learning Experience — `app/`
@@ -15,8 +20,8 @@ Owns the learner-facing learning world:
 - presenting a Complete Learning Material;
 - owning the unified Workbench that consumes Core-provided materials and
   learning semantics across modalities and Activity modes;
-- supporting text-only learning and Sense Group interaction without TTS;
-- requesting TTS on Learner intent and presenting full audio-processing status;
+- presenting transcript text and Sense Groups as support within audio/video
+  listening; standalone text learning and text-source TTS are deferred;
 - establishing a Language Slice or Learning Focus;
 - exposing the Minimum Sufficient Scaffold;
 - turning Speech Learning Representation into contextual Perceptual Guidance;
@@ -24,7 +29,7 @@ Owns the learner-facing learning world:
 - navigating between a Personal Corpus Entry, its Slice, and original material;
 - browsing Corpus history and explicitly adding selected entries to learning
   or review without requiring automatic recommendations;
-- presenting review, repair, production, and transfer experiences;
+- presenting listening review, perceptual repair, and further listening contexts;
 - source discovery, acquisition, preview, compilation progress, and recovery UX.
 
 App does not define canonical material validity, Speech Structure truth,
@@ -57,7 +62,6 @@ Owns the language-world compiler that turns Raw Sources into qualified,
 reusable Complete Learning Materials:
 
 - Source intake normalization and exact input identity;
-- faithful TTS for text Sources when requested, not as a text-learning gate;
 - transcription and text qualification for audio/video Sources;
 - Structured Timed Text and audio/text alignment;
 - audio-independent text-side Sense Group analysis;
@@ -224,9 +228,9 @@ learner facts are authenticated, mergeable, and learner-owned.
   Material contract.
 - Processed materials reach one unified App Workbench through Core; Workbench
   views and Activity modes vary without bypassing the semantic boundary.
-- Text-only material can support formal learning without TTS.
-- Present audio receives the full sound-processing scope; requested TTS enters
-  the same scope, not a reduced tier.
+- Current formal learning starts from audio/video; standalone text material
+  and text-source TTS are deferred.
+- Present audio receives the full sound-processing scope.
 - Canonical audio, when present, and canonical text represent one Material Revision.
 - Structured Reading supplies audio-independent coordinates; Structured Timed
   Text binds them to exact audio.
@@ -237,11 +241,13 @@ learner facts are authenticated, mergeable, and learner-owned.
 - Predicted, estimated, canonical, aligned, and observed speech evidence remain
   distinguishable.
 - Sense Group and Prosodic Chunk remain separate concepts and lifecycles.
-- Sense Group analysis and learning are available independently of audio.
+- Sense Groups are text-side representations used as help within the current
+  audio/video listening journey; they are not Prosodic Chunks.
 - Gen owns material-side representation; learner-relative Perceptual Guidance
   remains in the learning world.
 - Language Slices point back to the original Material Revision and context.
-- Text-only Slices are valid; adding audio never rewrites earlier episode facts.
+- Saved listening Slices retain exact audio/text coordinates; new resources
+  never rewrite earlier episode facts.
 - Personal Corpus facts outlive packages, models, projections, and indexes.
 - Exposure and clickstream do not automatically become learner state.
 - Reading, listening, speaking, and writing remain independent dimensions.

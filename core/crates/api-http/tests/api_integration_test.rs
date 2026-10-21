@@ -15,7 +15,6 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use persistence_sqlite::SqliteRepository;
 use serde_json::{Value, json};
-use sha2::{Digest as _, Sha256};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -187,7 +186,7 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The Phase 1 canonical contract is locked exactly: 4.0.0 is the contract
+    // The Phase 1 canonical contract is locked exactly: 5.0.0 is the contract
     // that rebuilds the learning-material surface on source assets and typed
     // document/media renditions.
     assert_eq!(body["contract_version"], CONTRACT_VERSION);
@@ -890,52 +889,22 @@ async fn retained_media_states_membership_in_every_response_shape() {
 // Learning-material HTTP surface (contract 3.2.0): acceptance coverage A-G.
 // ---------------------------------------------------------------------------
 
-/// Create a learning material over HTTP and return the details response.
-///
-/// Text-style document renditions (`"text": ...`) are a convenience for tests
-/// that only need a material: the helper encodes the text as exact UTF-8
-/// Source Asset bytes, computes the digest, and binds the rendition through
-/// its source asset index, mirroring what the App does for typed/pasted text.
-async fn create_material(
-    app: &Router,
-    title: &str,
-    document_renditions: Value,
-    media_renditions: Value,
-    retain: Option<bool>,
-) -> Value {
-    let mut source_assets = Vec::new();
-    let mut doc_renditions = Vec::new();
-    for rendition in document_renditions.as_array().expect("document renditions") {
-        let Some(text) = rendition.get("text").and_then(|value| value.as_str()) else {
-            doc_renditions.push(rendition.clone());
-            continue;
-        };
-        let digest = hex::encode(Sha256::digest(text.as_bytes()));
-        let media_type = rendition["media_type"].as_str().expect("media type");
-        source_assets.push(json!({
-            "media_type": media_type,
-            "byte_length": text.len(),
-            "sha256_digest": digest,
-            "binding": { "type": "managed" },
-        }));
-        let mut typed = rendition.clone();
-        let asset_index = source_assets.len() - 1;
-        typed["digest"] = json!(digest);
-        typed["byte_size"] = json!(text.len());
-        typed["source_asset_index"] = json!(asset_index);
-        typed.as_object_mut().expect("object").remove("text");
-        doc_renditions.push(typed);
-    }
-    let mut body = json!({
-        "title": title,
-        "source_assets": source_assets,
-        "document_renditions": doc_renditions,
-        "media_renditions": media_renditions,
-    });
-    if let Some(retain) = retain {
-        body["retain"] = json!(retain);
-    }
-    let (status, material) = send(app, post_json("/v1/materials", Some(TOKEN), &body)).await;
+/// Create a media-backed learning material over HTTP and return the details response.
+async fn create_material(app: &Router, title: &str) -> Value {
+    let media = register_media_with_retain(app, title, Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id");
+    let (status, material) = send(
+        app,
+        post_json(
+            "/v1/materials",
+            Some(TOKEN),
+            &json!({
+                "title": title,
+                "media_renditions": [{"media_id": media_id}],
+            }),
+        ),
+    )
+    .await;
     assert_eq!(
         status,
         StatusCode::OK,
@@ -944,7 +913,6 @@ async fn create_material(
     material
 }
 
-/// Material ids present in the retained Personal Library projection.
 async fn material_library_ids(app: &Router) -> Vec<String> {
     let (status, list) = send(app, get("/v1/materials", Some(TOKEN))).await;
     assert_eq!(status, StatusCode::OK, "{list}");
@@ -1192,42 +1160,12 @@ async fn material_membership_delete_preserves_material_and_is_idempotent() {
     assert!(again["material"]["retained_at_ms"].is_null());
 }
 
-// D. Text-only material with exact multibyte/whitespace bytes and language:
-// default retained, exact text/digest/byte_size, no path; append a revision,
-// then read current and historical revisions and prove ownership and shape.
+// D. Media-only material revision lifecycle, including omission of the optional
+// Source Asset collection and path-free media rendition responses.
 #[tokio::test]
-async fn text_material_preserves_exact_bytes_and_revision_ownership() {
-    use sha2::{Digest, Sha256};
-
+async fn media_material_revisions_preserve_media_identity_and_ownership() {
     let app = build_app();
-    // Exact bytes are never trimmed or mutated: leading/trailing spaces, a
-    // newline, and non-ASCII characters.
-    let text = "  Hello, 世界!  \n";
-    let digest = hex::encode(Sha256::digest(text.as_bytes()));
-    let (status, created) = send(
-        &app,
-        post_json(
-            "/v1/materials",
-            Some(TOKEN),
-            &json!({
-                "title": "Exact Bytes",
-                "source_assets": [
-                    {
-                        "media_type": "text/plain",
-                        "byte_length": text.len(),
-                        "sha256_digest": digest,
-                        "binding": { "type": "managed" },
-                    },
-                ],
-                "document_renditions": [
-                    { "media_type": "text/plain", "language": "en", "digest": digest, "byte_size": text.len(), "source_asset_index": 0 },
-                ],
-                "media_renditions": [],
-            }),
-        ),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{created}");
+    let created = create_material(&app, "Media Revision").await;
     let material_id = created["material"]["id"]
         .as_str()
         .expect("material id")
@@ -1236,87 +1174,52 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
         .as_str()
         .expect("revision id")
         .to_owned();
-
-    // Omitted retain defaults to retained membership.
+    let media_id = created["current_revision"]["media_renditions"][0]["media_id"]
+        .as_str()
+        .expect("media id")
+        .to_owned();
+    assert_eq!(created["shape"], "video");
     assert!(
-        created["material"]["retained_at_ms"].is_number(),
-        "omitted retain must default to retained: {created}"
+        created["current_revision"]
+            .get("document_renditions")
+            .is_none()
     );
-    assert_eq!(created["shape"], "text");
-
-    let rendition = &created["current_revision"]["document_renditions"][0];
-    assert_eq!(rendition["language"], "en");
-    assert_eq!(rendition["byte_size"], text.len() as u64);
-    assert_eq!(
-        rendition["digest"], digest,
-        "digest must be computed over the exact stored bytes"
+    assert!(
+        created["current_revision"]["source_assets"]
+            .as_array()
+            .unwrap()
+            .is_empty()
     );
-    assert!(rendition.get("text").is_none(), "no inline extracted text");
-    assert!(rendition.get("path").is_none());
-    assert!(created["current_revision"].get("path").is_none());
-    assert!(created["material"].get("path").is_none());
 
-    // The default-retained material enters the list.
-    assert!(material_library_ids(&app).await.contains(&material_id));
-
-    // Append a revision with different exact bytes and a null language.
-    let new_text = "  Second revision — 修正.  ";
-    let new_digest = hex::encode(Sha256::digest(new_text.as_bytes()));
     let (status, appended) = send(
         &app,
         post_json(
             &format!("/v1/materials/{material_id}/revisions"),
             Some(TOKEN),
             &json!({
-                "title": "Exact Bytes v2",
-                "source_assets": [
-                    {
-                        "media_type": "text/plain",
-                        "byte_length": new_text.len(),
-                        "sha256_digest": new_digest,
-                        "binding": { "type": "managed" },
-                    },
-                ],
-                "document_renditions": [
-                    { "media_type": "text/plain", "language": null, "digest": new_digest, "byte_size": new_text.len(), "source_asset_index": 0 },
-                ],
-                "media_renditions": [],
+                "title": "Media Revision v2",
+                "media_renditions": [{"media_id": media_id}],
             }),
         ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{appended}");
-    let current = &appended["current_revision"];
-    assert_eq!(current["title"], "Exact Bytes v2");
-    assert_eq!(
-        current["document_renditions"][0]["byte_size"],
-        new_text.len() as u64
-    );
-    assert_eq!(current["document_renditions"][0]["digest"], new_digest);
-    assert!(
-        current["document_renditions"][0]["language"].is_null(),
-        "null language stays null"
-    );
-    let second_revision_id = current["id"].as_str().expect("revision id").to_owned();
+    let second_revision_id = appended["current_revision"]["id"]
+        .as_str()
+        .expect("revision id")
+        .to_owned();
     assert_ne!(first_revision_id, second_revision_id);
-    // Creation time and membership survive a revision append.
     assert_eq!(
-        appended["material"]["created_at_ms"],
-        created["material"]["created_at_ms"]
+        appended["current_revision"]["media_renditions"][0]["media_id"],
+        media_id
     );
-    assert!(appended["material"]["retained_at_ms"].is_number());
+    assert!(
+        appended["current_revision"]
+            .get("document_renditions")
+            .is_none()
+    );
+    assert!(appended["current_revision"].get("path").is_none());
 
-    // Reading the material returns the appended revision as current.
-    let (status, read) = send(
-        &app,
-        get(&format!("/v1/materials/{material_id}"), Some(TOKEN)),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{read}");
-    assert_eq!(read["current_revision"]["id"], second_revision_id);
-    assert_eq!(read["shape"], "text");
-
-    // Historical revision read: exact original bytes, owned by the material.
     let (status, historical) = send(
         &app,
         get(
@@ -1327,47 +1230,17 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     .await;
     assert_eq!(status, StatusCode::OK, "{historical}");
     assert_eq!(historical["id"], first_revision_id);
-    assert_eq!(historical["material_id"], material_id);
-    assert_eq!(historical["title"], "Exact Bytes");
-    assert_eq!(historical["document_renditions"][0]["digest"], digest);
-    assert_eq!(
-        historical["document_renditions"][0]["byte_size"],
-        text.len() as u64
-    );
-    assert!(
-        historical["document_renditions"][0]
-            .as_object()
-            .expect("rendition object")
-            .get("text")
-            .is_none(),
-        "historical rendition carries no inline extracted text"
-    );
-    assert!(historical.get("path").is_none());
-    assert!(historical["document_renditions"][0].get("path").is_none());
-
-    // Current revision read through the revision endpoint.
-    let (status, current_read) = send(
-        &app,
-        get(
-            &format!("/v1/materials/{material_id}/revisions/{second_revision_id}"),
-            Some(TOKEN),
-        ),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{current_read}");
-    assert_eq!(current_read["id"], second_revision_id);
-    assert_eq!(current_read["title"], "Exact Bytes v2");
+    assert_eq!(historical["media_renditions"][0]["media_id"], media_id);
+    assert!(historical.get("document_renditions").is_none());
 }
 
-// D-null. Explicit JSON `retain: null` (as opposed to omitting the field)
-// must create a retained material that appears in the retained list. Unique
-// text assets guarantee the assertion cannot pass by converging on a material
-// retained by an earlier step.
+// D-null. Explicit JSON `retain: null` defaults to retained membership for a
+// media-backed material whose media was initially registered as temporary.
 #[tokio::test]
-async fn explicit_null_retain_creates_a_retained_material() {
+async fn explicit_null_retain_creates_a_retained_media_material() {
     let app = build_app();
-    let unique_text = format!("explicit-null-retain-{}", application::now_ms());
-    let digest = hex::encode(Sha256::digest(unique_text.as_bytes()));
+    let media = register_media_with_retain(&app, "Explicit Null Retain", Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id");
     let (status, created) = send(
         &app,
         post_json(
@@ -1375,18 +1248,7 @@ async fn explicit_null_retain_creates_a_retained_material() {
             Some(TOKEN),
             &json!({
                 "title": "Explicit Null Retain",
-                "source_assets": [
-                    {
-                        "media_type": "text/plain",
-                        "byte_length": unique_text.len(),
-                        "sha256_digest": digest,
-                        "binding": { "type": "managed" },
-                    },
-                ],
-                "document_renditions": [
-                    { "media_type": "text/plain", "language": null, "digest": digest, "byte_size": unique_text.len(), "source_asset_index": 0 },
-                ],
-                "media_renditions": [],
+                "media_renditions": [{"media_id": media_id}],
                 "retain": null,
             }),
         ),
@@ -1397,14 +1259,8 @@ async fn explicit_null_retain_creates_a_retained_material() {
         .as_str()
         .expect("material id")
         .to_owned();
-    assert!(
-        created["material"]["retained_at_ms"].is_number(),
-        "explicit retain:null must default to retained membership: {created}"
-    );
-    assert!(
-        material_library_ids(&app).await.contains(&material_id),
-        "retain:null material must appear in GET /v1/materials: {created}"
-    );
+    assert!(created["material"]["retained_at_ms"].is_number());
+    assert!(material_library_ids(&app).await.contains(&material_id));
 }
 
 // E. Unknown/malformed material, revision, and media ids are typed 4xx; a
@@ -1454,27 +1310,13 @@ async fn material_unknown_and_malformed_ids_are_typed_4xx() {
     assert_eq!(body["code"], "not_found");
 
     // A revision owned by another material is a typed 404.
-    let material_a = create_material(
-        &app,
-        "Owner A",
-        json!([{ "media_type": "text/plain", "language": null, "text": "alpha", "source_asset_index": null }]),
-        json!([]),
-        None,
-    )
-    .await;
+    let material_a = create_material(&app, "Owner A").await;
     let id_a = material_a["material"]["id"].as_str().expect("material id");
     let revision_a = material_a["current_revision"]["id"]
         .as_str()
         .expect("revision id")
         .to_owned();
-    let material_b = create_material(
-        &app,
-        "Owner B",
-        json!([{ "media_type": "text/plain", "language": null, "text": "beta", "source_asset_index": null }]),
-        json!([]),
-        None,
-    )
-    .await;
+    let material_b = create_material(&app, "Owner B").await;
     let id_b = material_b["material"]["id"].as_str().expect("material id");
 
     let (status, body) = send(
@@ -1526,7 +1368,6 @@ async fn mixed_and_unknown_media_inputs_map_through_application_errors() {
             &json!({
                 "title": "Ambiguous Mix",
                 "source_assets": [],
-                "document_renditions": [],
                 "media_renditions": [
                     { "media_id": id_a },
                     { "media_id": id_b },
@@ -1555,7 +1396,6 @@ async fn mixed_and_unknown_media_inputs_map_through_application_errors() {
             &json!({
                 "title": "Unknown Media",
                 "source_assets": [],
-                "document_renditions": [],
                 "media_renditions": [{ "media_id": unknown_media }],
             }),
         ),

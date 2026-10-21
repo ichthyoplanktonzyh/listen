@@ -41,10 +41,10 @@ the runtime/toolchain it may bind to:
 
 - The runtime is the interpreter family and version requirement the zipapp
   itself needs.
-- The toolchain is every external tool the bundle may invoke across the
-  declared ASR providers, with the Gen stage families (`media`, `asr`) that
-  require each tool. It is exactly the union of the per-provider requirements
-  in `PROVIDER_REQUIREMENTS`.
+- The toolchain covers the released zipapp's supported ASR providers
+  (`fixture`, `command`, and `whisper-cpp`), with the Gen stage families
+  (`media`, `asr`) that require each tool. It is the union of their requirements
+  in `PROVIDER_REQUIREMENTS`; it does not describe every source-checkout adapter.
 - Consumers record this identity immutably in their pin and the verifier
   rejects any manifest whose identity drifts from the source constants, so a
   release cannot silently add, drop, or re-role a tool.
@@ -57,11 +57,15 @@ the runtime/toolchain it may bind to:
   wrapper.
 - The `whisper-cpp` ASR provider needs `ffprobe`, `ffmpeg`, `whisper-cli`,
   and a whisper model.
-- The `fake` and `fixture` TTS providers need no external commands; the `say`
-  TTS provider binds to the macOS `say` and `afconvert` executables.
-- The `fixture` OCR provider needs no external commands; the absence of a
-  real OCR adapter is an honest capability result, not a hidden pipeline.
+- Document extraction, OCR, and document-to-speech adapters are not included.
 - These native tools and models are never placed inside the zipapp.
+
+Qwen3 and SenseVoice are source-checkout adapters. Their sidecar launchers live
+under `gen/tools/`, outside the zipapp's `listen_gen` source collection. They
+require the corresponding Python extras, sidecar interpreter, model files,
+and FFmpeg/FFprobe preprocessing tools. The zipapp does not supply those
+launchers or runtimes; their direct provider options require a source checkout.
+Model installation and downloads remain explicit opt-ins.
 
 ## Content package contract identity
 
@@ -77,7 +81,7 @@ contract the bundle produces packages against:
   "release_schema_id": "listen.content-package.release.v3",
   "package_schema": "listen.content-package.release.v3",
   "schema_version": 3,
-  "contract_version": "4.0.0",
+  "contract_version": "5.0.0",
   "canonical_sha256": "sha256:<release.schema.json file digest>"
 }
 ```
@@ -99,16 +103,16 @@ fresh Core contract artifact manifest from the same source snapshot:
 ```bash
 python tools/release_bundle.py build \
   --source-commit "$(git rev-parse HEAD)" \
-  --core-contract-manifest /path/to/listen-contracts-4.0.0.manifest.json \
+  --core-contract-manifest /path/to/listen-contracts-5.0.0.manifest.json \
   --output-parent dist
 ```
 
 Output layout:
 
 ```text
-dist/listen-gen-0.5.0/
-├── listen-gen-0.5.0.pyz
-└── listen-gen-0.5.0.release.json
+dist/listen-gen-0.5.2/
+├── listen-gen-0.5.2.pyz
+└── listen-gen-0.5.2.release.json
 ```
 
 The build is deterministic: identical source, version, contract identity,
@@ -125,8 +129,8 @@ Run the verifier before publishing:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.5.0/listen-gen-0.5.0.release.json \
-  --core-contract-manifest /path/to/listen-contracts-4.0.0.manifest.json
+  dist/listen-gen-0.5.2/listen-gen-0.5.2.release.json \
+  --core-contract-manifest /path/to/listen-contracts-5.0.0.manifest.json
 ```
 
 The verifier strictly parses the manifest — including the complete

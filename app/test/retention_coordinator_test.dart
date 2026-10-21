@@ -625,107 +625,124 @@ void main() {
     expect(harness.player.retentionInFlight, isFalse);
   });
 
-  test('Keep adds the material to the Personal Library, not just the media',
-      () async {
-    // The Personal Library lists retained *materials*; media membership is a
-    // separate flag Core keeps independently. Keep used to stop after
-    // `registerMedia(retain: true)`, so the status said "kept", the library
-    // stayed empty, and the follow-up material read flipped the button back to
-    // "Keep" on the next frame.
-    final adapter = _FakeAdapter();
-    final repository = _FakeSessionRepository();
-    final store = _FakeManagedStore();
-    final materials = _FakeMaterialRepository()
-      ..resolved = _materialDetails(materialId: 'material-1', retained: false);
-    final harness = _harness(
-      adapter: adapter,
-      repository: repository,
-      store: store,
-      materials: materials,
-    );
+  test(
+    'Keep adds the material to the Personal Library, not just the media',
+    () async {
+      // The Personal Library lists retained *materials*; media membership is a
+      // separate flag Core keeps independently. Keep used to stop after
+      // `registerMedia(retain: true)`, so the status said "kept", the library
+      // stayed empty, and the follow-up material read flipped the button back to
+      // "Keep" on the next frame.
+      final adapter = _FakeAdapter();
+      final repository = _FakeSessionRepository();
+      final store = _FakeManagedStore();
+      final materials = _FakeMaterialRepository()
+        ..resolved = _materialDetails(
+          materialId: 'material-1',
+          retained: false,
+        );
+      final harness = _harness(
+        adapter: adapter,
+        repository: repository,
+        store: store,
+        materials: materials,
+      );
 
-    await harness.session.openMediaPath('/media/original.mp3');
-    expect(harness.session.currentMaterial?.isRetained, isFalse);
+      await harness.session.openMediaPath('/media/original.mp3');
+      expect(harness.session.currentMaterial?.isRetained, isFalse);
 
-    await harness.session.keepCurrentMedia();
+      await harness.session.keepCurrentMedia();
 
-    expect(materials.retained, ['material-1']);
-    expect(harness.session.currentMaterial?.isRetained, isTrue);
-    expect(harness.player.mediaRetained, isTrue);
-    expect(harness.player.status, _en('statusMediaKept'));
-    expect(harness.player.statusIsError, isFalse);
-  });
+      expect(materials.retained, ['material-1']);
+      expect(harness.session.currentMaterial?.isRetained, isTrue);
+      expect(harness.player.mediaRetained, isTrue);
+      expect(harness.player.status, _en('statusMediaKept'));
+      expect(harness.player.statusIsError, isFalse);
+    },
+  );
 
-  test('a media already inside the managed store is kept without a second copy',
-      () async {
-    // Scanned material already lives in the store, and so does anything kept
-    // before and later unretained. Copying it back into the store would
-    // re-hash the whole file to arrive at the id Core already has; the only
-    // thing that has to move is the membership.
-    final adapter = _FakeAdapter();
-    final repository = _FakeSessionRepository();
-    final store = _FakeManagedStore();
-    final materials = _FakeMaterialRepository()
-      ..resolved = _materialDetails(materialId: 'material-1', retained: false);
-    final harness = _harness(
-      adapter: adapter,
-      repository: repository,
-      store: store,
-      materials: materials,
-    );
-    final managedPath = '${store.root}/abc123digest';
-    repository.storedTitle = 'abc123digest';
+  test(
+    'a media already inside the managed store is kept without a second copy',
+    () async {
+      // Scanned material already lives in the store, and so does anything kept
+      // before and later unretained. Copying it back into the store would
+      // re-hash the whole file to arrive at the id Core already has; the only
+      // thing that has to move is the membership.
+      final adapter = _FakeAdapter();
+      final repository = _FakeSessionRepository();
+      final store = _FakeManagedStore();
+      final materials = _FakeMaterialRepository()
+        ..resolved = _materialDetails(
+          materialId: 'material-1',
+          retained: false,
+        );
+      final harness = _harness(
+        adapter: adapter,
+        repository: repository,
+        store: store,
+        materials: materials,
+      );
+      final managedPath = '${store.root}/abc123digest';
+      repository.storedTitle = 'abc123digest';
 
-    await harness.session.openMediaPath(managedPath);
-    final titleBeforeKeep = harness.player.mediaTitle;
-    repository.registered.clear();
+      await harness.session.openMediaPath(managedPath);
+      final titleBeforeKeep = harness.player.mediaTitle;
+      repository.registered.clear();
 
-    await harness.session.keepCurrentMedia();
+      await harness.session.keepCurrentMedia();
 
-    expect(store.copies, isEmpty, reason: 'nothing to move: it is already there');
-    expect(
-      repository.registered,
-      isEmpty,
-      reason: 're-registering would re-fingerprint the whole file for an id '
-          'Core already has',
-    );
-    expect(repository.retained, ['media-1']);
-    expect(materials.retained, ['material-1']);
-    expect(harness.player.mediaPath, managedPath);
-    // A managed file's name is its SHA-256, and Core's title is the file name.
-    // Keeping must not rename the episode to a digest.
-    expect(harness.player.mediaTitle, titleBeforeKeep);
-    expect(harness.player.mediaTitle, isNot('abc123digest'));
-    expect(harness.player.mediaRetained, isTrue);
-    expect(harness.player.status, _en('statusMediaKept'));
-  });
+      expect(
+        store.copies,
+        isEmpty,
+        reason: 'nothing to move: it is already there',
+      );
+      expect(
+        repository.registered,
+        isEmpty,
+        reason:
+            're-registering would re-fingerprint the whole file for an id '
+            'Core already has',
+      );
+      expect(repository.retained, ['media-1']);
+      expect(materials.retained, ['material-1']);
+      expect(harness.player.mediaPath, managedPath);
+      // A managed file's name is its SHA-256, and Core's title is the file name.
+      // Keeping must not rename the episode to a digest.
+      expect(harness.player.mediaTitle, titleBeforeKeep);
+      expect(harness.player.mediaTitle, isNot('abc123digest'));
+      expect(harness.player.mediaRetained, isTrue);
+      expect(harness.player.status, _en('statusMediaKept'));
+    },
+  );
 
-  test('a failed material retain names the failure and keeps the copy',
-      () async {
-    final adapter = _FakeAdapter();
-    final repository = _FakeSessionRepository();
-    final store = _FakeManagedStore()..createdNew = true;
-    final materials = _FakeMaterialRepository()
-      ..resolved = _materialDetails(materialId: 'material-1', retained: false)
-      ..retainFails = true;
-    final harness = _harness(
-      adapter: adapter,
-      repository: repository,
-      store: store,
-      materials: materials,
-    );
+  test(
+    'a failed material retain names the failure and keeps the copy',
+    () async {
+      final adapter = _FakeAdapter();
+      final repository = _FakeSessionRepository();
+      final store = _FakeManagedStore()..createdNew = true;
+      final materials = _FakeMaterialRepository()
+        ..resolved = _materialDetails(materialId: 'material-1', retained: false)
+        ..retainFails = true;
+      final harness = _harness(
+        adapter: adapter,
+        repository: repository,
+        store: store,
+        materials: materials,
+      );
 
-    await harness.session.openMediaPath('/media/original.mp3');
-    await harness.session.keepCurrentMedia();
+      await harness.session.openMediaPath('/media/original.mp3');
+      await harness.session.keepCurrentMedia();
 
-    expect(harness.player.status, _en('statusKeepFailed'));
-    expect(harness.player.statusIsError, isTrue);
-    // The copy is real and the media is registered: only the membership did
-    // not land, and a retry deduplicates onto the same copy.
-    expect(store.deleted, isEmpty);
-    expect(harness.player.mediaPath, store.copyPath);
-    expect(harness.player.mediaRetained, isFalse);
-  });
+      expect(harness.player.status, _en('statusKeepFailed'));
+      expect(harness.player.statusIsError, isTrue);
+      // The copy is real and the media is registered: only the membership did
+      // not land, and a retry deduplicates onto the same copy.
+      expect(store.deleted, isEmpty);
+      expect(harness.player.mediaPath, store.copyPath);
+      expect(harness.player.mediaRetained, isFalse);
+    },
+  );
 
   test('Keep preserves material identity across the managed rebind and updates '
       'retained evidence', () async {
@@ -759,45 +776,42 @@ void main() {
     expect(harness.player.status, _en('statusMediaKept'));
   });
 
-  test(
-    'a material resolve failure after a successful Keep registration names '
-    'the failure and deletes nothing',
-    () async {
-      final adapter = _FakeAdapter();
-      final repository = _FakeSessionRepository();
-      final store = _FakeManagedStore();
-      final materials = _FakeMaterialRepository()
-        ..resolved = _materialDetails(retained: false);
-      final harness = _harness(
-        adapter: adapter,
-        repository: repository,
-        store: store,
-        materials: materials,
-      );
+  test('a material resolve failure after a successful Keep registration names '
+      'the failure and deletes nothing', () async {
+    final adapter = _FakeAdapter();
+    final repository = _FakeSessionRepository();
+    final store = _FakeManagedStore();
+    final materials = _FakeMaterialRepository()
+      ..resolved = _materialDetails(retained: false);
+    final harness = _harness(
+      adapter: adapter,
+      repository: repository,
+      store: store,
+      materials: materials,
+    );
 
-      await harness.session.openMediaPath('/media/original.mp3');
-      expect(harness.session.currentMaterial?.material.id, 'material-1');
+    await harness.session.openMediaPath('/media/original.mp3');
+    expect(harness.session.currentMaterial?.material.id, 'material-1');
 
-      // The registration round-trip succeeds; the follow-up material read
-      // fails. Resolution is non-gating enrichment.
-      materials.resolveFails = true;
-      await harness.session.keepCurrentMedia();
+    // The registration round-trip succeeds; the follow-up material read
+    // fails. Resolution is non-gating enrichment.
+    materials.resolveFails = true;
+    await harness.session.keepCurrentMedia();
 
-      // Without a resolved material there is nothing to give Personal Library
-      // membership to, so the Keep cannot claim it landed. Everything already
-      // achieved stays achieved — the copy is not deleted and the media stays
-      // registered and retained — which is what makes a retry cheap.
-      expect(store.deleted, isEmpty);
-      expect(repository.registered.last.retain, isTrue);
-      expect(repository.registered.last.path, store.copyPath);
-      expect(harness.player.mediaPath, store.copyPath);
-      expect(harness.session.currentMaterial, isNull);
-      expect(harness.player.status, _en('statusKeepFailed'));
-      expect(harness.player.statusIsError, isTrue);
-      // The named state never carries the boundary's own text.
-      expect(harness.player.status, isNot(contains('boom')));
-    },
-  );
+    // Without a resolved material there is nothing to give Personal Library
+    // membership to, so the Keep cannot claim it landed. Everything already
+    // achieved stays achieved — the copy is not deleted and the media stays
+    // registered and retained — which is what makes a retry cheap.
+    expect(store.deleted, isEmpty);
+    expect(repository.registered.last.retain, isTrue);
+    expect(repository.registered.last.path, store.copyPath);
+    expect(harness.player.mediaPath, store.copyPath);
+    expect(harness.session.currentMaterial, isNull);
+    expect(harness.player.status, _en('statusKeepFailed'));
+    expect(harness.player.statusIsError, isTrue);
+    // The named state never carries the boundary's own text.
+    expect(harness.player.status, isNot(contains('boom')));
+  });
 
   test(
     'a failed Core registration rolls back only a newly created copy',
@@ -1189,7 +1203,6 @@ MaterialDetails _materialDetails({
 }) => materialDetails(
   materialId: materialId,
   retainedAtMs: retained ? 42 : null,
-  documentRenditions: [documentRenditionForText('Hello')],
   shape: MaterialShape.audio,
 );
 
@@ -1487,13 +1500,6 @@ class _FakeMaterialRepository implements LearningMaterialRepository {
   }
 
   @override
-  Future<MaterialRevision> updateSourceAssetAvailability(
-    String materialId,
-    String sourceAssetId,
-    SourceAssetAvailability availability,
-  ) async => throw UnimplementedError();
-
-  @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
   ) async => throw UnimplementedError();
@@ -1553,13 +1559,6 @@ class _GatedMaterialRepository implements LearningMaterialRepository {
   }
 
   @override
-  Future<MaterialRevision> updateSourceAssetAvailability(
-    String materialId,
-    String sourceAssetId,
-    SourceAssetAvailability availability,
-  ) async => throw UnimplementedError();
-
-  @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
   ) async => throw UnimplementedError();
@@ -1592,10 +1591,6 @@ class _FakeImportRepository implements MediaImportRepository {
     String directory, {
     int? expectedBytes,
   }) => throw UnimplementedError();
-
-  @override
-  Future<String?> downloadArticle(String articleUrl, String directory) =>
-      throw UnimplementedError();
 
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
@@ -1658,16 +1653,7 @@ class _FakeManagedStore implements ManagedAssetStoreService {
   }
 
   @override
-  Future<ManagedAssetCopy> copyBytesIntoStore({
-    required List<int> bytes,
-    required String mediaKind,
-  }) async => throw UnimplementedError();
-
-  @override
   bool contains(String path) => path.startsWith('$root/');
-
-  @override
-  Future<List<int>?> readBytes(String path) async => null;
 
   @override
   Future<void> deleteStoreCopy(String path) async {
@@ -1696,9 +1682,6 @@ class _FakeResourceRepository implements ResourceRepository {
   @override
   ApiFailure failureDetail(Object error) =>
       ApiFailure(raw: '$error', message: 'unavailable');
-  @override
-  Future<ContentDifficultyProfile> contentFit(String trackId) async =>
-      throw UnimplementedError();
   @override
   Future<List<SubtitleTrack>> mediaSubtitles(String mediaId) async => [];
   @override

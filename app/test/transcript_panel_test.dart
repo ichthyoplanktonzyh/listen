@@ -356,9 +356,7 @@ void _analysisGroup() {
   );
 }
 
-/// The reading states are displays of this same pane, not separate windows.
-/// Blind and word-select both replace the scrolling transcript with the current
-/// sentence in focus — blanked — matching 每日英语听力's 盲听 / 选词.
+/// Normal and blind listening are displays of the same transcript pane.
 void _studyModeGroup() {
   String plainOf(WidgetTester tester, Key key) =>
       tester.widget<Text>(find.byKey(key)).textSpan!.toPlainText();
@@ -396,57 +394,10 @@ void _studyModeGroup() {
       expect(plain.replaceAll('_', '').trim(), isNotEmpty);
       // The count stands where in the piece the ear is: sentence 3 of 8.
       expect(find.text('3 / 8'), findsOneWidget);
-      // Blind shows no candidate words — that is word-select's job.
+      // Blind listening does not add a separate text quiz.
       expect(find.byType(OutlinedButton), findsNothing);
     },
   );
-
-  testWidgets('word select offers the removed words as chips and fills a blank', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(700, 600));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
-    final controller = ScrollController();
-    addTearDown(controller.dispose);
-    final cues = List.generate(6, _cue);
-    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
-
-    await tester.pumpWidget(
-      _Harness(
-        controller: controller,
-        track: track,
-        currentCue: cues[1],
-        studyMode: WorkbenchStudyMode.wordSelection,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // The current sentence, blanked, plus the prompt and a chip per blank.
-    expect(find.byType(ListView), findsNothing);
-    expect(find.text('请选择下列单词进行填空'), findsOneWidget);
-    final before = plainOf(
-      tester,
-      const Key('transcript-word-select-sentence'),
-    );
-    final blanks = RegExp(r'_+').allMatches(before).length;
-    final chips = find.byType(OutlinedButton);
-    expect(tester.widgetList(chips), hasLength(blanks));
-    expect(blanks, greaterThan(0));
-
-    // Tapping a chip drops its word into the first empty blank and consumes it.
-    final label =
-        ((tester.widget<OutlinedButton>(chips.first)).child! as Text).data!;
-    await tester.ensureVisible(chips.first);
-    await tester.tap(chips.first);
-    await tester.pumpAndSettle();
-
-    final after = plainOf(tester, const Key('transcript-word-select-sentence'));
-    expect(after, contains(label));
-    expect(RegExp(r'_+').allMatches(after).length, blanks - 1);
-    // The used chip stays visible but disabled, so the pool keeps its shape.
-    expect(tester.widget<OutlinedButton>(chips.first).onPressed, isNull);
-  });
 
   testWidgets('focus modes ask for a sentence when none is playing', (
     tester,
@@ -464,7 +415,7 @@ void _studyModeGroup() {
         controller: controller,
         track: track,
         currentCue: null,
-        studyMode: WorkbenchStudyMode.wordSelection,
+        studyMode: WorkbenchStudyMode.blindListening,
       ),
     );
     await tester.pumpAndSettle();

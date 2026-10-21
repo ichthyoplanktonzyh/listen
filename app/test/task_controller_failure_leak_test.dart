@@ -1,21 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/controllers/coach_dashboard_controller.dart';
 import 'package:llplayer_next/controllers/extensive_listening_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
 import 'package:llplayer_next/controllers/hunting_session_controller.dart';
-import 'package:llplayer_next/controllers/reading_diff_controller.dart';
-import 'package:llplayer_next/controllers/reading_task_controller.dart';
 import 'package:llplayer_next/controllers/review_controller.dart';
 import 'package:llplayer_next/data/repositories/review_repository.dart';
-import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
-import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
-import 'package:llplayer_next/data/repositories/coach_dashboard_repository.dart';
 import 'package:llplayer_next/data/repositories/hunting_repository.dart';
 import 'package:llplayer_next/data/repositories/listening_repository.dart';
-import 'package:llplayer_next/controllers/speaking_task_controller.dart';
-import 'package:llplayer_next/data/repositories/speaking_task_repository.dart';
-import 'package:llplayer_next/controllers/writing_task_controller.dart';
-import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/models/named_failure.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
@@ -35,8 +25,8 @@ import 'package:llplayer_next/services/api_service.dart';
 void main() {
   /// The body the field actually reported, verbatim.
   const envelope =
-      '{"code":"validation_error","message":"recording metadata must not be '
-      'empty","correlation_id":"api-853","retryable":false}';
+      '{"code":"validation_error","message":"listening request was '
+      'rejected","correlation_id":"api-853","retryable":false}';
 
   const leaks = [
     'HttpException',
@@ -46,7 +36,7 @@ void main() {
     '127.0.0.1',
     '62645',
     'validation_error',
-    'recording metadata must not be empty',
+    'listening request was rejected',
     'uri =',
     'retryable',
     '/v1/',
@@ -73,97 +63,6 @@ void main() {
     }
   }
 
-  const readingSource = ReadingTaskSource(
-    anchorCueId: 'cue-1',
-    mediaId: 'media-1',
-    trackId: 'track-1',
-    startMs: 1000,
-    endMs: 9000,
-    sourceLanguage: 'en',
-    responseLanguage: 'zh',
-    transcriptSnapshot: 'A quake struck Mindanao on Monday morning.',
-  );
-  const writingSource = WritingTaskSource(
-    anchorCueId: 'cue-1',
-    mediaId: 'media-1',
-    trackId: 'track-1',
-    startMs: 1000,
-    endMs: 9000,
-    sourceLanguage: 'en',
-    responseLanguage: 'en',
-    transcriptSnapshot: 'A storm delayed the ferry until Tuesday.',
-  );
-  const points = [
-    RubricPointView(
-      pointId: 'main-idea',
-      importance: 'required',
-      statement: 'Main idea',
-    ),
-  ];
-
-  test('a reading task whose rubric lookup fails names the state', () async {
-    // GET /v1/semantic/rubrics?… → 500.
-    final api = failingApi();
-    final controller = ReadingTaskController(
-      repository: LocalReadingTaskRepository(() => api),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.openTask(source: readingSource, templatePoints: points);
-
-    expectNamedState(
-      controller.state.error,
-      'This reading task could not be opened',
-    );
-    expect(controller.state.phase, 'idle');
-  });
-
-  test('a writing task that cannot be opened names the state', () async {
-    final api = failingApi();
-    final controller = WritingTaskController(
-      repository: LocalWritingTaskRepository(() => api),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.openTask(
-      source: writingSource,
-      kind: 'summary',
-      promptSnapshot: 'Summarise the report.',
-      fixedRubricPoints: points,
-    );
-
-    expectNamedState(
-      controller.state.error,
-      'This writing task could not be opened',
-    );
-  });
-
-  test('a speaking task that cannot be opened names the state', () async {
-    final api = failingApi();
-    final controller = SpeakingTaskController(
-      repository: LocalSpeakingTaskRepository(() => api),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.openTask(
-      source: const SpeakingTaskSource(
-        anchorCueId: 'cue-1',
-        mediaId: 'media-1',
-        trackId: 'track-1',
-        startMs: 1000,
-        endMs: 9000,
-        language: 'en',
-        transcriptSnapshot: 'A storm delayed the ferry until Tuesday.',
-      ),
-      fixedRubricPoints: points,
-    );
-
-    expectNamedState(
-      controller.state.error,
-      'This speaking task could not be opened',
-    );
-  });
-
   test('a review queue that cannot be loaded names the state', () async {
     // GET /v1/review/items?limit=20 → 500.
     final controller = ReviewController(LocalReviewRepository(failingApi()));
@@ -172,17 +71,6 @@ void main() {
     await controller.load();
 
     expectNamedState(controller.state.error, 'Could not load review queue');
-  });
-
-  test('a coach view that cannot be loaded names the state', () async {
-    final controller = CoachDashboardController(
-      LocalCoachDashboardRepository(failingApi()),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.load();
-
-    expectNamedState(controller.state.error, 'coachDashboardLoadFailed');
   });
 
   test('a hunting list that cannot be loaded names the state', () async {
@@ -226,19 +114,4 @@ void main() {
       );
     },
   );
-
-  test('a comparison that cannot be built names the state', () async {
-    final api = failingApi();
-    final controller = ReadingDiffController(
-      repository: LocalReadingTaskRepository(() => api),
-    );
-    addTearDown(controller.dispose);
-
-    await controller.loadDiff(readingSource);
-
-    expectNamedState(
-      controller.state.error,
-      'This comparison could not be built',
-    );
-  });
 }

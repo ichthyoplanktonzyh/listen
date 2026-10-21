@@ -5,19 +5,17 @@ import 'package:flutter/services.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
-import '../../models/practice.dart';
-import '../../models/production_corpus.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/motion.dart';
 import '../../theme/spacing.dart';
-import '../common/capability_viz.dart';
+import '../../theme/typography.dart';
+import '../common/capability_viz.dart' show capabilityAssessmentColor;
 import '../common/listen_loading.dart';
 import 'dictionary_inline_clip_player.dart';
 import 'entry_detail_parts.dart';
 import 'entry_section_anchors.dart';
 import 'pronunciation_button.dart';
-import '../../theme/typography.dart';
 
 /// The leaf widgets of this surface live in `entry_detail_parts.dart`; the
 /// corpus tile is re-exported so existing importers keep one entry point.
@@ -39,30 +37,21 @@ int? clipSpeechRateWpm(String sentence, int startMs, int endMs) {
 
 /// The listening-dictionary detail surface keeps the complete entry-level
 /// occurrence list authoritative while offering optional user-owned sense
-/// folders for organization. The optional callbacks light up Slice 3/4 behaviour — corpus enrichment, capability
-/// override editing, definition/note editing, upgrade-suggestion resolution,
-/// per-clip review exits, and external reference fallbacks.
+/// folders for organization. Its callbacks support corpus enrichment, manual
+/// listening overrides, definition and note editing, clip review, and external
+/// reference lookup.
 class ListeningDictionaryEntryView extends StatefulWidget {
   const ListeningDictionaryEntryView({
     super.key,
     required this.details,
-    this.showProductionCorpus = false,
-    this.productionHits,
-    this.productionLoadFailed = false,
-    this.onOpenProductionAttempt,
     this.slicePlayer,
     required this.onPlay,
     required this.onMark,
-    this.onShadowing,
     this.onSearchLibrary,
     this.onPlayCorpus,
     this.onCollectCorpus,
-    this.suggestions = const [],
-    this.suggestionsLoading = false,
     this.pronunciationLoading = false,
-    this.onConfirmSuggestion,
-    this.onRejectSuggestion,
-    this.onCapabilityOverride,
+    this.onListeningOverride,
     this.onLoadEvidenceHistory,
     this.onSaveContent,
     this.onCreateSenseFolder,
@@ -82,18 +71,9 @@ class ListeningDictionaryEntryView extends StatefulWidget {
 
   final LexicalEntryDetails details;
 
-  /// The vocabulary screen enables this section; reusable detail surfaces
-  /// remain layout-compatible until they opt into the projection.
-  final bool showProductionCorpus;
-
-  /// `null` while loading; an empty list is an honest no-output state.
-  final List<ProductionCorpusHitView>? productionHits;
-  final bool productionLoadFailed;
-  final ValueChanged<ProductionCorpusHitView>? onOpenProductionAttempt;
   final SlicePlayerController? slicePlayer;
   final ValueChanged<LexicalOccurrence> onPlay;
   final Future<bool> Function(LexicalOccurrence occurrence, bool heard) onMark;
-  final Future<void> Function(LexicalOccurrence occurrence)? onShadowing;
 
   /// Searches the local corpus for more contexts of this entry.
   final Future<List<CorpusOccurrence>> Function()? onSearchLibrary;
@@ -103,29 +83,17 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   /// Returns true when persisted.
   final Future<bool> Function(CorpusOccurrence occurrence)? onCollectCorpus;
 
-  /// Pending listening upgrade suggestions for this entry.
-  final List<UpgradeSuggestion> suggestions;
-
-  /// True while the suggestion probe is still in flight. Decoration data
-  /// announces its own waiting (#82 / V6) instead of holding the identity
-  /// card hostage — an empty list with this false is an honest "none".
-  final bool suggestionsLoading;
-
   /// True while the dictionary provider lookup that yields
   /// [pronunciationAudioUrl] is still in flight. Same rule as above: the
   /// pronunciation control waits by itself, nothing else does.
   final bool pronunciationLoading;
-  final Future<void> Function(UpgradeSuggestion suggestion)?
-  onConfirmSuggestion;
-  final Future<void> Function(UpgradeSuggestion suggestion)? onRejectSuggestion;
 
-  /// Sets or clears (conclusion == null) one channel's user override.
-  final Future<void> Function(String capability, String? conclusion)?
-  onCapabilityOverride;
+  /// Sets or clears the user's manual listening conclusion.
+  final Future<void> Function(String? conclusion)? onListeningOverride;
 
   /// Loads one page of the append-only evidence trail (issue #2). Read-only:
-  /// the section renders history and never writes. `capability == null` means
-  /// all channels; paging via [offset].
+  /// the section renders listening history and never writes; paging via
+  /// [offset].
   final Future<List<LearningObservationView>> Function({
     String? capability,
     int offset,
@@ -442,11 +410,6 @@ class _ListeningDictionaryEntryViewState
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final occurrences = _sortedOccurrences();
-    final productionDocuments = <String, ProductionCorpusHitView>{};
-    for (final hit
-        in widget.productionHits ?? const <ProductionCorpusHitView>[]) {
-      productionDocuments.putIfAbsent(hit.document.id, () => hit);
-    }
     final unassignedOccurrences = occurrences
         .where((occurrence) => !_assignedOccurrenceIds.contains(occurrence.id))
         .toList(growable: false);
@@ -455,9 +418,8 @@ class _ListeningDictionaryEntryViewState
     // eight-part scroll. Absent capabilities drop their section rather than
     // showing an empty anchor.
     _sections = [
-      // Evidence is a fixed segment: the four-channel override lives here even
-      // when no history loader is wired, so the conclusion is always editable
-      // next to what it was drawn from.
+      // Evidence is a fixed segment: the manual listening conclusion stays
+      // editable next to the source that informed it.
       EntryDetailSection(
         id: 'evidence',
         anchorKey: _anchorKey('evidence'),
@@ -471,13 +433,6 @@ class _ListeningDictionaryEntryViewState
         count: occurrences.isEmpty ? null : occurrences.length,
         child: _clipsSection(l, occurrences, unassignedOccurrences),
       ),
-      if (widget.showProductionCorpus)
-        EntryDetailSection(
-          id: 'output',
-          anchorKey: _anchorKey('output'),
-          label: l.text('dictionaryAnchorOutput'),
-          child: _outputSection(l, productionDocuments),
-        ),
       if (widget.onCreateSenseFolder != null)
         EntryDetailSection(
           id: 'senses',
@@ -506,13 +461,6 @@ class _ListeningDictionaryEntryViewState
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
           child: _identityCard(l),
         ),
-        // The suggestion banner stays pinned above the anchors (V4) and waits
-        // for itself.
-        if (widget.suggestionsLoading || widget.suggestions.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, ListenSpacing.gap12, 24, 0),
-            child: _suggestionRegion(l),
-          ),
         const SizedBox(height: ListenSpacing.gap8),
         EntrySectionAnchorBar(
           sections: _sections,
@@ -544,8 +492,7 @@ class _ListeningDictionaryEntryViewState
     );
   }
 
-  /// Who this word is: the form, its kind, the four-channel ring. Built purely
-  /// from `details`, which is why it never waits (#82 / V6).
+  /// The identity card also shows the user's current listening conclusion.
   Widget _identityCard(AppLocalizations l) {
     final colors = Theme.of(context).colorScheme;
     return Row(
@@ -583,12 +530,13 @@ class _ListeningDictionaryEntryViewState
           ),
         ),
         const SizedBox(width: ListenSpacing.gap12),
-        CapabilityRing(
-          assessments: capabilityProfileAssessments(
-            widget.details.capabilityProfile,
+        Icon(
+          Icons.hearing_outlined,
+          color: capabilityAssessmentColor(
+            Theme.of(context).colorScheme,
+            widget.details.capabilityProfile?.listening.effectiveAssessment ??
+                'unassessed',
           ),
-          size: 40,
-          withTooltip: true,
         ),
       ],
     );
@@ -628,36 +576,6 @@ class _ListeningDictionaryEntryViewState
     return const SizedBox.shrink();
   }
 
-  /// Pending upgrade suggestions, with their own waiting line.
-  Widget _suggestionRegion(AppLocalizations l) {
-    if (widget.suggestions.isEmpty) {
-      return Row(
-        key: const Key('dictionary-suggestions-loading'),
-        children: [
-          const ListenLoading.inline(size: 16),
-          const SizedBox(width: ListenSpacing.gap8),
-          Text(
-            l.text('dictionarySuggestionsLoading'),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final suggestion in widget.suggestions)
-          EntrySuggestionBanner(
-            suggestion: suggestion,
-            onConfirm: widget.onConfirmSuggestion,
-            onReject: widget.onRejectSuggestion,
-          ),
-      ],
-    );
-  }
-
   /// Section 1 · evidence: what actually happened, and the user's override of
   /// the conclusion drawn from it.
   Widget _evidenceSection(AppLocalizations l) => Column(
@@ -672,7 +590,7 @@ class _ListeningDictionaryEntryViewState
       ],
       EntryCapabilityEditor(
         profile: widget.details.capabilityProfile,
-        onOverride: widget.onCapabilityOverride,
+        onListeningOverride: widget.onListeningOverride,
       ),
     ],
   );
@@ -740,9 +658,6 @@ class _ListeningDictionaryEntryViewState
           controller: widget.slicePlayer!,
           occurrence: _activeOccurrence!,
           target: _activeOccurrence!.originalForm ?? entry.displayForm,
-          onShadowing: widget.onShadowing == null
-              ? null
-              : () => widget.onShadowing!(_activeOccurrence!),
           onClose: () {
             unawaited(widget.slicePlayer!.close());
             setState(() => _activeOccurrence = null);
@@ -909,110 +824,6 @@ class _ListeningDictionaryEntryViewState
       ),
     ),
   );
-
-  /// Section 3 · my output: what the learner has actually produced with this
-  /// word. `null` hits mean still loading; failure and emptiness stay
-  /// distinguishable (V6 — this section waits alone).
-  Widget _outputSection(
-    AppLocalizations l,
-    Map<String, ProductionCorpusHitView> productionDocuments,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(l.text('myOutput'), style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: ListenSpacing.gap4),
-      if (widget.productionHits == null && !widget.productionLoadFailed)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Row(
-            key: const Key('dictionary-output-loading'),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListenLoading.inline(size: 16),
-              const SizedBox(width: ListenSpacing.gap8),
-              Text(
-                l.text('myOutputLoading'),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        )
-      else if (widget.productionLoadFailed)
-        Text(
-          l.text('myOutputUnavailable'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        )
-      else if (widget.productionHits!.isEmpty)
-        Text(
-          l.text('myOutputEmpty'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        )
-      else ...[
-        Text(
-          l
-              .text(
-                widget.productionHits!.length == 1
-                    ? 'myOutputCountOne'
-                    : 'myOutputCount',
-              )
-              .replaceAll('{count}', '${widget.productionHits!.length}'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        for (final hit in productionDocuments.values)
-          ListTile(
-            key: ValueKey('production-output-${hit.document.id}'),
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              hit.document.responseText,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              '${_assistanceLabel(l, hit.document.assistance)} · '
-              '${l.text('revision')} ${hit.document.responseRevision}',
-            ),
-            trailing: Wrap(
-              spacing: 4,
-              children: [
-                if (widget.onSpeakSynthetic != null)
-                  PronunciationButton(
-                    key: ValueKey('production-speech-${hit.document.id}'),
-                    tooltip: l.text('readAloudSynthetic'),
-                    busy: widget.speechBusy,
-                    synthetic: true,
-                    onPressed: () => widget.onSpeakSynthetic!(
-                      hit.document.responseText,
-                      'production_corpus_readback',
-                    ),
-                  ),
-                const Icon(Icons.open_in_new),
-              ],
-            ),
-            onTap: widget.onOpenProductionAttempt == null
-                ? null
-                : () => widget.onOpenProductionAttempt!(hit),
-          ),
-      ],
-    ],
-  );
-
-  String _assistanceLabel(AppLocalizations l, String value) => switch (value) {
-    'content_anchored' => l.text('productionAssistanceContent'),
-    'source_reconstruction' => l.text('productionAssistanceReconstruction'),
-    'learner_revision' => l.text('productionAssistanceRevision'),
-    'explicit_target' => l.text('productionAssistanceTarget'),
-    'model_suggested' => l.text('productionAssistanceModel'),
-    'direct_imitation' => l.text('productionAssistanceImitation'),
-    _ => l.text('productionAssistanceUnknown'),
-  };
 
   Widget _senseFolderSection(AppLocalizations l) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,

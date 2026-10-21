@@ -50,7 +50,6 @@ void main() {
             onContinue: onContinue ?? () {},
             onOpenMedia: () {},
             onPlayMedia: (_) {},
-            onOpenDocument: (_) {},
           ),
         ),
       ),

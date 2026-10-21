@@ -18,7 +18,6 @@ class TokenLine extends StatefulWidget {
     required this.cue,
     required this.profiles,
     this.capabilityProfiles = const {},
-    this.capabilityDisplayChannel,
     required this.showStyles,
     required this.onWord,
     this.onWordTap,
@@ -50,7 +49,6 @@ class TokenLine extends StatefulWidget {
   final Cue cue;
   final Map<String, LexicalEntry> profiles;
   final Map<String, LexicalCapabilityProfile> capabilityProfiles;
-  final String? capabilityDisplayChannel;
   final bool showStyles;
   final double fontSize;
   final String? fontFamily;
@@ -146,7 +144,6 @@ class _TokenLineState extends State<TokenLine> {
   Map<String, LexicalEntry> get profiles => widget.profiles;
   Map<String, LexicalCapabilityProfile> get capabilityProfiles =>
       widget.capabilityProfiles;
-  String? get capabilityDisplayChannel => widget.capabilityDisplayChannel;
   bool get showStyles => widget.showStyles;
   double get fontSize => widget.fontSize;
   String? get fontFamily => widget.fontFamily;
@@ -540,9 +537,17 @@ class _TokenLineState extends State<TokenLine> {
       }
       final canonical = candidate.canonicalForm;
       final phraseDetails = phraseEntries[canonical];
-      final status =
-          _statusFromProfile(phraseDetails?.capabilityProfile) ??
-          phraseDetails?.entry.status;
+      final listeningAssessment =
+          phraseDetails?.capabilityProfile?.listening.effectiveAssessment;
+      final legacyStatus = phraseDetails?.entry.status;
+      final status = listeningAssessment == 'acquired'
+          ? 'known_recognized'
+          : listeningAssessment == 'not_acquired'
+          ? 'known_not_recognized'
+          : legacyStatus == 'known_recognized' ||
+                legacyStatus == 'known_not_recognized'
+          ? legacyStatus
+          : null;
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
@@ -660,37 +665,13 @@ class _TokenLineState extends State<TokenLine> {
   String? _effectiveDisplayStatus(String? normalized) {
     if (normalized == null) return null;
     final cap = capabilityProfiles[normalized];
-    if (cap != null) {
-      return switch (capabilityDisplayChannel) {
-        'reading' => _statusForDimension(cap.reading, reading: true),
-        'listening' => _statusForDimension(cap.listening, reading: false),
-        _ => _statusFromProfile(cap),
-      };
-    }
-    return profiles[normalized]?.status;
-  }
-
-  static String? _statusForDimension(
-    CapabilityDimensionState dimension, {
-    required bool reading,
-  }) => switch (dimension.effectiveAssessment) {
-    'not_acquired' => reading ? 'unknown_meaning' : 'known_not_recognized',
-    'acquired' => 'known_recognized',
-    _ => null,
-  };
-
-  static String? _statusFromProfile(LexicalCapabilityProfile? cap) {
-    if (cap == null) return null;
-    final reading = cap.reading.effectiveAssessment;
-    final listening = cap.listening.effectiveAssessment;
-    if (reading == 'not_acquired') return 'unknown_meaning';
-    if (reading == 'acquired' && listening == 'not_acquired') {
-      return 'known_not_recognized';
-    }
-    if (reading == 'acquired' && listening == 'acquired') {
-      return 'known_recognized';
-    }
-    return null;
+    final assessment = cap?.listening.effectiveAssessment;
+    if (assessment == 'not_acquired') return 'known_not_recognized';
+    if (assessment == 'acquired') return 'known_recognized';
+    final legacy = profiles[normalized]?.status;
+    return legacy == 'known_not_recognized' || legacy == 'known_recognized'
+        ? legacy
+        : null;
   }
 
   Color _phraseColor(BuildContext context, String? status) => switch (status) {

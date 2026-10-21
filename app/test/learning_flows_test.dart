@@ -7,10 +7,6 @@ import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/learning_flow_view_models.dart';
 import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
-import 'package:llplayer_next/controllers/practice_actions_coordinator.dart';
-import 'package:llplayer_next/controllers/practice_controller.dart';
-import 'package:llplayer_next/controllers/settings_controller.dart';
-import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/data/repositories/lexical_repository.dart';
 import 'package:llplayer_next/localization.dart';
@@ -160,34 +156,12 @@ void main() {
     final player = PlayerController();
     final subtitle = SubtitleController();
     final adapter = DesktopPlayerAdapter();
-    final recordingAdapter = DesktopPlayerAdapter();
     addTearDown(adapter.dispose);
-    addTearDown(recordingAdapter.dispose);
     final playback = PlaybackActionsCoordinator(
       adapter: adapter,
       player: player,
       subtitle: subtitle,
     )..bind(isMounted: () => true, reloadLearningEntries: () async {});
-    final practice = PracticeController();
-    final slicePlayer = SlicePlayerController();
-    addTearDown(practice.dispose);
-    addTearDown(slicePlayer.dispose);
-    final practiceActions =
-        PracticeActionsCoordinator(
-          practice: practice,
-          player: player,
-          subtitle: subtitle,
-          learning: LearningController(),
-          slicePlayer: slicePlayer,
-          playbackActions: playback,
-          settings: SettingsController(),
-          adapter: adapter,
-          recordingAdapter: recordingAdapter,
-        )..bind(
-          isMounted: () => true,
-          refreshDiagnosis: () async {},
-          seekCue: (_) async {},
-        );
     final hunting = HuntingController();
     final auxiliaryAudio = AuxiliaryAudioController();
     addTearDown(hunting.dispose);
@@ -201,7 +175,6 @@ void main() {
           semanticSearchViewModel: null,
           playerController: player,
           playbackActions: playback,
-          practiceActions: practiceActions,
           huntingController: hunting,
           auxiliaryAudio: auxiliaryAudio,
           pauseBackgroundPlayback: () async {},

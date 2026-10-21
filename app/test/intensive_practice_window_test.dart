@@ -54,16 +54,6 @@ void main() {
                 onNavigate: (delta) async => navigated = delta,
                 onSubmit: () async {},
                 onSaveReview: () async {},
-                onStartRecording: () async {},
-                onStopRecording: () async {},
-                onCancelRecording: () async {},
-                onOpenMicrophoneSettings: () async {},
-                onPlayReference: () async {},
-                onPlayRecording: () async {},
-                onPlayAba: () async {},
-                onDeleteRecording: () async {},
-                onShadowingRateChanged: (_) async {},
-                onShadowingStepChanged: (_) async {},
                 onClose: () async => closed = true,
               ),
             ],
@@ -85,106 +75,6 @@ void main() {
     expect(closed, isTrue);
     controller.dispose();
   });
-
-  testWidgets(
-    'shadowing panel exposes speed, expansion, and recording controls',
-    (tester) async {
-      final api = _practiceApi();
-      final controller = PracticeController(
-        repository: LocalPracticeRepository(() => api),
-      );
-      const cue = Cue(
-        id: 'sentence-shadow',
-        index: 0,
-        start: Duration(milliseconds: 100),
-        end: Duration(milliseconds: 1500),
-        text: 'One two three.',
-        tokens: [],
-      );
-      const chunks = [
-        DisplayChunk(
-          index: 0,
-          tokenStart: 0,
-          tokenEnd: 0,
-          text: 'One',
-          start: Duration(milliseconds: 100),
-          end: Duration(milliseconds: 500),
-        ),
-        DisplayChunk(
-          index: 1,
-          tokenStart: 1,
-          tokenEnd: 1,
-          text: 'two',
-          start: Duration(milliseconds: 500),
-          end: Duration(milliseconds: 900),
-        ),
-        DisplayChunk(
-          index: 2,
-          tokenStart: 2,
-          tokenEnd: 2,
-          text: 'three',
-          start: Duration(milliseconds: 900),
-          end: Duration(milliseconds: 1500),
-        ),
-      ];
-      await controller.startShadowing(
-        cue: cue,
-        chunk: chunks.first,
-        chunks: chunks,
-        mediaId: 'media-1',
-        trackId: 'track-1',
-        mediaTimeMs: (value) => value.inMilliseconds,
-      );
-      var originalPlays = 0;
-      var recordStarts = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          localizationsDelegates: const [AppLocalizations.delegate],
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: Stack(
-              children: [
-                IntensivePracticeWindow(
-                  controller: controller,
-                  currentSentence: 1,
-                  totalSentences: 1,
-                  canGoPrevious: false,
-                  canGoNext: false,
-                  isPlaying: false,
-                  onReplay: () async {},
-                  onTogglePlayback: () async {},
-                  onNavigate: (_) async {},
-                  onSubmit: () async {},
-                  onSaveReview: () async {},
-                  onStartRecording: () async => recordStarts++,
-                  onStopRecording: () async {},
-                  onCancelRecording: () async {},
-                  onOpenMicrophoneSettings: () async {},
-                  onPlayReference: () async => originalPlays++,
-                  onPlayRecording: () async {},
-                  onPlayAba: () async {},
-                  onDeleteRecording: () async {},
-                  onShadowingRateChanged: (_) async {},
-                  onShadowingStepChanged: (_) async {},
-                  onClose: () async {},
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('Shadowing'), findsOneWidget);
-      expect(find.text('0.9×'), findsOneWidget);
-      expect(find.text('1 + 2'), findsOneWidget);
-      expect(find.text('Objective comparison · no score'), findsNothing);
-      await tester.tap(find.text('Play original'));
-      await tester.tap(find.text('Start recording'));
-      expect(originalPlays, 1);
-      expect(recordStarts, 1);
-      controller.dispose();
-    },
-  );
 
   testWidgets('window keeps prompt visible while the next item is in flight', (
     tester,
@@ -237,16 +127,6 @@ void main() {
                 onNavigate: (_) async {},
                 onSubmit: () async {},
                 onSaveReview: () async {},
-                onStartRecording: () async {},
-                onStopRecording: () async {},
-                onCancelRecording: () async {},
-                onOpenMicrophoneSettings: () async {},
-                onPlayReference: () async {},
-                onPlayRecording: () async {},
-                onPlayAba: () async {},
-                onDeleteRecording: () async {},
-                onShadowingRateChanged: (_) async {},
-                onShadowingStepChanged: (_) async {},
                 onClose: () async {},
               ),
             ],
@@ -280,73 +160,6 @@ void main() {
     await tester.pump();
     expect(controller.item, isNotNull);
     expect(find.text('Listen, then type what you heard.'), findsOneWidget);
-    controller.dispose();
-  });
-
-  testWidgets('cross-media shadowing hides primary sentence navigation', (
-    tester,
-  ) async {
-    final api = _practiceApi();
-    final controller = PracticeController(
-      repository: LocalPracticeRepository(() => api),
-    );
-    await controller.startExternalShadowing(
-      mediaPath: '/tmp/source.mp4',
-      mediaId: 'source-media',
-      trackId: 'source-track',
-      sentenceId: 'source-sentence',
-      promptText: 'Only this source sentence.',
-      startMs: 100,
-      endMs: 900,
-    );
-    var toggled = false;
-    var navigated = false;
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: const [AppLocalizations.delegate],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: Stack(
-            children: [
-              IntensivePracticeWindow(
-                controller: controller,
-                currentSentence: 9,
-                totalSentences: 20,
-                canGoPrevious: true,
-                canGoNext: true,
-                showSentenceNavigation: false,
-                isPlaying: false,
-                onReplay: () async {},
-                onTogglePlayback: () async => toggled = true,
-                onNavigate: (_) async => navigated = true,
-                onSubmit: () async {},
-                onSaveReview: () async {},
-                onStartRecording: () async {},
-                onStopRecording: () async {},
-                onCancelRecording: () async {},
-                onOpenMicrophoneSettings: () async {},
-                onPlayReference: () async {},
-                onPlayRecording: () async {},
-                onPlayAba: () async {},
-                onDeleteRecording: () async {},
-                onShadowingRateChanged: (_) async {},
-                onShadowingStepChanged: (_) async {},
-                onClose: () async {},
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byTooltip('Previous sentence'), findsNothing);
-    expect(find.byTooltip('Next sentence'), findsNothing);
-    expect(find.text('Sentence 9 of 20'), findsNothing);
-    // Play/pause stays available in the keyboard-hint strip even when
-    // sentence navigation is suppressed for a cross-media source.
-    await tester.tap(find.text('Play / pause'));
-    expect(toggled, isTrue);
-    expect(navigated, isFalse);
     controller.dispose();
   });
 }

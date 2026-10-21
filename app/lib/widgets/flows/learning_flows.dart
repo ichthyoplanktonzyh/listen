@@ -7,25 +7,17 @@ import '../../controllers/learning_assets_view_models.dart';
 import '../../controllers/learning_flow_view_models.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
-import '../../controllers/practice_actions_coordinator.dart';
-import '../../controllers/personal_expression_view_model.dart';
 import '../../controllers/semantic_search_view_model.dart';
 import '../../controllers/slice_player_controller.dart';
 import '../../controllers/vocabulary_view_model.dart';
 import '../../learning_assets_ui.dart';
 import '../../localization.dart';
-import '../../models/personal_expression.dart';
 import '../../models/types.dart';
-import '../../screens/personal_expression_screen.dart';
 import '../../screens/vocabulary_screen.dart';
 
-/// Dialog- and navigation-driven vocabulary/learning flows extracted from the
+/// Dialog- and navigation-driven listening flows extracted from the
 /// composition root: learning assets/resources, phrase candidates, lemma
-/// correction, the vocabulary screen and external word-list import. Parameter
-/// names mirror the host's controller fields. Review, coach and expression
-/// are shell routes now (see `widgets/flows/shell_learning_routes.dart`),
-/// so the flows kept here are the ones that genuinely launch a task on top of
-/// the shell rather than navigate to a destination.
+/// correction, the vocabulary screen and external word-list import.
 
 /// Gives route-scoped notifiers an explicit owner without pushing disposal
 /// into the reusable screen widgets themselves.
@@ -52,52 +44,14 @@ class _OwnedNotifiersRouteState extends State<_OwnedNotifiersRoute> {
   Widget build(BuildContext context) => widget.child;
 }
 
-Future<PersonalExpressionDetailOutcome> openPersonalExpressionDetailFlow({
-  required BuildContext context,
-  required SentencePatternAssetView pattern,
-  required PersonalExpressionDetailViewModelFactory createViewModel,
-  Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
-  Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
-}) async {
-  final viewModel = createViewModel(pattern);
-  final outcome = await Navigator.of(context)
-      .push<PersonalExpressionDetailOutcome>(
-        MaterialPageRoute(
-          builder: (_) => _OwnedNotifiersRoute(
-            notifiers: [viewModel],
-            child: PersonalExpressionDetailScreen(
-              viewModel: viewModel,
-              pattern: pattern,
-              onPlaySource: onPlaySource,
-              onStartSpeaking: onStartSpeaking == null
-                  ? null
-                  : (value) async {
-                      Navigator.of(context).pop();
-                      await onStartSpeaking(value);
-                    },
-            ),
-          ),
-        ),
-      );
-  return outcome ?? PersonalExpressionDetailOutcome.closed;
-}
-
 Future<void> openLearningAssetsFlow({
   required BuildContext context,
   required LearningAssetsViewModel? viewModel,
-  required PersonalExpressionViewModel Function()?
-  createPersonalExpressionViewModel,
-  required PersonalExpressionDetailViewModelFactory?
-  createPersonalExpressionDetailViewModel,
   required PlayerController playerController,
   required Future<void> Function(Map<String, dynamic> occurrence)
   openSlicePlayback,
-  Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
-  Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
 }) async {
-  if (viewModel == null ||
-      createPersonalExpressionViewModel == null ||
-      createPersonalExpressionDetailViewModel == null) {
+  if (viewModel == null) {
     viewModel?.dispose();
     // Honest unavailable state: opening the assets screen is
     // user-triggered, so name the cause and recovery instead of swallowing
@@ -112,72 +66,11 @@ Future<void> openLearningAssetsFlow({
         notifiers: [viewModel],
         child: LearningAssetsScreen(
           viewModel: viewModel,
-          personalExpressionBuilder: (_) {
-            final personalExpressionViewModel =
-                createPersonalExpressionViewModel();
-            return _OwnedNotifiersRoute(
-              notifiers: [personalExpressionViewModel],
-              child: PersonalExpressionScreen(
-                viewModel: personalExpressionViewModel,
-                onOpenPattern: (context, pattern) =>
-                    openPersonalExpressionDetailFlow(
-                      context: context,
-                      pattern: pattern,
-                      createViewModel: createPersonalExpressionDetailViewModel,
-                      onPlaySource: onPlaySource,
-                      onStartSpeaking: onStartSpeaking,
-                    ),
-                language: personalExpressionViewModel.language,
-                onPlaySource: onPlaySource,
-                onStartSpeaking: onStartSpeaking,
-              ),
-            );
-          },
         ),
       ),
     ),
   );
   if (occurrence != null) await openSlicePlayback(occurrence);
-}
-
-Future<void> openPersonalExpressionFlow({
-  required BuildContext context,
-  required PersonalExpressionViewModel? viewModel,
-  required PersonalExpressionDetailViewModelFactory? createDetailViewModel,
-  required PlayerController playerController,
-  PersonalExpressionSourceView? initialSource,
-  Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
-  Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
-}) async {
-  if (viewModel == null || createDetailViewModel == null) {
-    viewModel?.dispose();
-    // Honest unavailable state: the expressions screen is a standing
-    // user destination; a dead click would hide why it will not open.
-    final l = AppLocalizations.of(context);
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-    return;
-  }
-  await Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      builder: (_) => _OwnedNotifiersRoute(
-        notifiers: [viewModel],
-        child: PersonalExpressionScreen(
-          viewModel: viewModel,
-          onOpenPattern: (context, pattern) => openPersonalExpressionDetailFlow(
-            context: context,
-            pattern: pattern,
-            createViewModel: createDetailViewModel,
-            onPlaySource: onPlaySource,
-            onStartSpeaking: onStartSpeaking,
-          ),
-          language: viewModel.language,
-          initialSource: initialSource,
-          onPlaySource: onPlaySource,
-          onStartSpeaking: onStartSpeaking,
-        ),
-      ),
-    ),
-  );
 }
 
 Future<void> openLearningResourcesFlow({
@@ -313,12 +206,10 @@ Future<void> showVocabularyFlow({
   required SemanticSearchViewModel? semanticSearchViewModel,
   required PlayerController playerController,
   required PlaybackActionsCoordinator playbackActions,
-  required PracticeActionsCoordinator practiceActions,
   required HuntingController huntingController,
   required AuxiliaryAudioController auxiliaryAudio,
   required Future<void> Function() pauseBackgroundPlayback,
   String? initialEntryId,
-  bool openCrossModalReview = false,
 }) async {
   if (viewModel == null || semanticSearchViewModel == null) {
     viewModel?.dispose();
@@ -348,9 +239,7 @@ Future<void> showVocabularyFlow({
           huntingController: huntingController,
           auxiliaryAudio: auxiliaryAudio,
           initialEntryId: initialEntryId,
-          openCrossModalReviewOnStart: openCrossModalReview,
           onPauseBackgroundPlayback: pauseBackgroundPlayback,
-          onStartShadowing: practiceActions.startExternalShadowing,
         ),
       ),
     ),

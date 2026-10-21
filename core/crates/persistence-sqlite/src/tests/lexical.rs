@@ -371,7 +371,7 @@ fn capability_projection_and_override_round_trip_without_losing_evidence_state()
         LexicalCapability::Reading,
         Some(CapabilityProjection {
             conclusion: CapabilityConclusion::Acquired,
-            source: CapabilityProjectionSource::EvidenceProjection,
+            source: CapabilityProjectionSource::Import,
             algorithm_version: "test-projection-v1".into(),
             confidence: None,
             evidence_as_of_ms: None,
@@ -386,7 +386,7 @@ fn capability_projection_and_override_round_trip_without_losing_evidence_state()
         LexicalCapability::Listening,
         Some(CapabilityProjection {
             conclusion: CapabilityConclusion::NotAcquired,
-            source: CapabilityProjectionSource::EvidenceProjection,
+            source: CapabilityProjectionSource::Import,
             algorithm_version: "test-projection-v1".into(),
             confidence: None,
             evidence_as_of_ms: None,
@@ -458,7 +458,7 @@ fn list_lexical_entries_filters_by_effective_capability_assessment() {
 
     let projection = |conclusion, at| CapabilityProjection {
         conclusion,
-        source: CapabilityProjectionSource::EvidenceProjection,
+        source: CapabilityProjectionSource::Import,
         algorithm_version: "test-v1".into(),
         confidence: None,
         evidence_as_of_ms: None,
@@ -1310,197 +1310,5 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
             .iter()
             .any(|h| h.kind == DiagnosisKind::InsufficientInformation),
         "unassessed should produce insufficient information"
-    );
-}
-
-#[test]
-fn upgrade_suggestion_confirm_updates_listening_projection() {
-    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let services = AppServices::new(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-    )
-    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
-    let entry = upsert_word_asset(
-        &services,
-        "en",
-        "confirm",
-        "confirm",
-        Some(LearningStatus::KnownNotRecognized),
-        None,
-    );
-    let profile = services
-        .lexical_learning()
-        .lexical_capability_profile(&entry.entry.id)
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        profile.effective_assessment(LexicalCapability::Listening),
-        CapabilityAssessment::NotAcquired,
-    );
-
-    let suggestion = UpgradeSuggestion {
-        id: UpgradeSuggestionId::parse("cap-upgrade-1").unwrap(),
-        lexical_entry_id: entry.entry.id.clone(),
-        lexical_display_form: "confirm".into(),
-        previous_status: LearningStatus::KnownNotRecognized,
-        suggested_status: LearningStatus::KnownRecognized,
-        status: UpgradeSuggestionStatus::Pending,
-        evidence_context_count: 5,
-        evidence_ids: vec![],
-        threshold: 5,
-        evidence_class: "heuristic_proxy".into(),
-        created_at_ms: 100,
-        resolved_at_ms: None,
-        cooldown_until_ms: None,
-        capability: Some(LexicalCapability::Listening),
-        previous_assessment: Some(CapabilityAssessment::NotAcquired),
-        suggested_assessment: Some(CapabilityAssessment::Acquired),
-    };
-    repo.save_upgrade_suggestion(&suggestion).unwrap();
-
-    let confirmed = services
-        .lexical_learning()
-        .confirm_upgrade_suggestion(&suggestion.id)
-        .unwrap();
-    assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
-
-    let audit = services
-        .projection_review()
-        .audit_and_refresh(&entry.entry.id)
-        .unwrap();
-    let proposal = audit
-        .proposals
-        .iter()
-        .find(|value| {
-            value.capability == LexicalCapability::Listening
-                && value.status == ProjectionProposalStatus::Pending
-        })
-        .unwrap();
-    services
-        .projection_review()
-        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
-        .unwrap();
-
-    let profile = services
-        .lexical_learning()
-        .lexical_capability_profile(&entry.entry.id)
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        profile.effective_assessment(LexicalCapability::Listening),
-        CapabilityAssessment::Acquired,
-    );
-    let details = services
-        .lexical_learning()
-        .lexical_details(&entry.entry.id)
-        .unwrap()
-        .unwrap();
-    assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
-
-    // ADR 0017 decision 4: the confirmation itself joins the observation
-    // stream so the transitional direct projection write can be replaced later.
-    let confirmations: Vec<_> = repo
-        .list_learning_observations(&entry.entry.id, Some(LexicalCapability::Listening), 10, 0)
-        .unwrap()
-        .into_iter()
-        .filter(|observation| observation.task_type == ObservationTaskType::UpgradeConfirmation)
-        .collect();
-    assert_eq!(confirmations.len(), 1);
-    assert_eq!(confirmations[0].outcome, ObservationOutcome::Success);
-    assert_eq!(confirmations[0].origin, ObservationOrigin::UserMarking);
-    assert_eq!(
-        confirmations[0].source_ref.as_deref(),
-        Some(suggestion.id.as_str())
-    );
-}
-
-#[test]
-fn legacy_suggestion_without_capability_confirms_via_profile_authority() {
-    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let services = AppServices::new(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-    )
-    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
-    let entry = upsert_word_asset(
-        &services,
-        "en",
-        "legacy",
-        "legacy",
-        Some(LearningStatus::KnownNotRecognized),
-        None,
-    );
-    let suggestion = UpgradeSuggestion {
-        id: UpgradeSuggestionId::parse("legacy-upgrade-1").unwrap(),
-        lexical_entry_id: entry.entry.id.clone(),
-        lexical_display_form: "legacy".into(),
-        previous_status: LearningStatus::KnownNotRecognized,
-        suggested_status: LearningStatus::KnownRecognized,
-        status: UpgradeSuggestionStatus::Pending,
-        evidence_context_count: 5,
-        evidence_ids: vec![],
-        threshold: 5,
-        evidence_class: "heuristic_proxy".into(),
-        created_at_ms: 100,
-        resolved_at_ms: None,
-        cooldown_until_ms: None,
-        capability: None,
-        previous_assessment: None,
-        suggested_assessment: None,
-    };
-    repo.save_upgrade_suggestion(&suggestion).unwrap();
-
-    let confirmed = services
-        .lexical_learning()
-        .confirm_upgrade_suggestion(&suggestion.id)
-        .unwrap();
-    assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
-    let audit = services
-        .projection_review()
-        .audit_and_refresh(&entry.entry.id)
-        .unwrap();
-    let proposal = audit
-        .proposals
-        .iter()
-        .find(|value| {
-            value.capability == LexicalCapability::Listening
-                && value.status == ProjectionProposalStatus::Pending
-        })
-        .unwrap();
-    services
-        .projection_review()
-        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
-        .unwrap();
-    let details = services
-        .lexical_learning()
-        .lexical_details(&entry.entry.id)
-        .unwrap()
-        .unwrap();
-    assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
-    assert_eq!(
-        details.history[0].change_source,
-        LearningChangeSource::CapabilityOverrideSync,
-    );
-    let profile = services
-        .lexical_learning()
-        .lexical_capability_profile(&entry.entry.id)
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        profile.effective_assessment(LexicalCapability::Listening),
-        CapabilityAssessment::Acquired,
     );
 }

@@ -25,18 +25,17 @@ from .asr import (
     PreprocessingAsrAdapter,
 )
 from .capability import CapabilityRequest
-from .document import FixtureOcrProvider
 from .media import FfmpegAudioPreprocessor
 from .package import ConversionError
 from .plan import UnsupportedCapability
 from .produce import ProduceConfig, ProductionFailure, produce
+from .package_v3 import sha256_of_bytes
 from .protocol_v2 import (
     MachineEventV2Emitter,
     protocol_capabilities_v2,
 )
-from .document import FixtureOcrProvider, RapidOcrProvider, SuryaOcrProvider
-from .tts import FakeTtsAdapter, FixtureTtsAdapter, KokoroTtsAdapter, SayTtsAdapter
 from .whisper_cpp import WhisperCppAsrAdapter
+from .subtitle import read_subtitle_source
 
 
 class CancellationRequested(BaseException):
@@ -65,6 +64,12 @@ class _CancellationState:
 
     def requested(self) -> bool:
         return self.signal_number is not None
+
+
+def _source_checkout_sidecar(name: str) -> Path | None:
+    """Resolve an optional wrapper shipped beside a full source checkout."""
+    candidate = Path(__file__).resolve().parents[2] / "tools" / name
+    return candidate if candidate.is_file() else None
 
 
 @contextlib.contextmanager
@@ -119,43 +124,11 @@ def parser(
     produce.add_argument("request", type=Path, help="capability request JSON document")
     produce.add_argument("--output", required=True, type=Path)
     produce.add_argument(
-        "--tts-provider",
-        default="none",
-        choices=["none", "fixture", "say", "fake", "kokoro", "edge-tts"],
-        help="TTS provider for document-to-listen derivations (say is macOS local adapter, kokoro is neural TTS)",
-    )
-    produce.add_argument("--tts-fixture", type=Path, help="audio fixture for the fixture TTS provider")
-    produce.add_argument(
-        "--tts-alignment-fixture",
-        type=Path,
-        help="committed anchor alignment JSON for the fixture TTS provider",
-    )
-    produce.add_argument("--tts-voice", help="macOS say voice name for the say TTS provider")
-    produce.add_argument("--tts-say-executable", default="say", help="say executable for the say TTS provider")
-    produce.add_argument("--tts-afconvert-executable", default="afconvert", help="afconvert executable for the say TTS provider")
-    produce.add_argument("--tts-timeout-seconds", type=float, default=600.0)
-    produce.add_argument("--tts-kokoro-voice", default="af_bella", help="Kokoro voice model (e.g. af_bella, af_sarah, am_adam)")
-    produce.add_argument("--tts-kokoro-speed", type=float, default=1.0, help="Kokoro speech speed multiplier")
-    produce.add_argument("--tts-kokoro-lang", default="a", help="Kokoro language code (e.g. 'a' for American English, 'b' for British, 'z' for Chinese)")
-    produce.add_argument("--tts-edge-voice", default="en-US-AvaNeural", help="Microsoft Edge TTS voice (e.g. en-US-AvaNeural, en-US-JennyNeural, zh-CN-XiaoxiaoNeural)")
-    produce.add_argument("--tts-edge-rate", default="+0%", help="Edge TTS speech rate (e.g. +0%%, +20%%, -10%%)")
-    produce.add_argument("--tts-edge-volume", default="+0%", help="Edge TTS speech volume (e.g. +0%%, +10%%)")
-    produce.add_argument("--tts-edge-pitch", default="+0Hz", help="Edge TTS speech pitch (e.g. +0Hz, +5Hz)")
-    produce.add_argument(
-        "--ocr-provider",
-        default="none",
-        choices=["none", "fixture", "surya", "rapidocr", "docling"],
-        help="optional OCR path for scanned PDFs; absence is an honest capability result",
-    )
-    produce.add_argument("--ocr-fixture", type=Path, help="committed OCR text for the fixture OCR provider")
-    produce.add_argument("--ocr-langs", default="en,zh", help="comma-separated language codes for OCR (default: en,zh)")
-    produce.add_argument("--ocr-device", default=None, help="hardware device for OCR (e.g. mps, cpu, cuda)")
-    produce.add_argument(
         "--provider",
         default="none",
         choices=["none", "fixture", "command", "qwen3", "sensevoice", "whisper-cpp"],
         help="ASR provider for media-to-read derivations "
-        "(qwen3 default / sensevoice fast / whisper-cpp compatibility)",
+        "(qwen3 and sensevoice are source-checkout-only; whisper-cpp is a released provider)",
     )
     produce.add_argument("--fixture", type=Path, help="normalized JSON for the fixture ASR provider")
     produce.add_argument("--command", help="external ASR wrapper executable; no shell is used")
@@ -167,9 +140,14 @@ def parser(
     )
     produce.add_argument("--command-timeout-seconds", type=float, default=3600.0)
     produce.add_argument("--asr-timeout-seconds", type=float, default=3600.0, help="timeout for the qwen3/sensevoice ASR sidecars")
-    # Qwen3-ASR (default provider) sidecar options.
+    # Qwen3-ASR source-checkout-only sidecar options.
     produce.add_argument("--qwen3-python", type=Path, default=Path(sys.executable), help="python interpreter that runs the qwen3 ASR sidecar")
-    produce.add_argument("--qwen3-sidecar", type=Path, help="path to tools/qwen3_asr_wrapper.py")
+    produce.add_argument(
+        "--qwen3-sidecar",
+        type=Path,
+        default=_source_checkout_sidecar("qwen3_asr_wrapper.py"),
+        help="source-checkout-only sidecar path; unavailable in the released zipapp",
+    )
     produce.add_argument("--qwen3-model-id", default="Qwen/Qwen3-ASR-0.6B")
     produce.add_argument("--qwen3-forced-aligner-model-id", default="Qwen/Qwen3-ForcedAligner-0.6B")
     produce.add_argument("--qwen3-language", default="auto")
@@ -177,7 +155,12 @@ def parser(
     produce.add_argument("--qwen3-dtype", default="auto")
     # SenseVoice (fast / CPU provider) sidecar options.
     produce.add_argument("--sensevoice-python", type=Path, default=Path(sys.executable), help="python interpreter that runs the sensevoice ASR sidecar")
-    produce.add_argument("--sensevoice-sidecar", type=Path, help="path to tools/sensevoice_asr_wrapper.py")
+    produce.add_argument(
+        "--sensevoice-sidecar",
+        type=Path,
+        default=_source_checkout_sidecar("sensevoice_asr_wrapper.py"),
+        help="source-checkout-only sidecar path; unavailable in the released zipapp",
+    )
     produce.add_argument("--sensevoice-model-id", default="iic/SenseVoiceSmall")
     produce.add_argument("--sensevoice-language", default="auto", choices=["auto", "zh", "en", "yue", "ja", "ko"])
     produce.add_argument("--sensevoice-device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
@@ -305,12 +288,6 @@ def parser(
         produce.add_argument(f"--{stage}-command-arg", action="append", default=[], help=f"one argv item for the {stage} command provider")
         produce.add_argument(f"--{stage}-command-timeout-seconds", type=float, default=600.0)
     produce.add_argument(
-        "--tts-aligner",
-        default="none",
-        choices=["none", "fixture", "command", "whisper-cpp"],
-        help="ASR provider that transcribes derived TTS audio into word timings",
-    )
-    produce.add_argument(
         "--machine-events",
         action="store_true",
         help="write the machine-event protocol as NDJSON to stdout",
@@ -322,8 +299,7 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     """Resolve the optional ASR adapter for capability derivations.
 
     Returns ``(adapter, preprocessor)``; the preprocessor is the shared
-    ffmpeg/ffprobe normalization pipeline the adapter uses and that the
-    ``tts_aligner`` path reuses on derived audio.
+    ffmpeg/ffprobe normalization pipeline used by the adapter.
     """
     if getattr(args, "provider", "none") == "none":
         return None, None
@@ -357,7 +333,11 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     if args.provider == "qwen3":
         from .asr import Qwen3AsrAdapter
         if args.qwen3_sidecar is None:
-            raise ConversionError("--qwen3-sidecar is required for the qwen3 ASR provider")
+            raise ConversionError(
+                "qwen3 is source-checkout-only; this release does not include "
+                "tools/qwen3_asr_wrapper.py. Run from a full source checkout or "
+                "choose fixture, command, or whisper-cpp."
+            )
         return (
             PreprocessingAsrAdapter(
                 Qwen3AsrAdapter(
@@ -380,7 +360,11 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     if args.provider == "sensevoice":
         from .asr import SenseVoiceAsrAdapter
         if args.sensevoice_sidecar is None:
-            raise ConversionError("--sensevoice-sidecar is required for the sensevoice ASR provider")
+            raise ConversionError(
+                "sensevoice is source-checkout-only; this release does not include "
+                "tools/sensevoice_asr_wrapper.py. Run from a full source checkout "
+                "or choose fixture, command, or whisper-cpp."
+            )
         return (
             PreprocessingAsrAdapter(
                 SenseVoiceAsrAdapter(
@@ -419,61 +403,6 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
         ),
         preprocessor,
     )
-
-
-def _build_tts(args: argparse.Namespace) -> Any | None:
-    selected = args.tts_provider
-    if selected == "none":
-        return None
-    if selected == "fake":
-        return FakeTtsAdapter()
-    if selected == "kokoro":
-        return KokoroTtsAdapter(
-            voice=args.tts_kokoro_voice,
-            speed=args.tts_kokoro_speed,
-            lang_code=args.tts_kokoro_lang,
-            afconvert_executable=args.tts_afconvert_executable,
-            timeout_seconds=args.tts_timeout_seconds,
-        )
-    if selected == "edge-tts":
-        from .tts import EdgeTtsAdapter
-        return EdgeTtsAdapter(
-            voice=args.tts_edge_voice,
-            rate=args.tts_edge_rate,
-            volume=args.tts_edge_volume,
-            pitch=args.tts_edge_pitch,
-            afconvert_executable=args.tts_afconvert_executable,
-            timeout_seconds=args.tts_timeout_seconds,
-        )
-    if selected == "say":
-        return SayTtsAdapter(
-            voice=args.tts_voice,
-            say_executable=args.tts_say_executable,
-            afconvert_executable=args.tts_afconvert_executable,
-            timeout_seconds=args.tts_timeout_seconds,
-        )
-    if args.tts_fixture is None:
-        raise ConversionError("--tts-fixture is required for the fixture TTS provider")
-    return FixtureTtsAdapter(args.tts_fixture, args.tts_alignment_fixture)
-
-
-def _build_ocr(args: argparse.Namespace) -> Any | None:
-    if args.ocr_provider == "none":
-        return None
-    if args.ocr_provider == "surya":
-        langs = [item.strip() for item in args.ocr_langs.split(",") if item.strip()]
-        return SuryaOcrProvider(langs=langs, device=args.ocr_device)
-    if args.ocr_provider == "rapidocr":
-        return RapidOcrProvider()
-    if args.ocr_provider == "docling":
-        from .document import DoclingOcrProvider
-        return DoclingOcrProvider()
-    if args.ocr_fixture is None:
-        raise ConversionError("--ocr-fixture is required for the fixture OCR provider")
-    if not args.ocr_fixture.is_file():
-        raise ConversionError("the OCR fixture must be a regular file")
-    return FixtureOcrProvider(args.ocr_fixture)
-
 
 
 def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
@@ -515,8 +444,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
     speech_activity = None
     prosody = None
     phone = None
-    tts_aligner = None
-
     def stage_adapter(selector: str, stage: str, fixture, command, command_args, timeout):
         if selector == "fixture":
             if fixture is None:
@@ -658,10 +585,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
             padding_ms=args.aligner_padding_ms,
         )
 
-    aligner_selector = args.tts_aligner
-    if aligner_selector != "none":
-        tts_aligner = _build_asr_for_aligner(args, aligner_selector, progress)
-
     if (
         sense_groups is None
         and acoustics is None
@@ -670,7 +593,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         and prosody is None
         and phone is None
         and aligner is None
-        and tts_aligner is None
     ):
         return None
     # The acoustics, acoustic-track, and speech-activity stages all consume the
@@ -696,36 +618,6 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         prosody=prosody,
         phone=phone,
         aligner=aligner,
-        tts_aligner=tts_aligner,
-    )
-
-
-def _build_asr_for_aligner(args, selector: str, progress) -> Any:
-    """Resolve the ASR adapter that transcribes derived TTS audio."""
-    from .asr import FixtureAsrAdapter
-    from .whisper_cpp import WhisperCppAsrAdapter
-    if selector == "fixture":
-        if args.fixture is None:
-            raise ConversionError("--fixture is required for the fixture tts-aligner")
-        return FixtureAsrAdapter(args.fixture, progress=progress)
-    if selector == "command":
-        if args.command is None:
-            raise ConversionError("--command is required for the command tts-aligner")
-        return CommandAsrAdapter(
-            args.command, args.command_arg, args.command_timeout_seconds,
-            progress=progress,
-        )
-    if args.whisper_model is None or args.whisper_model_id is None:
-        raise ConversionError(
-            "--whisper-model and --whisper-model-id are required for the whisper-cpp tts-aligner"
-        )
-    return WhisperCppAsrAdapter(
-        args.whisper_cli,
-        args.whisper_model,
-        args.whisper_model_id,
-        args.whisper_language,
-        args.whisper_translate_to_english,
-        args.whisper_timeout_seconds,
     )
 
 
@@ -747,6 +639,9 @@ def _run(
     writer: MachineEventV2Emitter | None,
 ) -> dict[str, Any]:
     request = CapabilityRequest.from_json_file(args.request)
+    subtitle_sha256 = None
+    if args.subtitle is not None:
+        subtitle_sha256 = sha256_of_bytes(read_subtitle_source(args.subtitle))
     if writer is not None:
         writer.accepted(request.attempt_id or _default_attempt_id(request))
 
@@ -760,19 +655,18 @@ def _run(
 
         from .plan import plan as plan_request
 
-        production_plan = plan_request(request)
+        production_plan = plan_request(request, subtitle_sha256=subtitle_sha256)
         writer.planned(production_plan.describe())
     else:
         check_cancelled = None
         progress = None
     asr_adapter, asr_preprocessor = _build_asr(args, progress=progress)
     config = ProduceConfig(
-        tts=_build_tts(args),
-        ocr=_build_ocr(args),
         asr=asr_adapter,
         asr_preprocessor=asr_preprocessor,
         rich=_build_rich(args, progress=progress),
         subtitle=args.subtitle,
+        subtitle_sha256=subtitle_sha256,
     )
     outcome = produce(
         request,

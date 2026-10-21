@@ -39,7 +39,6 @@ class MacosMenuBar extends StatelessWidget {
     required this.onArchiveMedia,
     required this.onOpenVocabulary,
     required this.onOpenReview,
-    required this.onOpenCoach,
     required this.child,
   });
 
@@ -58,7 +57,6 @@ class MacosMenuBar extends StatelessWidget {
   final VoidCallback onArchiveMedia;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
-  final VoidCallback onOpenCoach;
   final Widget child;
 
   @override
@@ -76,7 +74,6 @@ class MacosMenuBar extends StatelessWidget {
       onArchiveMedia: onArchiveMedia,
       onOpenVocabulary: onOpenVocabulary,
       onOpenReview: onOpenReview,
-      onOpenCoach: onOpenCoach,
     ),
     child: child,
   );
@@ -96,7 +93,6 @@ List<PlatformMenu> buildMacosMenus({
   required VoidCallback onArchiveMedia,
   required VoidCallback onOpenVocabulary,
   required VoidCallback onOpenReview,
-  required VoidCallback onOpenCoach,
 }) {
   // A table row as a menu item: label from the table's l10n key, callback
   // from the shared actions map (missing id = wiring bug, fail fast), no key
@@ -314,8 +310,7 @@ List<PlatformMenu> buildMacosMenus({
         ),
       ],
     ),
-    // ── Learning: every destination needs the local core, same gate the
-    // AppBar applies. ──
+    // ── Learning: every destination needs the local core. ──
     PlatformMenu(
       label: l.text('menuLearning'),
       menus: [
@@ -328,10 +323,6 @@ List<PlatformMenu> buildMacosMenus({
             PlatformMenuItem(
               label: l.text('review'),
               onSelected: capabilities.coreReady ? onOpenReview : null,
-            ),
-            PlatformMenuItem(
-              label: l.text('coachDashboard'),
-              onSelected: capabilities.coreReady ? onOpenCoach : null,
             ),
           ],
         ),

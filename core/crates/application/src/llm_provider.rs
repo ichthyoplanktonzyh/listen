@@ -11,14 +11,13 @@ use std::sync::Arc;
 
 use domain::{
     CapabilityClaim, LlmAuthRef, LlmProviderProfile, LlmProviderProfileId, LlmUse,
-    SemanticJudgment, SemanticTaskAttemptId, SenseGroupAnalysis, SubtitleTrackId, TimelineStatus,
+    SenseGroupAnalysis, SubtitleTrackId, TimelineStatus,
 };
 
 use crate::batch_governor::{BackoffPolicy, BatchProgress, LlmBatchCoordinator, LlmBatchExecution};
 use crate::{
     AppServices, ApplicationError, LlmProviderProfileRepository, MediaAnalysisUseCases,
-    OutputFeedbackDraft, RubricDraft, RubricGenerationRequest, SecretCleanupRepository,
-    SecretStore, SemanticLlmRuntime, SemanticLlmRuntimeFactory, SemanticUseCases,
+    SecretCleanupRepository, SecretStore, SemanticLlmRuntime, SemanticLlmRuntimeFactory,
 };
 
 fn retry_secret_cleanups(
@@ -104,7 +103,6 @@ fn delete_profile_then_secret(
 
 pub struct LlmProviderUseCases {
     profiles: Arc<dyn LlmProviderProfileRepository>,
-    semantic: SemanticUseCases,
     media_analysis: MediaAnalysisUseCases,
 }
 
@@ -112,7 +110,6 @@ impl LlmProviderUseCases {
     pub(crate) fn from_services(services: &AppServices) -> Self {
         Self {
             profiles: services.llm_provider_profiles.clone(),
-            semantic: SemanticUseCases::new(services.semantic_tasks.clone()),
             media_analysis: MediaAnalysisUseCases::from_services(services),
         }
     }
@@ -243,74 +240,6 @@ impl LlmProviderUseCases {
     ) -> Result<CapabilityClaim, ApplicationError> {
         let (runtime, _) = self.runtime(id, secret_store, factory)?;
         Ok(runtime.probe_structured_output().await?)
-    }
-
-    /// Generates a content-only rubric proposal. Identity and persistence stay
-    /// outside the provider adapter.
-    pub async fn generate_rubric(
-        &self,
-        id: &LlmProviderProfileId,
-        request: &RubricGenerationRequest,
-        secret_store: &dyn SecretStore,
-        factory: &dyn SemanticLlmRuntimeFactory,
-    ) -> Result<RubricDraft, ApplicationError> {
-        let (runtime, _) = self.runtime_for_use(
-            id,
-            LlmUse::RubricGeneration,
-            "rubric_generation",
-            secret_store,
-            factory,
-        )?;
-        Ok(runtime.rubric().generate_rubric(request).await?)
-    }
-
-    /// Judges one stored attempt and records the resulting immutable judgment.
-    /// Provider failures occur before persistence and therefore write nothing.
-    pub async fn judge_attempt(
-        &self,
-        id: &LlmProviderProfileId,
-        attempt_id: &SemanticTaskAttemptId,
-        response_revision: u32,
-        created_at_ms: u64,
-        secret_store: &dyn SecretStore,
-        factory: &dyn SemanticLlmRuntimeFactory,
-    ) -> Result<SemanticJudgment, ApplicationError> {
-        let (runtime, _) = self.runtime_for_use(
-            id,
-            LlmUse::SemanticJudgment,
-            "semantic_judgment",
-            secret_store,
-            factory,
-        )?;
-        self.semantic
-            .judge_semantic_attempt(
-                attempt_id,
-                response_revision,
-                runtime.judge(),
-                created_at_ms,
-            )
-            .await
-    }
-
-    /// Returns ephemeral teacher-style feedback for a stored output attempt.
-    pub async fn feedback_on_attempt(
-        &self,
-        id: &LlmProviderProfileId,
-        attempt_id: &SemanticTaskAttemptId,
-        response_revision: u32,
-        secret_store: &dyn SecretStore,
-        factory: &dyn SemanticLlmRuntimeFactory,
-    ) -> Result<OutputFeedbackDraft, ApplicationError> {
-        let (runtime, _) = self.runtime_for_use(
-            id,
-            LlmUse::SemanticJudgment,
-            "semantic_judgment",
-            secret_store,
-            factory,
-        )?;
-        self.semantic
-            .feedback_on_semantic_attempt(attempt_id, response_revision, runtime.feedback())
-            .await
     }
 
     /// Generates and persists one hybrid sense-group analysis while owning the
@@ -653,7 +582,7 @@ mod credential_compensation_tests {
             batch_policy: LlmBatchPolicy::default(),
             cost_budget: None,
             retention: DataRetentionPreference::Unknown,
-            allowed_uses: vec![LlmUse::SemanticJudgment],
+            allowed_uses: vec![LlmUse::SenseGroupPartition],
             capability: ProviderCapability::unknown(),
             created_at_ms: 1,
         }

@@ -3,13 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
-import '../../models/practice.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
-import '../../theme/typography.dart';
 import '../../utils/format_duration.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
@@ -41,9 +39,6 @@ class _EntryEvidenceSectionState extends State<EntryEvidenceSection> {
   bool loading = false;
   bool loadFailed = false;
 
-  /// `null` selects all channels.
-  String? capability;
-
   /// `null` while never loaded; an empty list is an honest no-evidence state.
   List<LearningObservationView>? rows;
   bool maybeMore = false;
@@ -54,7 +49,7 @@ class _EntryEvidenceSectionState extends State<EntryEvidenceSection> {
       loadFailed = false;
     });
     try {
-      final page = await widget.loader(capability: capability, offset: offset);
+      final page = await widget.loader(capability: 'listening', offset: offset);
       if (!mounted) return;
       setState(() {
         loading = false;
@@ -73,16 +68,6 @@ class _EntryEvidenceSectionState extends State<EntryEvidenceSection> {
   void _toggle() {
     setState(() => expanded = !expanded);
     if (expanded && rows == null && !loading) unawaited(_load(offset: 0));
-  }
-
-  void _selectCapability(String? value) {
-    if (value == capability) return;
-    setState(() {
-      capability = value;
-      rows = null;
-      maybeMore = false;
-    });
-    unawaited(_load(offset: 0));
   }
 
   @override
@@ -118,25 +103,6 @@ class _EntryEvidenceSectionState extends State<EntryEvidenceSection> {
           ),
         ),
         if (expanded) ...[
-          const SizedBox(height: ListenSpacing.gap8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final option in const [
-                (null, 'evidenceFilterAll'),
-                ('listening', 'capabilityListening'),
-                ('reading', 'capabilityReading'),
-                ('speaking', 'capabilitySpeaking'),
-                ('writing', 'capabilityWriting'),
-              ])
-                ChoiceChip(
-                  label: Text(l.text(option.$2)),
-                  selected: capability == option.$1,
-                  onSelected: (_) => _selectCapability(option.$1),
-                ),
-            ],
-          ),
           const SizedBox(height: ListenSpacing.gap8),
           if (loading && rows == null) const LinearProgressIndicator(),
           if (loadFailed)
@@ -202,12 +168,7 @@ class _EvidenceRow extends StatelessWidget {
       'partial' => (Icons.remove_circle_outline, colors.onSurfaceVariant),
       _ => (Icons.highlight_off, colors.error),
     };
-    final channelIcon = switch (observation.capability) {
-      'listening' => Icons.hearing_outlined,
-      'reading' => Icons.menu_book_outlined,
-      'speaking' => Icons.record_voice_over_outlined,
-      _ => Icons.edit_outlined,
-    };
+    const channelIcon = Icons.hearing_outlined;
     final detail = [
       if (observation.surfaceForm != null &&
           observation.surfaceForm!.isNotEmpty)
@@ -265,60 +226,6 @@ class _EvidenceRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// One pending listening upgrade suggestion with its evidence count and the
-/// confirm/defer resolution actions (restored from the pre-dictionary detail
-/// dialog).
-class EntrySuggestionBanner extends StatelessWidget {
-  const EntrySuggestionBanner({
-    super.key,
-    required this.suggestion,
-    required this.onConfirm,
-    required this.onReject,
-  });
-
-  final UpgradeSuggestion suggestion;
-  final Future<void> Function(UpgradeSuggestion suggestion)? onConfirm;
-  final Future<void> Function(UpgradeSuggestion suggestion)? onReject;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l
-                  .text('dictionaryUpgradeSuggestion')
-                  .replaceAll('{count}', '${suggestion.evidenceContextCount}'),
-            ),
-            const SizedBox(height: ListenSpacing.gap6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (onReject != null)
-                  TextButton(
-                    onPressed: () => unawaited(onReject!(suggestion)),
-                    child: Text(l.text('deferUpgrade')),
-                  ),
-                if (onConfirm != null)
-                  FilledButton(
-                    onPressed: () => unawaited(onConfirm!(suggestion)),
-                    child: Text(l.text('confirmListeningAcquired')),
-                  ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -742,128 +649,56 @@ class _HighlightedSentence extends StatelessWidget {
   }
 }
 
-/// The four-channel snapshot, editable in place when [onOverride] is wired:
-/// picking a side sets that channel's user override, pressing the active side
-/// again clears it (mirroring the side-panel pattern).
-///
-/// The four rows used to be eight identically weighted chips. Read down the
-/// column they looked like eight independent choices, when they are one 4×2
-/// table: four channels, each holding a single either/or. A segmented control
-/// per row says that in its shape — the two sides share one track, so exactly
-/// one of them can be lit, and a row with neither side lit is visibly an
-/// unanswered question rather than two unpressed buttons.
+/// The manually editable listening conclusion for this lexical entry.
 class EntryCapabilityEditor extends StatelessWidget {
   const EntryCapabilityEditor({
     super.key,
     required this.profile,
-    this.onOverride,
+    this.onListeningOverride,
   });
 
   final LexicalCapabilityProfile? profile;
-  final Future<void> Function(String capability, String? conclusion)?
-  onOverride;
-
-  static const _channels = [
-    ('reading', 'capabilityReading', Icons.menu_book_outlined),
-    ('listening', 'capabilityListening', Icons.hearing_outlined),
-    ('speaking', 'capabilitySpeaking', Icons.record_voice_over_outlined),
-    ('writing', 'capabilityWriting', Icons.edit_outlined),
-  ];
-
-  CapabilityDimensionState? _dimension(String channel) {
-    final value = profile;
-    if (value == null) return null;
-    return switch (channel) {
-      'reading' => value.reading,
-      'listening' => value.listening,
-      'speaking' => value.speaking,
-      _ => value.writing,
-    };
-  }
+  final Future<void> Function(String? conclusion)? onListeningOverride;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // The entry-scale portrait ring (#47): same graphic language as the
-        // coach dashboard and the book list, ahead of the editable rows.
-        Padding(
-          padding: const EdgeInsets.only(bottom: ListenSpacing.gap8),
-          child: CapabilityRing(
-            assessments: capabilityProfileAssessments(profile),
-            size: 44,
-            withTooltip: true,
-          ),
-        ),
-        for (final (channel, label, icon) in _channels)
-          Padding(
-            padding: const EdgeInsets.only(bottom: ListenSpacing.gap4),
-            child: _channelRow(context, l, channel, label, icon),
-          ),
-      ],
-    );
-  }
-
-  Widget _channelRow(
-    BuildContext context,
-    AppLocalizations l,
-    String channel,
-    String label,
-    IconData icon,
-  ) {
     final colors = Theme.of(context).colorScheme;
-    final assessment = _dimension(channel)?.effectiveAssessment ?? 'unassessed';
+    final dimension = profile?.listening;
+    final assessment = dimension?.effectiveAssessment ?? 'unassessed';
     final assessed = assessment == 'acquired' || assessment == 'not_acquired';
     return Row(
       children: [
         Icon(
-          icon,
+          Icons.hearing_outlined,
           size: ListenIconSize.control,
           color: capabilityAssessmentColor(colors, assessment),
         ),
         const SizedBox(width: ListenSpacing.gap8),
-        SizedBox(
-          width: 72,
-          child: Text(l.text(label), style: ListenType.reading),
+        Expanded(
+          child: Text(
+            l.text('capabilityListening'),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
         ),
         SegmentedButton<String>(
           showSelectedIcon: false,
-          // An unanswered channel is a legitimate resting state, and it is
-          // also how the user takes a verdict back: pressing the lit side
-          // again empties the selection, which clears the override.
           emptySelectionAllowed: true,
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: [
             for (final value in const ['acquired', 'not_acquired'])
-              ButtonSegment<String>(
-                value: value,
-                label: Text(l.text(value), style: ListenType.body),
-              ),
+              ButtonSegment<String>(value: value, label: Text(l.text(value))),
           ],
           selected: assessed ? {assessment} : const <String>{},
-          onSelectionChanged: onOverride == null
+          onSelectionChanged: onListeningOverride == null
               ? null
               : (selection) => unawaited(
-                  onOverride!(
-                    channel,
+                  onListeningOverride!(
                     selection.isEmpty ? null : selection.first,
                   ),
                 ),
         ),
-        if (!assessed) ...[
-          const SizedBox(width: ListenSpacing.gap8),
-          Flexible(
-            child: Text(
-              l.text('unassessed'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: ListenType.body.copyWith(color: colors.outline),
-            ),
-          ),
-        ],
-        if (_dimension(channel)?.userOverride != null)
+        if (dimension?.userOverride != null)
           Padding(
             padding: const EdgeInsets.only(left: ListenSpacing.gap4),
             child: Tooltip(

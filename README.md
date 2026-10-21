@@ -9,8 +9,8 @@ modules together as `listen.app`.
 
 ## Start here
 
-- [Current state](STATE.md) and [roadmap](ROADMAP.md): the current focus is
-  reducing scope and strengthening the core experience.
+- [Current state](STATE.md) and [roadmap](ROADMAP.md): audio/video listening,
+  contextual help, and returning through the Personal Corpus.
 - [Development](DEVELOPMENT.md): setup, run, checks, and packaging.
 - [Runtime architecture](docs/architecture/runtime.md): module, process,
   contract, and persistence boundaries in the implementation.
@@ -43,7 +43,6 @@ Code, contracts, and executable tests describe implemented behavior;
 
 - [App UI checks](docs/development/app-ui.md)
 - [Gen CLI and providers](docs/development/gen.md)
-- [Optional local speech service](docs/development/local-speech.md)
 - [Gen machine-event protocol](docs/protocols/gen-machine-events.md)
 - [Gen release bundle](docs/protocols/gen-release-bundle.md)
 - [Canonical contracts](core/contracts/)

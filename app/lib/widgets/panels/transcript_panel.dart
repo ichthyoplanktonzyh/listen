@@ -96,9 +96,7 @@ class TranscriptPanel extends StatefulWidget {
   final bool hasTranslationTrack;
   final VoidCallback? onImportTranslation;
 
-  /// How the transcript presents itself: read-through, blind, or word-select.
-  /// The reading states are displays of this same panel, so they are branches
-  /// here rather than separate windows.
+  /// How the transcript presents itself: visible or blind listening.
   final WorkbenchStudyMode studyMode;
 
   @override
@@ -147,20 +145,11 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
     if (widget.track == null) {
       body = _TranscriptReadinessSurface(view: widget.readiness);
     } else {
-      // The reading states are displays of this same pane. Read-through is the
-      // scrolling transcript; blind and word-select replace it with a single
-      // sentence in focus — the reference does not keep the list behind them.
+      // Transcript presentation stays within the listening pane. Blind mode
+      // replaces the scrolling list with its current sentence in focus.
       body = switch (widget.studyMode) {
         WorkbenchStudyMode.normal => _readThroughList(context),
         WorkbenchStudyMode.blindListening => _BlindView(
-          cue: widget.currentCue,
-          index: _currentCueIndex,
-          total: widget.track!.cues.length,
-        ),
-        WorkbenchStudyMode.wordSelection => _WordSelectView(
-          // A different sentence is a different exercise: rebuild from scratch
-          // so filled blanks never bleed across sentences.
-          key: ValueKey(widget.currentCue?.id),
           cue: widget.currentCue,
           index: _currentCueIndex,
           total: widget.track!.cues.length,
@@ -552,8 +541,8 @@ class _FocusAwaitingCue extends StatelessWidget {
 }
 
 /// Blind listening: the current sentence only, with most words blanked to a
-/// gap the size of the hidden word. The learner reads what scaffolding is left
-/// and catches the rest by ear. No candidate words — that is word-select.
+/// gap the size of the hidden word. A little text scaffolding remains while
+/// the learner catches the sentence by ear.
 class _BlindView extends StatelessWidget {
   const _BlindView({
     required this.cue,
@@ -612,223 +601,6 @@ class _BlindView extends StatelessWidget {
   }
 }
 
-/// Word select: the current sentence blanked, and below it the removed words as
-/// chips to place back. The chips are exactly the blanked words, shuffled — the
-/// exercise is self-contained in the sentence, no external answer data.
-class _WordSelectView extends StatefulWidget {
-  const _WordSelectView({
-    super.key,
-    required this.cue,
-    required this.index,
-    required this.total,
-  });
-
-  final Cue? cue;
-  final int index;
-  final int total;
-
-  @override
-  State<_WordSelectView> createState() => _WordSelectViewState();
-}
-
-class _WordSelectViewState extends State<_WordSelectView> {
-  late List<_Segment> _segments;
-  late List<_Candidate> _candidates;
-
-  // slot index -> the candidate placed in it, or null while empty.
-  final Map<int, int> _placed = {};
-
-  // Tap recognizers for filled blanks, rebuilt each frame and disposed here so
-  // they never outlive the spans that hold them.
-  final List<TapGestureRecognizer> _recognizers = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _build();
-  }
-
-  @override
-  void dispose() {
-    for (final recognizer in _recognizers) {
-      recognizer.dispose();
-    }
-    super.dispose();
-  }
-
-  void _build() {
-    final cue = widget.cue;
-    _segments = cue == null ? const [] : _blankSentence(cue);
-    final blanks = _segments.whereType<_Blank>().toList();
-    // The pool is the removed words themselves, shuffled deterministically per
-    // sentence so it is stable across rebuilds within a sitting.
-    final rng = Random(cue == null ? 0 : cue.id.hashCode ^ 0x5f3759df);
-    final pool = [
-      for (var i = 0; i < blanks.length; i += 1)
-        _Candidate(id: i, word: blanks[i].answer),
-    ]..shuffle(rng);
-    _candidates = pool;
-  }
-
-  int? get _nextEmptySlot {
-    for (final segment in _segments) {
-      if (segment is _Blank && !_placed.containsKey(segment.slot)) {
-        return segment.slot;
-      }
-    }
-    return null;
-  }
-
-  void _place(_Candidate candidate) {
-    final slot = _nextEmptySlot;
-    if (slot == null) return;
-    setState(() => _placed[slot] = candidate.id);
-  }
-
-  void _clear(int slot) => setState(() => _placed.remove(slot));
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final colors = Theme.of(context).colorScheme;
-    final theme = Theme.of(context).textTheme;
-    if (widget.cue == null) {
-      return Padding(
-        padding: ListenPadding.card,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _FocusHeader(index: widget.index, total: widget.total),
-            const SizedBox(height: ListenSpacing.gap16),
-            Expanded(
-              child: _FocusAwaitingCue(message: l.text('focusAwaitingCue')),
-            ),
-          ],
-        ),
-      );
-    }
-    final usedIds = _placed.values.toSet();
-    return SingleChildScrollView(
-      padding: ListenPadding.card,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _FocusHeader(index: widget.index, total: widget.total),
-          const SizedBox(height: ListenSpacing.gap16),
-          Text.rich(
-            TextSpan(
-              children: _filledSpans(context, _segments, _placed, _candidates),
-            ),
-            key: const Key('transcript-word-select-sentence'),
-            style: theme.titleMedium?.copyWith(height: 2.1),
-          ),
-          const SizedBox(height: ListenSpacing.gap16),
-          Divider(color: colors.outlineVariant),
-          const SizedBox(height: ListenSpacing.gap8),
-          Text(
-            l.text('wordSelectPrompt'),
-            style: theme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-          ),
-          const SizedBox(height: ListenSpacing.gap12),
-          Wrap(
-            spacing: ListenSpacing.gap12,
-            runSpacing: ListenSpacing.gap12,
-            children: [
-              for (final candidate in _candidates)
-                _WordChip(
-                  label: candidate.word,
-                  used: usedIds.contains(candidate.id),
-                  onTap: () => _place(candidate),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<InlineSpan> _filledSpans(
-    BuildContext context,
-    List<_Segment> segments,
-    Map<int, int> placed,
-    List<_Candidate> candidates,
-  ) {
-    final colors = Theme.of(context).colorScheme;
-    for (final recognizer in _recognizers) {
-      recognizer.dispose();
-    }
-    _recognizers.clear();
-    final spans = <InlineSpan>[];
-    for (final segment in segments) {
-      if (segment is _Literal) {
-        spans.add(TextSpan(text: segment.text));
-        continue;
-      }
-      final blank = segment as _Blank;
-      final placedId = placed[blank.slot];
-      if (placedId == null) {
-        spans.add(_underscoreSpan(context, blank.answer.length));
-      } else {
-        final word = candidates.firstWhere((c) => c.id == placedId).word;
-        final recognizer = TapGestureRecognizer()
-          ..onTap = () => _clear(blank.slot);
-        _recognizers.add(recognizer);
-        spans.add(
-          TextSpan(
-            text: word,
-            style: TextStyle(
-              color: colors.primary,
-              decoration: TextDecoration.underline,
-              decorationColor: colors.primary,
-            ),
-            recognizer: recognizer,
-          ),
-        );
-      }
-    }
-    return spans;
-  }
-}
-
-/// One candidate word placed in the pool.
-class _Candidate {
-  const _Candidate({required this.id, required this.word});
-  final int id;
-  final String word;
-}
-
-/// A tappable candidate chip. A placed chip stays visible but greys out, so the
-/// pool never changes shape underfoot as words are used.
-class _WordChip extends StatelessWidget {
-  const _WordChip({
-    required this.label,
-    required this.used,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool used;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return OutlinedButton(
-      onPressed: used ? null : onTap,
-      style: OutlinedButton.styleFrom(
-        shape: const StadiumBorder(),
-        side: BorderSide(color: used ? colors.outlineVariant : colors.outline),
-        foregroundColor: colors.onSurface,
-        padding: const EdgeInsets.symmetric(
-          horizontal: ListenSpacing.gap16,
-          vertical: ListenSpacing.gap8,
-        ),
-      ),
-      child: Text(label),
-    );
-  }
-}
-
 /// A blank standing in for one hidden word (`_Blank`) or a run of kept text —
 /// words, spaces, punctuation — shown verbatim (`_Literal`).
 sealed class _Segment {
@@ -849,8 +621,8 @@ class _Blank extends _Segment {
 /// Blanks a sentence for the focus modes: word tokens are hidden with a
 /// deterministic ~60% probability (seeded by the sentence id so it is stable
 /// within a sitting), everything else — spaces, punctuation, kept words — is
-/// literal. At least one word is always blanked so word-select has an exercise,
-/// and never every word so blind keeps some scaffolding.
+/// literal. At least one word is always blanked and at least one stays visible
+/// as scaffolding for the blind-listening exercise.
 List<_Segment> _blankSentence(Cue cue) {
   final words = [
     for (var i = 0; i < cue.tokens.length; i += 1)

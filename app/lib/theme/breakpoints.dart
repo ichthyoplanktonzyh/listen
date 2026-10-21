@@ -3,13 +3,8 @@
 /// Only thresholds compared against `constraints.maxWidth` belong here — fixed
 /// `width:` / `SizedBox` sizes are element geometry, not breakpoints.
 ///
-/// The one deliberate exception is the `*ColumnMax` block at the bottom:
-/// content-column caps (`ConstrainedBox(maxWidth:)`) that keep a reading or
-/// card column from sprawling on a wide window. They are a shared vocabulary,
-/// not a layout switch, but owner (#77, 前置决策 1) put them here rather than
-/// spawning a new file, since a column's cap and the breakpoint that folds it
-/// are the same "how wide should content be" concern. The五页 that each
-/// hard-coded their own width (audit C4) migrate to these as they are rebuilt.
+/// The `*ColumnMax` block at the bottom also holds shared content-column caps
+/// for `ConstrainedBox(maxWidth:)`; they are not layout switches.
 ///
 /// Values that happen to coincide are kept as separate constants when the
 /// reason for the threshold differs: each one is derived from what its own
@@ -20,12 +15,9 @@ abstract final class ListenBreakpoints {
   /// shell (`macos/Runner/MainFlutterWindow.swift` sets `contentMinSize` from
   /// these; `window_min_size_test.dart` keeps the two sides in step).
   ///
-  /// Width: `PlayerAppBar`'s icon-only form has a hard floor of 480px in both
-  /// locales — below that it overflows no matter how it degrades, short of
-  /// folding all four menus into one popup. 640 keeps real headroom over that
-  /// floor and is already the width the compact-home tests treat as the
-  /// canonical narrow desktop layout. Every breakpoint below is ≥520, so
-  /// nothing between 480 and 640 is a shape anyone designed for.
+  /// Width: 640px keeps headroom for the compact desktop layout. Every
+  /// breakpoint below is ≥520, so nothing between 480 and 640 is a shape
+  /// anyone designed for.
   ///
   /// Height: `IntensivePracticeWindow` clamps itself to 360–560; at 560 the
   /// window still clears that range once the toolbar is subtracted.
@@ -62,30 +54,6 @@ abstract final class ListenBreakpoints {
   /// (roughly 800px) still fits comfortably.
   static const playbackControlsRoomy = 900.0;
 
-  /// A row of icon buttons keeps its text labels; below it only the icons
-  /// remain (the tooltips carry the same wording, so no information is lost).
-  ///
-  /// Named for the shell app bar it was measured on. That bar is gone — it
-  /// was a fourth navigation duplicating the native macOS menu bar, the rail
-  /// and the pages themselves — but the threshold outlived it: it was derived
-  /// from the widest locale (English needed 836px for four labelled menus
-  /// plus an icon, Chinese fit under 700, sized at 860 for margin), and the
-  /// personal-expression header now measures its own labels against it.
-  static const appBarLabels = 860.0;
-
-  /// The coach dashboard's capability portrait keeps the compass ring beside
-  /// the echo bars; below it the two stack vertically. The compass is a fixed
-  /// 200px, so this leaves the bars at least ~380px of column width.
-  static const capabilityPortraitSideBySide = 640.0;
-
-  /// Reading surfaces (view header, task studio) drop to their compact
-  /// arrangement below this width.
-  static const readingCompact = 900.0;
-
-  /// The reading word inspector sits beside the reader; below it the inspector
-  /// moves under the reader instead.
-  static const readingInspectorSideBySide = 980.0;
-
   /// The vocabulary workbench (#79 / S3) keeps its list+lens column beside the
   /// activity pane; below it the two collapse to a single column (the narrow
   /// "B" form). Derived from the two panes' floors: the list needs ~320 to show
@@ -120,11 +88,9 @@ abstract final class ListenBreakpoints {
   /// down — even two of them — it wants a column cap, not this.
   static const noticeColumnMax = 360.0;
 
-  /// A single reading column of text-dense content — word detail, conversation
-  /// transcript, coach evidence. Sized to a comfortable measure (~70ch at the
-  /// body size) so lines stay legible. Replaces the 780/760 that vocabulary
-  /// detail and the conversation panel each hard-coded (audit C4); the 20px
-  /// spread between them was incidental — the reason is one.
+  /// A single column of text-dense content, such as transcript or word detail.
+  /// Sized to a comfortable measure (~70ch at the body size) so lines stay
+  /// legible.
   static const contentColumnMax = 780.0;
 
   /// A single centered card — the review card, a page-inline studio card —
@@ -132,22 +98,15 @@ abstract final class ListenBreakpoints {
   /// hard-coded 680 (audit C4).
   static const cardColumnMax = 680.0;
 
-  /// A column of decisions rather than reading — the conversation lobby, the
-  /// provider forms: one heading, one primary action, and whatever settings
-  /// fold under them.
+  /// A form column: one heading, one primary action, and its settings.
   ///
   /// Narrower than a reading column for two reasons that point the same way. A
   /// form row is not continuous text but a label↔control pair, and once the
   /// row gets long the eye loses which control belongs to which label on the
   /// way across. And a column this width reads as *one thing to do*, while a
   /// wider one starts reading as a form to be filled in — which is the wrong
-  /// invitation for a surface whose whole job is to get the learner talking.
-  ///
-  /// The live stage takes the same cap (S2): its afterglow caption and its
-  /// notice bar are the same room seen a moment later, and one measure across
-  /// the lobby→stage transition is what stops the room from resizing under the
-  /// learner. That folded in a 520 that differed from the 560 beside it for no
-  /// reason anyone could name.
+  /// invitation for a surface whose whole job is to move the learner through
+  /// one focused action.
   static const formColumnMax = 560.0;
 
   /// Wide content that is two columns or carries media — the home surface, the

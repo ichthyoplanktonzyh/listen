@@ -1,10 +1,9 @@
 use domain::{
-    CorpusOccurrence, CorpusOccurrenceKind, HuntingCandidate, HuntingCandidateId,
-    HuntingCandidateStatus, HuntingCheckAnswer, HuntingOccurrence, HuntingOccurrenceQueryResult,
-    HuntingTarget, HuntingTargetId, HuntingTargetSourceKind, HuntingTargetStatus, LearningEvent,
-    LearningEventId, LearningEventKind, LearningEventSubject, LearningEventSubjectKind,
-    LexicalEntry, LexicalEntryId, LexicalEntryKind, ListeningInboxItemId, MediaId,
-    ObservationResult, PracticeMode, SubtitleTrackId,
+    CorpusOccurrence, CorpusOccurrenceKind, HuntingCheckAnswer, HuntingOccurrence,
+    HuntingOccurrenceQueryResult, HuntingTarget, HuntingTargetId, HuntingTargetSourceKind,
+    HuntingTargetStatus, LearningEvent, LearningEventId, LearningEventKind, LearningEventSubject,
+    LearningEventSubjectKind, LexicalEntry, LexicalEntryId, LexicalEntryKind, ListeningInboxItemId,
+    MediaId, ObservationResult, PracticeMode, SubtitleTrackId,
 };
 
 use crate::{
@@ -15,16 +14,6 @@ use crate::{
 const MAX_ACTIVE_HUNTING_TARGETS: usize = 5;
 
 impl PracticeUseCases {
-    pub fn list_hunting_candidates(
-        &self,
-        status: Option<HuntingCandidateStatus>,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
-        self.hunting
-            .list_hunting_candidates(status, limit.min(100), offset)
-    }
-
     pub fn create_hunting_target(
         &self,
         input: CreateHuntingTargetInput,
@@ -46,21 +35,6 @@ impl PracticeUseCases {
                 if source_id.is_some() {
                     return Err(ApplicationError::Conflict(
                         "manual hunting target must not include source_id",
-                    ));
-                }
-            }
-            HuntingTargetSourceKind::ReviewCandidate => {
-                let candidate_id = source_id.as_ref().ok_or(ApplicationError::Validation(
-                    "review candidate hunting target source_id",
-                ))?;
-                let candidate_id = HuntingCandidateId::parse(candidate_id.clone())?;
-                let candidate = self
-                    .hunting
-                    .get_hunting_candidate(&candidate_id)?
-                    .ok_or(ApplicationError::NotFound("hunting candidate"))?;
-                if candidate.lexical_entry_id != input.lexical_entry_id {
-                    return Err(ApplicationError::Conflict(
-                        "hunting candidate belongs to another lexical entry",
                     ));
                 }
             }
@@ -115,16 +89,6 @@ impl PracticeUseCases {
             created_at_ms: existing.as_ref().map_or(now, |target| target.created_at_ms),
             updated_at_ms: now,
         })?;
-
-        if input.source_kind == HuntingTargetSourceKind::ReviewCandidate {
-            let candidate_id = HuntingCandidateId::parse(source_id.expect("validated source id"))?;
-            let mut candidate = self
-                .hunting
-                .get_hunting_candidate(&candidate_id)?
-                .ok_or(ApplicationError::NotFound("hunting candidate"))?;
-            candidate.status = HuntingCandidateStatus::Consumed;
-            self.hunting.upsert_hunting_candidate(&candidate)?;
-        }
 
         Ok(target)
     }

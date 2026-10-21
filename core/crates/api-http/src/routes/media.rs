@@ -82,9 +82,7 @@ pub(crate) async fn unretain_media(
         .map_err(ApiError::from)
 }
 
-/// Media library read model for triage (Phase 3.5 Slice 5): every media with
-/// cached fit facts, user triage intent, and the familiar-material mark. The
-/// client derives queue grouping from these facts; nothing here gates access.
+/// Media library read model with the user's explicit triage intent.
 pub(crate) async fn list_media_library(
     State(state): State<ApiState>,
 ) -> Result<Json<Vec<application::MediaLibraryEntry>>, ApiError> {
@@ -308,76 +306,6 @@ pub(crate) async fn read_subtitle(
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("subtitle track"))
-}
-
-/// Dual-dimension content fit for one track's media (ADR 0018). Served from
-/// the fingerprint-validated cache; recomputes only when transcript,
-/// timelines, or the vocabulary profile changed.
-pub(crate) async fn track_content_fit(
-    State(state): State<ApiState>,
-    Path(track_id): Path<String>,
-) -> Result<Json<domain::ContentDifficultyProfile>, ApiError> {
-    let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
-    state
-        .application
-        .execute("media.content_fit", move |services| {
-            services.media_analysis().content_fit_for_track(&track_id)
-        })
-        .await
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct CalibrationSamplesQuery {
-    language: Option<String>,
-}
-
-/// Offline calibration export. Predictions are uncalibrated and feedback is
-/// emitted only as the observed label, preventing target leakage.
-pub(crate) async fn content_fit_calibration_samples(
-    State(state): State<ApiState>,
-    Query(query): Query<CalibrationSamplesQuery>,
-) -> Result<Json<Vec<domain::CalibrationSample>>, ApiError> {
-    let language = query
-        .language
-        .map(LanguageCode::parse)
-        .transpose()
-        .map_err(ApplicationError::from)?;
-    state
-        .application
-        .execute("media.content_fit_calibration_samples", move |services| {
-            services
-                .media_analysis()
-                .export_calibration_samples(language.as_ref())
-        })
-        .await
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ColdStartWordsQuery {
-    limit: Option<u32>,
-}
-
-pub(crate) async fn cold_start_words(
-    State(state): State<ApiState>,
-    Path(track_id): Path<String>,
-    Query(query): Query<ColdStartWordsQuery>,
-) -> Result<Json<Vec<application::ColdStartWordCandidate>>, ApiError> {
-    let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
-    let limit = query.limit.unwrap_or(20);
-    state
-        .application
-        .execute("media.cold_start_words", move |services| {
-            services
-                .media_analysis()
-                .cold_start_word_candidates(&track_id, limit)
-        })
-        .await
-        .map(Json)
-        .map_err(ApiError::from)
 }
 
 pub(crate) async fn archive_subtitle(

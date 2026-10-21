@@ -11,17 +11,15 @@ import 'package:llplayer_next/models/review_deck.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/controllers/review_deck_controller.dart';
 import 'package:llplayer_next/screens/review_deck_home_screen.dart';
-import 'package:llplayer_next/services/anki_package_file_service.dart';
 import 'package:llplayer_next/services/occurrence_media_file_service.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/flows/shell_learning_routes.dart';
 
 import 'support/review_repository_fake.dart';
 
-/// The learning shell routes: hosts own a composition-root-built controller
-/// bundle for one visit. These cases pin the ownership contract — the
-/// unavailable pane while the core is disconnected, the screen once a bundle
-/// is supplied, and the rebuild when the core connects or disconnects again.
+/// The listening-language shell routes own their composition-root-built
+/// controller bundle for one visit and show an explicit state while Core is
+/// unavailable.
 
 class _FakeReviewRepository extends FakeReviewRepositoryBase {
   /// The route now opens on the deck home, so the load it makes on entry is
@@ -33,7 +31,6 @@ class _FakeReviewRepository extends FakeReviewRepositoryBase {
     loadCalls++;
     return ReviewDeckOverview(
       channels: const [],
-      importedDecks: const [],
       limitStatus: fakeLimitStatus(),
     );
   }
@@ -56,19 +53,6 @@ class _FakeReviewRepository extends FakeReviewRepositoryBase {
 
   @override
   Future<void> registerMedia(String path) async {}
-}
-
-class _FakeAnkiFileService implements AnkiPackageFileService {
-  const _FakeAnkiFileService();
-
-  @override
-  Future<String?> pickPackageToImport() async => null;
-
-  @override
-  Future<String> mediaDirectoryFor(String packagePath) async => '/tmp/media';
-
-  @override
-  Future<String?> pickExportDestination() async => null;
 }
 
 class _FakeFileService implements OccurrenceMediaFileService {
@@ -121,25 +105,10 @@ void main() {
               auxiliaryAudio: AuxiliaryAudioController(),
               pauseBackgroundPlayback: () async {},
             ),
-            ExpressionRouteHost(
-              create: null,
-              language: 'en',
-              createDetailViewModel: null,
-              onPlaySource: null,
-              onStartSpeaking: null,
-            ),
             ReviewRouteHost(
               create: null,
               language: 'en',
-              fileService: const _FakeAnkiFileService(),
               pauseBackgroundPlayback: () async {},
-              onStartShadowing: (_) async {},
-              onStartDelayedRetelling: (_) async {},
-            ),
-            CoachRouteHost(
-              create: null,
-              language: 'en',
-              onNavigate: (_, _) async {},
             ),
           ],
         ),
@@ -149,9 +118,9 @@ void main() {
 
     expect(
       find.text('Connect the local core first'),
-      findsNWidgets(4),
+      findsNWidgets(2),
       reason:
-          'each destination names the unavailable core instead of '
+          'each listening destination names the unavailable core instead of '
           'rendering a dead surface',
     );
     expect(tester.takeException(), isNull);
@@ -166,10 +135,7 @@ void main() {
         ReviewRouteHost(
           create: () => _reviewBundle(repository),
           language: 'en',
-          fileService: const _FakeAnkiFileService(),
           pauseBackgroundPlayback: () async {},
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -196,10 +162,7 @@ void main() {
             return ReviewRouteHost(
               create: connected ? () => _reviewBundle(repository) : null,
               language: 'en',
-              fileService: const _FakeAnkiFileService(),
               pauseBackgroundPlayback: () async {},
-              onStartShadowing: (_) async {},
-              onStartDelayedRetelling: (_) async {},
             );
           },
         ),

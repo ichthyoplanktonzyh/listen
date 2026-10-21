@@ -5,8 +5,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/learning_assets_ui.dart';
-import 'package:llplayer_next/controllers/learning_assets_view_models.dart';
-import 'package:llplayer_next/data/repositories/learning_assets_repository.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -169,47 +167,6 @@ void main() {
     await file.writeAsBytes(List<int>.filled(131072, 0));
     expect(await computeOpenSubtitlesMovieHash(file.path), '0000000000020000');
     await directory.delete(recursive: true);
-  });
-
-  // The 我的表达 entry on this screen shipped its own hardcoded title and
-  // subtitle, so an `en` learner met two lines of Chinese here while the
-  // compact home card — the same destination — read the localized keys. Both
-  // directions are asserted: this is a copy path, and a gate that only counts
-  // Han ideographs cannot prove the English side.
-  testWidgets('the my-expressions entry speaks the interface language', (
-    tester,
-  ) async {
-    Widget screen(Locale locale) => localized(
-      LearningAssetsScreen(
-        viewModel: LearningAssetsViewModel(
-          LocalLearningAssetsRepository(
-            LocalApi.withTransport(
-              baseUrl: 'http://test',
-              token: 'token',
-              transport: (method, path, body) async =>
-                  (statusCode: 200, body: '[]'),
-            ),
-          ),
-          language: 'en',
-        ),
-        personalExpressionBuilder: (_) => const SizedBox.shrink(),
-      ),
-      locale: locale,
-    );
-
-    await tester.pumpWidget(screen(const Locale('en')));
-    await tester.pumpAndSettle();
-    expect(find.text('My expressions'), findsOneWidget);
-    expect(
-      find.text('Saved expressions to revisit and practice'),
-      findsOneWidget,
-    );
-    expect(find.text('我的表达'), findsNothing);
-
-    await tester.pumpWidget(screen(const Locale('zh')));
-    await tester.pumpAndSettle();
-    expect(find.text('我的表达'), findsOneWidget);
-    expect(find.text('My expressions'), findsNothing);
   });
 
   testWidgets('learning asset tile shows phrase status and durable sources', (

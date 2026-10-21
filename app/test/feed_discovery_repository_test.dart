@@ -51,7 +51,7 @@ void main() {
   test('maps feed items to entries the acquisition path can act on', () async {
     final entries = await repository.entriesFor(feedUrl());
 
-    expect(entries, hasLength(2));
+    expect(entries, hasLength(1));
     final first = entries.first;
     expect(first.id, 'ep-001');
     expect(first.sourceId, feedUrl());
@@ -62,14 +62,6 @@ void main() {
     expect(first.mediaUrl, 'https://cdn.example.com/ep001.mp3');
     expect(first.mediaByteLength, 8123456);
     expect(first.language, 'en-us');
-  });
-
-  test('marks an item with no enclosure as nothing to acquire', () async {
-    final entries = await repository.entriesFor(feedUrl());
-
-    expect(entries.last.acquisition, AcquisitionMode.none);
-    expect(entries.last.mediaUrl, isNull);
-    expect(entries.last.durationMs, isNull);
   });
 
   test(
@@ -192,7 +184,7 @@ void main() {
         request.response.write(_feed);
         await request.response.close();
       };
-      expect(await repository.entriesFor(feedUrl()), hasLength(2));
+      expect(await repository.entriesFor(feedUrl()), hasLength(1));
     });
   });
 
@@ -266,100 +258,6 @@ void main() {
       expect(reRead.first.id, first.id);
     },
   );
-
-  test(
-    'a mixed feed decides modality per item, not from its first item',
-    () async {
-      handler = (request) async {
-        request.response.write(_mixedFeed);
-        await request.response.close();
-      };
-
-      final entries = await repository.entriesFor(feedUrl());
-      expect(entries, hasLength(2));
-
-      // The first item carries an enclosure: it is media, whatever the
-      // channel is called.
-      final media = entries.first;
-      expect(media.acquisition, AcquisitionMode.enclosure);
-      expect(media.contentKind, ItemContentKind.audio);
-      expect(media.mediaUrl, 'https://cdn.example.com/ep001.mp3');
-      expect(media.entryUrl, isNull);
-
-      // The second item is an article link: it is a document, decided by its
-      // own shape, not by the channel's first item.
-      final article = entries.last;
-      expect(article.acquisition, AcquisitionMode.article);
-      expect(article.contentKind, ItemContentKind.article);
-      expect(article.mediaUrl, isNull);
-      expect(article.entryUrl, 'https://blog.example.com/posts/1');
-    },
-  );
-
-  test(
-    'an article feed subscribes as a document source, not a podcast',
-    () async {
-      // The kind is the feed's own fact: enclosures are media, article links
-      // are documents. A feed of articles must never be offered as a podcast.
-      handler = (request) async {
-        request.response.write(_documentFeed);
-        await request.response.close();
-      };
-
-      final source = await repository.resolveCustomChannel(
-        feedUrl(),
-        _UnusedImportRepository(),
-      );
-
-      expect(source.kind, ContentSourceKind.document);
-
-      final items = await repository.entriesFor(feedUrl());
-      expect(items.single.acquisition, AcquisitionMode.article);
-      expect(items.single.contentKind, ItemContentKind.article);
-      expect(items.single.entryUrl, 'https://blog.example.com/posts/1');
-      expect(items.single.mediaUrl, isNull);
-    },
-  );
-
-  test(
-    'the subscribed kind is what the entries mean after a restart',
-    () async {
-      final directory = Directory.systemTemp.createTempSync('subs-doc-');
-      addTearDown(() => directory.deleteSync(recursive: true));
-
-      handler = (request) async {
-        request.response.write(_documentFeed);
-        await request.response.close();
-      };
-      final subscribing = FeedDiscoveryRepository(
-        client: HttpOverrides.runWithHttpOverrides(
-          HttpClient.new,
-          _RealHttpOverrides(),
-        ),
-        subscriptions: SubscriptionStore(directory: directory),
-      );
-      final added = await subscribing.resolveCustomChannel(
-        feedUrl(),
-        _UnusedImportRepository(),
-      );
-      expect(added.kind, ContentSourceKind.document);
-
-      // A fresh repository, as a relaunch would build: the cached parse is
-      // gone and the subscribed kind is the only thing left to say what the
-      // feed's items mean.
-      final relaunched = FeedDiscoveryRepository(
-        client: HttpOverrides.runWithHttpOverrides(
-          HttpClient.new,
-          _RealHttpOverrides(),
-        ),
-        subscriptions: SubscriptionStore(directory: directory),
-      );
-      final items = await relaunched.entriesFor(feedUrl());
-
-      expect(items.single.acquisition, AcquisitionMode.article);
-      expect(items.single.contentKind, ItemContentKind.article);
-    },
-  );
 }
 
 /// The base class's own `createHttpClient` builds a real one.
@@ -398,25 +296,8 @@ const _feed = '''
 </rss>
 ''';
 
-const _documentFeed = '''
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-  <channel>
-    <title>The Weekly Article</title>
-    <description>Long reads for learners.</description>
-    <language>en</language>
-    <item>
-      <title>The first article</title>
-      <guid>post-001</guid>
-      <pubDate>Tue, 28 Jul 2026 09:00:00 GMT</pubDate>
-      <link>https://blog.example.com/posts/1</link>
-    </item>
-  </channel>
-</rss>
-''';
-
-/// Two items with no guids: an enclosure item and an article item, so both
-/// surrogate shapes and the mixed-feed rule are exercised from one fixture.
+/// Two media items with no guids; the source-scoped surrogate key must remain
+/// stable across a re-read without treating an enclosure URL as an item id.
 const _feedWithoutGuids = '''
 <?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -429,33 +310,9 @@ const _feedWithoutGuids = '''
       <enclosure url="https://cdn.example.com/ep001.mp3" length="8123456" type="audio/mpeg"/>
     </item>
     <item>
-      <title>An article</title>
+      <title>Another episode</title>
       <pubDate>Wed, 29 Jul 2026 09:00:00 GMT</pubDate>
-      <link>https://blog.example.com/posts/1</link>
-    </item>
-  </channel>
-</rss>
-''';
-
-/// One enclosure item and one article item in the same channel: modality is
-/// each item's own fact.
-const _mixedFeed = '''
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-  <channel>
-    <title>Mixed</title>
-    <language>en</language>
-    <item>
-      <title>An episode</title>
-      <guid>mix-1</guid>
-      <pubDate>Tue, 28 Jul 2026 09:00:00 GMT</pubDate>
-      <enclosure url="https://cdn.example.com/ep001.mp3" length="8123456" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>An article</title>
-      <guid>mix-2</guid>
-      <pubDate>Wed, 29 Jul 2026 09:00:00 GMT</pubDate>
-      <link>https://blog.example.com/posts/1</link>
+      <enclosure url="https://cdn.example.com/ep002.mp3" length="9000000" type="audio/mpeg"/>
     </item>
   </channel>
 </rss>

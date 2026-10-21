@@ -8,236 +8,110 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from listen_gen.capability import CapabilityRequest
-from listen_gen.plan import (
-    DerivationKind,
-    ProductionPlan,
-    UnsupportedCapability,
-    plan,
-)
+from listen_gen.plan import DerivationKind, UnsupportedCapability, plan
+from listen_gen.package_v3 import sha256_of_bytes
 
 
-def document_request(**overrides) -> CapabilityRequest:
-    document = {
-        "schema": "listen_gen.capability-request.v2",
-        "version": 2,
-        "created_at_ms": 1,
-        "material": {
-            "material_id": "material-1",
-            "material_revision_id": "revision-1",
-            "title": "Material",
-        },
-        "edition": {
-            "edition_id": "edition-1",
-            "title": "Edition",
-            "target_language": "en",
-            "support_languages": [],
-        },
-        "requested_capability": "read",
-        "available_renditions": [
-            {
-                "kind": "document",
-                "rendition_id": "sha256:" + "a" * 64,
-                "media_type": "text/plain",
-                "language": "en",
-                "source_asset_id": "sha256:" + "b" * 64,
-                "blob": {"digest": "sha256:" + "c" * 64, "size_bytes": 10, "path": "/tmp/x.txt"},
-            }
-        ],
-        "available_resources": [],
-    }
-    document.update(overrides)
-    return CapabilityRequest.from_document(document)
-
-
-def media_request(**overrides) -> CapabilityRequest:
-    document = {
-        "schema": "listen_gen.capability-request.v2",
-        "version": 2,
-        "created_at_ms": 1,
-        "material": {
-            "material_id": "material-1",
-            "material_revision_id": "revision-1",
-            "title": "Material",
-        },
-        "edition": {
-            "edition_id": "edition-1",
-            "title": "Edition",
-            "target_language": "en",
-            "support_languages": [],
-        },
-        "requested_capability": "read",
-        "available_renditions": [
-            {
+def media_request(
+    capability: str = "read",
+    *,
+    media: bool = True,
+    media_kind: str = "audio",
+    additional_media_kinds: tuple[str, ...] = (),
+) -> CapabilityRequest:
+    renditions: list[dict[str, object]] = []
+    if media:
+        for index, kind in enumerate((media_kind, *additional_media_kinds)):
+            renditions.append({
                 "kind": "media",
-                "media_kind": "audio",
-                "rendition_id": "sha256:" + "d" * 64,
-                "media_type": "audio/wav",
-                "media_id": "media-1",
-                "fingerprint": "fp-1",
-                "blob": {"digest": "sha256:" + "e" * 64, "size_bytes": 10, "path": "/tmp/x.wav"},
-            }
-        ],
-        "available_resources": [],
-    }
-    document.update(overrides)
-    return CapabilityRequest.from_document(document)
+                "rendition_id": "sha256:" + str(index + 1) * 64,
+                "media_kind": kind,
+                "media_type": "audio/wav" if kind == "audio" else "video/mp4",
+                "media_id": f"media-{index + 1}",
+                "fingerprint": f"media-fingerprint-{index + 1}",
+                "blob": {
+                    "digest": "sha256:" + str(index + 2) * 64,
+                    "size_bytes": 10,
+                    "path": "/tmp/media.wav" if kind == "audio" else "/tmp/media.mp4",
+                },
+            })
+    return CapabilityRequest.from_document({
+        "schema": "listen_gen.capability-request.v2",
+        "version": 2,
+        "created_at_ms": 1,
+        "material": {
+            "material_id": "material-1",
+            "material_revision_id": "revision-1",
+            "title": "Test",
+        },
+        "edition": {
+            "edition_id": "edition-1",
+            "title": "Test",
+            "target_language": "en-US",
+            "support_languages": [],
+        },
+        "requested_capability": capability,
+        "available_renditions": renditions,
+    })
 
 
 class PlanTests(unittest.TestCase):
-    def test_read_from_document_plans_document_derivation(self) -> None:
-        production_plan = plan(document_request())
-        self.assertFalse(production_plan.empty)
-        self.assertEqual(len(production_plan.derivations), 1)
-        self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_READ
-        )
-        self.assertEqual(
-            production_plan.derivations[0].input_rendition_ids,
-            ("sha256:" + "a" * 64,),
-        )
-
-    def test_read_from_media_plans_media_derivation(self) -> None:
+    def test_read_from_media_plans_transcription(self) -> None:
         production_plan = plan(media_request())
         self.assertEqual(len(production_plan.derivations), 1)
+        derivation = production_plan.derivations[0]
+        self.assertEqual(derivation.kind, DerivationKind.MEDIA_READ)
+        self.assertEqual(derivation.provider, "asr")
+
+    def test_synchronized_listen_from_media_uses_the_same_asr_derivation(self) -> None:
+        production_plan = plan(media_request("synchronized_read_listen"))
         self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.MEDIA_READ
+            [entry.kind for entry in production_plan.derivations],
+            [DerivationKind.MEDIA_READ],
         )
 
-    def test_listen_from_document_plans_reading_then_tts(self) -> None:
-        production_plan = plan(document_request(requested_capability="listen"))
-        self.assertEqual(len(production_plan.derivations), 2)
-        self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_READ
-        )
-        self.assertEqual(
-            production_plan.derivations[1].kind, DerivationKind.DOCUMENT_LISTEN
-        )
-        self.assertEqual(production_plan.derivations[1].provider, "tts")
-        self.assertEqual(production_plan.derivations[1].input_resource_ids, ())
+    def test_subtitle_input_is_explicit_in_the_plan_without_a_local_path(self) -> None:
+        digest = sha256_of_bytes(b"subtitle bytes")
+        first = plan(media_request(), subtitle_sha256=digest)
+        changed = plan(media_request(), subtitle_sha256=sha256_of_bytes(b"other bytes"))
+        derivation = first.derivations[0].describe()
+        self.assertEqual(derivation["provider"], "subtitle")
+        self.assertIn("SRT/VTT", derivation["label"])
+        self.assertEqual(derivation["subtitle_sha256"], digest)
+        self.assertNotIn("path", derivation)
+        self.assertNotEqual(first.describe(), changed.describe())
+        self.assertNotIn("subtitle_sha256", plan(media_request()).derivations[0].describe())
 
-    def test_listen_from_media_is_already_satisfied(self) -> None:
-        production_plan = plan(media_request(requested_capability="listen"))
-        self.assertTrue(production_plan.empty)
+    def test_subtitle_input_identity_must_be_a_canonical_sha256(self) -> None:
+        with self.assertRaisesRegex(ValueError, "subtitle_sha256"):
+            plan(media_request(), subtitle_sha256="/private/local/path.srt")
 
-    def test_watch_from_document_is_unsupported(self) -> None:
-        with self.assertRaises(UnsupportedCapability):
-            plan(document_request(requested_capability="watch"))
+    def test_listen_requires_an_audio_rendition(self) -> None:
+        self.assertTrue(plan(media_request("listen", media_kind="audio")).empty)
+        self.assertTrue(
+            plan(
+                media_request(
+                    "listen", media_kind="audio", additional_media_kinds=("video",)
+                )
+            ).empty
+        )
+        with self.assertRaisesRegex(UnsupportedCapability, "listen requires an audio rendition"):
+            plan(media_request("listen", media_kind="video"))
 
-    def test_watch_from_media_is_already_satisfied(self) -> None:
-        production_plan = plan(media_request(requested_capability="watch"))
-        self.assertTrue(production_plan.empty)
+    def test_watch_is_satisfied_only_by_video_source(self) -> None:
+        self.assertTrue(plan(media_request("watch", media_kind="video")).empty)
+        with self.assertRaisesRegex(UnsupportedCapability, "watch requires video media"):
+            plan(media_request("watch", media_kind="audio"))
 
-    def test_synchronized_from_document_plans_reading_then_tts(self) -> None:
-        production_plan = plan(
-            document_request(requested_capability="synchronized_read_listen")
-        )
-        self.assertEqual(len(production_plan.derivations), 2)
-        self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_READ
-        )
-        self.assertEqual(
-            production_plan.derivations[1].kind, DerivationKind.DOCUMENT_LISTEN
-        )
+    def test_capability_without_media_is_unsupported(self) -> None:
+        for capability in ("read", "listen", "watch", "synchronized_read_listen"):
+            with self.subTest(capability=capability):
+                with self.assertRaises(UnsupportedCapability):
+                    plan(media_request(capability, media=False))
 
-    def test_synchronized_from_media_plans_media_derivation(self) -> None:
-        production_plan = plan(
-            media_request(requested_capability="synchronized_read_listen")
-        )
-        self.assertEqual(len(production_plan.derivations), 1)
-        self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.MEDIA_READ
-        )
-
-    def test_read_reuses_existing_compatible_structured_reading(self) -> None:
-        resource = {
-            "resource_id": "sha256:" + "f" * 64,
-            "kind": "structured_reading",
-            "schema": "listen.payload.structured-reading.v1",
-            "role": "base",
-            "content_language": "en",
-            "material_revision_id": "revision-1",
-            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
-        }
-        production_plan = plan(
-            document_request(available_resources=[resource])
-        )
-        self.assertTrue(production_plan.empty)
-
-    def test_language_incompatible_reading_never_suppresses_generation(self) -> None:
-        resource = {
-            "resource_id": "sha256:" + "f" * 64,
-            "kind": "structured_reading",
-            "schema": "listen.payload.structured-reading.v1",
-            "role": "base",
-            "content_language": "de",
-            "material_revision_id": "revision-1",
-            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
-        }
-        production_plan = plan(
-            document_request(available_resources=[resource])
-        )
-        self.assertFalse(production_plan.empty)
-        self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_READ
-        )
-
-    def test_stale_revision_reading_never_suppresses_generation(self) -> None:
-        resource = {
-            "resource_id": "sha256:" + "f" * 64,
-            "kind": "structured_reading",
-            "schema": "listen.payload.structured-reading.v1",
-            "role": "base",
-            "content_language": "en",
-            "material_revision_id": "revision-0",
-            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
-        }
-        production_plan = plan(
-            document_request(available_resources=[resource])
-        )
-        self.assertFalse(production_plan.empty)
-
-    def test_unknown_facts_never_suppress_generation(self) -> None:
-        resource = {
-            "resource_id": "sha256:" + "f" * 64,
-            "kind": "structured_reading",
-            "schema": "listen.payload.structured-reading.v1",
-            "role": "base",
-            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
-        }
-        production_plan = plan(
-            document_request(available_resources=[resource])
-        )
-        self.assertFalse(production_plan.empty)
-
-    def test_listen_reuses_compatible_reading_for_tts(self) -> None:
-        resource = {
-            "resource_id": "sha256:" + "f" * 64,
-            "kind": "structured_reading",
-            "schema": "listen.payload.structured-reading.v1",
-            "role": "base",
-            "content_language": "en",
-            "material_revision_id": "revision-1",
-            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
-        }
-        production_plan = plan(
-            document_request(requested_capability="listen", available_resources=[resource])
-        )
-        self.assertEqual(len(production_plan.derivations), 1)
-        self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_LISTEN
-        )
-        self.assertEqual(
-            production_plan.derivations[0].input_resource_ids, ("sha256:" + "f" * 64,)
-        )
-
-    def test_empty_inputs_are_unsupported(self) -> None:
-        with self.assertRaises(UnsupportedCapability):
-            plan(document_request(available_renditions=[]))
-
-    def test_plan_is_deterministic(self) -> None:
-        first = plan(document_request()).describe()
-        second = plan(document_request()).describe()
-        self.assertEqual(first, second)
+    def test_plan_description_is_stable(self) -> None:
+        request = media_request()
+        self.assertEqual(plan(request).describe(), plan(request).describe())
 
 
 if __name__ == "__main__":

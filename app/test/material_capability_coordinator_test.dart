@@ -16,8 +16,6 @@ import 'package:llplayer_next/services/capability_generation_request.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 
-import 'support/learning_material_fixtures.dart';
-
 /// The coordinator is the deep completion flow: resolution order (adopted →
 /// candidate adopt → local import → production), durable attempts, cancellation
 /// with latest-request-wins, and honest state transitions. This harness drives
@@ -213,8 +211,6 @@ void main() {
           id: baseRevision.id,
           materialId: baseRevision.materialId,
           title: baseRevision.title,
-          sourceAssets: baseRevision.sourceAssets,
-          documentRenditions: baseRevision.documentRenditions,
           mediaRenditions: [
             const MediaRendition(
               id: 'media-rendition-2',
@@ -326,12 +322,49 @@ void main() {
     await _settle();
 
     expect(run.cancelled, isTrue);
-    expect(harness.repo.finalizedFailures, ['cancelled']);
+    expect(harness.repo.finalizedFailures, isEmpty);
+    expect(harness.repo.cancelledAttemptIds, ['attempt-1']);
 
     final outcome = await requestFuture;
     expect(outcome, isA<CapabilityCancelled>());
     expect(harness.runView!.phase, CapabilityRunPhase.cancelled);
   });
+
+  test(
+    'cancel while Gen start is pending cancels and cleans the late process',
+    () async {
+      harness.gen.holdNextStart = true;
+      final requestFuture = harness.request(MaterialCapability.read);
+      await harness.gen.heldStartCalled.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw StateError(
+          'Gen start was never entered (count=${harness.gen.startCount})',
+        ),
+      );
+
+      await harness.coordinator.cancel('material-1', MaterialCapability.read);
+      final lateRun = harness.gen.releaseHeldStart();
+      await harness.gen.heldStartResolved.future.timeout(
+        const Duration(seconds: 2),
+      );
+
+      expect(
+        await requestFuture.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => throw StateError(
+            'request did not settle (cancelled=${harness.runView?.phase}, '
+            'finalized=${harness.repo.cancelledAttemptIds})',
+          ),
+        ),
+        isA<CapabilityCancelled>(),
+      );
+      expect(lateRun.cancelled, isTrue);
+      expect(lateRun.cleanUpCount, 1);
+      expect(harness.repo.finalizedFailures, isEmpty);
+      expect(harness.repo.cancelledAttemptIds, ['attempt-1']);
+      expect(harness.runView!.phase, CapabilityRunPhase.cancelled);
+    },
+  );
 
   test(
     'a newer request replaces the stale run and drops its results',
@@ -362,6 +395,57 @@ void main() {
       expect(await second, isA<CapabilityAvailable>());
       expect(harness.repo.finalizedSucceeded, 1);
       expect(harness.runView!.phase, CapabilityRunPhase.completed);
+    },
+  );
+
+  test(
+    'replacement while Gen start is pending cancels and cleans the stale process',
+    () async {
+      harness.gen.holdNextStart = true;
+      final staleRequest = harness.request(MaterialCapability.read);
+      await harness.gen.heldStartCalled.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw StateError(
+          'Gen start was never entered (count=${harness.gen.startCount})',
+        ),
+      );
+
+      final latestRequest = harness.request(MaterialCapability.read);
+      await _waitFor(() => harness.gen.startCount == 2);
+      final latestRun = harness.gen.lastRun!;
+      final staleRun = harness.gen.releaseHeldStart();
+      await harness.gen.heldStartResolved.future.timeout(
+        const Duration(seconds: 2),
+      );
+
+      expect(
+        await staleRequest.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => throw StateError(
+            'stale request did not settle (cancelled='
+            '${harness.repo.cancelledAttemptIds})',
+          ),
+        ),
+        isA<CapabilityReplaced>(),
+      );
+      expect(staleRun.cancelled, isTrue);
+      expect(staleRun.cleanUpCount, 1);
+
+      latestRun
+        ..emitProtocol()
+        ..emitAccepted(attemptId: 'attempt-1');
+      await _settle();
+      latestRun.emitCompleted();
+      await _settle();
+      await _settle();
+
+      expect(
+        await latestRequest.timeout(const Duration(seconds: 2)),
+        isA<CapabilityAvailable>(),
+      );
+      expect(harness.runView!.phase, CapabilityRunPhase.completed);
+      expect(harness.repo.cancelledAttemptIds, ['attempt-1']);
+      expect(harness.repo.finalizedSucceeded, 1);
     },
   );
 
@@ -466,23 +550,6 @@ void main() {
   );
 
   test(
-    'derived document audio satisfies listen without source audio',
-    () async {
-      harness.repo.editions = [_mediaEdition];
-      harness.repo.capabilities = const [];
-
-      final outcome = await harness.request(
-        MaterialCapability.listen,
-        material: _documentMaterial(language: 'en'),
-      );
-
-      expect(outcome, isA<CapabilityAvailable>());
-      expect(harness.gen.startCount, 0);
-      expect(harness.repo.attemptCount, 0);
-    },
-  );
-
-  test(
     'an empty-plan completion is a satisfied outcome, not a failure',
     () async {
       final requestFuture = harness.request(MaterialCapability.read);
@@ -548,9 +615,8 @@ void main() {
   test(
     'an already-satisfied projection resolves as available without a run',
     () async {
-      // The material has no document rendition, but the projection already
-      // reports read available (an adopted composition the learner has): the
-      // capability is present, never reported as broken.
+      // The projection already reports read available: the capability is
+      // present, never reported as broken.
       harness.repo.capabilities = const [
         MaterialCapabilityProjection(
           capability: MaterialCapability.read,
@@ -597,95 +663,6 @@ void main() {
       await _settle();
 
       expect(await requestFuture, isA<CapabilityAvailable>());
-    },
-  );
-
-  test('the request declares reusable adopted resources with exact payload '
-      'facts', () async {
-    harness.repo.composition = _adoptedComposition;
-    harness.repo.resourcePayloads[_adoptedResourceId] = utf8.encode(
-      '{"text":"Hello","anchors":[]}',
-    );
-
-    final requestFuture = harness.request(MaterialCapability.read);
-    await _settleUntil(() => harness.gen.hasRun);
-
-    final resources =
-        harness.gen.lastRun!.request.requestJson['available_resources']
-            as List<dynamic>;
-    expect(resources, hasLength(1));
-    final entry = resources.single as Map<String, dynamic>;
-    expect(entry['resource_id'], 'sha256:$_adoptedResourceId');
-    expect(entry['kind'], 'structured_reading');
-    expect(entry['schema'], 'listen.structured_reading.v1');
-    expect(entry['role'], 'base');
-    expect(entry['content_language'], 'en');
-    expect(entry['material_revision_id'], 'revision-1');
-    final blob = entry['blob'] as Map<String, dynamic>;
-    expect(blob['digest'], 'sha256:$_adoptedPayloadDigest');
-    expect(blob['size_bytes'], 28);
-    final path = blob['path'] as String;
-    expect(path, isNotEmpty);
-    expect(await File(path).readAsString(), '{"text":"Hello","anchors":[]}');
-
-    harness.gen.lastRun!
-      ..emitProtocol()
-      ..emitAccepted(attemptId: 'attempt-1');
-    await _settle();
-    harness.gen.lastRun!.emitCompleted();
-    await _settle();
-    await _settle();
-    await requestFuture;
-  });
-
-  test('an unreadable resource payload is not declared for reuse', () async {
-    // The adopted composition declares the structured reading, but its
-    // payload cannot be read from Core: the request must not claim a reuse
-    // it cannot back, and generation proceeds without it.
-    harness.repo.composition = _adoptedComposition;
-
-    final requestFuture = harness.request(MaterialCapability.read);
-    await _settleUntil(() => harness.gen.hasRun);
-
-    final resources =
-        harness.gen.lastRun!.request.requestJson['available_resources']
-            as List<dynamic>;
-    expect(resources, isEmpty);
-
-    harness.gen.lastRun!
-      ..emitProtocol()
-      ..emitAccepted(attemptId: 'attempt-1');
-    await _settle();
-    harness.gen.lastRun!.emitCompleted();
-    await _settle();
-    await _settle();
-    await requestFuture;
-  });
-
-  test(
-    'the request target language is the document rendition language',
-    () async {
-      final documentMaterial = _documentMaterial(language: 'zh');
-
-      final requestFuture = harness.request(
-        MaterialCapability.read,
-        material: documentMaterial,
-      );
-      await _settle();
-
-      expect(
-        harness.gen.lastRun!.request.requestJson['edition']['target_language'],
-        'zh',
-      );
-
-      harness.gen.lastRun!
-        ..emitProtocol()
-        ..emitAccepted(attemptId: 'attempt-1');
-      await _settle();
-      harness.gen.lastRun!.emitCompleted();
-      await _settle();
-      await _settle();
-      await requestFuture;
     },
   );
 
@@ -745,7 +722,13 @@ final class _FakeGenService implements ListenGenProcessService {
   _FakeGenService();
 
   _FakeGenRun? lastRun;
+  _FakeGenRun? heldRun;
   int startCount = 0;
+  bool holdNextStart = false;
+  final Completer<void> heldStartCalled = Completer<void>();
+  final Completer<void> heldStartResolved = Completer<void>();
+  final Completer<ListenGenProcessRun> _heldStartGate =
+      Completer<ListenGenProcessRun>();
   String verifiedToolVersion = '0.5.2';
 
   bool get hasRun => lastRun != null;
@@ -757,10 +740,25 @@ final class _FakeGenService implements ListenGenProcessService {
   ContentGeneratorState get state => ContentGeneratorState.ready;
 
   @override
-  Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) async {
+  Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) {
     startCount++;
     final run = _FakeGenRun(request, verifiedToolVersion: verifiedToolVersion);
     lastRun = run;
+    if (holdNextStart) {
+      holdNextStart = false;
+      heldRun = run;
+      heldStartCalled.complete();
+      return _heldStartGate.future.then((run) {
+        heldStartResolved.complete();
+        return run;
+      });
+    }
+    return Future.value(run);
+  }
+
+  _FakeGenRun releaseHeldStart() {
+    final run = heldRun!;
+    _heldStartGate.complete(run);
     return run;
   }
 }
@@ -775,6 +773,7 @@ final class _FakeGenRun implements ListenGenProcessRun {
       StreamController<GenMachineEvent>();
   final Completer<String> _packagePath = Completer<String>();
   bool cancelled = false;
+  int cleanUpCount = 0;
   int _sequence = 0;
 
   @override
@@ -793,7 +792,14 @@ final class _FakeGenRun implements ListenGenProcessRun {
 
   @override
   Future<void> cleanUp() async {
-    if (!_events.isClosed) await _events.close();
+    cleanUpCount++;
+    if (_events.isClosed) return;
+    final close = _events.close();
+    if (_events.hasListener) {
+      await close;
+    } else {
+      unawaited(close);
+    }
   }
 
   void emitProtocol() => _events.add(
@@ -885,6 +891,7 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   int finalizedSucceeded = 0;
   final List<String?> finalizedToolVersions = [];
   final List<String> finalizedFailures = [];
+  final List<String> cancelledAttemptIds = [];
   final List<String> adoptedReleases = [];
   final List<String> installedPackagePaths = [];
   int adoptFailuresRemaining = 0;
@@ -892,15 +899,6 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   String? installRejectionBody;
   bool failNextStart = false;
   bool failListCapabilities = false;
-
-  /// The adopted composition a production run may reuse resources from; null
-  /// reads as Core's typed not-found (no adopted composition).
-  AdoptedComposition? composition;
-
-  /// Keyed by resource id: the exact payload bytes behind each declared
-  /// resource. Missing payloads read as unreadable and are not reused.
-  final Map<String, List<int>> resourcePayloads = {};
-  bool failReadComposition = false;
 
   @override
   ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
@@ -942,20 +940,23 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   Future<CapabilityAttempt> finalizeAttempt({
     required String materialId,
     required String attemptId,
-    required bool succeeded,
+    required CapabilityAttemptFinalStatus status,
     String? failureReason,
     String? toolId,
     String? toolVersion,
   }) async {
-    if (succeeded) {
-      finalizedSucceeded++;
-      finalizedToolVersions.add(toolVersion);
-    } else {
-      finalizedFailures.add(failureReason ?? 'unknown');
+    switch (status) {
+      case CapabilityAttemptFinalStatus.succeeded:
+        finalizedSucceeded++;
+        finalizedToolVersions.add(toolVersion);
+      case CapabilityAttemptFinalStatus.failed:
+        finalizedFailures.add(failureReason ?? 'unknown');
+      case CapabilityAttemptFinalStatus.cancelled:
+        cancelledAttemptIds.add(attemptId);
     }
     return CapabilityAttempt(
       attemptId: attemptId,
-      status: succeeded ? 'succeeded' : 'failed',
+      status: status.name,
       startedAtMs: 1,
       finishedAtMs: 2,
       failureReason: failureReason,
@@ -1004,31 +1005,14 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
 
   @override
   Future<AdoptedComposition> readAdoptedComposition(String materialId) async {
-    if (failReadComposition) throw const ApiFailure(raw: 'composition failed');
-    final value = composition;
-    if (value == null) {
-      throw const ApiFailure(raw: 'not found', code: 'not_found');
-    }
-    return value;
+    throw const ApiFailure(raw: 'not found', code: 'not_found');
   }
 
   @override
   Future<List<int>> readCompositionResourcePayload(
     String materialId,
     String resourceId,
-  ) async {
-    final payload = resourcePayloads[resourceId];
-    if (payload == null) {
-      throw const ApiFailure(raw: 'payload not found');
-    }
-    return payload;
-  }
-
-  @override
-  Future<List<int>> readCompositionRenditionBlob(
-    String materialId,
-    String renditionId,
-  ) async => throw StateError('unexpected readCompositionRenditionBlob');
+  ) async => throw const ApiFailure(raw: 'payload not found');
 }
 
 LearningEdition _editionCopy({required bool adopted}) => LearningEdition(
@@ -1043,6 +1027,7 @@ LearningEdition _editionCopy({required bool adopted}) => LearningEdition(
   installedAtMs: 1,
   adoptedAtMs: adopted ? 2 : null,
   adopted: adopted,
+  availableCapabilities: const ['read'],
   resources: const [
     LearningEditionResource(
       resourceId:
@@ -1071,6 +1056,7 @@ final _satisfyingEdition = LearningEdition(
   installedAtMs: 1,
   adoptedAtMs: 2,
   adopted: true,
+  availableCapabilities: const ['read'],
   resources: [
     LearningEditionResource(
       resourceId:
@@ -1099,6 +1085,7 @@ final _mediaEdition = LearningEdition(
   installedAtMs: 1,
   adoptedAtMs: 2,
   adopted: true,
+  availableCapabilities: const [],
   resources: [],
   renditions: [
     LearningEditionRendition(
@@ -1122,8 +1109,6 @@ final _mediaOnlyMaterial = MaterialDetails(
     id: 'revision-1',
     materialId: 'material-1',
     title: 'Lesson',
-    sourceAssets: [],
-    documentRenditions: [],
     mediaRenditions: [
       MediaRendition(
         id: 'media-rendition-1',
@@ -1142,63 +1127,11 @@ final _mediaOnlyMaterial = MaterialDetails(
   shape: MaterialShape.audio,
 );
 
-/// A text document material whose Source Document Rendition declares a
-/// concrete language: the request's target language must come from here,
-/// never from a hardcoded learner surface language.
-MaterialDetails _documentMaterial({String language = 'zh'}) => materialDetails(
-  title: 'Lesson',
-  sourceAssets: [sourceAsset(id: 'source-1')],
-  documentRenditions: [
-    documentRenditionForText(
-      '你好世界',
-      id: 'document-rendition-1',
-      language: language,
-      sourceAssetId: 'source-1',
-    ),
-  ],
-);
-
-const _adoptedResourceId =
-    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
-const _adoptedPayloadDigest =
-    'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
-
-/// The adopted composition a production run can reuse resources from.
-AdoptedComposition get _adoptedComposition => AdoptedComposition(
-  materialId: 'material-1',
-  materialRevisionId: 'revision-1',
-  releaseId:
-      'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-  editionId: 'edition:material-1',
-  title: 'Lesson',
-  targetLanguage: 'en',
-  supportLanguages: const [],
-  adoptedAtMs: 2,
-  resources: const [
-    AdoptedCompositionResource(
-      resourceId: _adoptedResourceId,
-      kind: 'structured_reading',
-      schema: 'listen.structured_reading.v1',
-      role: 'base',
-      required: true,
-      availability: 'available',
-      contentLanguage: 'en',
-      supportLanguages: [],
-      payloadDigest: _adoptedPayloadDigest,
-      payloadSizeBytes: 28,
-      reviewStatus: 'machine_checked',
-    ),
-  ],
-  renditions: const [],
-);
-
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
-/// Settles until [condition] holds or a generous number of rounds passed.
-/// Production now reads and materializes adopted resources before starting
-/// the generator, so a single settle round is no longer enough.
-Future<void> _settleUntil(bool Function() condition) async {
-  for (var i = 0; i < 200 && !condition(); i++) {
+Future<void> _waitFor(bool Function() condition) async {
+  for (var round = 0; round < 200 && !condition(); round++) {
     await _settle();
   }
+  if (!condition()) throw StateError('Timed out waiting for condition');
 }

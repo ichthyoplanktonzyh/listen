@@ -62,15 +62,6 @@
       "cover": "amber",
       "kind": "podcast",
       "avatarUrl": null
-    },
-    {
-      "id": "c-guardian-english",
-      "name": "The Guardian",
-      "language": "English (UK)",
-      "description": "News and feature articles worth reading slowly.",
-      "cover": "slate",
-      "kind": "document",
-      "avatarUrl": null
     }
   ],
   "items": [
@@ -249,15 +240,6 @@
       "publishedOn": "2026-07-26",
       "mediaUrl": "https://www.example.com/audio/global-news-morning.mp3",
       "mediaByteLength": 25920000
-    },
-    {
-      "id": "i-guard-1",
-      "channelId": "c-guardian-english",
-      "title": "The art of slow reading",
-      "description": "Why reading deliberately is a skill worth keeping.",
-      "language": "English (UK)",
-      "publishedOn": "2026-07-24",
-      "entryUrl": "https://www.example.com/articles/slow-reading"
     }
   ]
 }

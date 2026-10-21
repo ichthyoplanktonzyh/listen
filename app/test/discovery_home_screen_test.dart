@@ -64,7 +64,7 @@ void main() {
     return viewModel;
   }
 
-  testWidgets('leads with material kinds and opens details on demand', (
+  testWidgets('leads with media kinds and opens details on demand', (
     tester,
   ) async {
     await pumpDiscovery(tester);
@@ -72,7 +72,6 @@ void main() {
     expect(find.text('找点内容开始学'), findsOneWidget);
     expect(find.text('视频'), findsOneWidget);
     expect(find.text('音频'), findsOneWidget);
-    expect(find.text('文章'), findsOneWidget);
     expect(find.text('内容源'), findsOneWidget);
     expect(find.text('TED-Ed'), findsOneWidget);
     expect(find.text('BBC Learning English 最新内容'), findsOneWidget);

@@ -163,21 +163,6 @@ class TestMediaImportRepository implements MediaImportRepository {
     return TestMediaDownloadHandle(entryId, completer);
   }
 
-  /// Every article URL handed to the document path, so a test can tell which
-  /// acquisition actually ran.
-  final articleRequests = <String>[];
-
-  @override
-  Future<String?> downloadArticle(String articleUrl, String directory) async {
-    articleRequests.add(articleUrl);
-    if (downloadFails) return null;
-    final entryId = articleUrl.contains('i-doc-1') ? 'i-doc-1' : 'i-doc-2';
-    final completer = Completer<String?>();
-    completer.complete('/path/to/downloaded/[$entryId].html');
-    completers[entryId] = completer;
-    return completer.future;
-  }
-
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) async {
     resolvedUrls.add(pageUrl);
@@ -272,9 +257,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
       updatedAtMs: 0,
     ),
     primaryTrackId: null,
-    fit: null,
     triageIntent: null,
-    familiarMaterial: false,
   );
 
   /// True makes registration throw the way a core rejection does.
@@ -355,13 +338,6 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
     required bool retain,
   }) async {
     if (failRegister) throw StateError('register failed');
-    // A document must never be registered as media: the fake answers the way
-    // Core would refuse bytes it cannot probe as a media file. The article
-    // path never reaches here — a test that does reach it with an .html path
-    // has taken the wrong intake.
-    if (path.endsWith('.html') || path.endsWith('.htm')) {
-      throw StateError('refused: $path is a document, not media');
-    }
     final regExp = RegExp(r'\[([^\]]+)\]');
     final match = regExp.firstMatch(path);
     final entryId = match?.group(1) ?? 'i-bbc-1';
@@ -384,9 +360,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
     final entry = MediaLibraryEntry(
       media: media,
       primaryTrackId: primaryTrackId,
-      fit: null,
       triageIntent: null,
-      familiarMaterial: false,
     );
 
     _entries.add(entry);
@@ -464,22 +438,6 @@ DiscoveryItem testPodcastItem(String id, String sourceId) => DiscoveryItem(
   contentKind: ItemContentKind.audio,
   mediaUrl: 'https://cdn.example.com/$id.mp3',
   mediaByteLength: 8123456,
-);
-
-/// A document item: an article link the feed offered, fetched as a document.
-DiscoveryItem testArticleItem(String id, String sourceId) => DiscoveryItem(
-  id: id,
-  sourceId: sourceId,
-  title: 'Article $id',
-  description: '',
-  durationMs: null,
-  language: 'en',
-  publishedOn: '2026-08-01',
-  thumbnailUrl: null,
-  viewCount: 0,
-  acquisition: AcquisitionMode.article,
-  contentKind: ItemContentKind.article,
-  entryUrl: 'https://blog.example.com/$id',
 );
 
 /// A feed item with show notes but no enclosure: discoverable, not acquirable.

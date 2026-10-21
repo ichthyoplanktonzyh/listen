@@ -165,6 +165,7 @@ class MediaLibraryCoordinator {
           : null;
       final List<PersonalLibraryEntry> nextPersonalLibrary = List.unmodifiable([
         for (final details in materials)
+          if (details.currentRevision.mediaRenditions.isNotEmpty)
           PersonalLibraryEntry(
             details: details,
             mediaEntries: snapshot ?? const [],
@@ -186,16 +187,15 @@ class MediaLibraryCoordinator {
     }
   }
 
-  /// Publishes the membership result of a document session immediately, then
-  /// reconciles with Core's authoritative list. This keeps the material the
-  /// learner just saved visible even when an unrelated corrupt legacy row
-  /// makes the all-materials query fail.
+  /// Publishes a retained audio/video material immediately, then reconciles
+  /// with Core's authoritative list.
   Future<void> reconcileMembership(MaterialDetails details) async {
     final current = personalLibrary ?? const <PersonalLibraryEntry>[];
     final next = <PersonalLibraryEntry>[
       for (final entry in current)
         if (entry.materialId != details.material.id) entry,
-      if (details.material.retainedAtMs != null)
+      if (details.material.retainedAtMs != null &&
+          details.currentRevision.mediaRenditions.isNotEmpty)
         PersonalLibraryEntry(
           details: details,
           mediaEntries: mediaLibrary ?? const <MediaLibraryEntry>[],
@@ -212,19 +212,15 @@ class MediaLibraryCoordinator {
   List<String>? get registeredMediaPaths =>
       mediaLibrary?.map((entry) => entry.media.path).toList(growable: false);
 
-  /// Subset of [personalLibrary] that is usable offline: a row is offline
-  /// when its source document rendition's bytes are resolvable (managed or
-  /// referenced), or when its primary media's local file still exists. Mixed
-  /// rows need just one working capability.
+  /// Subset of [personalLibrary] that is usable offline because its primary
+  /// media file exists locally.
   List<PersonalLibraryEntry>? get offlineLibrary {
     final library = personalLibrary;
     if (library == null) return null;
     return library
         .where(
-          (entry) =>
-              entry.canRead ||
-              (entry.primaryMedia != null &&
-                  fileService.exists(entry.primaryMedia!.media.path)),
+          (entry) => entry.primaryMedia != null &&
+              fileService.exists(entry.primaryMedia!.media.path),
         )
         .toList(growable: false);
   }
@@ -275,8 +271,8 @@ class MediaLibraryCoordinator {
     if (isMounted()) learning.selectTab(SidePanelTab.transcript);
   }
 
-  /// Media triage applies to the row's primary media only; text-only rows
-  /// have nothing to triage and are a no-op here.
+  /// Media triage applies to the row's primary media only; rows without a
+  /// usable media rendition are a no-op here.
   Future<void> setLibraryTriageIntent(
     PersonalLibraryEntry entry,
     String? intent,
@@ -327,12 +323,6 @@ class MediaLibraryCoordinator {
         failure: repository.failureDetail(error),
       );
     }
-  }
-
-  Future<void> toggleFamiliarSupply(bool enabled) async {
-    await settings.update(
-      settings.settings.copyWith(familiarMaterialSuggestions: enabled),
-    );
   }
 
   /// Reopen the most recently played media from the home continue entry. The

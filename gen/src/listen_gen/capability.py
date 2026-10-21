@@ -1,9 +1,9 @@
 """Capability production request model for the Slice 3 machine protocol.
 
 The request is the caller-owned, typed boundary of one generation operation:
-an exact Material Revision, the exact Renditions and Resources available to
-the run, and one requested Material Capability. Provider selection and
-secrets never enter the request; they are CLI/environment configuration.
+an exact Material Revision, its audio/video Renditions, and one requested
+Material Capability. Provider selection and secrets never enter the request;
+they are CLI/environment configuration.
 
 Request documents are not canonical identity documents; payload and rendition
 bytes are addressed by their declared digests.
@@ -141,46 +141,6 @@ class BlobSource:
 
 
 @dataclass(frozen=True)
-class AvailableDocumentRendition:
-    rendition_id: str
-    media_type: str
-    language: str | None
-    source_asset_id: str | None
-    blob: BlobSource
-
-    @classmethod
-    def from_document(cls, document: dict[str, Any]) -> "AvailableDocumentRendition":
-        rendition_id = _sha256_id(document, "rendition_id")
-        media_type = _required(document, "media_type")
-        if not _MIME_RE.match(media_type):
-            raise ConversionError(
-                f"capability request rendition media_type is invalid: {media_type!r}"
-            )
-        language = _optional_string(document, "language")
-        if not language:
-            # An empty tag is the same fact as an absent one: the rendition is
-            # untagged. Core projects an empty string for a material without a
-            # language fact, and the planner already treats both as "carries
-            # none".
-            language = None
-        else:
-            language = _language_tag(language)
-        source_asset_id = _optional_string(document, "source_asset_id")
-        if source_asset_id is not None and not _SHA256_RE.match(source_asset_id):
-            raise ConversionError(
-                "capability request source_asset_id must be a lowercase sha256 id"
-            )
-        blob = BlobSource.from_document(_required(document, "blob", "dict"))
-        return cls(
-            rendition_id=rendition_id,
-            media_type=media_type,
-            language=language,
-            source_asset_id=source_asset_id,
-            blob=blob,
-        )
-
-
-@dataclass(frozen=True)
 class AvailableMediaRendition:
     rendition_id: str
     media_kind: str
@@ -222,42 +182,6 @@ class AvailableMediaRendition:
 
 
 @dataclass(frozen=True)
-class AvailableResource:
-    resource_id: str
-    kind: str
-    schema: str
-    role: str
-    blob: BlobSource
-    content_language: str | None = None
-    material_revision_id: str | None = None
-
-    @classmethod
-    def from_document(cls, document: dict[str, Any]) -> "AvailableResource":
-        role = _required(document, "role")
-        if role not in ("base", "assistance"):
-            raise ConversionError(f"capability request resource role is invalid: {role!r}")
-        content_language = _optional_string(document, "content_language")
-        if content_language is not None:
-            content_language = _language_tag(content_language)
-        material_revision_id = _optional_string(document, "material_revision_id")
-        if material_revision_id is not None and not _IDENTIFIER_RE.match(
-            material_revision_id
-        ):
-            raise ConversionError(
-                "capability request resource material_revision_id is not a stable identifier"
-            )
-        return cls(
-            resource_id=_sha256_id(document, "resource_id"),
-            kind=_required(document, "kind"),
-            schema=_required(document, "schema"),
-            role=role,
-            blob=BlobSource.from_document(_required(document, "blob", "dict")),
-            content_language=content_language,
-            material_revision_id=material_revision_id,
-        )
-
-
-@dataclass(frozen=True)
 class CapabilityRequest:
     schema: str
     version: int
@@ -265,9 +189,7 @@ class CapabilityRequest:
     material: MaterialIdentity
     edition: EditionIdentity
     requested_capability: str
-    document_renditions: tuple[AvailableDocumentRendition, ...]
     media_renditions: tuple[AvailableMediaRendition, ...]
-    resources: tuple[AvailableResource, ...]
     attempt_id: str | None = None
     extensions: dict[str, Any] = field(default_factory=dict)
 
@@ -293,7 +215,6 @@ class CapabilityRequest:
             raise ConversionError(
                 "capability request available_renditions must be a list"
             )
-        document_renditions: list[AvailableDocumentRendition] = []
         media_renditions: list[AvailableMediaRendition] = []
         for entry in renditions:
             if not isinstance(entry, dict):
@@ -302,8 +223,8 @@ class CapabilityRequest:
                 )
             kind = entry.get("kind")
             if kind == "document":
-                document_renditions.append(
-                    AvailableDocumentRendition.from_document(entry)
+                raise ConversionError(
+                    "document material input is not supported; provide audio or video media"
                 )
             elif kind == "media":
                 media_renditions.append(AvailableMediaRendition.from_document(entry))
@@ -311,29 +232,11 @@ class CapabilityRequest:
                 raise ConversionError(
                     f"capability request rendition kind is invalid: {kind!r}"
                 )
-        resources = document.get("available_resources", [])
-        if not isinstance(resources, list):
-            raise ConversionError(
-                "capability request available_resources must be a list"
-            )
-        parsed_resources = [
-            AvailableResource.from_document(entry)
-            for entry in resources
-            if isinstance(entry, dict)
-        ]
-        if len(parsed_resources) != len(resources):
-            raise ConversionError(
-                "capability request available_resources entries must be objects"
-            )
-        seen_ids = {entry.rendition_id for entry in document_renditions}
-        seen_ids |= {entry.rendition_id for entry in media_renditions}
-        if len(seen_ids) != len(document_renditions) + len(media_renditions):
+        seen_ids = {entry.rendition_id for entry in media_renditions}
+        if len(seen_ids) != len(media_renditions):
             raise ConversionError(
                 "capability request rendition ids must be unique"
             )
-        resource_ids = {entry.resource_id for entry in parsed_resources}
-        if len(resource_ids) != len(parsed_resources):
-            raise ConversionError("capability request resource ids must be unique")
         extensions = document.get("extensions", {})
         if not isinstance(extensions, dict):
             raise ConversionError("capability request extensions must be an object")
@@ -347,9 +250,7 @@ class CapabilityRequest:
             ),
             edition=EditionIdentity.from_document(_required(document, "edition", "dict")),
             requested_capability=requested,
-            document_renditions=tuple(document_renditions),
             media_renditions=tuple(media_renditions),
-            resources=tuple(parsed_resources),
             attempt_id=attempt_id,
             extensions=dict(extensions),
         )
@@ -367,10 +268,3 @@ class CapabilityRequest:
         if not isinstance(document, dict):
             raise ConversionError("capability request must be a JSON object")
         return cls.from_document(document)
-
-    def documents_with_media_type(self, media_type: str) -> tuple[AvailableDocumentRendition, ...]:
-        return tuple(
-            entry
-            for entry in self.document_renditions
-            if entry.media_type == media_type
-        )

@@ -9,14 +9,9 @@ import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
 import '../common/listen_loading.dart';
 
-/// Phase 3.12 provider settings: configure vendor-neutral LLM providers for
-/// semantic feedback. Keys are write-only (stored in the OS keychain by the
-/// backend); this widget never displays or holds a secret after submit.
-///
-/// Any judgment a provider produces is unqualified `heuristic_proxy` and does
-/// not appear as learning feedback until Phase 3.12.1 qualification — the UI
-/// says so explicitly so a configured provider is never mistaken for verified
-/// assistance.
+/// Configure vendor-neutral LLM providers for optional sense-group analysis.
+/// Keys are write-only (stored in the OS keychain by the backend); this widget
+/// never displays or holds a secret after submit.
 class LlmProviderSettings extends StatefulWidget {
   const LlmProviderSettings({super.key, required this.viewModel});
 
@@ -34,8 +29,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   final _modelCtrl = TextEditingController();
   final _secretCtrl = TextEditingController();
   String _adapterKind = 'openai_chat_completions';
-  bool _useRubric = false;
-  bool _useJudgment = true;
+  bool _useSenseGroups = true;
 
   @override
   void initState() {
@@ -53,10 +47,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   }
 
   Future<void> _register() async {
-    final uses = <String>[
-      if (_useRubric) 'rubric_generation',
-      if (_useJudgment) 'semantic_judgment',
-    ];
+    final uses = <String>[if (_useSenseGroups) 'sense_group_partition'];
     if (_baseUrlCtrl.text.trim().isEmpty ||
         _modelCtrl.text.trim().isEmpty ||
         uses.isEmpty) {
@@ -127,7 +118,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
           ),
         ),
         const SizedBox(height: ListenSpacing.gap8),
-        Text(l.text('llmNotQualified'), style: theme.textTheme.bodySmall),
+        Text(l.text('llmSenseGroupNotice'), style: theme.textTheme.bodySmall),
         const SizedBox(height: ListenSpacing.gap12),
         if (state.failure != null)
           Padding(
@@ -274,29 +265,13 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         ),
         const SizedBox(height: ListenSpacing.gap8),
         Text(l.text('llmAllowedUses')),
-        Row(
-          children: [
-            Expanded(
-              child: CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _useJudgment,
-                onChanged: (v) => setState(() => _useJudgment = v ?? false),
-                title: Text(l.text('llmUseJudgment')),
-              ),
-            ),
-            Expanded(
-              child: CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _useRubric,
-                onChanged: (v) => setState(() => _useRubric = v ?? false),
-                title: Text(l.text('llmUseRubric')),
-              ),
-            ),
-          ],
+        CheckboxListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: _useSenseGroups,
+          onChanged: (v) => setState(() => _useSenseGroups = v ?? false),
+          title: Text(l.text('llmUseSenseGroups')),
         ),
         const SizedBox(height: ListenSpacing.gap8),
         Align(

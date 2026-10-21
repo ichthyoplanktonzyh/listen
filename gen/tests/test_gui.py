@@ -17,6 +17,7 @@ from listen_gen.gui import (
     _merge_config,
     _parse_multipart,
     _run_produce_worker,
+    _commit_upload,
     _validate_produce_payload,
     check_toolchain,
     detect_media_type,
@@ -35,6 +36,16 @@ class TestGui(unittest.TestCase):
         content_type, content = _read_static_asset("/")
         self.assertEqual(content_type, "text/html")
         self.assertIn(b"listen-gen", content)
+
+    def test_workbench_offers_media_and_subtitles_without_document_providers(self):
+        _, content = _read_static_asset("/")
+        self.assertIn(b"media-dropzone", content)
+        self.assertIn(b"sub-file-input", content)
+        self.assertIn("Qwen3 与 SenseVoice 仅在完整源码仓库中可用".encode(), content)
+        self.assertIn("发行版不可用".encode(), content)
+        self.assertIn("video-only 不会转换音轨".encode(), content)
+        for removed in (b"doc-file-input", b"work-doc-text", b"tts-provider", b"ocr-provider"):
+            self.assertNotIn(removed, content)
 
     def test_missing_static_asset_falls_back_to_index(self):
         content_type, content = _read_static_asset("/does-not-exist.js")
@@ -56,8 +67,8 @@ class TestGui(unittest.TestCase):
         self.assertIn("deepseek", cfg["llm_profiles"])
         self.assertIn("asr", cfg)
         self.assertIn("phones", cfg)
-        self.assertIn("tts", cfg)
-        self.assertIn("ocr", cfg)
+        self.assertNotIn("tts", cfg)
+        self.assertNotIn("ocr", cfg)
 
     def test_load_and_save_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -79,9 +90,10 @@ class TestGui(unittest.TestCase):
     def test_toolchain_check(self):
         tools = check_toolchain()
         self.assertIn("ffmpeg", tools)
-        self.assertIn("say", tools)
         self.assertIn("python", tools)
         self.assertTrue(tools["python"]["available"])
+        for provider in ("qwen3", "sensevoice"):
+            self.assertIn(f"{provider}_asr_sidecar", tools)
 
     def test_task_manager(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -148,14 +160,6 @@ class TestConfigEnhancements(unittest.TestCase):
 
     def test_validate_config_catches_problems(self):
         cfg = get_default_config()
-        bad_tts = dict(cfg)
-        bad_tts["tts"] = {"provider": "bogus"}
-        self.assertTrue(any("tts.provider" in p for p in validate_config(bad_tts)))
-
-        bad_ocr = dict(cfg)
-        bad_ocr["ocr"] = {"provider": "bogus"}
-        self.assertTrue(any("ocr.provider" in p for p in validate_config(bad_ocr)))
-
         bad_url = get_default_config()
         bad_url["llm_profiles"]["deepseek"]["base_url"] = "ftp://bad"
         self.assertTrue(any("base_url" in p for p in validate_config(bad_url)))
@@ -172,7 +176,7 @@ class TestConfigEnhancements(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "profiles.json"
             bad = get_default_config()
-            bad["tts"] = {"provider": "bogus"}
+            bad["asr"] = {"provider": "bogus"}
             with self.assertRaises(ValueError):
                 save_config(bad, path)
             self.assertFalse(path.exists())  # nothing written
@@ -265,7 +269,7 @@ class TestMultipartAndValidation(unittest.TestCase):
             "material": {"material_id": "m1", "material_revision_id": "rev-1", "title": "T"},
             "edition": {"edition_id": "ed-1", "title": "T", "target_language": "en-US", "support_languages": []},
             "requested_capability": "read",
-            "available_renditions": [{"kind": "document", "rendition_id": "sha256:" + "0" * 64}],
+            "available_renditions": [{"kind": "media", "rendition_id": "sha256:" + "0" * 64}],
         }
         self.assertEqual(_validate_produce_payload(ok, {}), [])
 
@@ -282,21 +286,61 @@ class TestMultipartAndValidation(unittest.TestCase):
         self.assertIn("material_id", fields)
         self.assertIn("title", fields)
         self.assertIn("requested_capability", fields)
-        self.assertIn("input", fields)  # no document or media input
+        self.assertIn("input", fields)  # no audio/video media input
+
+        document_input = {
+            "material": {"material_id": "m1", "material_revision_id": "rev-1", "title": "T"},
+            "edition": {"edition_id": "ed-1", "title": "T", "target_language": "en-US", "support_languages": []},
+            "requested_capability": "read",
+            "available_renditions": [{"kind": "document"}],
+        }
+        document_problems = _validate_produce_payload(document_input, {})
+        self.assertTrue(any("独立文档材料输入已移除" in p["message"] for p in document_problems))
+        nested_document_problems = _validate_produce_payload(
+            {**ok, "available_renditions": []},
+            {"request": {"available_renditions": [{"kind": "document"}]}},
+        )
+        self.assertTrue(
+            any("独立文档材料输入已移除" in p["message"] for p in nested_document_problems)
+        )
 
         listen_no_doc = {
             "material": {"material_id": "m1", "material_revision_id": "rev-1", "title": "T"},
             "edition": {"edition_id": "ed-1", "title": "T", "target_language": "en-US", "support_languages": []},
             "requested_capability": "listen",
-            "available_renditions": [{"kind": "media", "rendition_id": "sha256:" + "1" * 64}],
+            "available_renditions": [{
+                "kind": "media",
+                "rendition_id": "sha256:" + "1" * 64,
+                "media_kind": "audio",
+            }],
         }
-        problem_fields = {p["field"] for p in _validate_produce_payload(listen_no_doc, {})}
-        self.assertIn("input", problem_fields)
+        self.assertEqual(_validate_produce_payload(listen_no_doc, {}), [])
+        video_only_listen = {
+            **listen_no_doc,
+            "available_renditions": [{
+                "kind": "media",
+                "rendition_id": "sha256:" + "2" * 64,
+                "media_kind": "video",
+            }],
+        }
+        video_problems = _validate_produce_payload(video_only_listen, {})
+        self.assertTrue(any(
+            p["field"] == "requested_capability"
+            and "video-only" in p["message"]
+            for p in video_problems
+        ))
+
+    def test_document_upload_is_rejected_before_it_is_saved(self):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("listen_gen.gui.UPLOAD_DIR", Path(tmpdir)):
+            with self.assertRaisesRegex(ValueError, "document material input is not supported"):
+                _commit_upload("lesson.pdf", b"pdf", "application/pdf")
+            with self.assertRaisesRegex(ValueError, "document material input is not supported"):
+                _commit_upload("lesson.pdf", b"pdf", "audio/wav")
+            self.assertEqual(list(Path(tmpdir).iterdir()), [])
 
 
 class TestProduceWorkerEvents(unittest.TestCase):
     FAKE_CONFIG = {
-        "tts": {"provider": "none"},
         "asr": {"provider": "none", "whisper_model": ""},
         "phones": {"provider": "none"},
         "aligner": {"provider": "none"},
@@ -320,9 +364,19 @@ class TestProduceWorkerEvents(unittest.TestCase):
                 "support_languages": [],
             },
             "requested_capability": "read",
-            "available_renditions": [],
-            "available_resources": [],
-        })
+            "available_renditions": [{
+                "kind": "media",
+                "rendition_id": "sha256:" + "1" * 64,
+                "media_kind": "audio",
+                "media_type": "audio/wav",
+                "fingerprint": "fixture",
+                "blob": {
+                    "digest": "sha256:" + "2" * 64,
+                    "size_bytes": 1,
+                    "path": "/tmp/media.wav",
+                },
+            }],
+            })
 
     def _run(self, task_id: str, store: Path, output: Path) -> TaskManager:
         mgr = TaskManager(store_path=store)
@@ -341,7 +395,8 @@ class TestProduceWorkerEvents(unittest.TestCase):
             store = Path(tmpdir) / "tasks.json"
             output = Path(tmpdir) / "out.zip"
             mock_plan.return_value = SimpleNamespace(
-                describe=lambda: {"derivations": ["document_to_structured_reading"]}
+                derivations=(),
+                describe=lambda: {"derivations": ["media_to_structured_reading"]},
             )
             release = SimpleNamespace(
                 manifest_document={},
@@ -372,7 +427,9 @@ class TestProduceWorkerEvents(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = Path(tmpdir) / "tasks.json"
             output = Path(tmpdir) / "out.zip"
-            mock_plan.return_value = SimpleNamespace(describe=lambda: {"derivations": []})
+            mock_plan.return_value = SimpleNamespace(
+                derivations=(), describe=lambda: {"derivations": []}
+            )
             mgr = TaskManager(store_path=store)
             mgr.create_task("t1", {"material_id": "m1"}, output)
 
@@ -402,7 +459,9 @@ class TestProduceWorkerEvents(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = Path(tmpdir) / "tasks.json"
             output = Path(tmpdir) / "out.zip"
-            mock_plan.return_value = SimpleNamespace(describe=lambda: {"derivations": []})
+            mock_plan.return_value = SimpleNamespace(
+                derivations=(), describe=lambda: {"derivations": []}
+            )
             mock_produce.side_effect = RuntimeError("boom")
 
             mgr = self._run("t1", store, output)
@@ -417,6 +476,28 @@ class TestProduceWorkerEvents(unittest.TestCase):
             self.assertEqual(failed["code"], "internal_error")
             self.assertIn("boom", failed["message"])
             self.assertEqual(task.error, "boom")
+
+    def test_missing_source_only_provider_fails_clearly_without_package(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = Path(tmpdir) / "tasks.json"
+            output = Path(tmpdir) / "out.zip"
+            mgr = TaskManager(store_path=store)
+            mgr.create_task("source-only", {"material_id": "m1"}, output)
+            config = {
+                **self.FAKE_CONFIG,
+                "asr": {"provider": "qwen3", "qwen3": {"sidecar": ""}},
+            }
+            with patch("listen_gen.gui._GLOBAL_TASK_MANAGER", mgr):
+                _run_produce_worker(
+                    "source-only", self._make_request(), config, output
+                )
+
+            task = mgr.get_task("source-only")
+            failed = next(e for e in task.events if e.get("event") == "failed")
+            self.assertEqual(failed["code"], "invalid_request")
+            self.assertIn("source-checkout-only", failed["message"])
+            self.assertIn("does not include", failed["message"])
+            self.assertFalse(output.exists())
 
 
 class _FakeHandler:
@@ -551,7 +632,9 @@ class TestQueueTaskStates(unittest.TestCase):
 
 
 class TestRerun(unittest.TestCase):
-    def _snapshot_request(self, doc_path: Path) -> dict:
+    def _snapshot_request(self, media_path: Path, *, kind: str = "media") -> dict:
+        raw = media_path.read_bytes() if media_path.is_file() else b"missing"
+        digest = "sha256:" + "0" * 64
         return {
             "schema": "listen_gen.capability-request.v2",
             "version": 2,
@@ -560,23 +643,23 @@ class TestRerun(unittest.TestCase):
             "edition": {"edition_id": "ed-1", "title": "T", "target_language": "en-US", "support_languages": []},
             "requested_capability": "read",
             "available_renditions": [{
-                "kind": "document",
-                "rendition_id": "sha256:" + "0" * 64,
-                "media_type": "text/markdown",
-                "source_asset_id": "sha256:" + "0" * 64,
-                "blob": {"digest": "sha256:" + "0" * 64, "size_bytes": 10, "path": str(doc_path)},
+                "kind": kind,
+                "rendition_id": digest,
+                "media_kind": "audio",
+                "media_type": "audio/wav",
+                "fingerprint": digest,
+                "blob": {"digest": digest, "size_bytes": len(raw), "path": str(media_path)},
             }],
-            "available_resources": [],
-        }
+            }
 
     def test_rerun_rebuilds_snapshot(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            doc = Path(tmpdir) / "input.md"
-            doc.write_text("# Hi\n\nHello world.", encoding="utf-8")
+            media = Path(tmpdir) / "input.wav"
+            media.write_bytes(b"fixture-media-bytes")
             mgr = TaskManager(store_path=Path(tmpdir) / "tasks.json")
             mgr.create_task(
-                "old-1", self._snapshot_request(doc), Path(tmpdir) / "out.zip",
-                status="completed", config={"tts": {"provider": "fake"}},
+                "old-1", self._snapshot_request(media), Path(tmpdir) / "out.zip",
+                status="completed", config={"asr": {"provider": "fixture"}},
             )
             sched = RunScheduler(max_concurrent_runs=4)
             fake = _FakeHandler()
@@ -599,15 +682,15 @@ class TestRerun(unittest.TestCase):
             # digest recomputed honestly from the current file bytes
             self.assertNotEqual(rendition["blob"]["digest"], "sha256:" + "0" * 64)
             self.assertTrue(rendition["blob"]["digest"].startswith("sha256:"))
-            self.assertEqual(rendition["source_asset_id"], rendition["blob"]["digest"])
+            self.assertEqual(rendition["fingerprint"], rendition["blob"]["digest"])
             # config snapshot carried over
-            self.assertEqual(task.config["tts"]["provider"], "fake")
+            self.assertEqual(task.config["asr"]["provider"], "fixture")
             # fresh material revision
             self.assertTrue(task.request_doc["material"]["material_revision_id"].startswith("rev-"))
 
     def test_rerun_missing_blob_returns_409(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            missing = Path(tmpdir) / "gone.md"  # does not exist
+            missing = Path(tmpdir) / "gone.wav"  # does not exist
             mgr = TaskManager(store_path=Path(tmpdir) / "tasks.json")
             mgr.create_task("old-1", self._snapshot_request(missing), Path(tmpdir) / "out.zip", status="failed")
             fake = _FakeHandler()
@@ -617,6 +700,23 @@ class TestRerun(unittest.TestCase):
             self.assertEqual(kind, "error")
             self.assertEqual(status, 409)
             self.assertIn("已不在磁盘", message)
+
+    def test_rerun_of_document_task_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            document = Path(tmpdir) / "old.md"
+            document.write_text("old document", encoding="utf-8")
+            mgr = TaskManager(store_path=Path(tmpdir) / "tasks.json")
+            mgr.create_task(
+                "old-1", self._snapshot_request(document, kind="document"),
+                Path(tmpdir) / "out.zip", status="failed",
+            )
+            fake = _FakeHandler()
+            with patch("listen_gen.gui._GLOBAL_TASK_MANAGER", mgr):
+                GuiRequestHandler._handle_rerun(fake, "old-1")
+            kind, status, message = fake.calls[0]
+            self.assertEqual(kind, "error")
+            self.assertEqual(status, 400)
+            self.assertIn("document material input is not supported", message)
 
 
 if __name__ == "__main__":

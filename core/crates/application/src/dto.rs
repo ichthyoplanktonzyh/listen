@@ -1,13 +1,12 @@
 use domain::{
-    AssistanceLevel, ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId,
-    HuntingCandidateId, HuntingCheckAnswer, HuntingTargetId, HuntingTargetSourceKind, LanguageCode,
-    LearningEventId, LearningStatus, LexicalEntryId, LexicalEntryKind, LexicalObservationId,
-    ListeningComprehensionReport, ListeningInboxResolution, MediaId, MediaItem, MediaKind,
-    MediaTriageIntent, ObservationResult, PlayableSegment, PracticeAnchor, PracticeItemId,
-    PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, RecordingAssetId,
-    RecordingAudioMetadata, ReviewAttempt, ReviewCardState, ReviewItem, ReviewItemId, ReviewRating,
-    ReviewSchedule, ReviewSource, SubtitleSentenceId, SubtitleTrackId, TimelineCreator,
-    TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion, WordTimelineId, WordTiming,
+    CorpusOccurrence, CorpusOccurrenceId, HuntingCheckAnswer, HuntingTargetId,
+    HuntingTargetSourceKind, LearningEventId, LearningStatus, LexicalEntryId, LexicalEntryKind,
+    LexicalObservationId, ListeningComprehensionReport, ListeningInboxResolution, MediaId,
+    MediaItem, MediaKind, MediaTriageIntent, ObservationResult, PracticeAnchor, PracticeItemId,
+    PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, ReviewAttempt, ReviewCardState,
+    ReviewItem, ReviewItemId, ReviewRating, ReviewSchedule, ReviewSource, SubtitleSentenceId,
+    SubtitleTrackId, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
+    WordTimelineId, WordTiming,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,23 +21,14 @@ pub struct L1SpecialtyOccurrences {
     pub occurrences: Vec<CorpusOccurrence>,
 }
 
-/// One media-library row for triage (Phase 3.5 Slice 5): the registered
-/// media plus the facts the client groups queues from — cached content fit,
-/// explicit user triage intent, and the familiar-material mark (3.2). Queue
-/// membership itself stays a derived presentation view (ADR 0018 decision
-/// 6); the server never stores routing state.
+/// Media, personal-library membership, and explicit listening organization
+/// intent for the library.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MediaLibraryEntry {
     pub media: MediaItem,
-    /// Track the fit profile was resolved from (first available track with a
-    /// language); also the natural track for one-click session starts.
+    /// First available track, used by one-click listening session starts.
     pub primary_track_id: Option<SubtitleTrackId>,
-    /// Absent when no track qualifies or fit computation degrades (missing
-    /// word tokens, missing language). Fit is decoration, never a gate.
-    pub fit: Option<ContentDifficultyProfile>,
     pub triage_intent: Option<MediaTriageIntent>,
-    /// Whether any intensive session marked this media as familiar material.
-    pub familiar_material: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -204,19 +194,6 @@ pub struct CreateLexicalObservation {
     pub source: Option<LexicalSourceContext>,
 }
 
-/// One learner-confirmed expression literally present in a completed speaking
-/// response. The API layer qualifies the attempt before this reaches the
-/// channelized observation writer.
-pub struct RecordSpeakingProduction {
-    pub lexical_entry_id: LexicalEntryId,
-    pub sentence_id: Option<SubtitleSentenceId>,
-    pub surface_form: String,
-    pub media_id: Option<MediaId>,
-    pub assistance: AssistanceLevel,
-    pub source_ref: String,
-    pub occurred_at_ms: u64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePracticeSession {
     pub mode: PracticeMode,
@@ -243,29 +220,6 @@ pub struct SubmitPracticeAttempt {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateRecordingAsset {
-    pub file_path: String,
-    pub duration_ms: u64,
-    pub target: PracticeTarget,
-    pub source_segment: PlayableSegment,
-    pub language: LanguageCode,
-    pub audio: RecordingAudioMetadata,
-    pub recorder_version: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompleteShadowingAttempt {
-    pub item_id: PracticeItemId,
-    pub recording_id: RecordingAssetId,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateShadowingComparison {
-    pub recording_id: RecordingAssetId,
-    pub reference_wav_path: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateReviewItem {
     pub source: ReviewSource,
     pub anchors: Vec<PracticeAnchor>,
@@ -279,7 +233,6 @@ pub enum ReviewCardKind {
     ChunkCloze,
     PhrasePresence,
     SourceSentenceRecall,
-    DelayedRetelling,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -296,36 +249,6 @@ pub struct ReviewQueueEntry {
     pub schedule: ReviewSchedule,
     pub state: ReviewCardState,
     pub card: ReviewCard,
-    pub origin: ReviewItemOrigin,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReviewOriginKind {
-    Native,
-    ImportedAnki,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReviewItemOrigin {
-    pub kind: ReviewOriginKind,
-    pub anki_guid: Option<String>,
-    pub deck_id: Option<String>,
-    pub deck_name: Option<String>,
-    /// Imported cards have no Listen evidence/channel assignment by default.
-    pub has_listening_enhancements: bool,
-}
-
-impl ReviewItemOrigin {
-    pub fn native() -> Self {
-        Self {
-            kind: ReviewOriginKind::Native,
-            anki_guid: None,
-            deck_id: None,
-            deck_name: None,
-            has_listening_enhancements: true,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -355,17 +278,6 @@ pub struct ReviewSubmission {
     pub attempt: ReviewAttempt,
     pub schedule: ReviewSchedule,
     pub generated_observation_ids: Vec<LexicalObservationId>,
-    pub hunting_candidate_ids: Vec<HuntingCandidateId>,
-    pub upgrade_suggestions: Vec<UpgradeSuggestion>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReviewChannel {
-    Listening,
-    Speaking,
-    Reading,
-    Writing,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -373,30 +285,6 @@ pub struct ReviewStateCounts {
     pub new: u32,
     pub due: u32,
     pub learning: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReviewChannelCounts {
-    pub channel: ReviewChannel,
-    pub counts: ReviewStateCounts,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ImportedDeckCounts {
-    pub deck_id: String,
-    pub name: String,
-    pub parent_deck_id: Option<String>,
-    pub counts: ReviewStateCounts,
-}
-
-#[derive(Debug, Clone)]
-pub struct ImportedDeckSchedule {
-    pub item_id: ReviewItemId,
-    pub anki_guid: String,
-    pub deck_id: String,
-    pub name: String,
-    pub parent_deck_id: Option<String>,
-    pub schedule: ReviewSchedule,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -431,8 +319,7 @@ pub struct ReviewQueue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewDeckOverview {
-    pub channels: Vec<ReviewChannelCounts>,
-    pub imported_decks: Vec<ImportedDeckCounts>,
+    pub counts: ReviewStateCounts,
     pub limit_status: ReviewLimitStatus,
 }
 
@@ -441,7 +328,6 @@ pub struct ReviewDeckOverview {
 pub enum CustomStudyKind {
     MoreNew,
     ReviewAhead,
-    Channel { channel: ReviewChannel },
     Forgotten { minimum_lapses: Option<u32> },
 }
 
@@ -459,49 +345,6 @@ pub struct CustomStudyQueue {
     /// Only "review ahead" intentionally advances the official schedule when
     /// its cards are submitted. Other custom queues are extra practice.
     pub advances_normal_schedule: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnkiPackageImportRequest {
-    pub package_path: String,
-    pub media_directory: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnkiPackageImportSummary {
-    pub imported_cards: u32,
-    pub updated_cards: u32,
-    pub skipped_cards: u32,
-    pub imported_decks: u32,
-    pub imported_revlog_entries: u32,
-    pub imported_media_files: u32,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnkiPackageExportRequest {
-    pub package_path: String,
-    #[serde(default)]
-    pub deck_ids: Vec<String>,
-    #[serde(default)]
-    pub channels: Vec<ReviewChannel>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnkiExportFidelity {
-    pub cards_with_media_slices: u32,
-    pub video_slices_rendered_as_audio: u32,
-    pub media_render_failures: u32,
-    pub omitted_capabilities: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnkiPackageExportSummary {
-    pub exported_cards: u32,
-    pub exported_revlog_entries: u32,
-    pub exported_media_files: u32,
-    pub fidelity: AnkiExportFidelity,
-    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

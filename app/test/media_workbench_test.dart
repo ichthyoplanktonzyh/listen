@@ -51,7 +51,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a material without video gives the text panel the whole body', (
+  testWidgets('audio-only material gives the transcript panel the whole body', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1400, 800));
@@ -60,7 +60,7 @@ void main() {
     await tester.pumpWidget(
       localized(
         const MaterialWorkbench(
-          materialTitle: 'An article',
+          materialTitle: 'Audio episode',
           videoPane: null,
           learningPanel: SizedBox.expand(
             key: Key('full-width-text-panel'),
@@ -68,7 +68,6 @@ void main() {
           ),
           mediaFraction: 0.42,
           onMediaFractionChanged: _noopFraction,
-          showShadowAction: false,
         ),
       ),
     );
@@ -241,28 +240,6 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('immersive channel owns the workbench body', (tester) async {
-    await tester.pumpWidget(
-      localized(
-        const MaterialWorkbench(
-          materialTitle: 'CNN 10.mp4',
-          videoPane: ColoredBox(key: Key('old-stage'), color: Colors.black),
-          learningPanel: ColoredBox(key: Key('old-panel'), color: Colors.white),
-          immersiveStage: ColoredBox(
-            key: Key('reading-stage'),
-            color: Colors.white,
-          ),
-          mediaFraction: 0.42,
-          onMediaFractionChanged: _noopFraction,
-        ),
-      ),
-    );
-
-    expect(find.byKey(const Key('reading-stage')), findsOneWidget);
-    expect(find.byKey(const Key('old-stage')), findsNothing);
-    expect(find.byKey(const Key('old-panel')), findsNothing);
   });
 
   testWidgets('playback controls fit without a horizontal scroller', (

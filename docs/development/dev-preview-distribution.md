@@ -1,5 +1,11 @@
 # Development preview distribution
 
+This page describes the immutable published preview. The current
+`codex/listening-focus` source branch removes conversation, independent
+reading/writing/speaking, document material processing, and coaching; it has not
+replaced the preview assets below. Current Gen source no longer needs `pypdf`,
+OCR, or document TTS, and its listening database is a fresh separate store.
+
 The current preview is `v0.7.0-dev.1`, for macOS on Apple Silicon. Build it
 from a clean committed source tree with the prepared third-party runtime inputs:
 

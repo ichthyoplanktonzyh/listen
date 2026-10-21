@@ -26,7 +26,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 MIN_GEN_PYTHON = (3, 11)
-GEN_EXTRAS = {"tts", "ocr", "align", "asr-qwen", "asr-sensevoice", "all"}
+GEN_EXTRAS = {"align", "asr-qwen", "asr-sensevoice", "all"}
 SNAPSHOT_IGNORED_RELATIVE = {
     Path("app/test/failures"),
     Path("app/test/fixtures/smoke/generated"),
@@ -522,7 +522,7 @@ def _require_setup(root: Path = ROOT) -> Path:
             "Gen's Python 3.11+ environment is missing. Run `./dev setup` once first."
         )
     probe = subprocess.run(
-        [str(venv_python), "-c", "import listen_gen, pypdf, jieba"],
+        [str(venv_python), "-c", "import listen_gen, jieba"],
         cwd=str(root / "gen"),
         check=False,
         capture_output=True,
@@ -1103,14 +1103,14 @@ def _assemble_preview_distribution(
             "source_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
             "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
             "download_requires_explicit_user_confirmation": True,
-            "download_trigger": "starting a realtime conversation when no compatible model is installed",
+            "download_trigger": "running local media transcription when no compatible Whisper model is installed",
         },
         "gen_runtime": {
             "zipapp_bundled": True,
             "interpreter_bundled": False,
             "python_requires": ">=3.11",
-            "required_dependencies": ["pypdf>=5.0,<7"],
-            "optional_extras": ["tts", "ocr", "align", "asr-qwen", "asr-sensevoice"],
+            "required_dependencies": [],
+            "optional_extras": ["align", "asr-qwen", "asr-sensevoice"],
         },
         "artifact": {
             "filename": asset.name,
@@ -1530,7 +1530,7 @@ def parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="NAME[,NAME...]",
-        help="opt in to Gen model/runtime extras (tts, ocr, align, asr-qwen, asr-sensevoice, all)",
+        help="opt in to Gen audio model/runtime extras (align, asr-qwen, asr-sensevoice, all)",
     )
     setup.set_defaults(func=command_setup)
 

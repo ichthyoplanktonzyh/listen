@@ -26,20 +26,7 @@ abstract interface class ReviewRepository implements OccurrenceMediaRepository {
     required CustomStudyRequest request,
   });
 
-  Future<AnkiPackageImportSummary> importAnkiPackage({
-    required String packagePath,
-    required String mediaDirectory,
-  });
-
-  Future<AnkiPackageExportSummary> exportAnkiPackage(
-    AnkiPackageExportRequest request,
-  );
-
-  Future<List<UpgradeSuggestion>> pendingUpgradeSuggestions();
-
   Future<ReviewSubmission> submitRating(String itemId, String rating);
-
-  Future<void> resolveUpgradeSuggestion(String id, {required bool confirm});
 }
 
 class LocalReviewRepository implements ReviewRepository {
@@ -80,38 +67,8 @@ class LocalReviewRepository implements ReviewRepository {
   );
 
   @override
-  Future<AnkiPackageImportSummary> importAnkiPackage({
-    required String packagePath,
-    required String mediaDirectory,
-  }) => _api.importAnkiPackage(
-    packagePath: packagePath,
-    mediaDirectory: mediaDirectory,
-  );
-
-  @override
-  Future<AnkiPackageExportSummary> exportAnkiPackage(
-    AnkiPackageExportRequest request,
-  ) => _api.exportAnkiPackage(request);
-
-  @override
-  Future<List<UpgradeSuggestion>> pendingUpgradeSuggestions() =>
-      _api.upgradeSuggestions();
-
-  @override
   Future<ReviewSubmission> submitRating(String itemId, String rating) =>
       _api.submitReviewAttempt(itemId, rating);
-
-  @override
-  Future<void> resolveUpgradeSuggestion(
-    String id, {
-    required bool confirm,
-  }) async {
-    if (confirm) {
-      await _api.confirmUpgradeSuggestion(id);
-    } else {
-      await _api.rejectUpgradeSuggestion(id);
-    }
-  }
 
   @override
   Future<MediaItem> readMedia(String mediaId) => _api.readMedia(mediaId);

@@ -72,7 +72,6 @@ void main() {
           AppSidebar(
             currentRoute: AppRoute.library,
             onRouteSelected: (_) {},
-            onOpenConversation: () {},
             onOpenSettings: () {},
             toolsMenu: ShellToolsMenu(
               onOpenLearningAssets: () {},

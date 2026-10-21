@@ -253,31 +253,6 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
-  /// Activates a playable rendition that belongs to the material already on
-  /// the workbench without pretending that rendition is a registered Media.
-  ///
-  /// Generated TTS is a rendition of a document's adopted composition. Giving
-  /// it a synthetic media id would split one material into a document session
-  /// and a second media session; leaving the previous id in place would be
-  /// worse, because retention and progress actions would target the wrong
-  /// material. The transport needs only the path/title/kind.
-  void setMaterialPlaybackSource({
-    required String path,
-    required String title,
-    required String kind,
-  }) {
-    _store.update(
-      (s) => s.copyWith(
-        mediaId: null,
-        mediaPath: path,
-        mediaTitle: title,
-        mediaFingerprint: null,
-        mediaKind: kind,
-        mediaRetained: null,
-      ),
-    );
-  }
-
   void clearMedia() => _store.update(
     (s) => s.copyWith(
       mediaId: null,

@@ -24,7 +24,6 @@ Future<void> showAppSettings({
   required Future<void> Function() saveSettings,
   LearnerSettingsViewModel? learnerViewModel,
   LlmProviderSettingsViewModel? llmViewModel,
-  RealtimeProviderSettingsViewModel? realtimeViewModel,
   SyntaxCapabilitySettingsViewModel? syntaxViewModel,
 }) async {
   // The L1 setting is a backend asset (Phase 3.9), not a local file setting.
@@ -42,7 +41,6 @@ Future<void> showAppSettings({
     context: context,
     builder: (_) => SettingsDialog(
       llmViewModel: llmViewModel,
-      realtimeViewModel: realtimeViewModel,
       syntaxViewModel: syntaxViewModel,
       language: settingsController.language,
       themeMode: settingsController.themeMode,

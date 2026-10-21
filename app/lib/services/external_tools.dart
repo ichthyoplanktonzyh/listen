@@ -118,49 +118,6 @@ class ExternalTools {
     return output;
   }
 
-  Future<String> extractPcm16AudioSegment(
-    String mediaPath, {
-    required int startMs,
-    required int endMs,
-  }) async {
-    if (startMs < 0 || endMs <= startMs) {
-      throw const ExternalToolError('Audio segment range is invalid.');
-    }
-    final executable = await _resolve(ffmpegPath, 'ffmpeg');
-    final directory = Directory(
-      '${Platform.environment['HOME']}/Library/Caches/LLPlayerNext/shadowing-reference',
-    );
-    await directory.create(recursive: true);
-    final output =
-        '${directory.path}/${DateTime.now().microsecondsSinceEpoch}.wav';
-    await _run(executable, [
-      '-v',
-      'error',
-      '-y',
-      '-ss',
-      (startMs / 1000).toStringAsFixed(3),
-      '-i',
-      mediaPath,
-      '-t',
-      ((endMs - startMs) / 1000).toStringAsFixed(3),
-      '-vn',
-      '-ac',
-      '1',
-      '-ar',
-      '16000',
-      '-c:a',
-      'pcm_s16le',
-      output,
-    ], timeout: const Duration(minutes: 1));
-    final file = File(output);
-    if (!await file.exists() || await file.length() <= 44) {
-      throw const ExternalToolError(
-        'ffmpeg completed without producing comparison audio.',
-      );
-    }
-    return output;
-  }
-
   static const _youtubeExtractorArgs = [
     '--extractor-args',
     'youtube:player_client=android,web',
@@ -293,8 +250,8 @@ class ExternalTools {
       acquisition: AcquisitionMode.externalTool,
       contentKind: ItemContentKind.video,
       mediaUrl: 'https://www.youtube.com/watch?v=$videoId',
-      entryUrl: raw['url'] as String? ??
-          'https://www.youtube.com/watch?v=$videoId',
+      entryUrl:
+          raw['url'] as String? ?? 'https://www.youtube.com/watch?v=$videoId',
     );
   }
 

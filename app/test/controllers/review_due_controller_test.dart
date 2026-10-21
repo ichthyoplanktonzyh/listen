@@ -17,7 +17,6 @@ ReviewDeckOverview _overview(int newCards, int dueCards) =>
           'counts': {'new': newCards, 'learning': 0, 'due': dueCards},
         },
       ],
-      'imported_decks': <Map<String, dynamic>>[],
       'limit_status': {
         'limits': {'new_cards': 20, 'reviews': 200},
         'new_completed': 0,

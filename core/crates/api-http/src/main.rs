@@ -1,9 +1,7 @@
 use std::env;
-use std::ffi::OsString;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use api_http::{
     API_VERSION, ApiState, CONTRACT_VERSION, KeychainSecretStore, SyntaxCapabilityManager, router,
@@ -11,9 +9,7 @@ use api_http::{
 use application::AppServices;
 use application::now_ms;
 use embedding_provider::ManagedFastEmbedProvider;
-use local_runtime::{
-    LocalRealtimeCascadeConfig, LocalRealtimeCascadeRuntime, SpeechSynthesisManager,
-};
+use local_runtime::SpeechSynthesisManager;
 use persistence_sqlite::SqliteRepository;
 use rand::Rng;
 use syntactic_provider::{PythonSyntacticKind, PythonSyntacticProvider};
@@ -37,10 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_current_span(false)
         .with_span_list(false)
         .init();
-    let mut local_realtime_cascade = match local_realtime_cascade_config()? {
-        Some(config) => Some(LocalRealtimeCascadeRuntime::start(config).await?),
-        None => None,
-    };
     let database_path = database_path();
     if let Some(parent) = database_path.parent() {
         fs::create_dir_all(parent)?;
@@ -63,24 +55,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         repository.clone(),
         repository.clone(),
     )
-    .with_recording_repository(repository.clone())
-    .with_difficulty_repository(repository.clone())
     .with_corpus_index_repository(repository.clone())
     .with_learner_profile_repository(repository.clone())
-    .with_reading_position_repository(repository.clone())
-    .with_semantic_task_repository(repository.clone())
-    .with_production_corpus_repository(repository.clone())
-    .with_personal_expression_repository(repository.clone())
     .with_llm_provider_profile_repository(repository.clone())
-    .with_realtime_conversation_repository(repository.clone())
     .with_material_repository(repository.clone())
     .with_package_lifecycle_repository(repository.clone())
     .with_content_package_candidate_import_repository(repository.clone())
     .with_capability_attempt_repository(repository.clone())
     .with_source_identity_repository(repository.clone());
-    let services = services
-        .with_coach_dashboard_repository(repository.clone())
-        .with_semantic_embedding(repository.clone(), semantic_embedding.clone());
+    let services = services.with_semantic_embedding(repository.clone(), semantic_embedding.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
     // Startup reconciliation: every capability attempt left running by a
     // previous process is honestly superseded (interrupted), so no capability
@@ -107,10 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let llm_cleanup = services
         .llm_providers()
         .recover_pending_secret_cleanups(secret_store.as_ref());
-    let realtime_cleanup = services
-        .realtime_conversations()
-        .recover_pending_secret_cleanups(secret_store.as_ref());
-    if llm_cleanup.is_err() || realtime_cleanup.is_err() {
+    if llm_cleanup.is_err() {
         tracing::warn!(
             event = "secret_cleanup.retry_deferred",
             "pending provider credential cleanup will be retried later"
@@ -147,23 +127,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "address": address.to_string(),
             "token": token,
             "database": database_path,
-            "local_realtime_cascade_endpoint": local_realtime_cascade
-                .as_ref()
-                .map(LocalRealtimeCascadeRuntime::endpoint)
         })
     );
     let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal(interrupt, original_parent))
         .await;
-    if let Some(runtime) = &mut local_realtime_cascade
-        && let Err(error) = runtime.shutdown().await
-    {
-        tracing::warn!(
-            event = "local_realtime_cascade.shutdown_failed",
-            detail = %error,
-            "managed local realtime cascade did not shut down cleanly"
-        );
-    }
     serve_result?;
     println!(
         "{}",
@@ -179,59 +147,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn local_realtime_cascade_config()
--> Result<Option<LocalRealtimeCascadeConfig>, Box<dyn std::error::Error>> {
-    let Some(executable) = env::var_os("LLPLAYERNEXT_LOCAL_REALTIME_EXECUTABLE") else {
-        return Ok(None);
-    };
-    let args_json = env::var("LLPLAYERNEXT_LOCAL_REALTIME_ARGS_JSON").map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "LLPLAYERNEXT_LOCAL_REALTIME_ARGS_JSON is required when the managed local realtime cascade is enabled",
-        )
-    })?;
-    let args = serde_json::from_str::<Vec<String>>(&args_json)?
-        .into_iter()
-        .map(OsString::from)
-        .collect();
-    let endpoint = env::var("LLPLAYERNEXT_LOCAL_REALTIME_ENDPOINT")
-        .unwrap_or_else(|_| "ws://127.0.0.1:8765/v1/realtime".into());
-    let readiness_url = env::var("LLPLAYERNEXT_LOCAL_REALTIME_READINESS_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8765/v1/pool".into());
-    let startup_timeout = duration_from_env(
-        "LLPLAYERNEXT_LOCAL_REALTIME_STARTUP_TIMEOUT_SECS",
-        Duration::from_secs(300),
-    )?;
-    let shutdown_timeout = duration_from_env(
-        "LLPLAYERNEXT_LOCAL_REALTIME_SHUTDOWN_TIMEOUT_SECS",
-        Duration::from_secs(10),
-    )?;
-    Ok(Some(LocalRealtimeCascadeConfig {
-        executable: executable.into(),
-        args,
-        endpoint,
-        readiness_url,
-        startup_timeout,
-        shutdown_timeout,
-    }))
-}
-
-fn duration_from_env(
-    name: &str,
-    default: Duration,
-) -> Result<Duration, Box<dyn std::error::Error>> {
-    let Some(value) = env::var_os(name) else {
-        return Ok(default);
-    };
-    let seconds = value.to_string_lossy().parse::<u64>().map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("{name} must be an integer number of seconds"),
-        )
-    })?;
-    Ok(Duration::from_secs(seconds))
-}
-
 fn random_token() -> String {
     let bytes: [u8; 32] = rand::rng().random();
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -244,25 +159,13 @@ fn database_path() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
         let home = PathBuf::from(env::var_os("HOME").expect("HOME is required"));
-        let current = home.join("Library/Application Support/listen/listen.sqlite");
-        let legacy = home.join("Library/Application Support/LLPlayerNext/llplayernext.sqlite");
-        if current.exists() || !legacy.exists() {
-            current
-        } else {
-            legacy
-        }
+        home.join("Library/Application Support/listen/listen-listening.sqlite")
     }
     #[cfg(target_os = "windows")]
     {
         let local_app_data =
             PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"));
-        let current = local_app_data.join("listen/listen.sqlite");
-        let legacy = local_app_data.join("LLPlayerNext/llplayernext.sqlite");
-        if current.exists() || !legacy.exists() {
-            current
-        } else {
-            legacy
-        }
+        local_app_data.join("listen/listen-listening.sqlite")
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -271,13 +174,7 @@ fn database_path() -> PathBuf {
                 .join(".local/share")
                 .into_os_string()
         }));
-        let current = data_home.join("listen/listen.sqlite");
-        let legacy = data_home.join("llplayernext/llplayernext.sqlite");
-        if current.exists() || !legacy.exists() {
-            current
-        } else {
-            legacy
-        }
+        data_home.join("listen/listen-listening.sqlite")
     }
 }
 

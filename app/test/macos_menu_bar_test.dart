@@ -34,7 +34,6 @@ void main() {
     onArchiveMedia: () {},
     onOpenVocabulary: () {},
     onOpenReview: () {},
-    onOpenCoach: () {},
   );
 
   Iterable<PlatformMenuItem> flatten(List<PlatformMenuItem> items) sync* {
@@ -174,11 +173,7 @@ void main() {
     final noCore = build(
       capabilities: const AppBarCapabilities(hasMedia: true, coreReady: false),
     );
-    for (final label in [
-      l.text('vocabulary'),
-      l.text('review'),
-      l.text('coachDashboard'),
-    ]) {
+    for (final label in [l.text('vocabulary'), l.text('review')]) {
       expect(
         byLabel(noCore, label).onSelected,
         isNull,

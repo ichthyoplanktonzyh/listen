@@ -22,13 +22,14 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from test_produce import media_rendition, run_cli  # noqa: E402
 from listen_gen.asr import AsrSegment, AsrTranscript, AsrWord, _tokens  # noqa: E402
-from listen_gen.produce import ProduceConfig, _tts_rich_stages  # noqa: E402
+from listen_gen.capability import CapabilityRequest  # noqa: E402
+from listen_gen.package_v3 import sha256_of_bytes  # noqa: E402
+from listen_gen.produce import ProduceConfig, ProductionFailure, produce  # noqa: E402
 from listen_gen.rich_stages import RichStages  # noqa: E402
-from listen_gen.tts import AnchorAlignment  # noqa: E402
 
 
 def request_media(capability: str = "read", directory=None) -> dict:
-    rendition = media_rendition(directory)
+    rendition = media_rendition()
     blob = dict(rendition["blob"])
     blob["path"] = str(blob["path"])
     rendition["blob"] = blob
@@ -41,7 +42,6 @@ def request_media(capability: str = "read", directory=None) -> dict:
         "edition": {"edition_id": "edition-m", "title": "E", "target_language": "en-US", "support_languages": []},
         "requested_capability": capability,
         "available_renditions": [rendition],
-        "available_resources": [],
     }
 
 
@@ -613,137 +613,6 @@ class RichMediaPipelineTests(unittest.TestCase):
         self.assertNotIn("word_acoustics", kinds)
 
 
-class RichTtsPipelineTests(unittest.TestCase):
-    """Document -> listen joins the rich pipeline through a tts_aligner."""
-
-    def setUp(self) -> None:
-        self.directory = Path(tempfile.mkdtemp())
-
-    def _tts_probe(self, transcript: AsrTranscript):
-        class StubAsr:
-            def transcribe(self, media_path: Path) -> AsrTranscript:
-                return transcript
-
-        reading_payload = {
-            "text": "Hello world.",
-            "anchors": [
-                {
-                    "anchor_id": "sentence-0",
-                    "kind": "sentence",
-                    "start_offset": 0,
-                    "end_offset": 12,
-                }
-            ],
-        }
-        resources, _, warnings = _tts_rich_stages(
-            request=None,
-            config=ProduceConfig(rich=RichStages(tts_aligner=StubAsr())),
-            audio_bytes=b"fixture-audio",
-            audio_duration_ms=300,
-            reading_payload=reading_payload,
-            alignments=(AnchorAlignment("sentence-0", 0),),
-            producer={},
-            anchor_resource_id="sha256:anchor",
-            language="en",
-            subject={},
-            rendition_id="sha256:rendition",
-            created_at_ms=1,
-            progress=None,
-        )
-        return [resource.kind for resource in resources], warnings
-
-    def test_tts_fragmented_matching_transcript_is_assembled_before_word_fallback(self) -> None:
-        transcript = AsrTranscript(
-            language="en",
-            segments=(
-                AsrSegment(
-                    0,
-                    100,
-                    "Hello",
-                    "Hello",
-                    (AsrWord(0, 5, 10, 50, None, "asr_reported"),),
-                ),
-                AsrSegment(
-                    100,
-                    200,
-                    "world.",
-                    "world.",
-                    (AsrWord(0, 6, 110, 180, None, "asr_reported"),),
-                ),
-            ),
-            provider_id="fixture",
-            provider_version="1",
-        )
-        kinds, warnings = self._tts_probe(transcript)
-        self.assertIn("word_timeline", kinds)
-        self.assertNotIn("word_timeline_abstained", [warning["code"] for warning in warnings])
-
-    def test_tts_mismatched_or_extra_sentences_abstain_whole_word_chain(self) -> None:
-        mismatched = AsrTranscript(
-            language="en",
-            segments=(
-                AsrSegment(
-                    0,
-                    200,
-                    "Hello earth.",
-                    "Hello earth.",
-                    (
-                        AsrWord(0, 5, 10, 50, None, "asr_reported"),
-                        AsrWord(6, 11, 60, 120, None, "asr_reported"),
-                    ),
-                ),
-            ),
-            provider_id="fixture",
-            provider_version="1",
-        )
-        extra = AsrTranscript(
-            language="en",
-            segments=(
-                AsrSegment(0, 100, "Hello world.", "Hello world.", ()),
-                AsrSegment(100, 200, "Extra.", "Extra.", ()),
-            ),
-            provider_id="fixture",
-            provider_version="1",
-        )
-        for transcript in (mismatched, extra):
-            with self.subTest(transcript=transcript.segments):
-                kinds, warnings = self._tts_probe(transcript)
-                self.assertNotIn("word_timeline", kinds)
-                self.assertIn("word_timeline_abstained", [warning["code"] for warning in warnings])
-
-    def test_tts_text_mismatch_abstains_word_level_chain(self) -> None:
-        from test_produce import request_document
-
-        request_path = self.directory / "request.json"
-        request_path.write_text(json.dumps(request_document(self.directory, capability="listen")))
-        output = self.directory / "package.zip"
-        result = run_cli([
-            "package", "from-capability", str(request_path),
-            "--output", str(output),
-            "--tts-provider", "fake",
-            "--provider", "fixture", "--fixture", str(FIXTURES / "sample.asr.json"),
-            "--tts-aligner", "fixture",
-            "--sense-groups", "baseline",
-            "--acoustics", "fixture",
-            "--acoustics-fixture", str(FIXTURES / "acoustics-result.json"),
-            "--prosody", "fixture",
-            "--prosody-fixture", str(FIXTURES / "prosody-result.json"),
-            "--machine-events",
-        ])
-        self.assertEqual(result.returncode, 0, result.stderr)
-        kinds = resource_kinds(output)
-        for expected in ("structured_reading", "anchor_time_alignment"):
-            self.assertIn(expected, kinds, f"missing {expected} in {kinds}")
-        self.assertNotIn("word_timeline", kinds)
-        self.assertNotIn("sense_group_analysis", kinds)
-        self.assertNotIn("word_acoustics", kinds)
-        self.assertNotIn("prosody_analysis", kinds)
-        events = [json.loads(line) for line in result.stdout.splitlines() if line]
-        warnings = [event for event in events if event.get("event") == "warning"]
-        codes = [event["code"] for event in warnings]
-        self.assertIn("word_timeline_abstained", codes)
-
-
 class RichAlignedMediaTests(unittest.TestCase):
     """Media -> reading, word timeline derived by forced alignment."""
 
@@ -817,6 +686,7 @@ class RichAlignedMediaTests(unittest.TestCase):
             "--subtitle", str(srt),
             "--aligner", "fixture", "--aligner-fixture", str(FIXTURES / "sample.alignment.json"),
             "--sense-groups", "baseline",
+            "--machine-events",
         ])
         self.assertEqual(result.returncode, 0, result.stderr)
         kinds = resource_kinds(output)
@@ -825,6 +695,12 @@ class RichAlignedMediaTests(unittest.TestCase):
         self.assertIn("word_timeline", kinds)
         self.assertIn("sense_group_analysis", kinds)
         resources = package_resources(output)
+        events = [json.loads(line) for line in result.stdout.splitlines() if line]
+        planned = next(event["plan"] for event in events if event.get("event") == "planned")
+        derivation = planned["derivations"][0]
+        self.assertEqual(derivation["provider"], "subtitle")
+        self.assertEqual(derivation["subtitle_sha256"], sha256_of_bytes(srt.read_bytes()))
+        self.assertNotIn(str(srt), json.dumps(planned))
         alignment = next(
             r for r in resources
             if r["descriptor"]["kind"] == "anchor_time_alignment"
@@ -839,6 +715,58 @@ class RichAlignedMediaTests(unittest.TestCase):
             all(entry["timing_source"] == "forced_aligned" for entry in words)
         )
         self.assertEqual(words[0]["start_ms"], 100)
+        first_reading = next(
+            r for r in resources if r["descriptor"]["kind"] == "structured_reading"
+        )
+        first_config_identity = first_reading["descriptor"]["provenance"]["config_sha256"]
+
+        changed_srt = self.directory / "changed-track.srt"
+        changed_srt.write_text(
+            srt.read_text(encoding="utf-8").replace("00:00:00,100", "00:00:00,110"),
+            encoding="utf-8",
+        )
+        changed_output = self.directory / "changed-package.zip"
+        changed_result = self._run(changed_output, request_path, [
+            "--subtitle", str(changed_srt), "--machine-events",
+        ])
+        self.assertEqual(changed_result.returncode, 0, changed_result.stderr)
+        changed_events = [
+            json.loads(line) for line in changed_result.stdout.splitlines() if line
+        ]
+        changed_plan = next(
+            event["plan"] for event in changed_events if event.get("event") == "planned"
+        )
+        self.assertNotEqual(planned, changed_plan)
+        changed_reading = next(
+            r for r in package_resources(changed_output)
+            if r["descriptor"]["kind"] == "structured_reading"
+        )
+        self.assertNotEqual(
+            first_config_identity,
+            changed_reading["descriptor"]["provenance"]["config_sha256"],
+        )
+
+    def test_subtitle_change_after_planning_fails_without_a_package(self) -> None:
+        srt = self.directory / "changing-track.srt"
+        srt.write_text(
+            "1\n00:00:00,100 --> 00:00:01,200\nListen carefully!\n",
+            encoding="utf-8",
+        )
+        expected_sha256 = sha256_of_bytes(srt.read_bytes())
+        srt.write_text(
+            "1\n00:00:00,100 --> 00:00:01,200\nListen very carefully!\n",
+            encoding="utf-8",
+        )
+        output = self.directory / "must-not-exist.zip"
+        request = CapabilityRequest.from_document(request_media())
+        with self.assertRaises(ProductionFailure) as caught:
+            produce(
+                request,
+                output,
+                config=ProduceConfig(subtitle=srt, subtitle_sha256=expected_sha256),
+            )
+        self.assertEqual(caught.exception.code, "input_changed")
+        self.assertFalse(output.exists())
 
     def test_subtitle_fragments_merge_before_forced_alignment(self) -> None:
         first = "Send us their name, photo, and a couple lines"
@@ -989,115 +917,3 @@ class RichAlignedMediaTests(unittest.TestCase):
         warnings = [event for event in events if event.get("event") == "warning"]
         codes = [event["code"] for event in warnings]
         self.assertIn("word_timeline_abstained", codes, codes)
-
-
-class RichTtsAlignedTests(unittest.TestCase):
-    """Document -> listen derives the word timeline by forced alignment."""
-
-    def setUp(self) -> None:
-        self.directory = Path(tempfile.mkdtemp())
-
-    def test_tts_forced_alignment_produces_word_timeline_and_rich_chain(self) -> None:
-        from test_produce import request_document
-
-        # The committed alignment fixture uses relative windows.  The TTS
-        # anchor clock is cumulative per source sentence, so shift each
-        # segment into the absolute clock before exercising closure checks.
-        alignment = json.loads(
-            (FIXTURES / "sample-document.alignment.json").read_text(encoding="utf-8")
-        )
-        offsets = {0: 0, 1: 1140, 2: 3270}
-        sentence_ends = {0: 1140, 1: 3270, 2: 6300}
-        for word in alignment["words"]:
-            offset = offsets[word["segment_index"]]
-            word["start_ms"] += offset
-            word["end_ms"] = min(
-                word["end_ms"] + offset, sentence_ends[word["segment_index"]]
-            )
-        alignment_path = self.directory / "tts.alignment.json"
-        alignment_path.write_text(json.dumps(alignment), encoding="utf-8")
-        phone_path = self.directory / "tts.phone.json"
-        phone_path.write_text(
-            json.dumps(
-                {
-                    "schema": "listen_gen.phone-result.v1",
-                    "provider": {"id": "fixture-phone", "version": "1"},
-                    "config_sha256": "sha256:" + "9" * 64,
-                    "phone_set": "ipa",
-                    "phones": [
-                        {
-                            "symbol": "s",
-                            "start_ms": 20 + index * 20,
-                            "end_ms": 30 + index * 20,
-                        }
-                        for index in range(6)
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-        request_path = self.directory / "request.json"
-        request_path.write_text(json.dumps(request_document(self.directory, capability="listen")))
-        output = self.directory / "package.zip"
-        result = run_cli([
-            "package", "from-capability", str(request_path),
-            "--output", str(output),
-            "--tts-provider", "fake",
-            "--aligner", "fixture", "--aligner-fixture", str(alignment_path),
-            "--sense-groups", "baseline",
-            "--acoustics", "baseline",
-            "--prosody", "baseline",
-            "--phones", "fixture", "--phones-fixture", str(phone_path),
-            "--machine-events",
-        ])
-        self.assertEqual(result.returncode, 0, result.stderr)
-        by_kind = assert_complete_rich_package(self, output)
-        kinds = resource_kinds(output)
-        for expected in (
-            "structured_reading",
-            "anchor_time_alignment",
-            "word_timeline",
-            "sense_group_analysis",
-            "word_acoustics",
-            "prosody_analysis",
-            "phone_timeline",
-        ):
-            self.assertIn(expected, kinds, f"missing {expected} in {kinds}")
-        resources = package_resources(output)
-        word_timeline = next(r for r in resources if r["descriptor"]["kind"] == "word_timeline")
-        payload = resource_payload(output, word_timeline)
-        self.assertTrue(
-            all(entry["timing_source"] == "forced_aligned" for entry in payload["words"])
-        )
-        self.assertEqual(payload["words"][0]["start_ms"], 0)
-        events = [json.loads(line) for line in result.stdout.splitlines() if line]
-        warnings = [event for event in events if event.get("event") == "warning"]
-        self.assertEqual(warnings, [], [event["message"] for event in warnings])
-
-    def test_tts_aligner_failure_does_not_bind_mismatched_retranscription(self) -> None:
-        from test_produce import request_document
-
-        bad = self.directory / "bad-alignment.json"
-        bad.write_text("[1, 2]")
-        request_path = self.directory / "request.json"
-        request_path.write_text(json.dumps(request_document(self.directory, capability="listen")))
-        output = self.directory / "package.zip"
-        result = run_cli([
-            "package", "from-capability", str(request_path),
-            "--output", str(output),
-            "--tts-provider", "fake",
-            "--provider", "fixture", "--fixture", str(FIXTURES / "sample.asr.json"),
-            "--aligner", "fixture", "--aligner-fixture", str(bad),
-            "--tts-aligner", "fixture",
-            "--machine-events",
-        ])
-        self.assertEqual(result.returncode, 0, result.stderr)
-        kinds = resource_kinds(output)
-        self.assertNotIn("word_timeline", kinds)
-        events = [json.loads(line) for line in result.stdout.splitlines() if line]
-        warnings = [event for event in events if event.get("event") == "warning"]
-        self.assertIn("word_timeline_abstained", [event["code"] for event in warnings])
-
-
-if __name__ == "__main__":
-    unittest.main()

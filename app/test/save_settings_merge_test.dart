@@ -56,7 +56,6 @@ void main() {
       showExperimentalPhoneticResults: true,
       phonemeHighlightVisible: false,
       phoneticCachePolicy: 'keep_all',
-      familiarMaterialSuggestions: false,
       // Settings-owned fields the old code re-read through controller
       // getters; after the copyWith rewrite they simply ride along.
       language: 'zh',
@@ -91,7 +90,6 @@ void main() {
     expect(merged.showExperimentalPhoneticResults, isTrue);
     expect(merged.phonemeHighlightVisible, isFalse);
     expect(merged.phoneticCachePolicy, 'keep_all');
-    expect(merged.familiarMaterialSuggestions, isFalse);
     // Settings-owned fields keep their values without re-enumeration.
     expect(merged.language, 'zh');
     expect(merged.ffmpegPath, '/opt/homebrew/bin/ffmpeg');

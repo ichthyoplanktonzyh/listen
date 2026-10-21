@@ -3,25 +3,19 @@ use crate::{
     ApplicationError, CapabilityConclusion, CapabilityFilter, CapabilityOverride,
     CapabilityOverrideSource, CapabilityProjection, CapabilityProjectionSource,
     CreateLexicalObservation, ExternalVocabularyImport, ExternalVocabularyImportSummary,
-    LISTENING_CONFIDENCE_TASK, LanguageCode, LearningChangeSource, LearningObservation,
-    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
-    LexicalEntryId, LexicalEntryKind, LexicalLearningUseCases, LexicalObservation,
-    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, MediaAvailability, MediaId, MediaItem,
-    ObservationOrigin, ObservationResult, ObservationSpec, RecognitionEvidenceSourceKind,
-    RecordSpeakingProduction, SubtitleSentenceId, VocabularyAssetBundle, clean_optional,
-    clean_required, learning_observation_id, normalize_lemma, normalize_phrase, now_ms,
-    observation_spec_for_marking, observation_spec_for_reading_marking,
-    observation_spec_for_speaking_production, require_text,
+    LanguageCode, LearningChangeSource, LearningObservation, LearningStatus, LexicalCapability,
+    LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
+    LexicalLearningUseCases, LexicalObservation, LexicalOccurrenceId, LexicalSenseFolder,
+    LexicalSenseId, MediaAvailability, MediaId, MediaItem, ObservationOrigin, ObservationSpec,
+    SubtitleSentenceId, VocabularyAssetBundle, clean_optional, clean_required,
+    learning_observation_id, normalize_lemma, normalize_phrase, now_ms,
+    observation_spec_for_marking, require_text,
 };
 
 /// Marks capability projections inferred from a legacy linear status write,
 /// as opposed to the one-shot v22 backfill
 /// (`LEGACY_STATUS_MIGRATION_ALGORITHM_VERSION`).
 pub(crate) const LEGACY_STATUS_COMPAT_ALGORITHM_VERSION: &str = "legacy-status-compat-v1";
-
-/// Bounded evidence read for `listening-projection-v1` recomputes (ADR 0019).
-/// The rule only inspects recent decisive events; 200 newest rows is ample.
-pub(crate) const LISTENING_PROJECTION_EVIDENCE_LIMIT: u32 = 200;
 
 /// Where a channelized observation happened (ADR 0017). Kept as a struct so
 /// writer call sites stay within argument-count discipline.
@@ -153,11 +147,9 @@ impl LexicalLearningUseCases {
 
     /// Projects a legacy linear status write into the capability profile.
     ///
-    /// `source` must state where the legacy status came from
-    /// (`LegacyLearningStatusMigration` for live compat syncs of user-facing
-    /// legacy writes, `Import` for external vocabulary imports); the shared
-    /// algorithm version marks the mapping as a compat inference either way.
-    /// `EvidenceProjection` is reserved for real evidence-derived projections.
+    /// `source` states whether this projection came from a user status write
+    /// or an explicit external vocabulary import. Practice observations never
+    /// change capability state automatically.
     pub(crate) fn sync_capability_from_legacy_status(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -182,21 +174,6 @@ impl LexicalLearningUseCases {
                     .cloned()
                     .unwrap_or_default();
                 if current_dim.user_override.is_some() {
-                    continue;
-                }
-                // Writer ladder (ADR 0019 decision 3): compat may not upgrade
-                // over a task-grade evidence conclusion (a self-reported
-                // "认识" cannot overturn task failure). Downgrades and clears
-                // stay allowed, and weakened evidence conclusions may be
-                // overwritten by explicit user judgment.
-                if proj.conclusion == CapabilityConclusion::Acquired
-                    && current_dim.projection.as_ref().is_some_and(|value| {
-                        value.source == CapabilityProjectionSource::EvidenceProjection
-                            && value
-                                .confidence
-                                .is_some_and(|c| c >= LISTENING_CONFIDENCE_TASK)
-                    })
-                {
                     continue;
                 }
                 self.lexical_capabilities
@@ -330,31 +307,6 @@ impl LexicalLearningUseCases {
         };
         self.learning_observations
             .append_learning_observation(&observation)?;
-        self.refresh_projection_proposal(lexical_entry_id, spec.capability, occurred_at_ms)?;
-        Ok(())
-    }
-
-    /// Phase 3.17's sole automatic long-term writer creates a correctable
-    /// proposal. It never mutates projection/override; confirmation owns that.
-    pub(crate) fn refresh_projection_proposal(
-        &self,
-        lexical_entry_id: &LexicalEntryId,
-        capability: LexicalCapability,
-        now: u64,
-    ) -> Result<(), ApplicationError> {
-        let observations = self.learning_observations.list_learning_observations(
-            lexical_entry_id,
-            Some(capability),
-            LISTENING_PROJECTION_EVIDENCE_LIMIT,
-            0,
-        )?;
-        let (_, Some(proposal)) =
-            crate::projection_proposal_v1(lexical_entry_id, capability, &observations, now)
-        else {
-            return Ok(());
-        };
-        self.lexical_capabilities
-            .save_projection_proposal(&proposal)?;
         Ok(())
     }
 
@@ -378,62 +330,6 @@ impl LexicalLearningUseCases {
             capability,
             limit,
             offset,
-        )
-    }
-
-    /// Reading-posture word marking (Phase 3.13 Slice 5): one explicit user
-    /// act on one word writes exactly one reading-channel observation.
-    /// Deliberately narrower than the listening marking path — no legacy
-    /// `LexicalObservation` row, no recognition evidence, and no projection
-    /// (reading has no qualified automatic projection until 3.17; the
-    /// channelized writer only reprojects the listening channel).
-    pub fn record_reading_marking(
-        &self,
-        lexical_entry_id: &LexicalEntryId,
-        sentence_id: Option<&SubtitleSentenceId>,
-        surface_form: &str,
-        media_id: Option<MediaId>,
-        translation_visible: bool,
-        understood: bool,
-    ) -> Result<(), ApplicationError> {
-        require_text(surface_form, "surface_form")?;
-        self.lexical_entries
-            .lexical_details(lexical_entry_id)?
-            .ok_or(ApplicationError::NotFound("lexical entry"))?;
-        let occurred_at_ms = now_ms();
-        self.append_channelized_observation(
-            lexical_entry_id,
-            observation_spec_for_reading_marking(understood, translation_visible),
-            ObservationContext {
-                surface_form: Some(surface_form.to_owned()),
-                sentence_id: sentence_id.cloned(),
-                media_id,
-            },
-            ObservationOrigin::UserMarking,
-            sentence_id.map(|id| format!("reading-marking:{}", id.as_str())),
-            occurred_at_ms,
-        )
-    }
-
-    pub fn record_speaking_production(
-        &self,
-        input: RecordSpeakingProduction,
-    ) -> Result<(), ApplicationError> {
-        require_text(&input.surface_form, "surface_form")?;
-        self.lexical_entries
-            .lexical_details(&input.lexical_entry_id)?
-            .ok_or(ApplicationError::NotFound("lexical entry"))?;
-        self.append_channelized_observation(
-            &input.lexical_entry_id,
-            observation_spec_for_speaking_production(input.assistance),
-            ObservationContext {
-                surface_form: Some(input.surface_form),
-                sentence_id: input.sentence_id,
-                media_id: input.media_id,
-            },
-            ObservationOrigin::PracticeTask,
-            Some(input.source_ref),
-            input.occurred_at_ms,
         )
     }
 
@@ -486,19 +382,6 @@ impl LexicalLearningUseCases {
             Some(observation.id.as_str().to_owned()),
             created_at_ms,
         )?;
-        if observation.result == ObservationResult::RecognizedInContext {
-            self.record_context_recognition_evidence(
-                observation.lexical_entry_id.clone(),
-                Some(observation.sentence_id.clone()),
-                input
-                    .source
-                    .as_ref()
-                    .and_then(|source| source.media_id.clone()),
-                RecognitionEvidenceSourceKind::LexicalObservation,
-                observation.id.as_str(),
-                created_at_ms,
-            )?;
-        }
         Ok(observation)
     }
 

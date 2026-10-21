@@ -16,10 +16,10 @@ import 'package:llplayer_next/data/repositories/semantic_search_repository.dart'
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/vocabulary_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/widgets/common/listen_empty_state.dart';
 import 'package:llplayer_next/widgets/common/listen_loading.dart';
 import 'package:llplayer_next/widgets/vocabulary/listening_dictionary_entry_view.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
-import 'package:llplayer_next/widgets/vocabulary/vocabulary_gap_panel.dart';
 
 /// Characterization tests for `lib/screens/vocabulary_screen.dart`.
 ///
@@ -45,43 +45,6 @@ Map<String, dynamic> entryWire(String id, String form) => {
   'history': <dynamic>[],
   'occurrences': <dynamic>[],
   'sense_folders': <dynamic>[],
-};
-
-Map<String, dynamic> suggestionWire(String entryId, int contexts) => {
-  'id': 'suggestion-$entryId',
-  'lexical_entry_id': entryId,
-  'lexical_display_form': entryId,
-  'previous_status': 'known_not_recognized',
-  'suggested_status': 'known_recognized',
-  'status': 'pending',
-  'evidence_context_count': contexts,
-  'evidence_ids': <dynamic>[],
-  'threshold': 5,
-  'evidence_class': 'heuristic_proxy',
-  'created_at_ms': 1,
-};
-
-Map<String, dynamic> productionReviewWire({
-  String readiness = 'ready',
-  List<Map<String, dynamic>> targets = const [],
-}) => {
-  'readiness': readiness,
-  'document_count': 3,
-  'token_count': 120,
-  'lemma_count': 60,
-  'candidate_count': targets.length,
-  'targets': targets,
-};
-
-Map<String, dynamic> productionTargetWire(String id, String form) => {
-  'lexical_entry_id': id,
-  'normalized_key': form.toLowerCase(),
-  'display_form': form,
-  'frequency_rank': 900,
-  'frequency_band': 1,
-  'evidence_strength': 3,
-  'recency_band': 2,
-  'explanation': <dynamic>['frequent in input'],
 };
 
 Map<String, dynamic> semanticCapabilityWire({
@@ -148,10 +111,9 @@ const envelope =
 /// only describes the one thing it is bending. [route] may be async, which is
 /// how the race tests hold a response open.
 class Workbench {
-  Workbench({this.words = const [], this.candidates = const [], this.route});
+  Workbench({this.words = const [], this.route});
 
   List<Map<String, dynamic>> words;
-  List<Map<String, dynamic>> candidates;
 
   /// Returns a reply, or `null` to fall through to the baseline.
   FutureOr<Reply?> Function(String method, String path)? route;
@@ -174,16 +136,6 @@ class Workbench {
       if (override != null) return override;
       if (path.startsWith('/v1/vocabulary?')) return ok(words);
       if (path.startsWith('/v1/hunting/')) return ok(const <dynamic>[]);
-      if (path.startsWith('/v1/review/cross-modal?')) return ok(candidates);
-      if (path.startsWith('/v1/review/upgrade-suggestions')) {
-        return ok(const <dynamic>[]);
-      }
-      if (path.startsWith('/v1/production-gap/')) {
-        return ok(productionReviewWire());
-      }
-      if (path.startsWith('/v1/production-corpus/search')) {
-        return ok(const <dynamic>[]);
-      }
       if (path.startsWith('/v1/semantic-embedding/capability')) {
         return ok(semanticCapabilityWire());
       }
@@ -357,7 +309,7 @@ void main() {
       (tester) async {
         // SUSPECTED DEFECT D5. `_openEntryById` (vocabulary_screen.dart:234)
         // does not catch `lexicalEntryDetails`. The tap has no visible
-        // consequence at all: the gap pane stays, no SnackBar names the
+        // consequence at all: the detail stays empty, no SnackBar names the
         // failure, and the error escapes as an unhandled async error.
         setSize(tester, const Size(1200, 900));
         final bench = Workbench(
@@ -375,9 +327,9 @@ void main() {
         }, (error, _) => escaped.add(error));
 
         expect(escaped.single, isA<HttpException>());
-        // Nothing moved: the right pane is still the gap pane, and no bar
-        // names what went wrong.
-        expect(find.byType(VocabularyGapPanel), findsOneWidget);
+        // Nothing moved: the detail pane stays empty and no bar names the
+        // failure.
+        expect(find.byType(ListenEmptyState), findsOneWidget);
         expect(find.byType(SnackBar), findsNothing);
         expect(find.byKey(const Key('dictionary-identity-card')), findsNothing);
       },
@@ -573,60 +525,6 @@ void main() {
       },
     );
 
-    testWidgets(
-      'the gap pane falls back to the plain output review when the semantic '
-      'enrichment fails',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        final bench = Workbench(
-          route: (method, path) {
-            if (path.startsWith('/v1/production-gap/semantic-enrichment')) {
-              return fail('enrichment is down');
-            }
-            if (path.startsWith('/v1/production-gap/review')) {
-              return ok(
-                productionReviewWire(
-                  targets: [productionTargetWire('entry-9', 'nonetheless')],
-                ),
-              );
-            }
-            return null;
-          },
-        );
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        // Both were tried, and the fallback's rows render.
-        expect(bench.hits('/v1/production-gap/semantic-enrichment'), 1);
-        expect(bench.hits('/v1/production-gap/review'), 1);
-        expect(find.byType(VocabularyGapPanel), findsOneWidget);
-        expect(find.text('nonetheless'), findsOneWidget);
-        // Degraded silently: no failure notice for a fallback that worked.
-        expect(find.text('Could not load output review'), findsNothing);
-      },
-    );
-
-    testWidgets(
-      'the gap pane names the output source only after both of its requests '
-      'fail',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        final bench = Workbench(
-          route: (method, path) => path.startsWith('/v1/production-gap/')
-              ? fail('output review is down')
-              : null,
-        );
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        expect(bench.hits('/v1/production-gap/semantic-enrichment'), 1);
-        expect(bench.hits('/v1/production-gap/review'), 1);
-        expect(find.text('Could not load output review'), findsOneWidget);
-        // The pane's other source is unaffected by this one being down.
-        expect(find.text('Cross-channel review is unavailable'), findsNothing);
-      },
-    );
-
     testWidgets('an entry whose dictionary lookup fails settles on synthetic '
         'pronunciation instead of waiting', (tester) async {
       setSize(tester, const Size(1200, 900));
@@ -673,9 +571,24 @@ void main() {
         expect(find.text('Could not update'), findsOneWidget);
         expect(find.text('Details'), findsOneWidget);
         // The failed write does not re-read the entry, so the pane keeps the
-        // state the user was looking at — every channel still unanswered.
+        // state the user was looking at — listening is still unassessed.
         expect(bench.exact('/v1/lexical-entries/entry-1'), detailsBefore);
-        expect(inDetail(find.text('Not yet assessed')), findsNWidgets(4));
+        expect(inDetail(find.text('Listening')), findsOneWidget);
+        expect(
+          tester
+              .widget<SegmentedButton<String>>(
+                inDetail(find.byType(SegmentedButton<String>)),
+              )
+              .selected,
+          isEmpty,
+          reason: 'the existing listening assessment remains unassessed',
+        );
+        expect(
+          bench.calls
+              .where((call) => call.path.contains('/capability/'))
+              .map((call) => call.path),
+          ['/v1/lexical-entries/entry-1/capability/listening'],
+        );
       },
     );
 
@@ -712,9 +625,13 @@ void main() {
         expect(
           bench.hits('/v1/vocabulary?'),
           listBefore + 1,
-          reason:
-              'the list re-queries because its filters read the same '
-              'channels',
+          reason: 'the listening assessment filter reads the updated status',
+        );
+        expect(
+          bench.calls
+              .where((call) => call.path.contains('/capability/'))
+              .map((call) => call.path),
+          ['/v1/lexical-entries/entry-1/capability/listening'],
         );
       },
     );
@@ -798,35 +715,6 @@ void main() {
         expect(bench.calls.length, before);
       },
     );
-
-    testWidgets(
-      'a capability-proposal lookup with nothing to propose says so instead '
-      'of showing an empty dialog',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        final bench = Workbench(
-          words: [entryWire('entry-1', 'rather')],
-          route: (method, path) => path.startsWith('/v1/projections/entries/')
-              ? ok({'proposals': <dynamic>[]})
-              : null,
-        );
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('rather'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Capability proposals'));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(AlertDialog), findsOneWidget);
-        expect(
-          find.text(
-            'There is not enough qualified evidence for a proposal. '
-            'The channel remains unassessed.',
-          ),
-          findsOneWidget,
-        );
-      },
-    );
   });
 
   // ──────────────────────────────────────────────────────────────────────
@@ -835,45 +723,40 @@ void main() {
 
   group('async race guards', () {
     testWidgets(
-      'a decoration belonging to the previous entry cannot paint onto the '
-      'entry opened after it',
+      'a slow pronunciation for the previous entry cannot affect the next one',
       (tester) async {
-        // The `detailRequest` sequence guard (vocabulary_screen.dart:123, 235,
-        // 244, 255) exists for exactly this: entry A's suggestions resolving
-        // after the user moved to entry B must be dropped, not painted onto B.
         setSize(tester, const Size(1200, 900));
-        final staleSuggestions = Completer<void>();
+        final slowPronunciation = Completer<void>();
         addTearDown(() {
-          if (!staleSuggestions.isCompleted) staleSuggestions.complete();
+          if (!slowPronunciation.isCompleted) slowPronunciation.complete();
         });
         final bench = Workbench(
           words: [entryWire('entry-a', 'alpha'), entryWire('entry-b', 'bravo')],
           route: (method, path) async {
-            if (!path.startsWith('/v1/review/upgrade-suggestions')) return null;
-            if (path.contains('lexical_entry_id=entry-a')) {
-              await staleSuggestions.future;
-              return ok([suggestionWire('entry-a', 5)]);
+            if (path.contains('lemma=alpha')) {
+              await slowPronunciation.future;
+              return ok({'results': <dynamic>[]});
             }
-            return ok([suggestionWire('entry-b', 9)]);
+            return null;
           },
         );
 
         await tester.pumpWidget(host(api: bench.build(), tester: tester));
         await tester.pumpAndSettle();
-
         await tester.tap(find.text('alpha'));
         await tester.pumpAndSettle();
-        expect(staleSuggestions.isCompleted, isFalse);
+        expect(slowPronunciation.isCompleted, isFalse);
+        expect(inDetail(find.text('alpha')), findsOneWidget);
 
         await tester.tap(find.text('bravo'));
         await tester.pumpAndSettle();
-        expect(find.textContaining('9 contexts'), findsOneWidget);
+        expect(inDetail(find.text('bravo')), findsOneWidget);
+        expect(inDetail(find.text('alpha')), findsNothing);
 
-        // Entry A's suggestion lands late — and is dropped.
-        staleSuggestions.complete();
+        slowPronunciation.complete();
         await tester.pumpAndSettle();
-        expect(find.textContaining('5 contexts'), findsNothing);
-        expect(find.textContaining('9 contexts'), findsOneWidget);
+        expect(inDetail(find.text('bravo')), findsOneWidget);
+        expect(inDetail(find.text('alpha')), findsNothing);
       },
     );
 
@@ -958,10 +841,7 @@ void main() {
         // blanking — and the decoration slots are back in their waiting state.
         expect(slowEntry.isCompleted, isFalse);
         expect(inDetail(find.text('alpha')), findsOneWidget);
-        expect(
-          find.byKey(const Key('dictionary-suggestions-loading')),
-          findsOneWidget,
-        );
+        expect(inDetail(find.text('bravo')), findsNothing);
 
         slowEntry.complete();
         await tester.pumpAndSettle();
@@ -972,141 +852,10 @@ void main() {
   });
 
   // ──────────────────────────────────────────────────────────────────────
-  // Transitions across the three right-pane surfaces.
+  // Semantic search, listening filters, and direct entry selection.
   // ──────────────────────────────────────────────────────────────────────
 
-  group('pane transitions', () {
-    Workbench withProductionTarget(String id, String form) => Workbench(
-      words: [entryWire(id, form)],
-      route: (method, path) {
-        if (path.startsWith('/v1/production-gap/semantic-enrichment')) {
-          return fail('no enrichment');
-        }
-        if (path.startsWith('/v1/production-gap/review')) {
-          return ok(
-            productionReviewWire(targets: [productionTargetWire(id, form)]),
-          );
-        }
-        return null;
-      },
-    );
-
-    testWidgets(
-      'two-pane: opening an entry from the gap pane swaps the gap pane for '
-      'the detail and keeps the list',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        final bench = withProductionTarget('entry-1', 'rather');
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(VocabularyGapPanel), findsOneWidget);
-        await tester.tap(find.text('View & practice'));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(VocabularyGapPanel), findsNothing);
-        expect(
-          find.byKey(const Key('dictionary-identity-card')),
-          findsOneWidget,
-        );
-        expect(find.byType(VocabularyBookView), findsOneWidget);
-        // Two-pane never grows a back button.
-        expect(find.byType(BackButton), findsNothing);
-      },
-    );
-
-    testWidgets(
-      'two-pane: the Gaps row reads as selected exactly while no entry is open',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        final bench = Workbench(words: [entryWire('entry-1', 'rather')]);
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        ListTile gapsRow() =>
-            tester.widget<ListTile>(find.widgetWithText(ListTile, 'Gaps'));
-        expect(gapsRow().selected, isTrue);
-
-        await tester.tap(find.text('rather'));
-        await tester.pumpAndSettle();
-        expect(gapsRow().selected, isFalse);
-
-        await tester.tap(find.text('Gaps'));
-        await tester.pumpAndSettle();
-        expect(gapsRow().selected, isTrue);
-        expect(find.byType(VocabularyGapPanel), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'narrow: closing an entry opened from the gap pane returns to the gap '
-      'pane, not the list',
-      (tester) async {
-        // `_closeDetails` (vocabulary_screen.dart:313) clears `details` only;
-        // `narrowGapOpen` survives, so back unwinds one surface at a time.
-        setSize(tester, const Size(700, 900));
-        final bench = withProductionTarget('entry-1', 'rather');
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('View gaps →'));
-        await tester.pumpAndSettle();
-        expect(find.byType(VocabularyGapPanel), findsOneWidget);
-
-        await tester.tap(find.text('View & practice'));
-        await tester.pumpAndSettle();
-        expect(find.byType(VocabularyGapPanel), findsNothing);
-        expect(
-          find.byKey(const Key('dictionary-identity-card')),
-          findsOneWidget,
-        );
-
-        // First back: detail → gap pane.
-        await tester.tap(find.byType(BackButton));
-        await tester.pumpAndSettle();
-        expect(find.byType(VocabularyGapPanel), findsOneWidget);
-        expect(find.byType(VocabularyBookView), findsNothing);
-
-        // Second back: gap pane → list.
-        await tester.tap(find.byType(BackButton));
-        await tester.pumpAndSettle();
-        expect(find.byType(VocabularyBookView), findsOneWidget);
-        expect(find.byType(BackButton), findsNothing);
-      },
-    );
-
-    testWidgets(
-      'the narrow gap strip counts both sources once they have loaded',
-      (tester) async {
-        setSize(tester, const Size(700, 900));
-        final bench = Workbench(
-          route: (method, path) {
-            if (path.startsWith('/v1/production-gap/semantic-enrichment')) {
-              return fail('no enrichment');
-            }
-            if (path.startsWith('/v1/production-gap/review')) {
-              return ok(
-                productionReviewWire(
-                  targets: [
-                    productionTargetWire('entry-1', 'rather'),
-                    productionTargetWire('entry-2', 'nonetheless'),
-                  ],
-                ),
-              );
-            }
-            return null;
-          },
-        );
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text('Cross-channel candidates 0 · output gap 2'),
-          findsOneWidget,
-        );
-      },
-    );
-
+  group('dictionary transitions', () {
     testWidgets(
       'switching to semantic mode with an empty query shows no matches '
       'without querying the index',
@@ -1198,103 +947,32 @@ void main() {
       },
     );
 
-    testWidgets(
-      'the gap pane gives one honest empty state when neither source has '
-      'anything',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        // Baseline: no candidates, a ready output review with no targets.
-        final bench = Workbench(words: [entryWire('entry-1', 'rather')]);
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text(
-            "No cross-channel gaps yet. Words you understand but haven't "
-            'produced will surface here first.',
-          ),
-          findsOneWidget,
-        );
-        // One state, not two per-source notices stacked together.
-        expect(find.text('Where output lags input'), findsNothing);
-      },
-    );
-
-    testWidgets('the right pane waits until both gap sources have answered', (
+    testWidgets('picking an assessment filters the listening vocabulary', (
       tester,
     ) async {
       setSize(tester, const Size(1200, 900));
-      final slowCandidates = Completer<void>();
-      addTearDown(() {
-        if (!slowCandidates.isCompleted) slowCandidates.complete();
-      });
-      final bench = Workbench(
-        words: [entryWire('entry-1', 'rather')],
-        route: (method, path) async {
-          if (!path.startsWith('/v1/review/cross-modal?')) return null;
-          await slowCandidates.future;
-          return null;
-        },
-      );
+      final bench = Workbench(words: [entryWire('entry-1', 'rather')]);
       await tester.pumpWidget(host(api: bench.build(), tester: tester));
       await tester.pumpAndSettle();
 
-      // The list column is already usable while the gap pane waits: the two
-      // sides of the workbench load on separate clocks.
-      expect(find.byType(VocabularyBookView), findsOneWidget);
-      expect(find.text('rather'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byType(VocabularyGapPanel),
-          matching: find.byType(ListenLoading),
-        ),
-        findsOneWidget,
-      );
-
-      slowCandidates.complete();
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Not acquired'));
       await tester.pumpAndSettle();
-      expect(
-        find.descendant(
-          of: find.byType(VocabularyGapPanel),
-          matching: find.byType(ListenLoading),
-        ),
-        findsNothing,
-      );
+
+      final last = bench.calls
+          .lastWhere((call) => call.path.startsWith('/v1/vocabulary?'))
+          .path;
+      expect(last, contains('capability=listening'));
+      expect(last, contains('assessment=not_acquired'));
+
+      // Going back to All clears only the assessment filter.
+      await tester.tap(find.widgetWithText(ChoiceChip, 'All'));
+      await tester.pumpAndSettle();
+      final afterAll = bench.calls
+          .lastWhere((call) => call.path.startsWith('/v1/vocabulary?'))
+          .path;
+      expect(afterAll, contains('capability=listening'));
+      expect(afterAll, isNot(contains('assessment=')));
     });
-
-    testWidgets(
-      'picking an assessment re-queries with both the channel and the '
-      'assessment',
-      (tester) async {
-        // The channel alone never filters the query (already pinned in
-        // vocabulary_workbench_test); this is the other half — once an
-        // assessment is chosen, both axes go to the backend together.
-        setSize(tester, const Size(1200, 900));
-        final bench = Workbench(words: [entryWire('entry-1', 'rather')]);
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.widgetWithText(ChoiceChip, 'Speaking'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.widgetWithText(ChoiceChip, 'Not acquired'));
-        await tester.pumpAndSettle();
-
-        final last = bench.calls
-            .lastWhere((call) => call.path.startsWith('/v1/vocabulary?'))
-            .path;
-        expect(last, contains('capability=speaking'));
-        expect(last, contains('assessment=not_acquired'));
-
-        // Going back to "All" drops the capability filter again.
-        await tester.tap(find.widgetWithText(ChoiceChip, 'All'));
-        await tester.pumpAndSettle();
-        final afterAll = bench.calls
-            .lastWhere((call) => call.path.startsWith('/v1/vocabulary?'))
-            .path;
-        expect(afterAll, isNot(contains('capability=')));
-        expect(afterAll, isNot(contains('assessment=')));
-      },
-    );
 
     testWidgets(
       'an entry named at construction opens straight into the detail pane',
@@ -1310,7 +988,6 @@ void main() {
           find.byKey(const Key('dictionary-identity-card')),
           findsOneWidget,
         );
-        expect(find.byType(VocabularyGapPanel), findsNothing);
         expect(find.byType(VocabularyBookView), findsOneWidget);
       },
     );

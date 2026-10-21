@@ -298,7 +298,11 @@ Load command 3
             self.assertEqual(manifest["application"]["build_number"], "9")
             self.assertTrue(manifest["gen_runtime"]["zipapp_bundled"])
             self.assertFalse(manifest["gen_runtime"]["interpreter_bundled"])
-            self.assertEqual(manifest["gen_runtime"]["required_dependencies"], ["pypdf>=5.0,<7"])
+            self.assertEqual(manifest["gen_runtime"]["required_dependencies"], [])
+            self.assertEqual(
+                manifest["gen_runtime"]["optional_extras"],
+                ["align", "asr-qwen", "asr-sensevoice"],
+            )
             self.assertFalse(
                 manifest["verification"]["launch_environment"][
                     "source_checkout_available_to_app"
@@ -310,6 +314,13 @@ Load command 3
             self.assertEqual(
                 manifest["whisper_model"]["sha256"],
                 "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+            )
+            self.assertEqual(
+                manifest["whisper_model"]["download_trigger"],
+                "running local media transcription when no compatible Whisper model is installed",
+            )
+            self.assertTrue(
+                manifest["whisper_model"]["download_requires_explicit_user_confirmation"]
             )
             self.assertIn(hashlib.sha256(asset.read_bytes()).hexdigest(), checksums)
             self.assertIn(hashlib.sha256(manifest_path.read_bytes()).hexdigest(), checksums)

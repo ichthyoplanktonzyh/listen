@@ -13,7 +13,7 @@ Future<T> _request<T>(Future<T> Function() operation) async {
 /// The learning-material boundary used by the media session and material
 /// surfaces.
 ///
-/// This interface mirrors the Core 4.0 learning-material surface exactly and
+/// This interface mirrors the listening-focused media-material surface and
 /// keeps its callers independent of transport details: every failed operation
 /// throws a typed [ApiFailure], never a transport error.
 abstract interface class LearningMaterialRepository {
@@ -59,15 +59,6 @@ abstract interface class LearningMaterialRepository {
 
   /// Resolves the learning material bound to a media source.
   Future<MaterialDetails> resolveMaterialForMedia(String mediaId);
-
-  /// Updates the local availability fact of one Source Asset of the Material's
-  /// current revision. Availability is a runtime fact about the exact bytes,
-  /// never a change to identity or membership.
-  Future<MaterialRevision> updateSourceAssetAvailability(
-    String materialId,
-    String sourceAssetId,
-    SourceAssetAvailability availability,
-  );
 
   /// Projects the Material's capability state for every capability:
   /// `available`, `derivable`, `generating`, `unavailable`, or
@@ -129,19 +120,6 @@ final class LocalLearningMaterialRepository
   @override
   Future<MaterialDetails> resolveMaterialForMedia(String mediaId) =>
       _request(() => _api.resolveMaterialForMedia(mediaId));
-
-  @override
-  Future<MaterialRevision> updateSourceAssetAvailability(
-    String materialId,
-    String sourceAssetId,
-    SourceAssetAvailability availability,
-  ) => _request(
-    () => _api.updateSourceAssetAvailability(
-      materialId,
-      sourceAssetId,
-      availability,
-    ),
-  );
 
   @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(

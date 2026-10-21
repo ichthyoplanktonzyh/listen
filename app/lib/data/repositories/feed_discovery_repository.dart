@@ -10,20 +10,16 @@ import '../../services/subscription_store.dart';
 import 'discovery_repository.dart';
 import 'media_import_repository.dart';
 
-/// Discovery over RSS and Atom feeds: podcasts and article/blog feeds.
+/// Discovery over RSS and Atom feeds with media enclosures.
 ///
 /// These are the remote sources where discovery and acquisition are both
-/// first-class: the feed lists the items and hands over what the publisher
-/// put there — a media enclosure for a podcast, an article link for a
-/// document feed. There is no extractor to keep alive and no platform term
-/// being stretched, so this is the path the rest of the journey —
-/// generation, import, learning — gets exercised against.
+/// first-class: the feed lists the items and hands over the audio/video
+/// enclosure the publisher provides. Items without media are not exposed.
 ///
 /// A source id is the feed URL. For a feed the address is the stable thing to
 /// point at; there is no separate channel identifier to prefer. The source
-/// kind (podcast or document) is decided at subscription time from what the
-/// feed actually carries, so a feed whose items are enclosures and a feed
-/// whose items are articles never stand in for each other.
+/// feeds are treated as media sources even when they also link to articles;
+/// a permalink is never acquired as a document.
 final class FeedDiscoveryRepository implements DiscoveryRepository {
   FeedDiscoveryRepository({
     HttpClient? client,
@@ -54,8 +50,7 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
   final SubscriptionStore _subscriptions;
 
   List<ContentSource> get _customSources =>
-      _subscriptions.of(ContentSourceKind.podcast) +
-      _subscriptions.of(ContentSourceKind.document);
+      _subscriptions.of(ContentSourceKind.podcast);
 
   /// A feed source id is its feed URL, and YouTube channel ids are never
   /// URLs — so the shape answers this even before [sources] has been awaited
@@ -91,10 +86,10 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
   @override
   Future<List<DiscoveryItem>> entriesFor(String sourceId) async {
     final feed = await _fetchFeed(sourceId);
-    final kind = _kindOf(sourceId, feed);
     return [
       for (final item in feed.items)
-        _itemFrom(item, sourceId, feed.language, kind),
+        if (item.enclosureUrl != null)
+          _itemFrom(item, sourceId, feed.language),
     ];
   }
 
@@ -118,6 +113,11 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
   ) async {
     final trimmed = url.trim();
     final feed = await _fetchFeed(trimmed);
+    if (!feed.items.any((item) => item.enclosureUrl != null)) {
+      throw const FeedFormatException(
+        'This feed has no audio or video media enclosures.',
+      );
+    }
 
     final source = ContentSource(
       id: trimmed,
@@ -142,11 +142,8 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
 
   /// The channel-level kind, for subscription and shelf presentation.
   ///
-  /// Items are decided per item (an enclosure is always media, an article
-  /// link is always a document, whatever the channel is called); the channel
-  /// kind is the feed's dominant shape — the first item that carries either,
-  /// or the subscribed kind once a subscription exists. It never stands in
-  /// for an item's own modality.
+  /// Feeds carrying supported media use the podcast-family source kind. Each
+  /// item retains its own audio/video enclosure kind.
   ContentSourceKind _kindOf(String sourceId, ParsedFeed feed) {
     if (_customSources.any((source) => source.id == sourceId)) {
       final subscribed = _customSources.firstWhere(
@@ -154,11 +151,7 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
       );
       return subscribed.kind;
     }
-    for (final item in feed.items) {
-      if (item.enclosureUrl != null) return ContentSourceKind.podcast;
-      if (item.entryUrl != null) return ContentSourceKind.document;
-    }
-    return ContentSourceKind.document;
+    return ContentSourceKind.podcast;
   }
 
   Future<ParsedFeed> _fetchFeed(String feedUrl) async {
@@ -197,26 +190,12 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
     ParsedFeedItem item,
     String sourceId,
     String feedLanguage,
-    ContentSourceKind kind,
   ) {
     // The canonical item identity is the feed-declared GUID/Atom id when the
     // feed published one; an item without one gets an explicitly marked
     // source-scoped surrogate key — never the entry or enclosure URL dressed
     // up as a feed item id.
     final itemId = item.id ?? sourceScopedSurrogateId(sourceId: sourceId, item: item);
-    // Modality is the item's own fact, decided per item: a feed may mix
-    // enclosures and article links, and one item's shape must not be decided
-    // by another item's. A mixed item carrying both prefers the enclosure —
-    // that is the bytes the publisher offered to fetch.
-    final hasEnclosure = item.enclosureUrl != null;
-    final acquisition = switch (kind) {
-      ContentSourceKind.youtube => AcquisitionMode.externalTool,
-      _ => hasEnclosure
-          ? AcquisitionMode.enclosure
-          : item.entryUrl == null
-          ? AcquisitionMode.none
-          : AcquisitionMode.article,
-    };
     return DiscoveryItem(
       id: itemId,
       sourceId: sourceId,
@@ -227,9 +206,9 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
       publishedOn: item.publishedOn,
       thumbnailUrl: item.imageUrl,
       viewCount: item.viewCount,
-      acquisition: acquisition,
-      contentKind: hasEnclosure ? _kindFor(item.enclosureType) : ItemContentKind.article,
-      mediaUrl: hasEnclosure ? item.enclosureUrl : null,
+      acquisition: AcquisitionMode.enclosure,
+      contentKind: _kindFor(item.enclosureType),
+      mediaUrl: item.enclosureUrl,
       entryUrl: item.entryUrl,
       publisherId: item.publisherId,
       mediaByteLength: item.enclosureBytes,

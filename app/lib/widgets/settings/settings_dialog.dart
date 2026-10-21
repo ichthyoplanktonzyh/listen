@@ -10,7 +10,6 @@ import '../../theme/spacing.dart';
 import '../player/shortcut_cheat_sheet.dart';
 import 'llm_provider_settings.dart';
 import 'managed_store_settings.dart';
-import 'realtime_provider_settings.dart';
 import 'syntax_capability_settings.dart';
 
 /// Settings dialog content widget. Takes all setting values via constructor
@@ -19,7 +18,6 @@ class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
     this.llmViewModel,
-    this.realtimeViewModel,
     this.syntaxViewModel,
     required this.language,
     required this.themeMode,
@@ -95,7 +93,6 @@ class SettingsDialog extends StatefulWidget {
   /// Phase 3.12: when a sidecar is connected, the AI-providers section can
   /// manage vendor-neutral LLM providers. Null keeps that section inert.
   final LlmProviderSettingsViewModel? llmViewModel;
-  final RealtimeProviderSettingsViewModel? realtimeViewModel;
   final SyntaxCapabilitySettingsViewModel? syntaxViewModel;
   final String language;
   final String themeMode;
@@ -186,7 +183,7 @@ class SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<SettingsDialog> {
   final ScrollController _settingsScrollController = ScrollController();
-  final List<GlobalKey> _categoryKeys = List.generate(9, (_) => GlobalKey());
+  final List<GlobalKey> _categoryKeys = List.generate(8, (_) => GlobalKey());
   int _selectedCategory = 2;
   late String language;
   late String themeMode;
@@ -380,10 +377,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     NavigationRailDestination(
                       icon: const Icon(Icons.smart_toy_outlined),
                       label: Text(l.text('llmProviders')),
-                    ),
-                    NavigationRailDestination(
-                      icon: const Icon(Icons.record_voice_over_outlined),
-                      label: Text(l.text('realtimeProviders')),
                     ),
                     NavigationRailDestination(
                       icon: const Icon(Icons.keyboard_outlined),
@@ -1017,19 +1010,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     const Divider(),
                     Text(
                       key: _categoryKeys[7],
-                      l.text('realtimeProviders'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: ListenSpacing.gap8),
-                    if (widget.realtimeViewModel != null)
-                      RealtimeProviderSettings(
-                        viewModel: widget.realtimeViewModel!,
-                      )
-                    else
-                      Text(l.text('realtimeSidecarUnavailable')),
-                    const Divider(),
-                    Text(
-                      key: _categoryKeys[8],
                       l.text('shortcutsTitle'),
                       style: Theme.of(context).textTheme.titleSmall,
                     ),

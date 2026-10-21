@@ -181,6 +181,7 @@ void main() {
       final dbPath = scratchDatabasePath('fault-provider');
 
       final api = await LocalApi.connect(databasePath: dbPath);
+      MaterialCapabilityCoordinator? coordinator;
       try {
         final mediaPath = File(
           'test/fixtures/content-package-roundtrip/sample-media.wav',
@@ -189,25 +190,26 @@ void main() {
         final material = await api.resolveMaterialForMedia(media.id);
 
         final repository = LocalCapabilityRepository(() => api);
-        final coordinator = MaterialCapabilityCoordinator(
+        var fixturePath = '/nonexistent/sample.asr.json';
+        final activeCoordinator = MaterialCapabilityCoordinator(
           repository: repository,
           generator: generator,
           mediaFilePath: (rendition) async =>
               rendition.mediaId == media.id ? mediaPath : null,
-          // A fixture path that does not exist: the ASR provider must fail
-          // as a provider failure, not hang or fabricate output.
-          providerArguments: () => const [
+          // Start with a missing fixture, then repair the provider input to
+          // prove this material and coordinator can recover.
+          providerArguments: () => [
             '--provider',
             'fixture',
             '--fixture',
-            '/nonexistent/sample.asr.json',
+            fixturePath,
           ],
         );
+        coordinator = activeCoordinator;
 
-        final outcome = await coordinator.requestCapability(
-          material,
-          MaterialCapability.read,
-        );
+        final outcome = await activeCoordinator
+            .requestCapability(material, MaterialCapability.read)
+            .timeout(const Duration(seconds: 30));
         expect(outcome, isA<CapabilityFailed>());
 
         // The attempt is durably recorded as failed; a retry is possible and
@@ -219,9 +221,28 @@ void main() {
           (projection) => projection.capability == MaterialCapability.read,
         );
         expect(read.latestAttempt?.status, 'failed');
+        final failedAttemptId = read.latestAttempt!.attemptId;
+        expect(await api.listLearningEditions(material.material.id), isEmpty);
 
-        coordinator.dispose();
+        fixturePath = File(
+          'test/fixtures/content-package-roundtrip/sample.asr.json',
+        ).absolute.path;
+        final retry = await activeCoordinator
+            .requestCapability(material, MaterialCapability.read)
+            .timeout(const Duration(seconds: 30));
+        expect(retry, isA<CapabilityAvailable>());
+        expect((retry as CapabilityAvailable).edition!.adopted, isTrue);
+        final retriedRead =
+            (await api.listMaterialCapabilities(
+              material.material.id,
+            )).singleWhere(
+              (projection) => projection.capability == MaterialCapability.read,
+            );
+        expect(retriedRead.status, MaterialCapabilityStatus.available);
+        expect(retriedRead.latestAttempt?.status, 'succeeded');
+        expect(retriedRead.latestAttempt?.attemptId, isNot(failedAttemptId));
       } finally {
+        coordinator?.dispose();
         await api.close();
       }
     },

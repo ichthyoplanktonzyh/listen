@@ -1,15 +1,15 @@
 part of '../api_service.dart';
 
-// Adopted composition (Core 4.0): the single Core-owned composition
+// Adopted composition (Core 5.0): the single Core-owned composition
 // interface. The App never re-parses a `.listenpkg` to read adopted content;
-// every selected resource payload and rendition blob is read back through
-// Core, re-verified by it.
+// selected media resources and their payloads are read back through Core,
+// re-verified by it.
 
 extension AdoptedCompositionApi on LocalApi {
-  /// Resolves the current adopted composition of a Material: the selected
-  /// resources and renditions with their exact digest/size facts and Source
-  /// Asset / Media bindings. A Material with no adopted composition is a
-  /// typed not-found.
+  /// Resolves the current adopted composition of a Material: selected
+  /// resources and media renditions with their exact digest/size facts and
+  /// Core media bindings. A Material with no adopted composition is a typed
+  /// not-found.
   Future<AdoptedComposition> readAdoptedComposition(String materialId) async =>
       decodeAdoptedComposition(
         (await _request(
@@ -28,17 +28,6 @@ extension AdoptedCompositionApi on LocalApi {
     'GET',
     '/v1/materials/${Uri.encodeComponent(materialId)}/composition/resources/'
         '${Uri.encodeComponent(resourceId)}/payload',
-  ))!;
-
-  /// The exact durable embedded bytes of one selected rendition, re-verified
-  /// by Core. Document/Media rendition blobs are raw bytes.
-  Future<List<int>> readCompositionRenditionBlob(
-    String materialId,
-    String renditionId,
-  ) async => (await _requestBlob(
-    'GET',
-    '/v1/materials/${Uri.encodeComponent(materialId)}/composition/renditions/'
-        '${Uri.encodeComponent(renditionId)}/blob',
   ))!;
 }
 
@@ -87,35 +76,32 @@ AdoptedCompositionResource decodeAdoptedCompositionResource(
 
 AdoptedCompositionRendition decodeAdoptedCompositionRendition(
   Map<String, dynamic> json,
-) => AdoptedCompositionRendition(
-  renditionId: json['rendition_id'] as String,
-  kind: json['kind'] as String,
-  origin: json['origin'] as String,
-  mediaType: json['media_type'] as String,
-  language: json['language'] as String?,
-  digest: json['digest'] as String,
-  byteSize: json['byte_size'] as int,
-  blobAvailable: json['blob_available'] as bool,
-  binding: switch (json['binding']) {
-    null => null,
-    final binding => decodeAdoptedCompositionBinding(
-      Map<String, dynamic>.from(binding as Map),
-    ),
-  },
-  producerToolId: json['producer_tool_id'] as String?,
-);
+) {
+  final kind = json['kind'] as String;
+  if (kind != 'media') {
+    throw FormatException('unsupported composition rendition kind: $kind');
+  }
+  return AdoptedCompositionRendition(
+    renditionId: json['rendition_id'] as String,
+    kind: kind,
+    origin: json['origin'] as String,
+    mediaType: json['media_type'] as String,
+    digest: json['digest'] as String,
+    byteSize: json['byte_size'] as int,
+    blobAvailable: json['blob_available'] as bool,
+    binding: switch (json['binding']) {
+      null => null,
+      final binding => decodeAdoptedCompositionBinding(
+        Map<String, dynamic>.from(binding as Map),
+      ),
+    },
+    producerToolId: json['producer_tool_id'] as String?,
+  );
+}
 
-AdoptedCompositionBinding decodeAdoptedCompositionBinding(
+AdoptedCompositionMediaBinding decodeAdoptedCompositionBinding(
   Map<String, dynamic> json,
 ) => switch (json['type'] as String) {
-  'managed_source_asset' => AdoptedCompositionManagedSourceBinding(
-    sourceAssetId: json['source_asset_id'] as String,
-  ),
-  'referenced_source_asset' => AdoptedCompositionReferencedSourceBinding(
-    sourceAssetId: json['source_asset_id'] as String,
-    reference: json['reference'] as String,
-    available: json['available'] as bool,
-  ),
   'media' => AdoptedCompositionMediaBinding(
     mediaId: json['media_id'] as String,
   ),

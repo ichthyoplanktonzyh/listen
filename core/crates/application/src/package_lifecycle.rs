@@ -4,7 +4,7 @@
 //! This deep module exposes exactly three learner-intent operations:
 //!
 //! - [`PackageLifecycleUseCases::install_for_material`]: installs one local
-//!   Content Package v2 release for an existing Learning Material. Candidate
+//!   Content Package v3 release for an existing Learning Material. Candidate
 //!   only: it validates the release against the Material's current revision,
 //!   prepares the immutable installation facts together with the exact
 //!   validated payload bytes of every present resource, and persists both
@@ -18,7 +18,7 @@
 //!   deterministic, dependency-closed commit. Adoption may assume every
 //!   selected `Available` resource has durable stored payload backing.
 //!
-//! The v2 inspection, Installation Plan interpretation, dependency closure,
+//! The active v3 inspection, Installation Plan interpretation, dependency closure,
 //! candidate classification, compatibility checks, coherent-selection
 //! resolution, idempotency, and repository coordination are all hidden behind
 //! this interface. The repository seam ([`PackageLifecycleRepository`]) must
@@ -33,16 +33,16 @@ use std::sync::Arc;
 
 use content_package::v2::{PlanResource, ResourceDisposition, ResourceRole, ReviewStatus};
 use content_package::v3::{
-    PlanDocumentRendition, PlanMediaRendition, V3Error, V3Inspection, V3InstallationPlan,
-    inspect_v3_path, installation_plan_v3,
+    PlanMediaRendition, V3Error, V3Inspection, V3InstallationPlan, inspect_v3_path,
+    installation_plan_v3,
 };
 use domain::{
-    AdoptionCommitPlan, DocumentRendition, LanguageCode, LearningEdition, LearningMaterial,
-    LearningMaterialId, MaterialRevision, MaterialRevisionId, MediaAvailability, MediaId,
+    AdoptionCommitPlan, LanguageCode, LearningEdition, LearningMaterial, LearningMaterialId,
+    MaterialCapability, MaterialRevision, MaterialRevisionId, MediaAvailability, MediaId,
     MediaKind, MediaRendition, PackageInstallation, PackageLifecycleError, PackageReleaseId,
     PackageRenditionFact, PackageResourceAvailability, PackageResourceFact,
     PackageResourceProvenance, PackageResourceRole, PackageReviewStatus, Rendition,
-    RenditionOrigin, adoption_commit_plan,
+    RenditionOrigin, adopted_composition_for, adoption_commit_plan, project_capability,
 };
 
 use crate::{ApplicationError, MaterialRepository, now_ms};
@@ -50,11 +50,10 @@ use crate::{ApplicationError, MaterialRepository, now_ms};
 /// The application-owned prepared installation input handed to the
 /// persistence seam: the path-free [`PackageInstallation`] domain facts plus
 /// the exact validated raw payload bytes of every present known and present
-/// opaque resource and the exact embedded blob bytes of every present
-/// Document/Media Rendition. The repository must make facts, payloads, and
-/// rendition blobs durable together in one atomic operation so an accepted
-/// installation never depends on the source carrier. Raw bytes never enter
-/// domain entities or learner-facing views.
+/// opaque resource and the exact embedded blob bytes of every present Media
+/// Rendition. The repository makes facts, payloads, and media rendition blobs
+/// durable together in one atomic operation. Raw bytes never enter domain
+/// entities or learner-facing views.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedPackageInstallation {
     pub installation: PackageInstallation,
@@ -82,7 +81,7 @@ pub struct PreparedResourcePayload {
     pub bytes: Vec<u8>,
 }
 
-/// One exact embedded Document/Media Rendition blob with the facts that let
+/// One exact embedded Media Rendition blob with the facts that let
 /// the repository verify the association with its rendition fact and durably
 /// store the body. Derived renditions carry the blob that makes them usable
 /// after the source carrier is deleted; Source rendition blobs embedded in
@@ -90,9 +89,9 @@ pub struct PreparedResourcePayload {
 /// re-parse of the `.listenpkg`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedRenditionBlob {
-    /// The rendition id of the Document/Media Rendition this blob realizes.
+    /// The rendition id of the Media Rendition this blob realizes.
     pub rendition_id: String,
-    /// `document` or `media`.
+    /// Always `media` for active package installations.
     pub kind: String,
     pub digest: String,
     pub size_bytes: u64,
@@ -184,18 +183,6 @@ pub trait PackageLifecycleRepository: Send + Sync {
         resource_id: &str,
     ) -> Result<Option<Vec<u8>>, ApplicationError>;
 
-    /// Reads the exact durable embedded blob of one installed Document/Media
-    /// Rendition, re-verifying digest and size against the stored rendition
-    /// fact. `Ok(None)` means the installation or rendition is absent or its
-    /// blob is not stored (unavailable); tampered bytes fail with a
-    /// repository error and are never returned.
-    fn read_rendition_blob(
-        &self,
-        material_id: &LearningMaterialId,
-        release_id: &PackageReleaseId,
-        rendition_id: &str,
-    ) -> Result<Option<Vec<u8>>, ApplicationError>;
-
     /// Deletes one installed candidate release for `material_id`. Returns true
     /// if a release was found and deleted, false if no such installation existed.
     fn delete_installation(
@@ -256,15 +243,6 @@ impl PackageLifecycleRepository for DisabledPackageLifecycleRepository {
         Err(Self::disabled())
     }
 
-    fn read_rendition_blob(
-        &self,
-        _material_id: &LearningMaterialId,
-        _release_id: &PackageReleaseId,
-        _rendition_id: &str,
-    ) -> Result<Option<Vec<u8>>, ApplicationError> {
-        Err(Self::disabled())
-    }
-
     fn delete_installation(
         &self,
         _material_id: &LearningMaterialId,
@@ -319,6 +297,9 @@ pub struct PackageEditionView {
     /// When the release is currently adopted: the original adoption time.
     pub adopted_at_ms: Option<u64>,
     pub adopted: bool,
+    /// Capabilities available from the current source and this Edition's
+    /// selectable media/resources, calculated by Core's shared projection.
+    pub available_capabilities: Vec<MaterialCapability>,
     pub resources: Vec<PackageResourceView>,
     pub renditions: Vec<PackageRenditionView>,
 }
@@ -342,15 +323,15 @@ impl PackageLifecycleUseCases {
         }
     }
 
-    /// Installs one local Content Package release for an existing Learning
-    /// Material. Both the v2 and the v3 release schema are supported; the
-    /// declared schema of the carrier selects the inspection.
+    /// Installs one local Content Package v3 release for an existing Learning
+    /// Material. The v2 resource-disposition vocabulary is reused by v3 plan
+    /// types, but only v3 carriers are accepted by this use case.
     ///
     /// The carrier's `material_id` and `material_revision_id` must equal the
     /// Material's identity and current revision exactly. Declared media
     /// renditions must match a bound Material media asset by kind and
-    /// normalized SHA-256 fingerprint, a document-text base resource must
-    /// agree with the matching Material text asset, and every required known
+    /// normalized SHA-256 fingerprint, document rendition inputs are rejected,
+    /// and every required known
     /// resource payload and its dependency closure must be available.
     /// Ambiguous bindings fail rather than guess.
     ///
@@ -374,15 +355,21 @@ impl PackageLifecycleUseCases {
             .ok_or(ApplicationError::NotFound("material"))?;
         let current_revision = self.current_revision(&material)?;
         let inspection = inspect_v3_path(package_path).map_err(map_v3_inspection_error)?;
+        if !inspection.document_renditions.is_empty() {
+            return Err(ApplicationError::Invalid(
+                "document material input is not supported; provide audio or video media".into(),
+            ));
+        }
         let plan = installation_plan_v3(&inspection);
         let prepared =
             self.prepare_v3_installation(&material, &current_revision, &inspection, &plan)?;
         let persisted = self.package_lifecycle.save_installation(&prepared)?;
         let adoption = self.package_lifecycle.get_adoption(material_id)?;
-        let adopted = adoption
-            .as_ref()
-            .filter(|plan| plan.release_id == persisted.release_id);
-        Ok(edition_view(persisted, adopted))
+        let adopted = adoption.as_ref().filter(|plan| {
+            plan.release_id == persisted.release_id
+                && plan.material_revision_id == current_revision.id
+        });
+        Ok(edition_view(persisted, &current_revision, adopted))
     }
 
     /// Lists the installed Learning Edition candidates for the Material's
@@ -406,10 +393,11 @@ impl PackageLifecycleUseCases {
             if installation.material_revision_id != current_revision.id {
                 continue;
             }
-            let adopted = adoption
-                .as_ref()
-                .filter(|plan| plan.release_id == installation.release_id);
-            views.push(edition_view(installation, adopted));
+            let adopted = adoption.as_ref().filter(|plan| {
+                plan.release_id == installation.release_id
+                    && plan.material_revision_id == current_revision.id
+            });
+            views.push(edition_view(installation, &current_revision, adopted));
         }
         views.sort_by(|a, b| a.release_id.as_str().cmp(b.release_id.as_str()));
         Ok(views)
@@ -450,7 +438,11 @@ impl PackageLifecycleUseCases {
         }
         let plan = adoption_commit_plan(&installation, now_ms())?;
         let committed = self.package_lifecycle.commit_adoption(&plan)?;
-        Ok(edition_view(installation, Some(&committed)))
+        Ok(edition_view(
+            installation,
+            &current_revision,
+            Some(&committed),
+        ))
     }
 
     /// Deletes one installed Learning Edition candidate for the Material.
@@ -525,7 +517,6 @@ impl PackageLifecycleUseCases {
                     .into(),
             ));
         }
-        let document_availability = validate_v3_document_sources(current_revision, inspection)?;
         let media_availability = validate_v3_media_sources(current_revision, inspection)?;
         verify_v3_required_closure(plan, inspection)?;
         let edition = LearningEdition {
@@ -545,7 +536,7 @@ impl PackageLifecycleUseCases {
             .iter()
             .map(|resource| resource_fact_v3(resource, inspection))
             .collect::<Result<Vec<_>, _>>()?;
-        let renditions = v3_rendition_facts(plan, &document_availability, &media_availability)?;
+        let renditions = v3_rendition_facts(plan, &media_availability)?;
         let (payloads, rendition_blobs) = collect_prepared_payloads_v3(plan, inspection)?;
         Ok(PreparedPackageInstallation {
             installation: PackageInstallation {
@@ -562,79 +553,6 @@ impl PackageLifecycleUseCases {
             rendition_blobs,
         })
     }
-}
-
-/// Validates every declared v3 Document Rendition against the bound Material
-/// document renditions. A Source rendition must agree with exactly one
-/// Material document rendition by exact blob digest (and media type), must
-/// not contradict its declared language, and must bind the same Source Asset
-/// bytes the Material records; a Derived rendition is available when its
-/// declared text blob is present in the carrier. Returns the per-rendition
-/// availability fact and, for a Source rendition, the exact Source Asset it
-/// binds.
-fn validate_v3_document_sources(
-    current_revision: &MaterialRevision,
-    inspection: &V3Inspection,
-) -> Result<HashMap<String, (bool, Option<domain::SourceAssetId>)>, ApplicationError> {
-    let mut availability = HashMap::with_capacity(inspection.document_renditions.len());
-    for record in &inspection.document_renditions {
-        let entry = &record.entry;
-        let fact = match entry.origin {
-            content_package::v3::RenditionOrigin::Source => {
-                let digest_hex = entry.text_blob.digest.trim_start_matches("sha256:");
-                let matches: Vec<&DocumentRendition> = current_revision
-                    .renditions
-                    .iter()
-                    .filter_map(|component| match component {
-                        Rendition::Document(rendition) if rendition.digest == digest_hex => {
-                            Some(rendition)
-                        }
-                        _ => None,
-                    })
-                    .collect();
-                if matches.is_empty() {
-                    return Err(ApplicationError::Invalid(
-                        "content package v3 source document rendition does not match a bound material document rendition"
-                            .into(),
-                    ));
-                }
-                if matches.len() > 1 {
-                    return Err(ApplicationError::Invalid(
-                        "content package v3 source document rendition binding is ambiguous".into(),
-                    ));
-                }
-                if matches[0].media_type != entry.media_type {
-                    return Err(ApplicationError::Invalid(
-                        "content package v3 source document rendition contradicts the material's media type"
-                            .into(),
-                    ));
-                }
-                if let (Some(declared), Some(stored)) = (&entry.language, &matches[0].language)
-                    && declared != stored.as_str()
-                {
-                    return Err(ApplicationError::Invalid(
-                        "content package v3 source document rendition contradicts the material's declared language"
-                            .into(),
-                    ));
-                }
-                // A Source rendition is available when the carrier embeds its
-                // exact bytes (managed sources always do). A referenced
-                // source rendition with no embedded blob stays a bound,
-                // adopted fact whose bytes are read through its Source Asset
-                // binding.
-                (record.text_present, matches[0].source_asset_id.clone())
-            }
-            content_package::v3::RenditionOrigin::Derived => {
-                debug_assert!(
-                    entry.producer.is_some(),
-                    "derived renditions carry producer facts by inspection"
-                );
-                (record.text_present, None)
-            }
-        };
-        availability.insert(entry.rendition_id.clone(), fact);
-    }
-    Ok(availability)
 }
 
 /// Validates every declared v3 Media Rendition against the bound Material
@@ -821,17 +739,6 @@ fn collect_prepared_payloads_v3(
     payloads.sort_by(|a, b| a.resource_id.cmp(&b.resource_id));
 
     let mut rendition_blobs = Vec::new();
-    for rendition in &plan.document_renditions {
-        if let Some(bytes) = inspection.rendition_blobs.get(&rendition.text_digest) {
-            rendition_blobs.push(PreparedRenditionBlob {
-                rendition_id: rendition.rendition_id.clone(),
-                kind: "document".to_owned(),
-                digest: rendition.text_digest.clone(),
-                size_bytes: rendition.text_size_bytes,
-                bytes: bytes.clone(),
-            });
-        }
-    }
     for rendition in &plan.media_renditions {
         if let Some(bytes) = inspection.rendition_blobs.get(&rendition.media_digest) {
             rendition_blobs.push(PreparedRenditionBlob {
@@ -934,57 +841,13 @@ fn resource_fact_v3(
 /// with their exact origin, availability, digest, and size snapshot.
 fn v3_rendition_facts(
     plan: &V3InstallationPlan,
-    document_availability: &HashMap<String, (bool, Option<domain::SourceAssetId>)>,
     media_availability: &HashMap<String, (bool, Option<MediaId>)>,
 ) -> Result<Vec<PackageRenditionFact>, ApplicationError> {
-    let mut facts =
-        Vec::with_capacity(plan.document_renditions.len() + plan.media_renditions.len());
-    for rendition in &plan.document_renditions {
-        facts.push(document_rendition_fact(rendition, document_availability)?);
-    }
+    let mut facts = Vec::with_capacity(plan.media_renditions.len());
     for rendition in &plan.media_renditions {
         facts.push(media_rendition_fact(rendition, media_availability)?);
     }
     Ok(facts)
-}
-
-fn document_rendition_fact(
-    plan_rendition: &PlanDocumentRendition,
-    availability: &HashMap<String, (bool, Option<domain::SourceAssetId>)>,
-) -> Result<PackageRenditionFact, ApplicationError> {
-    let (available, source_asset_id) = availability
-        .get(&plan_rendition.rendition_id)
-        .cloned()
-        .ok_or_else(|| {
-            ApplicationError::Repository("package release document rendition is missing".into())
-        })?;
-    Ok(PackageRenditionFact {
-        rendition_id: plan_rendition.rendition_id.clone(),
-        kind: "document".to_owned(),
-        origin: match plan_rendition.origin {
-            content_package::v3::RenditionOrigin::Source => RenditionOrigin::Source,
-            content_package::v3::RenditionOrigin::Derived => RenditionOrigin::Derived,
-        },
-        media_type: plan_rendition.media_type.clone(),
-        available,
-        media_digest: plan_rendition.text_digest.clone(),
-        media_size_bytes: plan_rendition.text_size_bytes,
-        media_id: None,
-        source_asset_id,
-        producer: plan_rendition
-            .producer
-            .as_ref()
-            .map(|producer| PackageResourceProvenance {
-                created_at_ms: producer.created_at_ms,
-                tool_id: producer.tool_id.clone(),
-                tool_version: producer.tool_version.clone(),
-                provider_id: producer.provider_id.clone(),
-                provider_version: producer.provider_version.clone(),
-                model_id: producer.model_id.clone(),
-                model_version: producer.model_version.clone(),
-                config_sha256: producer.config_sha256.clone(),
-            }),
-    })
 }
 
 fn media_rendition_fact(
@@ -1047,8 +910,35 @@ fn map_v3_inspection_error(error: V3Error) -> ApplicationError {
 
 fn edition_view(
     installation: PackageInstallation,
+    current_revision: &MaterialRevision,
     adoption: Option<&AdoptionCommitPlan>,
 ) -> PackageEditionView {
+    let adopted = adoption.filter(|plan| {
+        plan.release_id == installation.release_id
+            && plan.material_id == installation.material_id
+            && plan.material_revision_id == current_revision.id
+    });
+    let candidate_plan = adopted
+        .cloned()
+        .or_else(|| adoption_commit_plan(&installation, installation.installed_at_ms).ok());
+    let available_capabilities = candidate_plan
+        .as_ref()
+        .map(|plan| {
+            let composition = adopted_composition_for(&installation, plan);
+            [
+                MaterialCapability::Read,
+                MaterialCapability::Listen,
+                MaterialCapability::Watch,
+                MaterialCapability::SynchronizedReadListen,
+            ]
+            .into_iter()
+            .filter(|capability| {
+                project_capability(*capability, current_revision, Some(&composition), &[]).status
+                    == domain::CapabilityStatus::Available
+            })
+            .collect()
+        })
+        .unwrap_or_default();
     PackageEditionView {
         material_id: installation.material_id,
         material_revision_id: installation.material_revision_id,
@@ -1058,8 +948,9 @@ fn edition_view(
         target_language: installation.edition.target_language,
         support_languages: installation.edition.support_languages,
         installed_at_ms: installation.installed_at_ms,
-        adopted_at_ms: adoption.map(|plan| plan.adopted_at_ms),
-        adopted: adoption.is_some(),
+        adopted_at_ms: adopted.map(|plan| plan.adopted_at_ms),
+        adopted: adopted.is_some(),
+        available_capabilities,
         resources: installation
             .resources
             .iter()
@@ -1388,6 +1279,16 @@ mod tests {
             .collect()
     }
 
+    fn rendition_blob_map(
+        prepared: &PreparedPackageInstallation,
+    ) -> BTreeMap<String, PreparedRenditionBlob> {
+        prepared
+            .rendition_blobs
+            .iter()
+            .map(|blob| (blob.rendition_id.clone(), blob.clone()))
+            .collect()
+    }
+
     /// The seam's retry equality: identical immutable release facts with the
     /// adapter-stamped `installed_at_ms` excluded.
     fn immutable_facts_equal(first: &PackageInstallation, second: &PackageInstallation) -> bool {
@@ -1412,6 +1313,7 @@ mod tests {
             if let Some(existing) = state.installations.get(&key) {
                 if immutable_facts_equal(&existing.installation, &prepared.installation)
                     && existing.payloads == payload_map(prepared)
+                    && existing.rendition_blobs == rendition_blob_map(prepared)
                 {
                     return Ok(existing.installation.clone());
                 }
@@ -1430,11 +1332,7 @@ mod tests {
                     } else {
                         payload_map(prepared)
                     },
-                    rendition_blobs: prepared
-                        .rendition_blobs
-                        .iter()
-                        .map(|blob| (blob.rendition_id.clone(), blob.clone()))
-                        .collect(),
+                    rendition_blobs: rendition_blob_map(prepared),
                 },
             );
             Ok(prepared.installation.clone())
@@ -1560,25 +1458,6 @@ mod tests {
                 .map(|payload| payload.bytes.clone()))
         }
 
-        fn read_rendition_blob(
-            &self,
-            material_id: &LearningMaterialId,
-            release_id: &PackageReleaseId,
-            rendition_id: &str,
-        ) -> Result<Option<Vec<u8>>, ApplicationError> {
-            Ok(self
-                .state
-                .lock()
-                .unwrap()
-                .installations
-                .get(&(
-                    material_id.as_str().to_owned(),
-                    release_id.as_str().to_owned(),
-                ))
-                .and_then(|stored| stored.rendition_blobs.get(rendition_id))
-                .map(|blob| blob.bytes.clone()))
-        }
-
         fn delete_installation(
             &self,
             material_id: &LearningMaterialId,
@@ -1701,6 +1580,8 @@ mod tests {
     struct FixtureIds {
         material_id: String,
         revision_id: String,
+        media_id: String,
+        media_fingerprint: String,
     }
 
     fn write_carrier(files: &BTreeMap<String, Vec<u8>>) -> (TestDirectory, PathBuf) {
@@ -1771,46 +1652,41 @@ mod tests {
         }
     }
 
-    fn seed_text_material(setup: &Setup, retained: bool) -> (LearningMaterial, MaterialRevision) {
-        seed_text_material_with_text(setup, retained, TEXT)
+    fn seed_media_material(setup: &Setup, retained: bool) -> (LearningMaterial, MaterialRevision) {
+        seed_media_material_with_transcript(setup, retained, TEXT)
     }
 
-    fn seed_text_material_with_text(
+    fn seed_media_material_with_transcript(
         setup: &Setup,
         retained: bool,
-        text: &str,
+        transcript: &str,
     ) -> (LearningMaterial, MaterialRevision) {
-        let asset = domain::SourceAsset::new(
-            "text/plain",
-            text.len() as u64,
-            text_digest(text),
-            domain::SourceAssetBinding::Managed,
-            domain::SourceAssetAvailability::Available,
-            1,
-        )
-        .expect("valid source asset");
-        let rendition = domain::Rendition::Document(
-            DocumentRendition::new(
+        // Transcript-specific fingerprints keep independently seeded
+        // Materials distinct while the package fixture's transcript remains
+        // derived structured reading over this registered media identity.
+        let fingerprint = text_digest(transcript);
+        let media_id = MediaId::from_fingerprint("media", &fingerprint);
+        let rendition = domain::Rendition::Media(
+            MediaRendition::new(
                 RenditionOrigin::Source,
-                "text/plain",
-                Some(language("en")),
-                text_digest(text),
-                text.len() as u64,
-                Some(asset.id.clone()),
+                MediaKind::Audio,
+                "audio/mpeg",
+                fingerprint,
+                MediaAvailability::Available,
+                Some(media_id),
+                None,
+                None,
                 None,
                 None,
             )
-            .expect("valid document rendition"),
+            .expect("valid media rendition"),
         );
-        let material_id = initial_material_id(
-            std::slice::from_ref(&asset),
-            std::slice::from_ref(&rendition),
-        )
-        .expect("deterministic id");
+        let material_id =
+            initial_material_id(&[], std::slice::from_ref(&rendition)).expect("deterministic id");
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Material",
-            vec![asset],
+            Vec::new(),
             vec![rendition],
             1,
         )
@@ -1824,7 +1700,7 @@ mod tests {
         (material, revision)
     }
 
-    /// A mixed text + audio material whose media fingerprint is the given
+    /// A media material whose media fingerprint is the given
     /// full fingerprint string (either `sha256:<hex>` or bare `<hex>`) and
     /// whose media asset carries the given availability snapshot.
     fn seed_mixed_media_material(
@@ -1832,28 +1708,6 @@ mod tests {
         fingerprint: &str,
         media_availability: MediaAvailability,
     ) -> (LearningMaterial, MaterialRevision) {
-        let text_asset = domain::SourceAsset::new(
-            "text/plain",
-            TEXT.len() as u64,
-            text_digest(TEXT),
-            domain::SourceAssetBinding::Managed,
-            domain::SourceAssetAvailability::Available,
-            1,
-        )
-        .expect("valid source asset");
-        let text_rendition = domain::Rendition::Document(
-            DocumentRendition::new(
-                RenditionOrigin::Source,
-                "text/plain",
-                Some(language("en")),
-                text_digest(TEXT),
-                TEXT.len() as u64,
-                Some(text_asset.id.clone()),
-                None,
-                None,
-            )
-            .expect("valid document rendition"),
-        );
         let media_rendition = domain::Rendition::Media(
             MediaRendition::new(
                 RenditionOrigin::Source,
@@ -1869,14 +1723,13 @@ mod tests {
             )
             .expect("valid media rendition"),
         );
-        let material_id =
-            initial_material_id(&[], &[text_rendition.clone(), media_rendition.clone()])
-                .expect("deterministic id");
+        let material_id = initial_material_id(&[], std::slice::from_ref(&media_rendition))
+            .expect("deterministic id");
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Material",
-            vec![text_asset],
-            vec![text_rendition, media_rendition],
+            Vec::new(),
+            vec![media_rendition],
             1,
         )
         .expect("valid revision");
@@ -1889,9 +1742,97 @@ mod tests {
     }
 
     fn ids_of(material: &LearningMaterial, revision: &MaterialRevision) -> FixtureIds {
+        let media = revision
+            .renditions
+            .iter()
+            .find_map(|rendition| match rendition {
+                Rendition::Media(media) => Some(media),
+                Rendition::Document(_) => None,
+            })
+            .expect("media material has one rendition");
         FixtureIds {
             material_id: material.id.as_str().to_owned(),
             revision_id: revision.id.as_str().to_owned(),
+            media_id: media.media_id.as_ref().unwrap().as_str().to_owned(),
+            media_fingerprint: media.fingerprint.clone(),
+        }
+    }
+
+    fn capability_resource_fact(
+        resource_id: &str,
+        kind: &str,
+        role: PackageResourceRole,
+        required: bool,
+        availability: PackageResourceAvailability,
+        support_languages: Vec<LanguageCode>,
+        anchor_resource_ids: Vec<String>,
+    ) -> PackageResourceFact {
+        PackageResourceFact {
+            resource_id: resource_id.into(),
+            kind: kind.into(),
+            schema: format!("listen.payload.{kind}.v1"),
+            role,
+            required,
+            availability,
+            content_language: Some(language("en")),
+            support_languages,
+            dependencies: Vec::new(),
+            anchor_resource_ids,
+            payload_digest: format!("sha256:{}", "f".repeat(64)),
+            payload_size_bytes: 10,
+            provenance: PackageResourceProvenance {
+                created_at_ms: 1,
+                tool_id: "listen-gen".into(),
+                tool_version: "0.4.0".into(),
+                provider_id: None,
+                provider_version: None,
+                model_id: None,
+                model_version: None,
+                config_sha256: None,
+            },
+            review_status: PackageReviewStatus::MachineChecked,
+            quality_warnings: Vec::new(),
+        }
+    }
+
+    fn capability_package_installation(
+        material: &LearningMaterial,
+        revision: &MaterialRevision,
+        resources: Vec<PackageResourceFact>,
+    ) -> PackageInstallation {
+        let source_media = revision
+            .renditions
+            .iter()
+            .find_map(|rendition| match rendition {
+                Rendition::Media(media) => Some(media),
+                Rendition::Document(_) => None,
+            })
+            .expect("fixture revision has source media");
+        PackageInstallation {
+            release_id: PackageReleaseId::parse("sha256:capabilities").unwrap(),
+            release_created_at_ms: 1,
+            material_id: material.id.clone(),
+            material_revision_id: revision.id.clone(),
+            edition: LearningEdition {
+                edition_id: domain::LearningEditionId::parse("edition-capabilities").unwrap(),
+                title: "Capabilities".into(),
+                target_language: language("en"),
+                support_languages: vec![language("zh-Hans")],
+            },
+            resources,
+            renditions: vec![PackageRenditionFact {
+                rendition_id: "media-rendition".into(),
+                kind: "media".into(),
+                origin: RenditionOrigin::Source,
+                media_type: source_media.media_type.clone(),
+                available: true,
+                media_digest: sha256_id(MEDIA_BYTES),
+                media_size_bytes: MEDIA_BYTES.len() as u64,
+                media_id: source_media.media_id.clone(),
+                source_asset_id: None,
+                producer: None,
+            }],
+            installed_at_ms: 1,
         }
     }
 
@@ -2062,16 +2003,56 @@ mod tests {
         })
     }
 
-    /// A release with one embedded base document_text resource.
-    fn text_only_release(ids: &FixtureIds, edition_id: &str) -> (Value, BTreeMap<String, Vec<u8>>) {
-        text_only_release_with_text(ids, edition_id, TEXT)
+    /// A media release with one structured-reading resource derived from its audio source.
+    fn media_reading_release(
+        ids: &FixtureIds,
+        edition_id: &str,
+    ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        media_reading_release_with_transcript(ids, edition_id, TEXT)
     }
 
-    fn text_only_release_with_text(
+    fn media_reading_release_with_transcript(
+        ids: &FixtureIds,
+        edition_id: &str,
+        transcript: &str,
+    ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (_, payload_bytes) = document_payload(transcript, "en");
+        let payload_digest = sha256_id(&payload_bytes);
+        let descriptor = v3_base_descriptor(
+            "structured_reading",
+            "listen.payload.structured-reading.v1",
+            "en",
+            &[],
+            &payload_digest,
+            payload_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let resource = resource_entry(&descriptor, true);
+        let media_digest = format!("sha256:{}", media_hex());
+        let media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, false);
+        let media = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &media_blob,
+            Some(&ids.media_id),
+            &ids.media_fingerprint,
+            None,
+            None,
+        );
+        let release = v3_release(ids, edition_id, vec![], vec![media], vec![resource]);
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&payload_digest), payload_bytes);
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    fn package_with_document_rendition(
         ids: &FixtureIds,
         edition_id: &str,
         text: &str,
     ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (mut release, mut files) = media_reading_release(ids, edition_id);
         let text_bytes = text.as_bytes().to_vec();
         let text_digest = sha256_id(&text_bytes);
         let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
@@ -2080,133 +2061,22 @@ mod tests {
             "text/plain",
             Some("en"),
             &text_blob,
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            Some(&text_digest),
             None,
             None,
         );
-        let (_, payload_bytes) = document_payload(text, "en");
-        let payload_digest = sha256_id(&payload_bytes);
-        let descriptor = v3_base_descriptor(
-            "structured_reading",
-            "listen.payload.structured-reading.v1",
-            "en",
-            &[],
-            &payload_digest,
-            payload_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let resource = resource_entry(&descriptor, true);
-        let release = v3_release(ids, edition_id, vec![document], vec![], vec![resource]);
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-        blobs.insert(blob_path(&payload_digest), payload_bytes);
-
-        let files = carrier_with_release(&release, blobs);
+        release["document_renditions"] = json!([document]);
+        files.insert(blob_path(&text_digest), text_bytes);
+        files.insert("release.json".to_owned(), canonical_bytes(&release));
         (release, files)
     }
 
-    /// A release whose base document text differs from the Material's text.
-    fn mismatched_text_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let text_bytes = "Different text entirely.".as_bytes().to_vec();
-        let text_digest = sha256_id(&text_bytes);
-        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
-        let document = v3_document_rendition(
-            "source",
-            "text/plain",
-            Some("en"),
-            &text_blob,
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-            None,
-            None,
-        );
-        let (_, payload_bytes) = document_payload("Different text entirely.", "en");
-        let payload_digest = sha256_id(&payload_bytes);
-        let descriptor = v3_base_descriptor(
-            "structured_reading",
-            "listen.payload.structured-reading.v1",
-            "en",
-            &[],
-            &payload_digest,
-            payload_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let resource = resource_entry(&descriptor, true);
-        let release = v3_release(
-            ids,
-            "edition-mismatch",
-            vec![document],
-            vec![],
-            vec![resource],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-        blobs.insert(blob_path(&payload_digest), payload_bytes);
-
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A release whose base document text declares a different language.
-    fn mismatched_text_language_release(ids: &FixtureIds) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let text_bytes = TEXT.as_bytes().to_vec();
-        let text_digest = sha256_id(&text_bytes);
-        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
-        let document = v3_document_rendition(
-            "source",
-            "text/plain",
-            Some("zh-Hans"),
-            &text_blob,
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-            None,
-            None,
-        );
-        let (_, payload_bytes) = document_payload(TEXT, "zh-Hans");
-        let payload_digest = sha256_id(&payload_bytes);
-        let descriptor = v3_base_descriptor(
-            "structured_reading",
-            "listen.payload.structured-reading.v1",
-            "zh-Hans",
-            &[],
-            &payload_digest,
-            payload_bytes.len() as u64,
-            &ids.revision_id,
-        );
-        let resource = resource_entry(&descriptor, true);
-        let release = v3_release(
-            ids,
-            "edition-language-mismatch",
-            vec![document],
-            vec![],
-            vec![resource],
-        );
-        let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
-        blobs.insert(blob_path(&payload_digest), payload_bytes);
-        let files = carrier_with_release(&release, blobs);
-        (release, files)
-    }
-
-    /// A mixed media + text release: an audio rendition, a base document
-    /// text, and an optional translation assistance. The rendition digest is
-    /// the real SHA-256 of [`MEDIA_BYTES`]; `embed_media` controls whether
-    /// the media blob is carried or satisfied by the local Material asset.
-    fn media_text_translation_release(
+    /// A media package with structured reading, an optional translation, and a source audio rendition.
+    fn media_translation_release(
         ids: &FixtureIds,
         embed_media: bool,
         edition_id: &str,
     ) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let text_bytes = TEXT.as_bytes().to_vec();
-        let text_digest = sha256_id(&text_bytes);
-        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
-        let document = v3_document_rendition(
-            "source",
-            "text/plain",
-            Some("en"),
-            &text_blob,
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-            None,
-            None,
-        );
         let (_, text_payload_bytes) = document_payload(TEXT, "en");
         let text_payload_digest = sha256_id(&text_payload_bytes);
         let text_descriptor = v3_base_descriptor(
@@ -2241,20 +2111,19 @@ mod tests {
             "audio",
             "audio/mpeg",
             &media_blob,
-            Some("media-1"),
-            &media_hex(),
+            Some(&ids.media_id),
+            &ids.media_fingerprint,
             None,
             None,
         );
         let release = v3_release(
             ids,
             edition_id,
-            vec![document],
+            vec![],
             vec![media],
             vec![text_resource, translation_resource],
         );
         let mut blobs = BTreeMap::new();
-        blobs.insert(blob_path(&text_digest), text_bytes);
         blobs.insert(blob_path(&text_payload_digest), text_payload_bytes);
         blobs.insert(blob_path(&translation_digest), translation_bytes);
         if embed_media {
@@ -2275,8 +2144,8 @@ mod tests {
             "audio",
             "audio/mpeg",
             &media_blob,
-            Some("media-1"),
-            &media_hex(),
+            Some(&ids.media_id),
+            &ids.media_fingerprint,
             None,
             None,
         );
@@ -2297,8 +2166,8 @@ mod tests {
             "video",
             "video/mp4",
             &media_blob,
-            Some("media-1"),
-            &media_hex(),
+            Some(&ids.media_id),
+            &ids.media_fingerprint,
             None,
             None,
         );
@@ -2571,7 +2440,7 @@ mod tests {
         ids: &FixtureIds,
         edition_id: &str,
     ) -> (Value, BTreeMap<String, Vec<u8>>) {
-        let (release, mut files) = text_only_release(ids, edition_id);
+        let (release, mut files) = media_reading_release(ids, edition_id);
 
         let media_digest = format!("sha256:{}", media_hex());
         let source_media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, false);
@@ -2580,8 +2449,8 @@ mod tests {
             "audio",
             "audio/mpeg",
             &source_media_blob,
-            Some("media-1"),
-            &media_hex(),
+            Some(&ids.media_id),
+            &ids.media_fingerprint,
             None,
             None,
         );
@@ -2617,9 +2486,9 @@ mod tests {
     #[test]
     fn v3_install_prepares_candidate_only_edition() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, files) = text_only_release(&ids, "edition-v3-text");
+        let (_, files) = media_reading_release(&ids, "edition-v3-text");
 
         let view = install_ok(&setup, &material.id, &files);
         assert_eq!(view.release_id.as_str().len(), 71);
@@ -2631,7 +2500,7 @@ mod tests {
             PackageResourceAvailability::Available
         );
         assert_eq!(view.renditions.len(), 1);
-        assert_eq!(view.renditions[0].kind, "document");
+        assert_eq!(view.renditions[0].kind, "media");
         assert!(view.renditions[0].available);
         assert_eq!(setup.package_lifecycle.installation_count(), 1);
         // Candidate-only: membership is never touched.
@@ -2650,13 +2519,7 @@ mod tests {
         let (release, files) = v3_composed_release(&ids, "edition-v3-composed");
 
         let view = install_ok(&setup, &material.id, &files);
-        assert_eq!(view.renditions.len(), 3);
-        let document = view
-            .renditions
-            .iter()
-            .find(|rendition| rendition.kind == "document")
-            .expect("document rendition");
-        assert!(document.available);
+        assert_eq!(view.renditions.len(), 2);
         // The source media blob is referenced, not embedded: availability
         // comes from the bound Material media asset, which is available.
         let source_media_id = release["media_renditions"]
@@ -2704,65 +2567,17 @@ mod tests {
     }
 
     #[test]
-    fn v3_install_rejects_unmatched_source_document_rendition() {
+    fn v3_install_rejects_document_renditions() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, files) = text_only_release(&ids, "edition-v3-text");
-        // Swap in a document rendition that does not match the Material text.
-        // The blob is referenced (not embedded) so inspection passes and the
-        // install-time binding check is the one that rejects the release.
-        let other_bytes = b"unrelated text".to_vec();
-        let other_digest = sha256_id(&other_bytes);
-        let other_blob = v3_blob_declaration(&other_digest, other_bytes.len() as u64, false);
-        let document = v3_document_rendition(
-            "source",
-            "text/plain",
-            Some("en"),
-            &other_blob,
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-            None,
-            None,
-        );
-        let mut release: Value = serde_json::from_slice(&files["release.json"]).unwrap();
-        release["document_renditions"] = json!([document]);
-        // The original text blob is no longer referenced by any rendition or
-        // resource; drop it so the carrier inventory stays exact.
-        let mut files = files;
-        files.remove(&blob_path(&sha256_id(TEXT.as_bytes())));
-        files.insert("release.json".to_owned(), canonical_bytes(&release));
+        let (_, files) = package_with_document_rendition(&ids, "edition-v3-media", TEXT);
 
         let error = install_err(&setup, &material.id, &files);
         assert!(matches!(
             error,
             ApplicationError::Invalid(message)
-                if message == "content package v3 source document rendition does not match a bound material document rendition"
-        ));
-    }
-
-    #[test]
-    fn v3_install_rejects_source_document_language_contradiction() {
-        let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
-        let ids = ids_of(&material, &revision);
-        let (_, mut files) = text_only_release(&ids, "edition-v3-text");
-        let mut release: Value = serde_json::from_slice(&files["release.json"]).unwrap();
-        let entry = release["document_renditions"][0].clone();
-        let identity = json!({
-            "media_type": entry["media_type"],
-            "language": "zh-Hans",
-            "text_blob": entry["text_blob"],
-        });
-        release["document_renditions"][0]["language"] = json!("zh-Hans");
-        release["document_renditions"][0]["rendition_id"] =
-            json!(sha256_id(&canonical_bytes(&identity)));
-        files.insert("release.json".to_owned(), canonical_bytes(&release));
-
-        let error = install_err(&setup, &material.id, &files);
-        assert!(matches!(
-            error,
-            ApplicationError::Invalid(message)
-                if message == "content package v3 source document rendition contradicts the material's declared language"
+                if message == "document material input is not supported; provide audio or video media"
         ));
     }
 
@@ -2772,7 +2587,7 @@ mod tests {
         let (material, revision) =
             seed_mixed_media_material(&setup, &media_hex(), MediaAvailability::Available);
         let ids = ids_of(&material, &revision);
-        let (release, mut files) = text_only_release(&ids, "edition-v3-text");
+        let (release, mut files) = media_reading_release(&ids, "edition-v3-text");
         let mut release = release;
         let media_blob = v3_blob_declaration(&format!("sha256:{}", "c".repeat(64)), 100, false);
         let media = v3_media_rendition(
@@ -2801,7 +2616,7 @@ mod tests {
         let (material, revision) =
             seed_mixed_media_material(&setup, &media_hex(), MediaAvailability::Available);
         let ids = ids_of(&material, &revision);
-        let (release, _) = text_only_release(&ids, "edition-v3-text");
+        let (release, _) = media_reading_release(&ids, "edition-v3-text");
         let mut release = release;
         let derived_bytes = b"listen fixture derived media".to_vec();
         let derived_digest = sha256_id(&derived_bytes);
@@ -2832,45 +2647,31 @@ mod tests {
     #[test]
     fn v3_install_rejects_stale_material_revision() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
-        let ids = FixtureIds {
-            material_id: material.id.as_str().to_owned(),
-            revision_id: revision.id.as_str().to_owned(),
-        };
-        let (_, files) = text_only_release(&ids, "edition-v3-text");
+        let (material, revision) = seed_media_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, files) = media_reading_release(&ids, "edition-v3-text");
         // Append a newer revision to the same Material so the package binds
         // the stale revision.
         let second_text = "Second revision text.";
-        let second_asset = domain::SourceAsset::new(
-            "text/plain",
-            second_text.len() as u64,
-            text_digest(second_text),
-            domain::SourceAssetBinding::Managed,
-            domain::SourceAssetAvailability::Available,
-            2,
-        )
-        .expect("valid source asset");
-        let second = domain::Rendition::Document(
-            DocumentRendition::new(
+        let second_fingerprint = text_digest(second_text);
+        let second = domain::Rendition::Media(
+            MediaRendition::new(
                 RenditionOrigin::Source,
-                "text/plain",
-                Some(language("en")),
-                text_digest(second_text),
-                second_text.len() as u64,
-                Some(second_asset.id.clone()),
+                MediaKind::Audio,
+                "audio/mpeg",
+                &second_fingerprint,
+                MediaAvailability::Available,
+                Some(MediaId::from_fingerprint("media", &second_fingerprint)),
+                None,
+                None,
                 None,
                 None,
             )
-            .expect("valid document rendition"),
+            .expect("valid media rendition"),
         );
-        let appended = MaterialRevision::new(
-            material.id.clone(),
-            "Material",
-            vec![second_asset],
-            vec![second],
-            2,
-        )
-        .expect("valid revision");
+        let appended =
+            MaterialRevision::new(material.id.clone(), "Material", Vec::new(), vec![second], 2)
+                .expect("valid revision");
         setup.materials.append_revision_fake(appended, 2);
         let error = install_err(&setup, &material.id, &files);
         assert!(matches!(
@@ -2887,9 +2688,9 @@ mod tests {
     #[test]
     fn install_prepares_candidate_only_edition() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (release, blobs) = text_only_release(&ids, "edition-1");
+        let (release, blobs) = media_reading_release(&ids, "edition-1");
         assert_eq!(release["schema"], RELEASE_SCHEMA_V3);
 
         let view = install_ok(&setup, &material.id, &blobs);
@@ -2914,7 +2715,7 @@ mod tests {
         assert_eq!(resource.review_status, PackageReviewStatus::HumanReviewed);
         assert_eq!(resource.content_language, Some(language("en")));
         assert_eq!(view.renditions.len(), 1);
-        assert_eq!(view.renditions[0].kind, "document");
+        assert_eq!(view.renditions[0].kind, "media");
         assert!(view.renditions[0].available);
 
         assert_eq!(setup.package_lifecycle.installation_count(), 1);
@@ -2928,9 +2729,9 @@ mod tests {
     #[test]
     fn install_persists_exact_known_payload_bytes_at_the_repository_seam() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let view = install_ok(&setup, &material.id, &blobs);
 
         let (_, expected_bytes) = document_payload(TEXT, "en");
@@ -2955,9 +2756,9 @@ mod tests {
     fn install_preserves_retained_and_temporary_material_membership() {
         let setup = setup();
         let (retained_material, retained_revision) =
-            seed_text_material_with_text(&setup, true, "Retained material text.");
+            seed_media_material_with_transcript(&setup, true, "Retained material text.");
         let (temporary_material, temporary_revision) =
-            seed_text_material_with_text(&setup, false, "Temporary material text.");
+            seed_media_material_with_transcript(&setup, false, "Temporary material text.");
         let retained_ids = ids_of(&retained_material, &retained_revision);
         let temporary_ids = ids_of(&temporary_material, &temporary_revision);
         assert_ne!(
@@ -2965,13 +2766,16 @@ mod tests {
             "distinct content yields distinct materials"
         );
 
-        let (retained_release, retained_blobs) = text_only_release_with_text(
+        let (retained_release, retained_blobs) = media_reading_release_with_transcript(
             &retained_ids,
             "edition-retained",
             "Retained material text.",
         );
-        let (temporary_release, temporary_blobs) =
-            text_only_release_with_text(&temporary_ids, "edition-temp", "Temporary material text.");
+        let (temporary_release, temporary_blobs) = media_reading_release_with_transcript(
+            &temporary_ids,
+            "edition-temp",
+            "Temporary material text.",
+        );
         assert_ne!(
             retained_release["edition"]["edition_id"],
             temporary_release["edition"]["edition_id"]
@@ -3004,9 +2808,9 @@ mod tests {
     #[test]
     fn install_never_mutates_adoption_or_active_selection() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
 
         install_ok(&setup, &material.id, &blobs);
 
@@ -3027,10 +2831,10 @@ mod tests {
     #[test]
     fn install_rejects_exact_material_id_mismatch() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let mut ids = ids_of(&material, &revision);
         ids.material_id = "some-other-material".into();
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
 
         let error = install_err(&setup, &material.id, &blobs);
         assert!(matches!(
@@ -3044,10 +2848,10 @@ mod tests {
     #[test]
     fn install_rejects_stale_material_revision_mismatch() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let mut ids = ids_of(&material, &revision);
         ids.revision_id = "stale-revision".into();
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
 
         let error = install_err(&setup, &material.id, &blobs);
         assert!(matches!(
@@ -3087,7 +2891,22 @@ mod tests {
             MediaAvailability::Available,
         );
         let ids = ids_of(&material, &revision);
-        let files = audio_rendition_carrier(&ids, "edition-media");
+        let mut files = audio_rendition_carrier(&ids, "edition-media");
+        let mut release: Value = serde_json::from_slice(&files["release.json"]).unwrap();
+        let media_digest = format!("sha256:{}", media_hex());
+        let media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, true);
+        let mismatched = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &media_blob,
+            Some(&ids.media_id),
+            "unrelated-fingerprint",
+            None,
+            None,
+        );
+        release["media_renditions"] = json!([mismatched]);
+        files.insert("release.json".into(), canonical_bytes(&release));
 
         let error = install_err(&setup, &material.id, &files);
         assert!(matches!(
@@ -3107,7 +2926,7 @@ mod tests {
             MediaAvailability::Available,
         );
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = media_text_translation_release(&ids, false, "edition-media");
+        let (_, blobs) = media_translation_release(&ids, false, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
         let media = view
             .renditions
@@ -3126,7 +2945,7 @@ mod tests {
             MediaAvailability::Available,
         );
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
+        let (_, blobs) = media_translation_release(&ids, true, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
         let media = view
             .renditions
@@ -3142,7 +2961,7 @@ mod tests {
         let (material, revision) =
             seed_mixed_media_material(&setup, &media_hex(), MediaAvailability::Available);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
+        let (_, blobs) = media_translation_release(&ids, true, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
         let media = view
             .renditions
@@ -3161,7 +2980,7 @@ mod tests {
             MediaAvailability::Missing,
         );
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
+        let (_, blobs) = media_translation_release(&ids, true, "edition-media");
         let view = install_ok(&setup, &material.id, &blobs);
 
         let media = view
@@ -3188,105 +3007,6 @@ mod tests {
             !plan.selected_rendition_ids.contains(&media.rendition_id),
             "unavailable renditions are never selected"
         );
-    }
-
-    #[test]
-    fn install_rejects_document_text_mismatch() {
-        let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
-        let ids = ids_of(&material, &revision);
-        let (_, blobs) = mismatched_text_release(&ids);
-
-        let error = install_err(&setup, &material.id, &blobs);
-        assert!(matches!(
-            error,
-            ApplicationError::Invalid(message)
-                if message
-                    == "content package v3 source document rendition does not match a bound material document rendition"
-        ));
-    }
-
-    #[test]
-    fn install_rejects_document_text_language_mismatch() {
-        let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
-        let ids = ids_of(&material, &revision);
-        let (_, blobs) = mismatched_text_language_release(&ids);
-
-        let error = install_err(&setup, &material.id, &blobs);
-        assert!(matches!(
-            error,
-            ApplicationError::Invalid(message)
-                if message
-                    == "content package v3 source document rendition contradicts the material's declared language"
-        ));
-    }
-
-    #[test]
-    fn install_rejects_ambiguous_document_text_binding() {
-        let setup = setup();
-        let asset = domain::SourceAsset::new(
-            "text/plain",
-            TEXT.len() as u64,
-            text_digest(TEXT),
-            domain::SourceAssetBinding::Managed,
-            domain::SourceAssetAvailability::Available,
-            1,
-        )
-        .expect("valid source asset");
-        let text_rendition = domain::Rendition::Document(
-            DocumentRendition::new(
-                RenditionOrigin::Source,
-                "text/plain",
-                Some(language("en")),
-                text_digest(TEXT),
-                TEXT.len() as u64,
-                Some(asset.id.clone()),
-                None,
-                None,
-            )
-            .expect("valid document rendition"),
-        );
-        let zh_rendition = domain::Rendition::Document(
-            DocumentRendition::new(
-                RenditionOrigin::Source,
-                "text/plain",
-                Some(language("zh-Hans")),
-                text_digest(TEXT),
-                TEXT.len() as u64,
-                Some(asset.id.clone()),
-                None,
-                None,
-            )
-            .expect("valid document rendition"),
-        );
-        let material_id = initial_material_id(
-            std::slice::from_ref(&asset),
-            &[text_rendition.clone(), zh_rendition.clone()],
-        )
-        .expect("deterministic id");
-        let revision = MaterialRevision::new(
-            material_id.clone(),
-            "Material",
-            vec![asset],
-            vec![text_rendition, zh_rendition],
-            1,
-        )
-        .expect("valid revision");
-        let material = LearningMaterial::new(&revision, None, 1, 1).expect("valid material");
-        setup
-            .materials
-            .create_material(&material, &revision)
-            .expect("material persists");
-        let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
-
-        let error = install_err(&setup, &material.id, &blobs);
-        assert!(matches!(
-            error,
-            ApplicationError::Invalid(message)
-                if message == "content package v3 source document rendition binding is ambiguous"
-        ));
     }
 
     #[test]
@@ -3353,7 +3073,7 @@ mod tests {
     #[test]
     fn install_rejects_missing_required_payload() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = missing_required_release(&ids);
 
@@ -3368,7 +3088,7 @@ mod tests {
     #[test]
     fn install_accepts_optional_missing_payload_as_an_availability_fact() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = optional_missing_release(&ids);
 
@@ -3391,6 +3111,10 @@ mod tests {
             document.availability,
             PackageResourceAvailability::Available
         );
+        assert_eq!(
+            view.available_capabilities,
+            vec![MaterialCapability::Read, MaterialCapability::Listen]
+        );
 
         let adopted = setup
             .use_cases
@@ -3402,7 +3126,7 @@ mod tests {
     #[test]
     fn missing_optional_resources_have_no_stored_body_and_stay_explicitly_unavailable() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = optional_missing_release(&ids);
         let view = install_ok(&setup, &material.id, &blobs);
@@ -3434,7 +3158,7 @@ mod tests {
     #[test]
     fn install_accepts_optional_opaque_resource_as_verified_metadata() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = optional_opaque_release(&ids, false);
 
@@ -3445,6 +3169,10 @@ mod tests {
             .find(|resource| resource.kind == "future_analysis")
             .expect("opaque fact");
         assert_eq!(opaque.availability, PackageResourceAvailability::Opaque);
+        assert_eq!(
+            view.available_capabilities,
+            vec![MaterialCapability::Read, MaterialCapability::Listen]
+        );
 
         let adopted = setup
             .use_cases
@@ -3465,9 +3193,97 @@ mod tests {
     }
 
     #[test]
+    fn edition_view_uses_core_capabilities_for_selected_available_facts() {
+        let setup = setup();
+        let (material, revision) = seed_media_material(&setup, false);
+        let resources = vec![
+            capability_resource_fact(
+                "reading",
+                "structured_reading",
+                PackageResourceRole::Base,
+                true,
+                PackageResourceAvailability::Available,
+                Vec::new(),
+                Vec::new(),
+            ),
+            capability_resource_fact(
+                "alignment",
+                "anchor_time_alignment",
+                PackageResourceRole::Base,
+                true,
+                PackageResourceAvailability::Available,
+                Vec::new(),
+                vec!["reading".into()],
+            ),
+            capability_resource_fact(
+                "optional-translation",
+                "translation",
+                PackageResourceRole::Assistance,
+                false,
+                PackageResourceAvailability::Missing,
+                vec![language("zh-Hans")],
+                Vec::new(),
+            ),
+            capability_resource_fact(
+                "opaque-analysis",
+                "future_analysis",
+                PackageResourceRole::Assistance,
+                false,
+                PackageResourceAvailability::Opaque,
+                Vec::new(),
+                Vec::new(),
+            ),
+        ];
+        let installation = capability_package_installation(&material, &revision, resources);
+        let expected = vec![
+            MaterialCapability::Read,
+            MaterialCapability::Listen,
+            MaterialCapability::SynchronizedReadListen,
+        ];
+
+        let candidate = edition_view(installation.clone(), &revision, None);
+        assert_eq!(candidate.available_capabilities, expected);
+
+        let committed = adoption_commit_plan(&installation, 10).unwrap();
+        let adopted = edition_view(installation.clone(), &revision, Some(&committed));
+        assert_eq!(adopted.available_capabilities, expected);
+
+        let mut wrong_anchor = installation.clone();
+        wrong_anchor
+            .resources
+            .iter_mut()
+            .find(|resource| resource.kind == "anchor_time_alignment")
+            .unwrap()
+            .anchor_resource_ids = vec!["different-reading".into()];
+        let wrong_anchor = edition_view(wrong_anchor, &revision, None);
+        assert_eq!(
+            wrong_anchor.available_capabilities,
+            vec![MaterialCapability::Read, MaterialCapability::Listen]
+        );
+
+        let mut ambiguous = installation;
+        for id in ["translation-a", "translation-b"] {
+            ambiguous.resources.push(capability_resource_fact(
+                id,
+                "translation",
+                PackageResourceRole::Assistance,
+                false,
+                PackageResourceAvailability::Available,
+                vec![language("zh-Hans")],
+                Vec::new(),
+            ));
+        }
+        let ambiguous = edition_view(ambiguous, &revision, None);
+        assert!(
+            ambiguous.available_capabilities.is_empty(),
+            "a candidate without a resolvable adoption plan advertises no capabilities"
+        );
+    }
+
+    #[test]
     fn install_retains_present_optional_opaque_payload_bytes_exactly() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = optional_opaque_release(&ids, true);
         let view = install_ok(&setup, &material.id, &blobs);
@@ -3502,7 +3318,7 @@ mod tests {
     #[test]
     fn install_rejects_required_dependency_closure_failure() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = broken_closure_release(&ids);
 
@@ -3518,9 +3334,9 @@ mod tests {
     #[test]
     fn install_is_idempotent_and_returns_the_equal_existing_installation() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
 
         let first = install_ok(&setup, &material.id, &blobs);
         let second = install_ok(&setup, &material.id, &blobs);
@@ -3541,9 +3357,9 @@ mod tests {
     #[test]
     fn save_fails_closed_on_unequal_facts_or_bytes_for_the_same_identity() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let view = install_ok(&setup, &material.id, &blobs);
         let stored = setup
             .package_lifecycle
@@ -3605,9 +3421,9 @@ mod tests {
     #[test]
     fn reinstall_of_adopted_release_reports_existing_adoption_evidence() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let installed = install_ok(&setup, &material.id, &blobs);
         assert!(!installed.adopted, "a fresh installation is never adopted");
 
@@ -3638,7 +3454,7 @@ mod tests {
     #[test]
     fn install_errors_never_contain_the_supplied_package_path() {
         let setup = setup();
-        let (material, _) = seed_text_material(&setup, false);
+        let (material, _) = seed_media_material(&setup, false);
         let directory = TestDirectory::new();
         let path = directory.path().join("nested").join("missing.listenpkg");
         fs::create_dir_all(&path).unwrap();
@@ -3665,7 +3481,7 @@ mod tests {
     #[test]
     fn install_unsupported_release_schema_is_a_stable_error() {
         let setup = setup();
-        let (material, _) = seed_text_material(&setup, false);
+        let (material, _) = seed_media_material(&setup, false);
         let directory = TestDirectory::new();
         fs::write(
             directory.path().join("release.json"),
@@ -3686,13 +3502,17 @@ mod tests {
     #[test]
     fn errors_and_views_never_leak_payloads_or_manifests() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
 
         // A rejected carrier's payload content never reaches the error
         // surface, even when the payload is the reason for rejection.
-        let (_, mismatched_blobs) = mismatched_text_release(&ids);
-        let error = install_err(&setup, &material.id, &mismatched_blobs);
+        let (_, document_blobs) = package_with_document_rendition(
+            &ids,
+            "edition-document-rejected",
+            "Different text entirely.",
+        );
+        let error = install_err(&setup, &material.id, &document_blobs);
         assert!(
             !error.to_string().contains("Different text entirely."),
             "error display must not expose payload content: {error}"
@@ -3703,7 +3523,7 @@ mod tests {
         );
 
         // Installed views expose no payload content, manifest, or path.
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let view = install_ok(&setup, &material.id, &blobs);
         let view_debug = format!("{view:?}");
         assert!(
@@ -3730,9 +3550,9 @@ mod tests {
     #[test]
     fn carrier_deletion_after_install_still_lists_and_adopts_from_stored_state() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
 
         let directory = TestDirectory::new();
         let path = directory.path().to_path_buf();
@@ -3770,9 +3590,9 @@ mod tests {
     #[test]
     fn list_fails_when_current_revision_is_missing() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         install_ok(&setup, &material.id, &blobs);
 
         setup.materials.corrupt_current_revision(
@@ -3792,11 +3612,13 @@ mod tests {
     #[test]
     fn list_fails_when_current_revision_belongs_to_another_material() {
         let setup = setup();
-        let (material, revision) = seed_text_material_with_text(&setup, false, "Material A text.");
+        let (material, revision) =
+            seed_media_material_with_transcript(&setup, false, "Material A text.");
         let (other, other_revision) =
-            seed_text_material_with_text(&setup, false, "Material B text.");
+            seed_media_material_with_transcript(&setup, false, "Material B text.");
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release_with_text(&ids, "edition-1", "Material A text.");
+        let (_, blobs) =
+            media_reading_release_with_transcript(&ids, "edition-1", "Material A text.");
         install_ok(&setup, &material.id, &blobs);
 
         setup
@@ -3817,9 +3639,9 @@ mod tests {
     #[test]
     fn adopt_fails_when_current_revision_is_missing_without_commit() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let installed = install_ok(&setup, &material.id, &blobs);
 
         setup.materials.corrupt_current_revision(
@@ -3848,11 +3670,13 @@ mod tests {
     #[test]
     fn adopt_fails_on_cross_material_pointer_without_commit_and_preserves_adoption() {
         let setup = setup();
-        let (material, revision) = seed_text_material_with_text(&setup, false, "Material A text.");
+        let (material, revision) =
+            seed_media_material_with_transcript(&setup, false, "Material A text.");
         let (other, other_revision) =
-            seed_text_material_with_text(&setup, false, "Material B text.");
+            seed_media_material_with_transcript(&setup, false, "Material B text.");
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release_with_text(&ids, "edition-1", "Material A text.");
+        let (_, blobs) =
+            media_reading_release_with_transcript(&ids, "edition-1", "Material A text.");
         let installed = install_ok(&setup, &material.id, &blobs);
         setup
             .use_cases
@@ -3893,10 +3717,10 @@ mod tests {
     #[test]
     fn list_shows_two_editions_for_one_revision_with_adoption_evidence() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, first_blobs) = text_only_release(&ids, "edition-1");
-        let (_, second_blobs) = text_only_release(&ids, "edition-2");
+        let (_, first_blobs) = media_reading_release(&ids, "edition-1");
+        let (_, second_blobs) = media_reading_release(&ids, "edition-2");
         let first = install_ok(&setup, &material.id, &first_blobs);
         let second = install_ok(&setup, &material.id, &second_blobs);
         assert_ne!(first.release_id, second.release_id);
@@ -3926,17 +3750,17 @@ mod tests {
     }
 
     #[test]
-    fn adopt_text_only_edition_without_timeline_is_valid() {
+    fn adopt_structured_reading_edition_without_timeline_is_valid() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-text-only");
+        let (_, blobs) = media_reading_release(&ids, "edition-reading-only");
         let installed = install_ok(&setup, &material.id, &blobs);
 
         let view = setup
             .use_cases
             .adopt_for_material(&material.id, &installed.release_id)
-            .expect("text-only adoption succeeds");
+            .expect("structured-reading adoption succeeds");
         assert!(view.adopted);
         assert!(view.adopted_at_ms.is_some());
         assert_eq!(view.release_id, installed.release_id);
@@ -3950,7 +3774,7 @@ mod tests {
         assert_eq!(
             plan.selected_resource_ids,
             vec![view.resources[0].resource_id.clone()],
-            "the text-only edition selects its single document"
+            "the edition selects its single structured-reading resource"
         );
         assert_eq!(plan.material_id, material.id);
         assert_eq!(plan.material_revision_id, revision.id);
@@ -3965,10 +3789,10 @@ mod tests {
             MediaAvailability::Available,
         );
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = media_text_translation_release(&ids, true, "edition-media");
+        let (_, blobs) = media_translation_release(&ids, true, "edition-media");
         let installed = install_ok(&setup, &material.id, &blobs);
         assert_eq!(installed.resources.len(), 2);
-        assert_eq!(installed.renditions.len(), 2);
+        assert_eq!(installed.renditions.len(), 1);
 
         let view = setup
             .use_cases
@@ -3982,7 +3806,7 @@ mod tests {
             .unwrap()
             .expect("adoption exists");
         assert_eq!(plan.selected_resource_ids.len(), 2);
-        assert_eq!(plan.selected_rendition_ids.len(), 2);
+        assert_eq!(plan.selected_rendition_ids.len(), 1);
         assert_eq!(plan.exclusive_selections.len(), 2);
         assert_eq!(
             plan.exclusive_selections[0].family,
@@ -4001,7 +3825,7 @@ mod tests {
     #[test]
     fn adopt_rejects_absent_installation() {
         let setup = setup();
-        let (material, _) = seed_text_material(&setup, false);
+        let (material, _) = seed_media_material(&setup, false);
         let error = setup
             .use_cases
             .adopt_for_material(
@@ -4018,38 +3842,32 @@ mod tests {
     #[test]
     fn adopt_rejects_stale_revision_installation() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let installed = install_ok(&setup, &material.id, &blobs);
 
         let second_text = "Second revision.";
-        let second_asset = domain::SourceAsset::new(
-            "text/plain",
-            second_text.len() as u64,
-            text_digest(second_text),
-            domain::SourceAssetBinding::Managed,
-            domain::SourceAssetAvailability::Available,
-            2,
-        )
-        .expect("valid source asset");
-        let next_rendition = domain::Rendition::Document(
-            DocumentRendition::new(
+        let second_fingerprint = text_digest(second_text);
+        let next_rendition = domain::Rendition::Media(
+            MediaRendition::new(
                 RenditionOrigin::Source,
-                "text/plain",
-                Some(language("en")),
-                text_digest(second_text),
-                second_text.len() as u64,
-                Some(second_asset.id.clone()),
+                MediaKind::Audio,
+                "audio/mpeg",
+                &second_fingerprint,
+                MediaAvailability::Available,
+                Some(MediaId::from_fingerprint("media", &second_fingerprint)),
+                None,
+                None,
                 None,
                 None,
             )
-            .expect("valid document rendition"),
+            .expect("valid media rendition"),
         );
         let next_revision = MaterialRevision::new(
             material.id.clone(),
             "Material v2",
-            vec![second_asset],
+            Vec::new(),
             vec![next_rendition],
             2,
         )
@@ -4070,7 +3888,7 @@ mod tests {
     #[test]
     fn adopt_rejects_ambiguous_exclusive_resource_family() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = ambiguous_translation_release(&ids);
         let installed = install_ok(&setup, &material.id, &blobs);
@@ -4095,7 +3913,7 @@ mod tests {
     #[test]
     fn adopt_rejects_broken_dependency_closure() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
         let (_, blobs) = optional_broken_closure_release(&ids);
         let installed = install_ok(&setup, &material.id, &blobs);
@@ -4119,7 +3937,7 @@ mod tests {
     #[test]
     fn adopt_rejects_missing_required_candidate_in_durable_state() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         // A durable store may hold an installation whose required resource is
         // unavailable; adoption must revalidate from the immutable facts.
         let installation = domain::PackageInstallation {
@@ -4185,9 +4003,9 @@ mod tests {
     #[test]
     fn adopt_is_idempotent_and_preserves_the_original_timestamp() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let installed = install_ok(&setup, &material.id, &blobs);
 
         let first = setup
@@ -4210,9 +4028,9 @@ mod tests {
     #[test]
     fn adopt_fails_closed_when_the_stored_adoption_row_was_tampered() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let (_, blobs) = media_reading_release(&ids, "edition-1");
         let installed = install_ok(&setup, &material.id, &blobs);
 
         setup
@@ -4278,10 +4096,10 @@ mod tests {
     #[test]
     fn adopt_switches_to_another_installed_release() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, first_blobs) = text_only_release(&ids, "edition-1");
-        let (_, second_blobs) = text_only_release(&ids, "edition-2");
+        let (_, first_blobs) = media_reading_release(&ids, "edition-1");
+        let (_, second_blobs) = media_reading_release(&ids, "edition-2");
         let first = install_ok(&setup, &material.id, &first_blobs);
         let second = install_ok(&setup, &material.id, &second_blobs);
 
@@ -4308,10 +4126,10 @@ mod tests {
     #[test]
     fn failed_switch_preserves_the_previous_adoption() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, first_blobs) = text_only_release(&ids, "edition-1");
-        let (_, second_blobs) = text_only_release(&ids, "edition-2");
+        let (_, first_blobs) = media_reading_release(&ids, "edition-1");
+        let (_, second_blobs) = media_reading_release(&ids, "edition-2");
         let first = install_ok(&setup, &material.id, &first_blobs);
         let second = install_ok(&setup, &material.id, &second_blobs);
 
@@ -4355,10 +4173,10 @@ mod tests {
     #[test]
     fn commit_adoption_fails_atomically_when_selected_resources_lack_payload_backing() {
         let setup = setup();
-        let (material, revision) = seed_text_material(&setup, false);
+        let (material, revision) = seed_media_material(&setup, false);
         let ids = ids_of(&material, &revision);
-        let (_, first_blobs) = text_only_release(&ids, "edition-1");
-        let (_, second_blobs) = text_only_release(&ids, "edition-2");
+        let (_, first_blobs) = media_reading_release(&ids, "edition-1");
+        let (_, second_blobs) = media_reading_release(&ids, "edition-2");
         let first = install_ok(&setup, &material.id, &first_blobs);
         setup
             .use_cases

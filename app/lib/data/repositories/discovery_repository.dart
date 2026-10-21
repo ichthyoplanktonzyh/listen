@@ -56,10 +56,11 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
     final kindsById = {for (final source in sources) source.id: source.kind};
     final entries = <DiscoveryItem>[
       for (final raw in decoded['items'] as List<dynamic>)
-        _entryFromMap(
-          raw as Map<dynamic, dynamic>,
-          kindsById[raw['channelId']] ?? ContentSourceKind.youtube,
-        ),
+        if (raw is Map &&
+            kindsById[raw['channelId']] != null &&
+            (kindsById[raw['channelId']] == ContentSourceKind.youtube ||
+                raw['mediaUrl'] != null))
+          _entryFromMap(raw, kindsById[raw['channelId']]!),
     ];
     _sources = List.unmodifiable(sources);
     _entries = List.unmodifiable(entries);
@@ -113,13 +114,11 @@ ContentSource _sourceFromMap(Map<dynamic, dynamic> map) => ContentSource(
 );
 
 /// The fixture catalog is written in Content Source / Discovery Item terms:
-/// every source declares its kind and every entry carries only the evidence
-/// that kind has — enclosure URLs for podcast sources, article links for
-/// document sources, a YouTube watch identity for video sources.
+/// every entry carries only media acquisition facts: enclosure URLs for
+/// podcast sources and a YouTube watch identity for video sources.
 DiscoveryItem _entryFromMap(Map<dynamic, dynamic> map, ContentSourceKind kind) {
   final id = map['id'] as String;
   final isYoutube = kind == ContentSourceKind.youtube;
-  final isDocument = kind == ContentSourceKind.document;
   return DiscoveryItem(
     id: id,
     sourceId: map['channelId'] as String,
@@ -132,14 +131,8 @@ DiscoveryItem _entryFromMap(Map<dynamic, dynamic> map, ContentSourceKind kind) {
     viewCount: map['viewCount'] as int? ?? 0,
     acquisition: isYoutube
         ? AcquisitionMode.externalTool
-        : isDocument
-        ? AcquisitionMode.article
         : AcquisitionMode.enclosure,
-    contentKind: isYoutube
-        ? ItemContentKind.video
-        : isDocument
-        ? ItemContentKind.article
-        : ItemContentKind.audio,
+    contentKind: isYoutube ? ItemContentKind.video : ItemContentKind.audio,
     mediaUrl: isYoutube
         ? 'https://www.youtube.com/watch?v=$id'
         : map['mediaUrl'] as String?,
@@ -151,8 +144,7 @@ DiscoveryItem _entryFromMap(Map<dynamic, dynamic> map, ContentSourceKind kind) {
 ContentSourceKind _kindFromName(String name) => switch (name) {
   'youtube' => ContentSourceKind.youtube,
   'podcast' => ContentSourceKind.podcast,
-  'document' => ContentSourceKind.document,
-  _ => ContentSourceKind.youtube,
+  _ => ContentSourceKind.podcast,
 };
 
 ChannelCoverTone _coverFromName(String name) => switch (name) {

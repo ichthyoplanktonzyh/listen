@@ -3,7 +3,7 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
-use domain::{ProductionChannel, SemanticEmbeddingSourceKind};
+use domain::SemanticEmbeddingSourceKind;
 use serde::Deserialize;
 
 use crate::{ApiError, ApiState};
@@ -13,14 +13,6 @@ pub(crate) struct SemanticSearchQuery {
     query: String,
     language: Option<String>,
     source: Option<String>,
-    channel: Option<String>,
-    limit: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct SemanticGapQuery {
-    language: Option<String>,
-    channel: Option<String>,
     limit: Option<u32>,
 }
 
@@ -129,16 +121,13 @@ pub(crate) async fn search(
     let source = match query.source.as_deref() {
         None | Some("all") => None,
         Some("media_corpus") => Some(SemanticEmbeddingSourceKind::MediaCorpus),
-        Some("production_document") => Some(SemanticEmbeddingSourceKind::ProductionDocument),
-        Some("production_lexeme") => Some(SemanticEmbeddingSourceKind::ProductionLexeme),
         Some(_) => {
             return Err(bad_request(
                 "invalid_source",
-                "source must be all, media_corpus, production_document, or production_lexeme",
+                "source must be all or media_corpus",
             ));
         }
     };
-    let channel = parse_channel(query.channel.as_deref())?;
     let text = query.query;
     let language = query.language;
     let limit = query.limit.unwrap_or(20);
@@ -147,47 +136,12 @@ pub(crate) async fn search(
         .execute_async("semantic_embedding.search", move |services| async move {
             services
                 .semantic_embedding()
-                .search(&text, language.as_deref(), source, channel, limit)
+                .search(&text, language.as_deref(), source, limit)
                 .await
         })
         .await
         .map(Json)
         .map_err(Into::into)
-}
-
-pub(crate) async fn enrich_gap_review(
-    State(state): State<ApiState>,
-    Query(query): Query<SemanticGapQuery>,
-) -> Result<Json<domain::SemanticallyEnrichedProductionGapReview>, ApiError> {
-    let channel = parse_channel(query.channel.as_deref())?.unwrap_or(ProductionChannel::Written);
-    let language = query.language.unwrap_or_else(|| "en".to_owned());
-    let limit = query.limit.unwrap_or(10);
-    state
-        .application
-        .execute_async(
-            "semantic_embedding.enrich_gap_review",
-            move |services| async move {
-                services
-                    .semantic_embedding()
-                    .enrich_gap_review(&language, channel, limit)
-                    .await
-            },
-        )
-        .await
-        .map(Json)
-        .map_err(Into::into)
-}
-
-fn parse_channel(value: Option<&str>) -> Result<Option<ProductionChannel>, ApiError> {
-    match value {
-        None | Some("all") => Ok(None),
-        Some("written") => Ok(Some(ProductionChannel::Written)),
-        Some("spoken") => Ok(Some(ProductionChannel::Spoken)),
-        Some(_) => Err(bad_request(
-            "invalid_channel",
-            "channel must be all, written, or spoken",
-        )),
-    }
 }
 
 fn bad_request(code: &'static str, message: &'static str) -> ApiError {

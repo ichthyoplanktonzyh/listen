@@ -1,4 +1,4 @@
-/// Learner-facing facts about one installed Learning Edition (Core 4.0
+/// Learner-facing facts about one installed Learning Edition (Core 5.0
 /// package lifecycle). Contains only what the learner journey needs:
 /// identities, title, languages, timestamps, adoption evidence, and
 /// capability availability. Manifest, dependency edges, source paths,
@@ -17,9 +17,11 @@ class LearningEdition {
     required this.adopted,
     required List<LearningEditionResource> resources,
     required List<LearningEditionRendition> renditions,
+    required List<String> availableCapabilities,
   }) : _supportLanguages = List.unmodifiable(supportLanguages),
        _resources = List.unmodifiable(resources),
-       _renditions = List.unmodifiable(renditions);
+       _renditions = List.unmodifiable(renditions),
+       _availableCapabilities = List.unmodifiable(availableCapabilities);
 
   final String materialId;
   final String materialRevisionId;
@@ -43,6 +45,9 @@ class LearningEdition {
   final List<LearningEditionRendition> _renditions;
   List<LearningEditionRendition> get renditions =>
       List.unmodifiable(_renditions);
+  final List<String> _availableCapabilities;
+  List<String> get availableCapabilities =>
+      List.unmodifiable(_availableCapabilities);
 
   LearningEditionResource? baseResourceOfKind(String kind) {
     for (final resource in _resources) {
@@ -51,11 +56,9 @@ class LearningEdition {
     return null;
   }
 
-  /// Read is available when the composition carries a readable document
-  /// rendition or a structured-reading base resource.
-  bool get providesRead =>
-      renditions.any((r) => r.kind == 'document' && r.available) ||
-      baseResourceOfKind('structured_reading') != null;
+  /// Core projects these capabilities from the effective resource roles and
+  /// availability; missing or opaque resources do not satisfy the capability.
+  bool get providesRead => _availableCapabilities.contains('read');
 
   /// A playable media rendition exists in the composition. Whether it is
   /// audio or video is answered against the Material's own media facts by the
@@ -64,8 +67,7 @@ class LearningEdition {
       renditions.any((r) => r.kind == 'media' && r.available);
 
   bool get providesSynchronizedReadListen =>
-      hasAvailableMediaRendition &&
-      baseResourceOfKind('anchor_time_alignment') != null;
+      _availableCapabilities.contains('synchronized_read_listen');
 }
 
 /// One resource-kind capability fact of an installed Edition.
@@ -95,8 +97,7 @@ class LearningEditionResource {
   final List<String> supportLanguages;
 }
 
-/// One rendition availability fact of an installed Edition. Kinds are the
-/// package's own: `document` or `media`.
+/// One media rendition availability fact of an installed Edition.
 class LearningEditionRendition {
   const LearningEditionRendition({
     required this.renditionId,

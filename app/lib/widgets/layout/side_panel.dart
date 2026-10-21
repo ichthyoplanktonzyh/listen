@@ -17,7 +17,6 @@ import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../utils/transcript_translation.dart';
-import '../panels/content_fit_card.dart';
 import '../panels/listening_inbox_panel.dart';
 import '../panels/transcript_panel.dart';
 import '../panels/word_bubble.dart';
@@ -50,8 +49,7 @@ class SidePanel extends StatefulWidget {
     required this.onOpenWord,
     required this.onSeekCue,
     this.onSeekWord,
-    required this.onSetSelectedWordStatus,
-    required this.onSetCapabilityOverride,
+    required this.onSetListeningOverride,
     required this.onSaveSelectedLearningContent,
     required this.onObserveSelected,
     required this.onOpenSlicePlayback,
@@ -61,9 +59,7 @@ class SidePanel extends StatefulWidget {
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
-    this.onStartColdStart,
     this.onRecordCurrentSource,
-    this.onReadingMark,
     this.studyMode = WorkbenchStudyMode.normal,
   });
 
@@ -81,9 +77,7 @@ class SidePanel extends StatefulWidget {
   /// Single-tap a transcript word to play from that word. Null keeps single-tap
   /// dictionary lookup (see [TranscriptPanel.onSeekWord]).
   final Future<void> Function(SubtitleToken token, Cue cue)? onSeekWord;
-  final Future<void> Function(String? selected) onSetSelectedWordStatus;
-  final Future<void> Function(String capability, String? conclusion)
-  onSetCapabilityOverride;
+  final Future<void> Function(String? conclusion) onSetListeningOverride;
   final Future<void> Function(String? definition, String? note)
   onSaveSelectedLearningContent;
   final Future<void> Function(bool heard) onObserveSelected;
@@ -101,14 +95,9 @@ class SidePanel extends StatefulWidget {
   onReplayListeningInboxItem;
   final Future<void> Function(ListeningInboxItem item, String resolution)
   onProcessListeningInboxItem;
-  final VoidCallback? onStartColdStart;
   final VoidCallback? onRecordCurrentSource;
 
-  /// Explicit reading mark for the selected word; non-null only while the
-  /// reading posture is open (Phase 3.13 Slice 5).
-  final void Function(bool understood)? onReadingMark;
-
-  /// How the transcript presents itself — read-through, blind, or word-select.
+  /// How the transcript presents itself — visible or blind listening.
   final WorkbenchStudyMode studyMode;
 
   @override
@@ -127,13 +116,11 @@ class _SidePanelState extends State<SidePanel> {
   AppLocalizations get l => AppLocalizations.of(context);
 
   Future<void> _seekCue(Cue? cue) => widget.onSeekCue(cue);
-  Future<void> _setSelectedWordStatus(String? selected) =>
-      widget.onSetSelectedWordStatus(selected);
   Future<void> _saveSelectedLearningContent(String? definition, String? note) =>
       widget.onSaveSelectedLearningContent(definition, note);
   Future<void> _observeSelected(bool heard) => widget.onObserveSelected(heard);
-  Future<void> _setCapabilityOverride(String capability, String? conclusion) =>
-      widget.onSetCapabilityOverride(capability, conclusion);
+  Future<void> _setListeningOverride(String? conclusion) =>
+      widget.onSetListeningOverride(conclusion);
   Future<void> _refreshListeningInbox() => widget.onRefreshListeningInbox();
   Future<void> _replayListeningInboxItem(ListeningInboxItem item) =>
       widget.onReplayListeningInboxItem(item);
@@ -154,7 +141,6 @@ class _SidePanelState extends State<SidePanel> {
       context: context,
       anchor: anchor,
       learning: learningController,
-      onStatus: (value) => unawaited(_setSelectedWordStatus(value)),
       onOpenDetails: () => learningController.selectTab(SidePanelTab.notes),
       onPlayPronunciationAudio: widget.onPlayPronunciationAudio,
     );
@@ -189,23 +175,6 @@ class _SidePanelState extends State<SidePanel> {
           selected: learningController.tab,
           onSelected: learningController.selectTab,
         ),
-        // Content fit is a media-level "should I watch this, and how" signal,
-        // so it belongs over the transcript — the browse/decide surface —
-        // rather than buried in the technical resource manager.
-        if (learningController.tab == SidePanelTab.transcript &&
-            subtitleController.contentFit != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              ListenSpacing.gap12,
-              ListenSpacing.gap8,
-              ListenSpacing.gap12,
-              ListenSpacing.gap8,
-            ),
-            child: ContentFitCard(
-              profile: subtitleController.contentFit!,
-              onStartColdStart: widget.onStartColdStart,
-            ),
-          ),
         Expanded(
           child: switch (learningController.tab) {
             SidePanelTab.notes => _notes(),
@@ -288,14 +257,12 @@ class _SidePanelState extends State<SidePanel> {
             dictionary: learningController.selectedDictionary,
             pronunciation: learningController.selectedPronunciation,
             languageProfile: learningController.currentLanguageProfile,
-            onStatus: _setSelectedWordStatus,
             onSave: _saveSelectedLearningContent,
             onSource: widget.onOpenSlicePlayback,
             onHeard: () => _observeSelected(true),
             onNotHeard: () => _observeSelected(false),
-            onCapabilityOverride: _setCapabilityOverride,
+            onListeningOverride: _setListeningOverride,
             onRecordSource: widget.onRecordCurrentSource,
-            onReadingMark: widget.onReadingMark,
             onCorrectLemma: widget.onCorrectLemma,
             onOpenListeningDictionary: widget.onOpenListeningDictionary == null
                 ? null

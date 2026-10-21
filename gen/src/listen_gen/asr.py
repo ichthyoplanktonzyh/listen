@@ -538,7 +538,7 @@ def _qwen_language_to_tag(raw_language: str) -> str:
 
 
 class Qwen3AsrAdapter:
-    """Default local ASR provider backed by Qwen3-ASR-0.6B via a sidecar.
+    """Source-checkout-only ASR provider backed by Qwen3-ASR-0.6B via a sidecar.
 
     The ``tools/qwen3_asr_wrapper.py`` subprocess runs the official ``qwen-asr``
     Transformers backend with the Qwen3 forced aligner attached, so the wrapper

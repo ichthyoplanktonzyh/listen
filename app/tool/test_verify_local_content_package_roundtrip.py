@@ -1,18 +1,30 @@
+import hashlib
 import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("verify_local_content_package_roundtrip.sh")
+APP_TOOL = SCRIPT.parent
+sys.path.insert(0, str(APP_TOOL))
+import build_content_package_roundtrip_fixtures
+
 NAMES = [
     "local Gen bundle to local Core round trips through capability production, installation, and adoption",
-    "a document material produces listen through the fake TTS provider and its derived audio resolves from the adopted composition through Core",
-    "the Gen/Core/App matrix keeps one adopted package shape across document and media families",
-    "a video subtitle with fragmented cues lands as one complete sentence with every rich timeline",
-    "Core-adopted compositions render honest audio and text surfaces for document, audio, and video",
+    "audio and video ASR/subtitle inputs produce adopted media packages through Gen, Core, and App",
+    "fragmented video subtitles produce one time-aligned transcript with rich speech analysis",
+    "a malformed package fails installation cleanly and pollutes no state",
+    "adopting an unknown release fails without changing the composition",
+    "a provider failure surfaces as a clean failed attempt and retries without hanging or orphaning the generator",
+    "a fixture feed item acquires, keeps, reopens after restart, and never duplicates its material on a second refresh",
+    "process lifecycle cancellation reports cancelled promptly",
+    "process lifecycle cancellation escalates when the generator ignores soft signals",
+    "process lifecycle protocol failure is prompt while cleanup reclaims a hung process",
+    "process lifecycle does not execute an artifact swapped after verification",
 ]
 
 
@@ -58,8 +70,8 @@ class ScriptSemanticsTests(unittest.TestCase):
             "if stage == 'core-contract':\n"
             " out = sys.argv[sys.argv.index('--output-dir') + 1]\n"
             " os.makedirs(out, exist_ok=True)\n"
-            " m = {'contract_version': '4.0.0', 'files': {'release.schema.json': 'a' * 64}}\n"
-            " open(os.path.join(out, 'listen-contracts-4.0.0.manifest.json'), 'w').write(json.dumps(m))\n"
+            " m = {'contract_version': '5.0.0', 'files': {'release.schema.json': 'a' * 64}}\n"
+            " open(os.path.join(out, 'listen-contracts-5.0.0.manifest.json'), 'w').write(json.dumps(m))\n"
             "if stage == 'gen-build':\n"
             " out = sys.argv[sys.argv.index('--output-parent') + 1]\n"
             " version = 'listen-gen-0.5.2'\n"
@@ -81,6 +93,58 @@ class ScriptSemanticsTests(unittest.TestCase):
         )
         self.runner.chmod(0o755)
         self.cwd_file = self.root.parent / "runner-cwd.txt"
+
+    def test_fixture_builder_emits_hashed_media_and_analysis_files_only(self):
+        fixtures = self.root.parent / "media-fixtures"
+        fake_ffmpeg = self.root.parent / "ffmpeg"
+        fake_ffprobe = self.root.parent / "ffprobe"
+        fake_ffmpeg.write_text(
+            "#!/bin/sh\nfor arg do output=$arg; done\nprintf 'fixture-video' > \"$output\"\n",
+            encoding="utf-8",
+        )
+        fake_ffprobe.write_text(
+            "#!/bin/sh\nfor arg do media=$arg; done\n"
+            "case \"$media\" in *.wav) printf 'audio\\n' ;; *) printf 'video\\naudio\\n' ;; esac\n",
+            encoding="utf-8",
+        )
+        fake_ffmpeg.chmod(0o755)
+        fake_ffprobe.chmod(0o755)
+
+        build_content_package_roundtrip_fixtures.build(
+            fixtures,
+            str(fake_ffmpeg),
+            str(fake_ffprobe),
+        )
+
+        manifest = json.loads((fixtures / "manifest.json").read_text())
+        self.assertEqual(
+            set(manifest["files"]),
+            {
+                "full.acoustics.json",
+                "full.alignment.json",
+                "full.phones.json",
+                "full.prosody.json",
+                "full.sense-groups.json",
+                "sample-media.wav",
+                "sample-video.mp4",
+                "sample.asr.json",
+                "simple.acoustics.json",
+                "simple.alignment.json",
+                "simple.phones.json",
+                "simple.prosody.json",
+                "simple.sense-groups.json",
+            },
+        )
+        for name, expected_hash in manifest["files"].items():
+            self.assertEqual(
+                hashlib.sha256((fixtures / name).read_bytes()).hexdigest(),
+                expected_hash,
+                name,
+            )
+        self.assertEqual(
+            manifest["media_streams"],
+            {"sample-media.wav": ["audio"], "sample-video.mp4": ["video", "audio"]},
+        )
 
     def run_gate(self, fail_stage="", dirty=False, capture_gen_python=False):
         if dirty:
@@ -174,6 +238,22 @@ class ScriptSemanticsTests(unittest.TestCase):
             self.assertNotIn(obsolete, text)
         self.assertIn("--source-root", text)
         self.assertIn('git -C "$source_root" archive HEAD', text)
+
+    def test_gate_is_media_only_and_runs_generator_cancel_cleanup_checks(self):
+        text = SCRIPT.read_text()
+        for removed in (
+            "EXPECTED_DOCUMENT_TEST",
+            "pypdf",
+            "--tts-provider",
+            "lesson-scanned.pdf",
+            "lesson.epub",
+        ):
+            self.assertNotIn(removed, text)
+        self.assertIn("test/listen_gen_process_service_test.dart", text)
+        self.assertIn('"$EXPECTED_CANCEL_TEST"', text)
+        self.assertIn('"$EXPECTED_CANCEL_ESCALATION_TEST"', text)
+        self.assertIn('"$EXPECTED_PROCESS_CLEANUP_TEST"', text)
+        self.assertIn('LISTEN_PACKAGE_E2E=1', text)
 
 
 if __name__ == "__main__":

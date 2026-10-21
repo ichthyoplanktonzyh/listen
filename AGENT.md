@@ -26,8 +26,10 @@ Read [README.md](README.md), [STATE.md](STATE.md), and
   require explicit authorization; do not download models as part of tests.
 - Never print, log, commit, or persist credentials. Never commit learner data,
   virtualenvs, downloaded models, runtime binaries, or build output.
-- Preserve learner facts and immutable published artifacts. Durable format
-  changes need migration; published tags never acquire different bytes.
+- Preserve learner facts unless the owner explicitly waives data compatibility.
+  This scope-reduction stage targets fresh stores; do not read, reset, or delete
+  a real learner's database during implementation or tests. Published artifacts
+  remain immutable; published tags never acquire different bytes.
 - Run checks appropriate to the change and report executed results. Interface
   changes also run `./dev test integration`; packaging changes verify the
   extracted application outside the checkout.

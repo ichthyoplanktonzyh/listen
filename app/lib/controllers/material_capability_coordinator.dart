@@ -13,10 +13,9 @@ import '../services/capability_file_resolver.dart';
 import '../services/capability_generation_request.dart';
 import '../services/capability_request_encoder.dart';
 import '../services/listen_gen_process_service.dart';
-import '../services/reusable_resource_resolver.dart';
 
-/// The deep Material Capability coordinator. One learner intent — "Read",
-/// "Listen", "Watch", or synchronized Read-and-Listen for one Material —
+/// The deep Material Capability coordinator. One learner intent — prepare a
+/// transcript, listen, watch, or synchronize transcript and audio —
 /// hides package lookup, generation, installation, and adoption while
 /// preserving their distinct domain outcomes.
 ///
@@ -39,17 +38,13 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     this.providerArguments = _noProviderArguments,
     this.generatorToolId = 'listen-gen',
     CapabilityFileResolver? fileResolver,
-    ReusableResourceResolver? reusableResources,
   }) : _fileResolver =
            fileResolver ??
-           _defaultFileResolver(mediaFilePath, mediaPathResolver),
-       _reusableResources =
-           reusableResources ?? ReusableResourceResolver(_repository);
+           _defaultFileResolver(mediaFilePath, mediaPathResolver);
 
   final CapabilityRepository _repository;
   final ListenGenProcessService _generator;
   final CapabilityFileResolver _fileResolver;
-  final ReusableResourceResolver _reusableResources;
 
   /// Resolves the local file behind a media rendition, or null when the file
   /// is not available on this machine.
@@ -66,14 +61,14 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   final SubtitleTrack? Function(MediaRendition rendition)?
   subtitleTrackForMedia;
 
-  /// CLI arguments selecting the Gen providers for a run (e.g.
-  /// `--tts-provider say`, `--provider whisper-cpp --model …`); provider
-  /// choice and secrets never enter the request document. Evaluated per run
-  /// so a toolchain resolved after construction still applies.
+  /// CLI arguments selecting the media transcription provider for a run;
+  /// provider choice and secrets never enter the request document. Evaluated
+  /// per run so a toolchain resolved after construction still applies.
   final List<String> Function() providerArguments;
   final String generatorToolId;
 
   final Map<String, _CapabilitySession> _sessions = {};
+  bool _disposed = false;
 
   /// Resolves the authoritative local file behind a media rendition: the
   /// injected resolver when present, otherwise the file resolver's own path
@@ -138,29 +133,37 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     }
   }
 
-  /// Cancels the active production run of one capability. The durable Core
-  /// attempt is finalized as a failed attempt with the stable `cancelled`
-  /// reason; the Gen process is terminated without orphaning it.
-  Future<void> cancel(String materialId, MaterialCapability capability) async {
+  /// Cancels the active run of one capability and records a cancelled Core
+  /// attempt when production has already started.
+  Future<void> cancel(
+    String materialId,
+    MaterialCapability capability, {
+    int? requestToken,
+  }) async {
     final session = _sessions[_sessionKey(materialId, capability)];
     final run = session?.activeRun;
-    if (run == null || run.phase.terminal || run.finished) return;
-    run.cancelled = true;
-    run.phase = CapabilityRunPhase.cancelled;
+    if (run == null ||
+        (requestToken != null && run.token != requestToken) ||
+        run.phase.terminal ||
+        run.phase == CapabilityRunPhase.adopting ||
+        run.replaced ||
+        run.finished ||
+        run.finalizationStatus != null) {
+      return;
+    }
+    run.markCancelled();
     _emit();
-    // The durable `cancelled` finalize note is written by the run's own
-    // cancellation branch in _produce, which also owns the process teardown.
-    run.processRun?.cancel();
   }
 
   /// Drops all sessions and releases resolver-owned temporary files.
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     for (final session in _sessions.values) {
-      session.activeRun?.processRun?.cancel();
+      session.activeRun?.markReplaced();
     }
     unawaited(_fileResolver.dispose());
-    unawaited(_reusableResources.dispose());
     _sessions.clear();
     super.dispose();
   }
@@ -173,6 +176,8 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     String? localPackagePath, {
     bool forceProduce = false,
   }) async {
+    final stopped = await _finishIfStopped(run);
+    if (stopped != null) return stopped;
     if (forceProduce) {
       return _produce(material, capability, run);
     }
@@ -182,10 +187,11 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       run,
       () => _repository.listEditions(material.material.id),
     );
+    final stoppedAfterEditions = await _finishIfStopped(run);
+    if (stoppedAfterEditions != null) return stoppedAfterEditions;
     if (editions != null) {
       final adopted = _firstSatisfying(
         editions.where((edition) => edition.adopted),
-        material,
         capability,
       );
       if (adopted != null) {
@@ -194,7 +200,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       }
 
       // 2. Compatible installed candidate: adopt it explicitly.
-      final candidate = _firstSatisfying(editions, material, capability);
+      final candidate = _firstSatisfying(editions, capability);
       if (candidate != null) {
         run.phase = CapabilityRunPhase.adopting;
         _emit();
@@ -203,6 +209,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
             material.material.id,
             candidate.releaseId,
           );
+          if (run.replaced) return const CapabilityReplaced();
           run.phase = CapabilityRunPhase.completed;
           return CapabilityAvailable(edition: adoptedEdition);
         } on Object catch (error) {
@@ -221,13 +228,20 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
           material.material.id,
           localPackagePath,
         );
+        final stoppedAfterInstall = await _finishIfStopped(run);
+        if (stoppedAfterInstall != null) return stoppedAfterInstall;
+        run.phase = CapabilityRunPhase.adopting;
+        _emit();
         final adopted = await _repository.adoptEdition(
           material.material.id,
           installed.releaseId,
         );
+        if (run.replaced) return const CapabilityReplaced();
         run.phase = CapabilityRunPhase.completed;
         return CapabilityAvailable(edition: adopted);
       } on Object catch (error) {
+        final stopped = await _finishIfStopped(run);
+        if (stopped != null) return stopped;
         return _fail(run, error);
       }
     }
@@ -237,16 +251,17 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       run,
       () => _repository.listCapabilities(material.material.id),
     );
+    final stoppedAfterProjection = await _finishIfStopped(run);
+    if (stoppedAfterProjection != null) return stoppedAfterProjection;
     if (projections == null) return _fail(run, const _CoordinatorUnavailable());
     final status = projections
         .where((projection) => projection.capability == capability)
         ._firstOrNull
         ?.status;
     switch (status) {
-      // The capability is already satisfied by the current material facts —
-      // a directly readable document or an adopted composition the learner
-      // already has — so no production run starts. The projection carries
-      // the evidence; the run reports it as available, never as broken.
+      // The capability is already satisfied by current media facts or an
+      // adopted composition, so no production run starts. The projection
+      // carries the evidence; report it as available, never as broken.
       case MaterialCapabilityStatus.available:
         run.phase = CapabilityRunPhase.completed;
         return const CapabilityAvailable();
@@ -270,6 +285,9 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     MaterialCapability capability,
     _CapabilityRun run,
   ) async {
+    final stoppedBeforeAttempt = await _finishIfStopped(run);
+    if (stoppedBeforeAttempt != null) return stoppedBeforeAttempt;
+
     // The durable attempt: retry creates a new attempt, never rewrites facts.
     final CapabilityAttempt attempt;
     try {
@@ -278,12 +296,16 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         _capabilityName(capability),
       );
     } on Object catch (error) {
+      final stopped = await _finishIfStopped(run);
+      if (stopped != null) return stopped;
       return _fail(run, error);
     }
     run.attemptId = attempt.attemptId;
     _emit();
+    final stoppedAfterAttempt = await _finishIfStopped(run);
+    if (stoppedAfterAttempt != null) return stoppedAfterAttempt;
 
-    // Core 4.0 media renditions carry no byte digest; when the rendition's
+    // Core 5.0 media renditions carry no byte digest; when the rendition's
     // file is on this machine the file resolver computes the authoritative
     // blob facts the request must declare. The path map feeds the Gen run;
     // snapshot misses fall through to the authoritative resolver (a freshly
@@ -292,35 +314,15 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     final mediaPaths = <String, String>{};
     for (final rendition in material.currentRevision.mediaRenditions) {
       final path = await _resolveMediaPath(rendition);
+      final stoppedAfterMediaPath = await _finishIfStopped(run);
+      if (stoppedAfterMediaPath != null) return stoppedAfterMediaPath;
       if (path != null) mediaPaths[rendition.id] = path;
       final facts = await _fileResolver.mediaBlobFacts(rendition);
+      final stoppedAfterBlobFacts = await _finishIfStopped(run);
+      if (stoppedAfterBlobFacts != null) return stoppedAfterBlobFacts;
       if (facts != null) mediaBlobFacts[rendition.id] = facts;
     }
 
-    // Document renditions resolve to their exact Source Asset bytes — never a
-    // fabricated extracted-text file. The path map feeds the Gen run; the
-    // digest facts travel in the request.
-    final revision = material.currentRevision;
-    final assetsById = <String, SourceAsset>{
-      for (final asset in revision.sourceAssets) asset.id: asset,
-    };
-    final documentSourcePaths = <String, String>{};
-    final documentSourceAssetIds = <String, String>{};
-    for (final rendition in revision.documentRenditions) {
-      final asset = assetsById[rendition.sourceAssetId];
-      final path = await _fileResolver.documentSourcePath(rendition, asset);
-      if (path != null) {
-        documentSourcePaths[rendition.id] = path;
-        documentSourceAssetIds[rendition.id] =
-            rendition.sourceAssetId ?? rendition.id;
-      }
-    }
-
-    // Resources the current adopted composition already carries are declared
-    // as reusable: a compatible Structured Reading is consumed by Gen instead
-    // of being regenerated. The payload is materialized to a run-owned
-    // temporary file so the generator can verify the exact bytes it reuses.
-    final availableResources = await _reusableResources.resolve(material);
     final subtitleSrt = _selectedSubtitleSrt(
       material.currentRevision.mediaRenditions,
     );
@@ -336,14 +338,14 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       requestedCapability: _capabilityName(capability),
       createdAtMs: attempt.startedAtMs,
       attemptId: attempt.attemptId,
-      documentRenditions: material.currentRevision.documentRenditions,
-      documentSourcePaths: documentSourcePaths,
-      documentSourceAssetIds: documentSourceAssetIds,
       mediaRenditions: material.currentRevision.mediaRenditions,
       mediaFilePath: (rendition) => mediaPaths[rendition.id],
       mediaBlobFacts: mediaBlobFacts,
-      availableResources: availableResources,
     );
+    final stoppedBeforeGeneratorStart = await _finishIfStopped(run);
+    if (stoppedBeforeGeneratorStart != null) {
+      return stoppedBeforeGeneratorStart;
+    }
 
     final ListenGenProcessRun processRun;
     try {
@@ -355,10 +357,21 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         ),
       );
     } on Object catch (error) {
-      await _finalizeFailure(run, _stableCode(error));
+      final stopped = await _finishIfStopped(run);
+      if (stopped != null) return stopped;
+      await _finalizeAttempt(
+        run,
+        status: CapabilityAttemptFinalStatus.failed,
+        failureReason: _stableCode(error),
+      );
       return _fail(run, error);
     }
     run.processRun = processRun;
+    final stoppedAfterGeneratorStart = await _finishIfStopped(
+      run,
+      processRun: processRun,
+    );
+    if (stoppedAfterGeneratorStart != null) return stoppedAfterGeneratorStart;
     run.phase = CapabilityRunPhase.generating;
     _emit();
 
@@ -425,52 +438,79 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
           }),
     );
 
-    final awaited = await terminal.future;
+    final awaited = await Future.any<GenEventTerminal?>([
+      terminal.future,
+      run.stopSignal.then<GenEventTerminal?>((_) => null),
+    ]);
     await subscription.cancel();
-    if (run.replaced) {
-      // Latest-request-wins: the stale run's results are dropped.
-      unawaited(processRun.cleanUp());
-      return const CapabilityReplaced();
+    final stoppedAfterTerminal = await _finishIfStopped(
+      run,
+      processRun: processRun,
+    );
+    if (stoppedAfterTerminal != null) return stoppedAfterTerminal;
+    if (awaited == null) {
+      throw StateError('Capability run stopped without a stop reason.');
     }
-    if (run.cancelled) {
-      await _finalizeFailure(run, 'cancelled');
-      unawaited(processRun.cleanUp());
-      return const CapabilityCancelled();
+    if (awaited.kind == GenEventKind.cancelled) {
+      run.markCancelled();
+      final stoppedByGenerator = await _finishIfStopped(
+        run,
+        processRun: processRun,
+      );
+      return stoppedByGenerator ?? const CapabilityCancelled();
     }
     if (awaited.kind != GenEventKind.completed) {
       final code = awaited.code ?? 'generation_failed';
-      await _finalizeFailure(run, code);
-      unawaited(processRun.cleanUp());
+      await _finalizeAttempt(
+        run,
+        status: CapabilityAttemptFinalStatus.failed,
+        failureReason: code,
+      );
+      await _cleanupProcessRun(processRun);
       return _fail(
         run,
         ListenGenProcessFailure(code, message: awaited.message),
       );
     }
 
-    final packagePath = awaited.packageSha256 == null
-        ? null
-        : await processRun.packagePath.catchError(
-            (Object error) => throw error,
-          );
+    final String? packagePath;
+    if (awaited.packageSha256 == null) {
+      packagePath = null;
+    } else {
+      try {
+        packagePath = await processRun.packagePath;
+      } on Object catch (error) {
+        final stopped = await _finishIfStopped(run, processRun: processRun);
+        if (stopped != null) return stopped;
+        await _finalizeAttempt(
+          run,
+          status: CapabilityAttemptFinalStatus.failed,
+          failureReason: _stableCode(error),
+        );
+        await _cleanupProcessRun(processRun);
+        return _fail(run, error);
+      }
+    }
+    final stoppedAfterPackageHandoff = await _finishIfStopped(
+      run,
+      processRun: processRun,
+    );
+    if (stoppedAfterPackageHandoff != null) return stoppedAfterPackageHandoff;
     if (packagePath == null) {
       // An empty plan is a satisfied outcome, not a failure: the generator
-      // found the capability already provided by the available resources and
+      // found the capability already provided by the available media resources and
       // produced no package. The durable attempt records the success and the
       // run completes without an installed edition.
-      try {
-        await _repository.finalizeAttempt(
-          materialId: material.material.id,
-          attemptId: attempt.attemptId,
-          succeeded: true,
-          toolId: generatorToolId,
-          toolVersion: processRun.verifiedToolVersion,
-        );
-      } on Object catch (_) {
-        // The run is still completed; the attempt note is best-effort.
-      }
+      await _finalizeAttempt(
+        run,
+        status: CapabilityAttemptFinalStatus.succeeded,
+        toolId: generatorToolId,
+        toolVersion: processRun.verifiedToolVersion,
+      );
       run.phase = CapabilityRunPhase.completed;
       _emit();
-      unawaited(processRun.cleanUp());
+      await _cleanupProcessRun(processRun);
+      if (run.replaced) return const CapabilityReplaced();
       return const CapabilityAvailable();
     }
 
@@ -486,10 +526,21 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         packagePath,
       );
     } on Object catch (error) {
-      await _finalizeFailure(run, _stableCode(error));
-      unawaited(processRun.cleanUp());
+      final stopped = await _finishIfStopped(run, processRun: processRun);
+      if (stopped != null) return stopped;
+      await _finalizeAttempt(
+        run,
+        status: CapabilityAttemptFinalStatus.failed,
+        failureReason: _stableCode(error),
+      );
+      await _cleanupProcessRun(processRun);
       return _fail(run, error);
     }
+    final stoppedAfterInstall = await _finishIfStopped(
+      run,
+      processRun: processRun,
+    );
+    if (stoppedAfterInstall != null) return stoppedAfterInstall;
     run.phase = CapabilityRunPhase.adopting;
     _emit();
     final LearningEdition adopted;
@@ -499,27 +550,27 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         installed.releaseId,
       );
     } on Object catch (error) {
-      await _finalizeFailure(run, _stableCode(error));
-      unawaited(processRun.cleanUp());
+      final stopped = await _finishIfStopped(run, processRun: processRun);
+      if (stopped != null) return stopped;
+      await _finalizeAttempt(
+        run,
+        status: CapabilityAttemptFinalStatus.failed,
+        failureReason: _stableCode(error),
+      );
+      await _cleanupProcessRun(processRun);
       return _fail(run, error);
     }
-    try {
-      await _repository.finalizeAttempt(
-        materialId: material.material.id,
-        attemptId: attempt.attemptId,
-        succeeded: true,
-        toolId: generatorToolId,
-        toolVersion: processRun.verifiedToolVersion,
-      );
-    } on Object catch (_) {
-      // The composition is adopted and durable; a failed finalize note does
-      // not un-adopt it, and the projection stays honest via the adopted
-      // composition itself.
-    }
+    await _finalizeAttempt(
+      run,
+      status: CapabilityAttemptFinalStatus.succeeded,
+      toolId: generatorToolId,
+      toolVersion: processRun.verifiedToolVersion,
+    );
     run.phase = CapabilityRunPhase.completed;
     run.producedPackageSha256 = awaited.packageSha256;
     _emit();
-    unawaited(processRun.cleanUp());
+    await _cleanupProcessRun(processRun);
+    if (run.replaced) return const CapabilityReplaced();
     return CapabilityAvailable(edition: adopted);
   }
 
@@ -557,13 +608,11 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     return '${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)},${pad(millis, 3)}';
   }
 
-  /// The language the generation must produce: the exact language of the
-  /// source document when one is known. A material with no language fact
-  /// declares `und` (undetermined) — never a guessed learner surface
-  /// language — and the generators decide from the content itself.
-  static String _targetLanguageFor(MaterialDetails material) {
-    for (final rendition in material.currentRevision.documentRenditions) {
-      final language = rendition.language;
+  /// The media subtitle language is the only declared target language for
+  /// generation; unknown remains `und` rather than guessing from preferences.
+  String _targetLanguageFor(MaterialDetails material) {
+    for (final rendition in material.currentRevision.mediaRenditions) {
+      final language = subtitleTrackForMedia?.call(rendition)?.language;
       if (language != null && language.isNotEmpty) return language;
     }
     return 'und';
@@ -571,20 +620,71 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
 
   static List<String> _noProviderArguments() => const [];
 
-  Future<void> _finalizeFailure(_CapabilityRun run, String reason) async {
-    final attemptId = run.attemptId;
-    if (attemptId == null) return;
-    try {
-      await _repository.finalizeAttempt(
-        materialId: run.materialId,
-        attemptId: attemptId,
-        succeeded: false,
-        failureReason: reason,
-      );
-    } on Object catch (_) {
-      // The attempt note is best-effort; the run failure is already visible
-      // in the session and the projection derives from the attempt record.
+  Future<CapabilityOutcome?> _finishIfStopped(
+    _CapabilityRun run, {
+    ListenGenProcessRun? processRun,
+    StreamSubscription<GenMachineEvent>? subscription,
+  }) async {
+    if (run.finalizationStatus == CapabilityAttemptFinalStatus.succeeded ||
+        (!run.cancelled && !run.replaced)) {
+      return null;
     }
+    await subscription?.cancel();
+    final process = processRun ?? run.processRun;
+    if (process != null) {
+      _observePackageOutcome(process);
+      process.cancel();
+      await _cleanupProcessRun(process);
+    }
+    await _finalizeAttempt(run, status: CapabilityAttemptFinalStatus.cancelled);
+    return run.replaced
+        ? const CapabilityReplaced()
+        : const CapabilityCancelled();
+  }
+
+  Future<void> _cleanupProcessRun(ListenGenProcessRun processRun) async {
+    try {
+      await processRun.cleanUp();
+    } on Object catch (_) {
+      // Cleanup must not strand the user-visible run after child reaping.
+    }
+  }
+
+  void _observePackageOutcome(ListenGenProcessRun processRun) {
+    unawaited(
+      processRun.packagePath.then<void>((_) {}).catchError((Object _) {}),
+    );
+  }
+
+  Future<void> _finalizeAttempt(
+    _CapabilityRun run, {
+    required CapabilityAttemptFinalStatus status,
+    String? failureReason,
+    String? toolId,
+    String? toolVersion,
+  }) {
+    final existing = run.finalizationFuture;
+    if (existing != null) return existing;
+    final attemptId = run.attemptId;
+    if (attemptId == null) return Future<void>.value();
+
+    run.finalizationStatus = status;
+    final finalization = _repository
+        .finalizeAttempt(
+          materialId: run.materialId,
+          attemptId: attemptId,
+          status: status,
+          failureReason: failureReason,
+          toolId: toolId,
+          toolVersion: toolVersion,
+        )
+        .then<void>((_) {})
+        .catchError((Object _) {
+          // Attempt finalization is best-effort; the run view remains the
+          // source of immediate status and Core's projection is refreshed.
+        });
+    run.finalizationFuture = finalization;
+    return finalization;
   }
 
   /// Runs [action], mapping every failure into the run state. Returns null
@@ -593,6 +693,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     try {
       return await action();
     } on Object catch (error) {
+      if (run.cancelled || run.replaced) return null;
       run.phase = CapabilityRunPhase.failed;
       run.failure = _friendly(error);
       run.failureDetail = _detail(error);
@@ -602,6 +703,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   }
 
   CapabilityOutcome _fail(_CapabilityRun run, Object error) {
+    if (run.replaced) return const CapabilityReplaced();
     run.phase = CapabilityRunPhase.failed;
     run.failure = _friendly(error);
     run.failureDetail = _detail(error);
@@ -658,44 +760,22 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
 
   LearningEdition? _firstSatisfying(
     Iterable<LearningEdition> editions,
-    MaterialDetails material,
     MaterialCapability capability,
   ) {
     for (final edition in editions) {
-      if (_editionSatisfies(edition, material, capability)) return edition;
+      if (_editionSatisfies(edition, capability)) return edition;
     }
     return null;
   }
 
   bool _editionSatisfies(
     LearningEdition edition,
-    MaterialDetails material,
     MaterialCapability capability,
-  ) {
-    switch (capability) {
-      case MaterialCapability.read:
-        return edition.providesRead;
-      case MaterialCapability.listen:
-        // The playable rendition may be derived by Gen (document -> TTS) and
-        // therefore need not exist on the source Material revision. The
-        // adopted Edition is the authority for whether listen is now
-        // available; requiring a source audio rendition would make every
-        // generated document-audio Edition look permanently unsatisfied.
-        return edition.hasAvailableMediaRendition;
-      case MaterialCapability.watch:
-        if (!edition.hasAvailableMediaRendition) return false;
-        return _materialHasMediaKind(material, MediaRenditionKind.video);
-      case MaterialCapability.synchronizedReadListen:
-        return edition.providesSynchronizedReadListen;
-    }
+  ) => edition.availableCapabilities.contains(_capabilityName(capability));
+
+  void _emit() {
+    if (!_disposed) notifyListeners();
   }
-
-  static bool _materialHasMediaKind(
-    MaterialDetails material,
-    MediaRenditionKind kind,
-  ) => material.currentRevision.mediaRenditions.any((r) => r.kind == kind);
-
-  void _emit() => notifyListeners();
 }
 
 /// One requested capability's session: the current run plus the replacement
@@ -711,10 +791,7 @@ final class _CapabilitySession {
   _CapabilityRun replaceRun() {
     _requestToken++;
     final previous = _activeRun;
-    if (previous != null) {
-      previous.replaced = true;
-      previous.processRun?.cancel();
-    }
+    previous?.markReplaced();
     _activeRun = _CapabilityRun(materialId, capability, _requestToken);
     return _activeRun!;
   }
@@ -733,6 +810,7 @@ final class _CapabilityRun {
   bool replaced = false;
   bool cancelled = false;
   bool finished = false;
+  final Completer<void> _stopCompleter = Completer<void>();
   CapabilityRunPhase phase = CapabilityRunPhase.resolving;
   String? stage;
   final List<String> warnings = [];
@@ -741,11 +819,32 @@ final class _CapabilityRun {
   String? attemptId;
   String? producedPackageSha256;
   ListenGenProcessRun? processRun;
+  CapabilityAttemptFinalStatus? finalizationStatus;
+  Future<void>? finalizationFuture;
+
+  Future<void> get stopSignal => _stopCompleter.future;
+
+  void markCancelled() {
+    if (replaced || finalizationStatus != null) return;
+    cancelled = true;
+    phase = CapabilityRunPhase.cancelled;
+    if (!_stopCompleter.isCompleted) _stopCompleter.complete();
+    processRun?.cancel();
+  }
+
+  void markReplaced() {
+    replaced = true;
+    if (!_stopCompleter.isCompleted) _stopCompleter.complete();
+    if (finalizationStatus != CapabilityAttemptFinalStatus.succeeded) {
+      processRun?.cancel();
+    }
+  }
 
   CapabilityRunView get view => CapabilityRunView(
     materialId: materialId,
     capability: capability,
     phase: phase,
+    requestToken: token,
     stage: stage,
     warnings: List.unmodifiable(warnings),
     failureCode: failure,
@@ -767,12 +866,6 @@ final class _CoordinatorUnavailable implements Exception {
 final class _UnresolvingCapabilityFileResolver
     implements CapabilityFileResolver {
   const _UnresolvingCapabilityFileResolver();
-
-  @override
-  Future<String?> documentSourcePath(
-    DocumentRendition rendition,
-    SourceAsset? sourceAsset,
-  ) async => null;
 
   @override
   Future<String?> mediaPath(MediaRendition rendition) async => null;

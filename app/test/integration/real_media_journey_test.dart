@@ -130,6 +130,7 @@ void main() {
         final edition = (outcome as CapabilityAvailable).edition!;
         expect(edition.adopted, isTrue);
         expect(edition.providesRead, isTrue);
+        expect(edition.availableCapabilities, contains('read'));
         final releaseId = edition.releaseId;
         coordinator.dispose();
 

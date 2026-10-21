@@ -2,25 +2,22 @@
 //!
 //! The adopted composition is the single Core-owned composition authority
 //! for a Material: this module resolves the current adoption, lists the
-//! selected resources and renditions, reads selected resource payloads and
-//! embedded Document/Media Rendition blobs, and returns Source Asset / Media
-//! bindings without ever leaking a local path.
+//! selected resources and renditions, reads selected resource payloads, and
+//! returns media bindings without ever leaking a local path.
 //!
 //! The App never re-parses a `.listenpkg` to read adopted content: Core
 //! parses the carrier inside installation, persists every present payload
-//! body and rendition blob atomically, and exposes typed content here. A
-//! missing or tampered selected body is an honest
+//! body and rendition blob atomically, and exposes selected resource content
+//! here. A missing or tampered selected body is an honest
 //! [`CompositionError::IntegrityFailure`], never a silent fallback to an App
-//! cache; an unreachable referenced Source Asset is an explicit
-//! [`CompositionError::SourceUnavailable`] that never deletes the Material or
-//! its adoption.
+//! cache.
 
 use std::sync::Arc;
 
 use domain::{
     AdoptedComposition, AdoptionCommitPlan, LanguageCode, LearningEditionId, LearningMaterialId,
-    MaterialRevision, MediaId, PackageReleaseId, PackageResourceAvailability, PackageResourceRole,
-    PackageReviewStatus, RenditionOrigin, SourceAsset, SourceAssetAvailability, SourceAssetBinding,
+    MediaId, PackageReleaseId, PackageResourceAvailability, PackageResourceRole,
+    PackageReviewStatus, RenditionOrigin,
 };
 
 use crate::{ApplicationError, MaterialRepository, MediaRepository, PackageLifecycleRepository};
@@ -50,9 +47,6 @@ pub enum CompositionError {
     /// The adopted selected content is missing or its bytes no longer verify
     /// (tampered digest or size). Never a silent fallback.
     IntegrityFailure,
-    /// A referenced Source Asset behind a Source rendition cannot be
-    /// reached. The Material and its adoption stay untouched.
-    SourceUnavailable,
     /// The durable composition store failed (for example unconfigured).
     StorageFailure,
 }
@@ -68,7 +62,6 @@ impl std::fmt::Display for CompositionError {
             CompositionError::IntegrityFailure => {
                 "adopted composition content is missing or fails integrity verification"
             }
-            CompositionError::SourceUnavailable => "a referenced source asset is unavailable",
             CompositionError::StorageFailure => "adopted composition store failed",
         };
         f.write_str(message)
@@ -86,7 +79,6 @@ impl From<CompositionError> for ApplicationError {
                 ApplicationError::NotFound("composition resource or rendition")
             }
             CompositionError::IntegrityFailure => ApplicationError::CompositionIntegrity,
-            CompositionError::SourceUnavailable => ApplicationError::SourceUnavailable,
             other => ApplicationError::Repository(other.to_string()),
         }
     }
@@ -110,34 +102,21 @@ pub struct CompositionResourceView {
     pub review_status: PackageReviewStatus,
 }
 
-/// The Source Asset / Media binding behind a rendition, never a local path.
-/// `Reference` is the opaque app-owned binding string the App already owns.
+/// The Media binding behind a rendition, never a local path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompositionBinding {
-    /// The Source Asset bytes are owned by Core-managed storage.
-    ManagedSourceAsset { source_asset_id: String },
-    /// The Source Asset is referenced in place at an opaque app-owned
-    /// reference; `available` reports whether the bytes are currently
-    /// reachable.
-    ReferencedSourceAsset {
-        source_asset_id: String,
-        reference: String,
-        available: bool,
-    },
     /// A Source Media Rendition bound to a registered media source.
     Media { media_id: MediaId },
 }
 
-/// One selected rendition of the adopted composition, with its exact blob
-/// facts and its binding when it is a Source rendition or a materialized
-/// package-derived media rendition.
+/// One selected media rendition of the adopted composition, with its exact
+/// blob facts and media binding when a local media item is available.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompositionRenditionView {
     pub rendition_id: String,
     pub kind: String,
     pub origin: RenditionOrigin,
     pub media_type: String,
-    pub language: Option<LanguageCode>,
     /// Lowercase hex SHA-256 of the exact rendition bytes.
     pub digest: String,
     pub byte_size: u64,
@@ -163,8 +142,8 @@ pub struct AdoptedCompositionView {
     pub renditions: Vec<CompositionRenditionView>,
 }
 
-/// The exact typed content body of one selected resource payload or rendition
-/// blob. The digest and size are the verified facts of the body.
+/// The exact typed content body of one selected resource payload. The
+/// digest and size are the verified facts of the body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompositionPayload {
     pub kind: String,
@@ -228,12 +207,7 @@ impl CompositionUseCases {
             return Err(CompositionError::IntegrityFailure);
         }
         let composition = domain::adopted_composition_for(&installation, &plan);
-        Ok(Some(self.view(
-            &revision,
-            &installation.release_id,
-            &plan,
-            &composition,
-        )?))
+        Ok(Some(self.view(&plan, &composition)?))
     }
 
     /// Reads the exact durable payload of one selected resource of the
@@ -258,47 +232,6 @@ impl CompositionUseCases {
         })
     }
 
-    /// Reads the exact durable blob of one selected Document/Media Rendition
-    /// of the adopted composition. A Source rendition whose Source Asset is
-    /// referenced and unreachable is an explicit
-    /// [`CompositionError::SourceUnavailable`]; missing or tampered stored
-    /// bytes are [`CompositionError::IntegrityFailure`].
-    pub fn read_rendition_blob(
-        &self,
-        material_id: &LearningMaterialId,
-        rendition_id: &str,
-    ) -> Result<CompositionPayload, CompositionError> {
-        let (release_id, rendition) = self.selected_rendition(material_id, rendition_id)?;
-        let bytes = self
-            .package_lifecycle
-            .read_rendition_blob(material_id, &release_id, rendition_id)
-            .map_err(|_| CompositionError::IntegrityFailure)?;
-        let Some(bytes) = bytes else {
-            // The blob is not stored. A Source rendition whose bound Source
-            // Asset is referenced and unreachable is an honest
-            // source_unavailable; anything else is an integrity failure of
-            // the adopted selection.
-            if rendition.origin == RenditionOrigin::Source
-                && rendition.source_asset_id.as_ref().is_some_and(|asset_id| {
-                    self.referenced_asset_unavailable(material_id, asset_id)
-                        .unwrap_or(false)
-                })
-            {
-                return Err(CompositionError::SourceUnavailable);
-            }
-            return Err(CompositionError::IntegrityFailure);
-        };
-        Ok(CompositionPayload {
-            kind: rendition.kind.clone(),
-            digest: rendition
-                .media_digest
-                .trim_start_matches("sha256:")
-                .to_owned(),
-            size_bytes: rendition.media_size_bytes,
-            bytes,
-        })
-    }
-
     /// Loads one selected resource of the adopted composition with its
     /// release identity.
     fn selected_resource(
@@ -313,22 +246,6 @@ impl CompositionUseCases {
             .find(|resource| resource.resource_id == resource_id)
             .ok_or(CompositionError::NotSelected)?;
         Ok((release_id, resource))
-    }
-
-    /// Loads one selected rendition of the adopted composition with its
-    /// release identity.
-    fn selected_rendition(
-        &self,
-        material_id: &LearningMaterialId,
-        rendition_id: &str,
-    ) -> Result<(PackageReleaseId, domain::PackageRenditionFact), CompositionError> {
-        let (release_id, composition) = self.load_adopted(material_id)?;
-        let rendition = composition
-            .renditions
-            .into_iter()
-            .find(|rendition| rendition.rendition_id == rendition_id)
-            .ok_or(CompositionError::NotSelected)?;
-        Ok((release_id, rendition))
     }
 
     fn load_adopted(
@@ -353,46 +270,10 @@ impl CompositionUseCases {
         ))
     }
 
-    /// Whether the rendition's bound Source Asset is referenced in place and
-    /// currently reported unreachable. Missing or managed assets never count
-    /// as unreachable.
-    fn referenced_asset_unavailable(
-        &self,
-        material_id: &LearningMaterialId,
-        asset_id: &domain::SourceAssetId,
-    ) -> Result<bool, CompositionError> {
-        let material = self
-            .materials
-            .get_material(material_id)
-            .map_err(|_| CompositionError::StorageFailure)?
-            .ok_or(CompositionError::MaterialNotFound)?;
-        let revision = self
-            .materials
-            .get_revision(&material.current_revision_id)
-            .map_err(|_| CompositionError::StorageFailure)?
-            .ok_or(CompositionError::IntegrityFailure)?;
-        let Some(asset) = revision
-            .source_assets
-            .iter()
-            .find(|asset| asset.id == *asset_id)
-        else {
-            return Ok(false);
-        };
-        Ok(matches!(
-            (&asset.binding, &asset.availability),
-            (
-                SourceAssetBinding::Referenced { .. },
-                SourceAssetAvailability::Unavailable { .. }
-            )
-        ))
-    }
-
     /// Assembles the learner-facing view of the adopted composition. Every
     /// binding is returned without a local path.
     fn view(
         &self,
-        revision: &MaterialRevision,
-        _release_id: &PackageReleaseId,
         plan: &AdoptionCommitPlan,
         composition: &AdoptedComposition,
     ) -> Result<AdoptedCompositionView, CompositionError> {
@@ -406,23 +287,17 @@ impl CompositionUseCases {
                             self.derived_media_binding(rendition)?
                         }
                         RenditionOrigin::Derived => None,
-                        RenditionOrigin::Source => {
-                            if rendition.kind == "media" {
-                                rendition
-                                    .media_id
-                                    .clone()
-                                    .map(|media_id| CompositionBinding::Media { media_id })
-                            } else {
-                                self.document_binding(revision, rendition.source_asset_id.as_ref())
-                            }
-                        }
+                        RenditionOrigin::Source if rendition.kind == "media" => rendition
+                            .media_id
+                            .clone()
+                            .map(|media_id| CompositionBinding::Media { media_id }),
+                        RenditionOrigin::Source => None,
                     };
                     Ok(CompositionRenditionView {
                         rendition_id: rendition.rendition_id.clone(),
                         kind: rendition.kind.clone(),
                         origin: rendition.origin,
                         media_type: rendition.media_type.clone(),
-                        language: None,
                         digest: rendition
                             .media_digest
                             .trim_start_matches("sha256:")
@@ -491,32 +366,6 @@ impl CompositionUseCases {
             .map_err(|_| CompositionError::StorageFailure)?
             .is_some();
         Ok(exists.then_some(CompositionBinding::Media { media_id }))
-    }
-
-    /// The Source Asset binding behind one Source Document Rendition, from
-    /// the exact Source Asset the rendition binds. Never a local path.
-    fn document_binding(
-        &self,
-        revision: &MaterialRevision,
-        asset_id: Option<&domain::SourceAssetId>,
-    ) -> Option<CompositionBinding> {
-        let asset_id = asset_id?;
-        let asset: &SourceAsset = revision
-            .source_assets
-            .iter()
-            .find(|asset| asset.id == *asset_id)?;
-        match &asset.binding {
-            SourceAssetBinding::Managed => Some(CompositionBinding::ManagedSourceAsset {
-                source_asset_id: asset.id.as_str().to_owned(),
-            }),
-            SourceAssetBinding::Referenced { reference } => {
-                Some(CompositionBinding::ReferencedSourceAsset {
-                    source_asset_id: asset.id.as_str().to_owned(),
-                    reference: reference.clone(),
-                    available: asset.availability == SourceAssetAvailability::Available,
-                })
-            }
-        }
     }
 }
 

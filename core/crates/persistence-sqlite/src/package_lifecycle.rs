@@ -939,43 +939,6 @@ impl PackageLifecycleRepository for SqliteRepository {
         Ok(Some(payload.bytes))
     }
 
-    fn read_rendition_blob(
-        &self,
-        material_id: &LearningMaterialId,
-        release_id: &PackageReleaseId,
-        rendition_id: &str,
-    ) -> Result<Option<Vec<u8>>, ApplicationError> {
-        let conn = self.connection.lock();
-        let stored = query_rendition_blobs(&conn, material_id.as_str(), release_id.as_str())?;
-        let Some(blob) = stored
-            .into_iter()
-            .find(|blob| blob.rendition_id == rendition_id)
-        else {
-            return Ok(None);
-        };
-        let fact = query_installation(&conn, material_id.as_str(), release_id.as_str())?
-            .and_then(|installation| {
-                installation
-                    .renditions
-                    .into_iter()
-                    .find(|fact| fact.rendition_id == rendition_id)
-            })
-            .ok_or_else(|| {
-                ApplicationError::Repository("package release rendition fact is missing".into())
-            })?;
-        if blob.kind != fact.kind
-            || blob.digest != fact.media_digest
-            || blob.size_bytes != fact.media_size_bytes
-            || blob.bytes.len() as u64 != blob.size_bytes
-            || blob.digest != sha256_id(&blob.bytes)
-        {
-            return Err(ApplicationError::Repository(
-                "package release rendition blob is corrupt".into(),
-            ));
-        }
-        Ok(Some(blob.bytes))
-    }
-
     fn delete_installation(
         &self,
         material_id: &LearningMaterialId,

@@ -59,11 +59,15 @@ GenMachineEvent parseListenGenMachineEventV2(
         throw const FormatException('listen-gen warning fields missing');
       }
     case GenEventKind.completed:
-      if (json['document_renditions'] is! List<dynamic> ||
+      final documentRenditions = json['document_renditions'];
+      if (documentRenditions is! List<dynamic> ||
+          documentRenditions.isNotEmpty ||
           json['media_renditions'] is! List<dynamic> ||
           json['resources'] is! List<dynamic> ||
           json['warnings'] is! List<dynamic>) {
-        throw const FormatException('listen-gen completion fields missing');
+        throw const FormatException(
+          'listen-gen completion must contain media-only renditions',
+        );
       }
       final packageSha256 = json['package_sha256'];
       if (packageSha256 != null &&
@@ -87,9 +91,6 @@ GenMachineEvent parseListenGenMachineEventV2(
     warningMessage: json['message'] as String?,
     packageSha256: json['package_sha256'] as String?,
     producedRenditions: [
-      ...(json['document_renditions'] as List<dynamic>? ?? const []).map(
-        (value) => _validatedSha256((value as Map)['rendition_id']),
-      ),
       ...(json['media_renditions'] as List<dynamic>? ?? const []).map(
         (value) => _validatedSha256((value as Map)['rendition_id']),
       ),

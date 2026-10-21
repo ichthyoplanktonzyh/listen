@@ -51,9 +51,8 @@ source snapshot. A skipped journey or failed prerequisite is not a pass.
 There is no checked-in GitHub Actions workflow running these gates; report
 actual local commands and results.
 
-[App UI checks](docs/development/app-ui.md), [Gen development](docs/development/gen.md),
-and the [optional local speech service](docs/development/local-speech.md) cover
-focused workflows.
+[App UI checks](docs/development/app-ui.md) and
+[Gen development](docs/development/gen.md) cover focused workflows.
 
 ## Product packaging
 
@@ -81,9 +80,11 @@ for asset names, installation, and runtime limitations.
 
 Use isolated fixtures and a temporary database; do not delete learner data.
 
-1. Launch and check the authenticated Core startup/compatibility handshake.
-2. Open a supported document or media fixture. Check reading/playback,
-   subtitles, seeking, and the operation changed by the task.
+1. Launch with a fresh isolated store and check the authenticated Core
+   startup/compatibility handshake. This scope-reduction stage does not
+   support upgrading databases from the broader implementation.
+2. Open a supported audio/video fixture. Check playback, subtitles, seeking,
+   contextual help, and the operation changed by the task.
 3. Exercise loading, empty, unavailable, error, retry, and cancellation states.
    For production changes, verify progress, package adoption, and reopening.
 4. Close the app and confirm child processes exit.

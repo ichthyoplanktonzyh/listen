@@ -12,7 +12,6 @@ import '../state/builder.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
 import '../theme/listen_theme.dart';
-import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
@@ -23,8 +22,6 @@ class ReviewQueueScreen extends StatefulWidget {
     required this.controller,
     required this.resolver,
     required this.slicePlayer,
-    required this.onStartShadowing,
-    required this.onStartDelayedRetelling,
     this.onPauseBackgroundPlayback,
     this.autoLoad = true,
   });
@@ -33,9 +30,6 @@ class ReviewQueueScreen extends StatefulWidget {
   /// started the round — a custom-study queue would otherwise be replaced by
   /// the day's schedule the moment the screen appeared.
   final bool autoLoad;
-
-  final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
-  final Future<void> Function(ReviewQueueEntry entry) onStartDelayedRetelling;
 
   /// Silences the primary player so a review clip owns audio focus alone. The
   /// clip runs on a second decoder ([SlicePlayerController]) that is otherwise
@@ -132,12 +126,7 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
             return const Center(child: ListenLoading());
           }
           if (state.current == null) {
-            return _Finished(
-              state: state,
-              onRetry: controller.load,
-              onResolve: (id, confirm) =>
-                  controller.resolveUpgradeSuggestion(id, confirm: confirm),
-            );
+            return _Finished(state: state, onRetry: controller.load);
           }
           final entry = state.current!;
           final customStudy = state.customStudy;
@@ -180,25 +169,12 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
       key: ValueKey(entry.item.id),
       entry: entry,
       clipAvailable: _clipAvailable(entry),
-      shadowAvailable: _canShadow(entry),
       revealed: state.revealed,
       busy: state.busy,
       previews: state.previews,
       error: state.error,
       slicePlayer: _slicePlayer,
       onPlayClip: () => unawaited(_playClip(entry)),
-      onShadowing: () async {
-        await _slicePlayer.close();
-        if (!context.mounted) return;
-        // As a shell route there is nothing to pop; only pushed
-        // contexts (deep links, tests) dismiss themselves.
-        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-        if (entry.card.kind == 'delayed_retelling') {
-          await widget.onStartDelayedRetelling(entry);
-        } else {
-          await widget.onStartShadowing(entry);
-        }
-      },
       onReveal: controller.reveal,
       onRate: (rating) async {
         await _slicePlayer.close();
@@ -218,11 +194,6 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
         end != null &&
         end > start;
   }
-
-  bool _canShadow(ReviewQueueEntry entry) =>
-      entry.item.source.mediaId != null &&
-      entry.playbackStartMs != null &&
-      entry.playbackEndMs != null;
 
   Future<void> _playClip(ReviewQueueEntry entry) async {
     final source = entry.item.source;
@@ -275,13 +246,11 @@ class _ReviewCard extends StatefulWidget {
     super.key,
     required this.entry,
     required this.clipAvailable,
-    required this.shadowAvailable,
     required this.revealed,
     required this.busy,
     required this.previews,
     required this.slicePlayer,
     required this.onPlayClip,
-    required this.onShadowing,
     required this.onReveal,
     required this.onRate,
     this.error,
@@ -289,14 +258,12 @@ class _ReviewCard extends StatefulWidget {
 
   final ReviewQueueEntry entry;
   final bool clipAvailable;
-  final bool shadowAvailable;
   final bool revealed;
   final bool busy;
   final List<ReviewIntervalPreview> previews;
   final String? error;
   final SlicePlayerController slicePlayer;
   final VoidCallback onPlayClip;
-  final Future<void> Function() onShadowing;
   final VoidCallback onReveal;
   final Future<bool> Function(String rating) onRate;
 
@@ -339,34 +306,12 @@ class _ReviewCardState extends State<_ReviewCard> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: ListenSpacing.gap32),
-                  // #73: an imported Anki card carries no listening evidence of
-                  // its own. The backend says so in `has_listening_enhancements`
-                  // and the card obeys: no slice player, no shadowing, and the
-                  // head says where the card came from — rather than offering
-                  // affordances that would silently do nothing.
-                  if (widget.entry.origin.hasListeningEnhancements) ...[
-                    _PlaybackControls(
-                      slicePlayer: widget.slicePlayer,
-                      clipAvailable: widget.clipAvailable,
-                      onPlayClip: widget.onPlayClip,
-                    ),
-                    const SizedBox(height: ListenSpacing.gap8),
-                    OutlinedButton.icon(
-                      onPressed: widget.shadowAvailable && !widget.busy
-                          ? () => unawaited(widget.onShadowing())
-                          : null,
-                      icon: Icon(
-                        card.kind == 'delayed_retelling'
-                            ? Icons.record_voice_over_outlined
-                            : Icons.mic_none,
-                      ),
-                      label: Text(
-                        card.kind == 'delayed_retelling'
-                            ? l.text('reviewStartDelayedRetelling')
-                            : l.text('reviewShadowClip'),
-                      ),
-                    ),
-                  ],
+                  _PlaybackControls(
+                    slicePlayer: widget.slicePlayer,
+                    clipAvailable: widget.clipAvailable,
+                    onPlayClip: widget.onPlayClip,
+                  ),
+                  const SizedBox(height: ListenSpacing.gap8),
                   const SizedBox(height: ListenSpacing.gap24),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
@@ -459,25 +404,6 @@ class _ReviewCardState extends State<_ReviewCard> {
         onPressed: widget.busy ? null : widget.onReveal,
         child: Text(l.text('reviewShowHeardWord')),
       ),
-      // R3: the delayed-retelling card used to collapse to an empty box here.
-      // It gives no answer to flip (the learner retells, then enters speaking),
-      // so it shows the task framing and that the source stays hidden.
-      'delayed_retelling' => Container(
-        key: const ValueKey('delayed-retelling-prompt'),
-        width: double.infinity,
-        padding: const EdgeInsets.all(ListenSpacing.gap16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: ListenRadii.surfaceBorder,
-        ),
-        child: Text(
-          l.text('reviewRetellPromptNote'),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
       _ => OutlinedButton(
         key: const ValueKey('source-sentence-prompt'),
         onPressed: widget.busy ? null : widget.onReveal,
@@ -557,22 +483,14 @@ class _ReviewCardState extends State<_ReviewCard> {
         'chunk_cloze' => 'reviewHintChunkCloze',
         'phrase_presence' => 'reviewHintPhrasePresence',
         'source_sentence_recall' => 'reviewHintSourceRecall',
-        'delayed_retelling' => 'reviewHintDelayedRetelling',
         _ => 'reviewHintGeneric',
       });
 }
 
 /// The card head names what this card is and where its schedule stands.
 ///
-/// It used to open with a capability channel too, derived here from
-/// `card.kind`. That claim is gone, for three reasons. It was **wrong**: the
-/// backend files a card under a channel by `source.kind` (a Sentence-sourced
-/// card is Reading), so the head and the deck it was counted in disagreed
-/// about the same card. It was **narrower than it looked**: this rule could
-/// only ever return listening or speaking, so two of the four faces were
-/// unreachable. And it was **redundant**: the card kind beside it already says
-/// what the learner is about to do, more precisely and without a second rule
-/// to drift.
+/// A channel label is redundant here: every remaining card belongs to the
+/// listening review queue, and its kind already names the listening task.
 class _CardHead extends StatelessWidget {
   const _CardHead({required this.entry});
 
@@ -583,7 +501,6 @@ class _CardHead extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final card = entry.card;
-    final imported = entry.origin.isImportedAnki;
     final detail = _scheduleDetail(l, entry.schedule);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -591,9 +508,9 @@ class _CardHead extends StatelessWidget {
         Row(
           children: [
             Icon(
-              imported ? Icons.inventory_2_outlined : Icons.hearing_outlined,
+              Icons.hearing_outlined,
               size: ListenIconSize.control,
-              color: imported ? colors.onSurfaceVariant : colors.primary,
+              color: colors.primary,
             ),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(
@@ -605,19 +522,6 @@ class _CardHead extends StatelessWidget {
             _StateChip(state: entry.state),
           ],
         ),
-        if (entry.origin.isImportedAnki) ...[
-          const SizedBox(height: ListenSpacing.gap4),
-          Text(
-            entry.origin.deckName == null
-                ? l.text('reviewOriginImportedAnki')
-                : l
-                      .text('reviewOriginImportedAnkiDeck')
-                      .replaceAll('{deck}', '${entry.origin.deckName}'),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
-          ),
-        ],
         if (detail != null) ...[
           const SizedBox(height: ListenSpacing.gap4),
           Text(
@@ -661,7 +565,6 @@ class _CardHead extends StatelessWidget {
         'chunk_cloze' => 'reviewKindChunkCloze',
         'phrase_presence' => 'reviewKindPhrasePresence',
         'source_sentence_recall' => 'reviewKindSourceRecall',
-        'delayed_retelling' => 'reviewKindDelayedRetelling',
         _ => 'reviewKindGeneric',
       });
 }
@@ -889,15 +792,10 @@ class _GradeRow extends StatelessWidget {
 }
 
 class _Finished extends StatelessWidget {
-  const _Finished({
-    required this.state,
-    required this.onRetry,
-    required this.onResolve,
-  });
+  const _Finished({required this.state, required this.onRetry});
 
   final ReviewState state;
   final Future<bool> Function() onRetry;
-  final Future<bool> Function(String id, bool confirm) onResolve;
 
   /// An empty queue has three different causes and they must not be told as
   /// one story: the day's budget is spent, a custom-study round ended, or
@@ -970,69 +868,6 @@ class _Finished extends StatelessWidget {
               Text(_note(l, state), textAlign: TextAlign.center)
             else
               TextButton(onPressed: onRetry, child: Text(l.text('retry'))),
-            if (state.upgradeSuggestions.isNotEmpty) ...[
-              const SizedBox(height: ListenSpacing.gap24),
-              Text(
-                l.text('reviewStatusSuggestions'),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: ListenSpacing.gap8),
-              for (final suggestion in state.upgradeSuggestions)
-                Card(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: ListenBreakpoints.formColumnMax,
-                    ),
-                    child: Padding(
-                      padding: ListenPadding.card,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)
-                                .text('listeningUpgradeSuggestion')
-                                .replaceAll(
-                                  '{count}',
-                                  '${suggestion.evidenceContextCount}',
-                                )
-                                .replaceAll(
-                                  '{word}',
-                                  suggestion.lexicalDisplayForm,
-                                ),
-                          ),
-                          const SizedBox(height: ListenSpacing.gap12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: state.busy
-                                    ? null
-                                    : () => onResolve(suggestion.id, false),
-                                child: Text(
-                                  AppLocalizations.of(
-                                    context,
-                                  ).text('deferUpgrade'),
-                                ),
-                              ),
-                              const SizedBox(width: ListenSpacing.gap8),
-                              FilledButton(
-                                onPressed: state.busy
-                                    ? null
-                                    : () => onResolve(suggestion.id, true),
-                                child: Text(
-                                  AppLocalizations.of(
-                                    context,
-                                  ).text('confirmListeningAcquired'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
           ],
         ),
       ),

@@ -11,9 +11,6 @@ import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/screens/review_queue_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/occurrence_media_file_service.dart';
-import 'package:llplayer_next/theme/breakpoints.dart';
-import 'package:llplayer_next/theme/icon_size.dart';
-import 'package:llplayer_next/theme/spacing.dart';
 
 /// A no-op second decoder so a review clip can "play" without opening a real
 /// video_player instance.
@@ -122,13 +119,6 @@ Map<String, dynamic> _reviewItem({
   },
   'state': state,
   'card': {'kind': kind, 'cue': cue, 'answer': answer, 'target': target},
-  'origin': {
-    'kind': 'native',
-    'anki_guid': null,
-    'deck_id': null,
-    'deck_name': null,
-    'has_listening_enhancements': true,
-  },
 };
 
 /// The `/v1/review/queue` envelope: entries plus the daily-budget status that
@@ -169,8 +159,6 @@ Map<String, dynamic> _submission(String rating) => {
     'lapse_count': 0,
   },
   'generated_observation_ids': const <dynamic>[],
-  'hunting_candidate_ids': const <dynamic>[],
-  'upgrade_suggestions': const <dynamic>[],
 };
 
 const _bounded = [
@@ -228,10 +216,6 @@ void main() {
         baseUrl: 'http://test',
         token: 'tok',
         transport: (method, path, body) async {
-          if (path ==
-              '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-            return (statusCode: 200, body: '[]');
-          }
           if (path.endsWith('/interval-preview')) {
             return (statusCode: 200, body: '[]');
           }
@@ -261,8 +245,6 @@ void main() {
             controller: ReviewController(LocalReviewRepository(api)),
             resolver: _fakeResolver(),
             slicePlayer: SlicePlayerController(),
-            onStartShadowing: (_) async {},
-            onStartDelayedRetelling: (_) async {},
           ),
         ),
       );
@@ -341,10 +323,6 @@ void main() {
           baseUrl: 'http://test',
           token: 'tok',
           transport: (method, path, body) async {
-            if (path ==
-                '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-              return (statusCode: 200, body: '[]');
-            }
             return (
               statusCode: 200,
               body: jsonEncode(
@@ -369,8 +347,6 @@ void main() {
               controller: ReviewController(LocalReviewRepository(api)),
               resolver: _fakeResolver(),
               slicePlayer: SlicePlayerController(),
-              onStartShadowing: (_) async {},
-              onStartDelayedRetelling: (_) async {},
             ),
           ),
         );
@@ -393,76 +369,6 @@ void main() {
   }
 
   testWidgets(
-    'delayed retelling shows a prompt instead of collapsing, and enters '
-    'speaking',
-    (tester) async {
-      var launched = false;
-      final api = LocalApi.withTransport(
-        baseUrl: 'http://test',
-        token: 'tok',
-        transport: (method, path, body) async {
-          if (path ==
-              '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-            return (statusCode: 200, body: '[]');
-          }
-          if (path.endsWith('/interval-preview')) {
-            return (statusCode: 200, body: '[]');
-          }
-          return (
-            statusCode: 200,
-            body: jsonEncode(
-              _queueBody([
-                _reviewItem(
-                  id: 'review-speaking-1',
-                  kind: 'delayed_retelling',
-                  answer: 'The ferry leaves on Tuesday.',
-                  mediaId: 'media-1',
-                  anchors: const [
-                    {
-                      'kind': 'sentence',
-                      'id': 'cue-1',
-                      'label': 'en',
-                      'lexical_entry_id': null,
-                      'sentence_id': 'cue-1',
-                      'token_start': null,
-                      'token_end': null,
-                      'start_ms': 1000,
-                      'end_ms': 12000,
-                    },
-                  ],
-                ),
-              ]),
-            ),
-          );
-        },
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ReviewQueueScreen(
-            controller: ReviewController(LocalReviewRepository(api)),
-            resolver: _fakeResolver(),
-            slicePlayer: SlicePlayerController(),
-            onStartShadowing: (_) async {},
-            onStartDelayedRetelling: (_) async => launched = true,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // R3: the card no longer collapses to an empty box; it frames the task.
-      expect(
-        find.text('Source hidden · retell from memory, then start speaking.'),
-        findsOneWidget,
-      );
-      expect(find.text('Start delayed retelling'), findsOneWidget);
-      expect(find.text('Show the sentence'), findsNothing);
-      await tester.tap(find.text('Start delayed retelling'));
-      await tester.pumpAndSettle();
-      expect(launched, isTrue);
-    },
-  );
-
-  testWidgets(
     'R1: a source clip plays on its own decoder with no media loaded, and '
     'toggles in place',
     (tester) async {
@@ -474,10 +380,6 @@ void main() {
         baseUrl: 'http://test',
         token: 'tok',
         transport: (method, path, body) async {
-          if (path ==
-              '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-            return (statusCode: 200, body: '[]');
-          }
           if (path.endsWith('/interval-preview')) {
             return (statusCode: 200, body: '[]');
           }
@@ -507,8 +409,6 @@ void main() {
           // from the main player entirely.
           home: ReviewQueueScreen(
             controller: ReviewController(LocalReviewRepository(api)),
-            onStartShadowing: (_) async {},
-            onStartDelayedRetelling: (_) async {},
             resolver: _fakeResolver(),
             slicePlayer: slicePlayer,
           ),
@@ -548,10 +448,6 @@ void main() {
       baseUrl: 'http://test',
       token: 'tok',
       transport: (method, path, body) async {
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: '[]');
-        }
         if (path.endsWith('/interval-preview')) {
           return (statusCode: 200, body: '[]');
         }
@@ -576,8 +472,6 @@ void main() {
       MaterialApp(
         home: ReviewQueueScreen(
           controller: ReviewController(LocalReviewRepository(api)),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
           resolver: _fakeResolver(reachable: false),
           slicePlayer: slicePlayer,
         ),
@@ -603,10 +497,6 @@ void main() {
       baseUrl: 'http://test',
       token: 'tok',
       transport: (method, path, body) async {
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: '[]');
-        }
         if (path.endsWith('/interval-preview')) {
           return (statusCode: 200, body: '[]');
         }
@@ -636,8 +526,6 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -658,10 +546,6 @@ void main() {
       baseUrl: 'http://test',
       token: 'tok',
       transport: (method, path, body) async {
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: '[]');
-        }
         if (path == '/v1/review/items/review-preview-1/interval-preview') {
           return (
             statusCode: 200,
@@ -714,8 +598,6 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -741,10 +623,6 @@ void main() {
       baseUrl: 'http://test',
       token: 'tok',
       transport: (method, path, body) async {
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: '[]');
-        }
         if (path.endsWith('/interval-preview')) {
           return (statusCode: 500, body: '{"message":"nope"}');
         }
@@ -769,8 +647,6 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -792,10 +668,6 @@ void main() {
       baseUrl: 'http://test',
       token: 'tok',
       transport: (method, path, body) async {
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: '[]');
-        }
         return (
           statusCode: 200,
           body: jsonEncode(
@@ -820,8 +692,6 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -832,81 +702,11 @@ void main() {
     expect(find.textContaining('20/20 new, 143/200 reviews'), findsOneWidget);
   });
 
-  testWidgets('an imported Anki card offers no listening affordances', (
-    tester,
-  ) async {
+  testWidgets('the card head names the listening item kind', (tester) async {
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'tok',
       transport: (method, path, body) async {
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: '[]');
-        }
-        if (path.endsWith('/interval-preview')) {
-          return (statusCode: 200, body: '[]');
-        }
-        final entry = _reviewItem(
-          id: 'review-imported-1',
-          kind: 'word_recognition',
-          answer: 'Vorstellung',
-          mediaId: 'media-1',
-          anchors: _bounded,
-        );
-        return (
-          statusCode: 200,
-          body: jsonEncode(
-            _queueBody([
-              {
-                ...entry,
-                'origin': {
-                  'kind': 'imported_anki',
-                  'anki_guid': 'guid-1',
-                  'deck_id': 'deck-1',
-                  'deck_name': 'German::Nouns',
-                  'has_listening_enhancements': false,
-                },
-              },
-            ]),
-          ),
-        );
-      },
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ReviewQueueScreen(
-          controller: ReviewController(LocalReviewRepository(api)),
-          resolver: _fakeResolver(),
-          slicePlayer: SlicePlayerController(),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text('From Anki · German::Nouns · no listening enhancements'),
-      findsOneWidget,
-    );
-    // The card carries anchors and a media id, so these controls would have
-    // rendered on a native card. An imported card has no listening evidence
-    // behind it, so they are absent rather than dead.
-    expect(find.text('Play sound clip'), findsNothing);
-    expect(find.text('Shadow this clip'), findsNothing);
-  });
-
-  testWidgets('the card head names the kind, and claims no capability '
-      'channel', (tester) async {
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'tok',
-      transport: (method, path, body) async {
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: '[]');
-        }
         if (path.endsWith('/interval-preview')) {
           return (statusCode: 200, body: '[]');
         }
@@ -931,116 +731,12 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // The kind alone. The head used to prefix a channel derived here from
-    // `card.kind` — a rule that could only ever say listening or speaking, and
-    // that disagreed with the backend, which files a card under a channel by
-    // `source.kind`. Two rules for one question is one rule too many.
     expect(find.text('Word recognition'), findsOneWidget);
-    for (final channel in ['Listening', 'Speaking', 'Reading', 'Writing']) {
-      expect(find.textContaining('$channel ·'), findsNothing);
-    }
-  });
-
-  testWidgets('finished queue shows a non-blocking upgrade suggestion', (
-    tester,
-  ) async {
-    final requests = <String>[];
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'tok',
-      transport: (method, path, body) async {
-        requests.add('$method $path');
-        if (path == '/v1/review/queue?limit=20') {
-          return (statusCode: 200, body: jsonEncode(_queueBody(const [])));
-        }
-        if (path ==
-            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
-          return (statusCode: 200, body: jsonEncode([upgradeSuggestionJson]));
-        }
-        if (path == '/v1/review/upgrade-suggestions/suggestion-1/reject') {
-          return (
-            statusCode: 200,
-            body: jsonEncode({...upgradeSuggestionJson, 'status': 'rejected'}),
-          );
-        }
-        throw StateError('unexpected $method $path');
-      },
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ReviewQueueScreen(
-          controller: ReviewController(LocalReviewRepository(api)),
-          resolver: _fakeResolver(),
-          slicePlayer: SlicePlayerController(),
-          onStartShadowing: (_) async {},
-          onStartDelayedRetelling: (_) async {},
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('heard in 5 contexts'), findsOneWidget);
-
-    // S2 token provenance for the finished screen: its page inset is a page
-    // role (28 before), its verdict glyph is the screen's one `illustration`
-    // (52 before), and the suggestion card takes a named column cap.
-    expect(
-      tester
-          .widget<SingleChildScrollView>(
-            find.byType(SingleChildScrollView).first,
-          )
-          .padding,
-      ListenPadding.pageCompact,
-    );
-    expect(
-      tester.widget<Icon>(find.byIcon(Icons.check_circle_outline)).size,
-      ListenIconSize.illustration,
-    );
-    expect(
-      tester
-          .widget<ConstrainedBox>(
-            find
-                .ancestor(
-                  of: find.textContaining('heard in 5 contexts'),
-                  matching: find.byType(ConstrainedBox),
-                )
-                .last,
-          )
-          .constraints
-          .maxWidth,
-      ListenBreakpoints.formColumnMax,
-    );
-
-    await tester.tap(find.text('Not yet'));
-    await tester.pumpAndSettle();
-    expect(
-      requests.last,
-      'POST /v1/review/upgrade-suggestions/suggestion-1/reject',
-    );
-    expect(find.textContaining('heard in 5 contexts'), findsNothing);
+    expect(find.textContaining('Listening ·'), findsNothing);
   });
 }
-
-const upgradeSuggestionJson = <String, dynamic>{
-  'id': 'suggestion-1',
-  'lexical_entry_id': 'lexical-1',
-  'lexical_display_form': 'would have',
-  'previous_status': 'known_not_recognized',
-  'suggested_status': 'known_recognized',
-  'status': 'pending',
-  'evidence_context_count': 5,
-  'evidence_ids': ['evidence-1'],
-  'threshold': 5,
-  'evidence_class': 'heuristic_proxy',
-  'created_at_ms': 1,
-  'resolved_at_ms': null,
-  'cooldown_until_ms': null,
-};

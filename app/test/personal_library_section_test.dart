@@ -4,121 +4,51 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/models/types.dart';
-import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/widgets/home/personal_library_section.dart';
 
 import 'support/learning_material_fixtures.dart';
 
-MediaLibraryEntry _entry({
-  String id = 'media-1',
-  String title = 'Media 1',
-  String meaningFit = 'comprehensible',
-  String soundFit = 'challenging',
-  String? intent,
-  bool familiar = false,
-  bool withFit = true,
-}) => MediaLibraryEntry.fromJson({
-  'media': {
-    'id': id,
-    'path': '/tmp/$id.mp4',
-    'fingerprint': '$id-fp',
-    'title': title,
-    'kind': 'video',
-    'duration': 60000,
-    'availability': 'available',
-    'created_at_ms': 1,
-    'updated_at_ms': 2,
-  },
-  'primary_track_id': 'track-$id',
-  'fit': withFit
-      ? {
-          'subject_kind': 'media',
-          'subject_id': id,
-          'language': 'en',
-          'meaning': {'fit': meaningFit, 'signals': <Object>[]},
-          'sound': {'fit': soundFit, 'signals': <Object>[]},
-          'assessed_token_ratio': 0.9,
-          'evidence_grade': 'initial_estimate',
-          'algorithm_version': 'content-fit-v2',
-          'computed_at_ms': 3,
-          'input_fingerprint': 'fp',
-        }
-      : null,
-  'triage_intent': intent,
-  'familiar_material': familiar,
-});
+MediaLibraryEntry _entry({String id = 'media-1', String title = 'Media 1'}) =>
+    MediaLibraryEntry.fromJson({
+      'media': {
+        'id': id,
+        'path': '/tmp/$id.mp4',
+        'fingerprint': '$id-fp',
+        'title': title,
+        'kind': 'video',
+        'duration': 60000,
+        'availability': 'available',
+        'created_at_ms': 1,
+        'updated_at_ms': 2,
+      },
+      'primary_track_id': 'track-$id',
+      'triage_intent': null,
+    });
 
-/// A media-only library row: the revision carries [entry]'s media as an
-/// available rendition, so all media capabilities resolve.
-PersonalLibraryEntry _mediaRow(
-  MediaLibraryEntry entry, {
-  String materialId = 'material-1',
-}) => PersonalLibraryEntry(
-  details: materialDetails(
-    materialId: materialId,
-    title: entry.media.title,
-    documentRenditions: const [],
-    mediaRenditions: [
-      mediaRendition(
-        id: 'asset-1',
-        mediaId: entry.media.id,
-        kind: MediaRenditionKind.video,
-        fingerprint: 'fp',
+PersonalLibraryEntry _row(MediaLibraryEntry entry, {String? materialId}) =>
+    PersonalLibraryEntry(
+      details: materialDetails(
+        materialId: materialId ?? entry.media.id,
+        title: entry.media.title,
+        mediaRenditions: [
+          mediaRendition(
+            id: 'asset-${entry.media.id}',
+            mediaId: entry.media.id,
+            kind: MediaRenditionKind.video,
+            fingerprint: entry.media.fingerprint,
+          ),
+        ],
+        shape: MaterialShape.video,
       ),
-    ],
-    shape: MaterialShape.video,
-  ),
-  mediaEntries: [entry],
-);
-
-/// A text-only library row: inline document rendition, no media at all.
-PersonalLibraryEntry _textRow(String id, String title) => PersonalLibraryEntry(
-  details: materialDetails(
-    materialId: id,
-    revisionId: 'revision-$id',
-    title: title,
-    documentRenditions: [
-      documentRenditionForText('A readable document.', id: 'text-$id'),
-    ],
-    shape: MaterialShape.text,
-  ),
-  mediaEntries: const [],
-);
-
-/// A mixed row: both inline text and a bound media rendition.
-PersonalLibraryEntry _mixedRow(
-  MediaLibraryEntry entry,
-  String id, {
-  String title = 'Mixed',
-}) => PersonalLibraryEntry(
-  details: materialDetails(
-    materialId: id,
-    revisionId: 'revision-$id',
-    title: title,
-    documentRenditions: [
-      documentRenditionForText('A readable document.', id: 'text-$id'),
-    ],
-    mediaRenditions: [
-      mediaRendition(
-        id: 'asset-$id',
-        mediaId: entry.media.id,
-        kind: MediaRenditionKind.video,
-        fingerprint: 'fp',
-      ),
-    ],
-    shape: MaterialShape.mixed,
-  ),
-  mediaEntries: [entry],
-);
+      mediaEntries: [entry],
+    );
 
 Widget _host(
   List<PersonalLibraryEntry> entries, {
-  bool familiarSupplyEnabled = true,
   void Function(PersonalLibraryEntry)? onOpen,
   void Function(PersonalLibraryEntry)? onStartExtensive,
   void Function(PersonalLibraryEntry)? onStartIntensive,
   void Function(PersonalLibraryEntry, String?)? onSetIntent,
-  void Function(bool)? onToggleFamiliarSupply,
 }) => MaterialApp(
   locale: const Locale('en'),
   localizationsDelegates: const [AppLocalizations.delegate],
@@ -127,226 +57,121 @@ Widget _host(
     body: SingleChildScrollView(
       child: PersonalLibrarySection(
         entries: entries,
-        familiarSupplyEnabled: familiarSupplyEnabled,
         onOpen: onOpen ?? (_) {},
         onStartExtensive: onStartExtensive ?? (_) {},
         onStartIntensive: onStartIntensive ?? (_) {},
         onSetIntent: onSetIntent ?? (_, _) {},
-        onToggleFamiliarSupply: onToggleFamiliarSupply ?? (_) {},
       ),
     ),
   ),
 );
 
 void main() {
-  testWidgets('groups entries by derived queue with golden targets on top', (
+  testWidgets('library lists audio and video materials without fit groups', (
     tester,
   ) async {
     await tester.pumpWidget(
       _host([
-        _mediaRow(
-          _entry(id: 'easy', title: 'Easy', soundFit: 'comprehensible'),
-        ),
-        _mediaRow(_entry(id: 'golden', title: 'Golden')),
-        _mediaRow(_entry(id: 'hard', title: 'Hard', meaningFit: 'too_hard')),
-        _mediaRow(_entry(id: 'unrated', title: 'Unrated', withFit: false)),
-        _textRow('text-1', 'Text document'),
+        _row(_entry(id: 'audio-1', title: 'First episode')),
+        _row(_entry(id: 'video-1', title: 'Second lesson')),
       ]),
     );
-    expect(find.text('Intensive picks'), findsOneWidget);
-    expect(find.text('Extensive listening'), findsOneWidget);
-    expect(find.text('Set aside for now'), findsOneWidget);
-    expect(find.text('Not rated yet'), findsOneWidget);
 
-    // Text-only rows carry no media facts, so they land in the unsorted group
-    // with the unrated media row — never a fabricated media queue.
-    expect(find.text('Text document'), findsOneWidget);
-
-    // S2 token provenance. The section used to carry five icon sizes
-    // (13/15/18/18/20) and a 7/2 pill inset; every glyph it renders now lands
-    // on a `ListenIconSize` step — the check a source scan cannot make, since a
-    // size can reach an `Icon` through a variable.
-    final steps = <double>{
-      ListenIconSize.inline,
-      ListenIconSize.control,
-      ListenIconSize.chrome,
-      ListenIconSize.illustration,
-    };
-    for (final icon in tester.widgetList<Icon>(find.byType(Icon))) {
-      if (icon.size != null) expect(steps, contains(icon.size));
+    expect(find.text('First episode'), findsOneWidget);
+    expect(find.text('Second lesson'), findsOneWidget);
+    for (final removedGroup in [
+      'Intensive picks',
+      'Extensive listening',
+      'Set aside for now',
+      'Not rated yet',
+    ]) {
+      expect(find.text(removedGroup), findsNothing);
     }
-
-    // Golden target badge appears on the intensive row.
-    expect(find.text('Intensive pick'), findsOneWidget);
-
-    // Group order: intensive header above extensive header above deferred.
-    final intensiveY = tester.getTopLeft(find.text('Intensive picks')).dy;
-    final extensiveY = tester.getTopLeft(find.text('Extensive listening')).dy;
-    final deferredY = tester.getTopLeft(find.text('Set aside for now')).dy;
-    final goldenY = tester.getTopLeft(find.text('Golden')).dy;
-    final easyY = tester.getTopLeft(find.text('Easy')).dy;
-    expect(intensiveY, lessThan(extensiveY));
-    expect(extensiveY, lessThan(deferredY));
-    expect(goldenY, lessThan(easyY));
-  });
-
-  testWidgets('user intent overrides fit-derived grouping', (tester) async {
-    await tester.pumpWidget(
-      _host([
-        _mediaRow(_entry(id: 'golden', title: 'Pinned away', intent: 'defer')),
-      ]),
+    expect(
+      tester.getTopLeft(find.text('First episode')).dy,
+      lessThan(tester.getTopLeft(find.text('Second lesson')).dy),
     );
-    expect(find.text('Set aside for now'), findsOneWidget);
-    expect(find.text('Intensive picks'), findsNothing);
   });
 
-  testWidgets('familiar supply toggle moves familiar material', (tester) async {
-    final entries = [
-      _mediaRow(_entry(id: 'fam', title: 'Familiar', familiar: true)),
-    ];
-    await tester.pumpWidget(_host(entries));
-    // Supply on: familiar golden-target relists as extensive with the badge.
-    expect(find.text('Extensive listening'), findsOneWidget);
-    expect(find.text('Relisten'), findsOneWidget);
-
-    await tester.pumpWidget(_host(entries, familiarSupplyEnabled: false));
-    // Supply off: falls back to the fit-derived intensive group, no badge.
-    expect(find.text('Intensive picks'), findsOneWidget);
-    expect(find.text('Relisten'), findsNothing);
-  });
-
-  testWidgets('media one-click actions and intent menu reach the callbacks', (
+  testWidgets('video extensive and intensive shortcuts reach their callbacks', (
     tester,
   ) async {
     PersonalLibraryEntry? extensiveStarted;
     PersonalLibraryEntry? intensiveStarted;
     (PersonalLibraryEntry, String?)? intentSet;
+    final row = _row(_entry(id: 'm', title: 'Row'));
     await tester.pumpWidget(
       _host(
-        [_mediaRow(_entry(id: 'm', title: 'Row'))],
+        [row],
         onStartExtensive: (entry) => extensiveStarted = entry,
         onStartIntensive: (entry) => intensiveStarted = entry,
         onSetIntent: (entry, intent) => intentSet = (entry, intent),
       ),
     );
+
     await tester.tap(find.text('Listen'));
-    expect(extensiveStarted?.materialId, 'material-1');
+    expect(extensiveStarted?.materialId, row.materialId);
     await tester.tap(find.text('Work on it'));
-    expect(intensiveStarted?.materialId, 'material-1');
+    expect(intensiveStarted?.materialId, row.materialId);
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
-    // The CheckedPopupMenuItem's leading checkmark shifts the label off the
-    // text's own hit-test center; the selection expectation below verifies
-    // the tap regardless.
     await tester.tap(find.text('Set aside'), warnIfMissed: false);
     await tester.pumpAndSettle();
-    expect(intentSet?.$1.materialId, 'material-1');
+    expect(intentSet?.$1.materialId, row.materialId);
     expect(intentSet?.$2, 'defer');
   });
 
-  testWidgets('a text-only row opens the material and offers no media triage', (
+  testWidgets('opening a media row enters its material workbench', (
     tester,
   ) async {
     PersonalLibraryEntry? opened;
-    await tester.pumpWidget(
-      _host([
-        _textRow('text-1', 'Text document'),
-      ], onOpen: (entry) => opened = entry),
-    );
+    final row = _row(_entry(title: 'CNN10'));
+    await tester.pumpWidget(_host([row], onOpen: (entry) => opened = entry));
 
-    expect(find.text('Open'), findsOneWidget);
-    expect(find.text('Listen'), findsNothing);
-    expect(find.text('Work on it'), findsNothing);
-    expect(find.byIcon(Icons.more_vert), findsNothing);
+    await tester.tap(find.text('CNN10'));
 
-    await tester.tap(find.text('Open'));
-    expect(opened?.materialId, 'text-1');
+    expect(opened?.materialId, row.materialId);
   });
 
   testWidgets(
-    'a mixed row opens through the one door and keeps the study shortcuts',
+    'video rows keep open and study actions without requesting audio generation',
     (tester) async {
-      // A mixed material used to force the choice up front — Read here, Open
-      // media there — which is what made several routes into the same
-      // material exist at all. One Open now hands it to the workbench, which
-      // mounts whatever the material can do.
+      final row = _row(_entry(id: 'video-1', title: 'Video lesson'));
       PersonalLibraryEntry? opened;
-      var rowTapOpens = 0;
+      PersonalLibraryEntry? extensivelyStarted;
+      PersonalLibraryEntry? intensified;
+
       await tester.pumpWidget(
         _host(
-          [
-            _mixedRow(
-              _entry(id: 'm', title: 'Mixed'),
-              'mixed-1',
-              title: 'Mixed material',
-            ),
-          ],
-          onOpen: (entry) {
-            opened = entry;
-            rowTapOpens += 1;
-          },
+          [row],
+          onOpen: (entry) => opened = entry,
+          onStartExtensive: (entry) => extensivelyStarted = entry,
+          onStartIntensive: (entry) => intensified = entry,
         ),
       );
 
-      expect(find.text('Read'), findsNothing);
-      expect(find.text('Open media'), findsNothing);
-      expect(find.text('Open'), findsOneWidget);
-      // The study modes survive as secondary shortcuts.
       expect(find.text('Listen'), findsOneWidget);
+      expect(find.text('Open'), findsOneWidget);
       expect(find.text('Work on it'), findsOneWidget);
+      expect(find.text('Generate listening'), findsNothing);
 
+      await tester.tap(find.text('Listen'));
+      await tester.tap(find.text('Work on it'));
       await tester.tap(find.text('Open'));
-      expect(opened?.materialId, 'mixed-1');
 
-      // A mixed row used to refuse the bare row tap because it could not
-      // guess; there is nothing left to guess.
-      await tester.tap(find.text('Mixed material'));
-      expect(rowTapOpens, 2);
+      expect(extensivelyStarted?.materialId, row.materialId);
+      expect(intensified?.materialId, row.materialId);
+      expect(opened?.materialId, row.materialId);
     },
   );
 
-  testWidgets('a mixed row with missing media still reads', (tester) async {
-    final missing = MediaLibraryEntry.fromJson({
-      'media': {
-        'id': 'media-gone',
-        'path': '/gone/m.mp4',
-        'fingerprint': 'fp',
-        'title': 'Gone',
-        'kind': 'video',
-        'duration': 60000,
-        'availability': 'available',
-        'created_at_ms': 1,
-        'updated_at_ms': 2,
-      },
-      'primary_track_id': null,
-      'fit': null,
-      'triage_intent': null,
-      'familiar_material': false,
-    });
-    PersonalLibraryEntry? opened;
-    await tester.pumpWidget(
-      _host([
-        _mixedRow(missing, 'mixed-gone', title: 'Mixed with missing media'),
-      ], onOpen: (entry) => opened = entry),
-    );
-
-    // The document capability is intact even though the media is gone:
-    // opening must never be gated on media availability.
-    expect(find.text('Open'), findsOneWidget);
-    await tester.tap(find.text('Open'));
-    expect(opened?.materialId, 'mixed-gone');
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('empty library shows the neutral empty note', (tester) async {
+  testWidgets('empty library explains where retained materials appear', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(const []));
+
     expect(find.text('Materials you keep will appear here.'), findsOneWidget);
-  });
-
-  testWidgets('the section is titled Personal library', (tester) async {
-    await tester.pumpWidget(_host(const []));
     expect(find.text('Personal library'), findsOneWidget);
-    expect(find.text('Media library'), findsNothing);
   });
 }
