@@ -6,7 +6,7 @@ if ! bash -n "$0"; then
   echo "Refusing to run the macOS release verifier with invalid shell syntax." >&2
   exit 2
 fi
-fixture_source="$root/test/fixtures/smoke"
+fixture_source="${LISTEN_SMOKE_FIXTURE_SOURCE:-$root/test/fixtures/smoke}"
 tmp="$(mktemp -d)"
 fixtures="$tmp/fixtures"
 release_output="${LISTEN_RELEASE_OUTPUT_DIR:-$root/dist}"
@@ -59,6 +59,25 @@ stop_app() {
     wait "$pid" 2>/dev/null || true
   fi
   pid=""
+}
+
+preserve_audio_smoke_diagnostics() {
+  local diagnostics
+  diagnostics="$(mktemp -d "${TMPDIR:-/tmp}/listen-audio-smoke-timeout.XXXXXX")" ||
+    return 1
+  chmod 700 "$diagnostics"
+  for file in \
+    "$tmp/desktop.log" \
+    "$isolated_home/Library/Logs/listen/core.log" \
+    "$tmp/mvp.sqlite" \
+    "$tmp/mvp.sqlite-wal" \
+    "$tmp/mvp.sqlite-shm"; do
+    if [[ -f "$file" ]]; then
+      cp "$file" "$diagnostics/$(basename "$file")" || return 1
+      chmod 600 "$diagnostics/$(basename "$file")" || return 1
+    fi
+  done
+  echo "Isolated audio smoke diagnostics preserved at: $diagnostics" >&2
 }
 
 fail() {
@@ -251,7 +270,18 @@ LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-audio.m4a" \
   launch_packaged_app >>"$tmp/desktop.log" 2>&1 &
 pid=$!
-sleep 3
+if ! python3 "$root/tool/wait_for_sqlite_value.py" \
+  "$tmp/mvp.sqlite" \
+  'SELECT count(*) FROM media_items;' \
+  2 \
+  --timeout-seconds 20 \
+  --interval-seconds 0.2 \
+  --description "audio media item count"; then
+  stop_app
+  preserve_audio_smoke_diagnostics ||
+    echo "Could not preserve isolated audio smoke diagnostics." >&2
+  fail "audio media item registration did not reach 2 within 20 seconds"
+fi
 assert_app_running
 assert_sqlite_value 'SELECT count(*) FROM media_items;' "2" "audio media item count"
 [[ -f "$app/Contents/MacOS/api-http" ]]
