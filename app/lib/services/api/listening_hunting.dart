@@ -4,6 +4,30 @@ part of '../api_service.dart';
 // Split out of api_service.dart (mechanical decomposition).
 
 extension ListeningHuntingApi on LocalApi {
+  Future<List<HuntingCandidate>> huntingCandidates({
+    String status = 'active',
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        'status': status,
+        'limit': '$limit',
+        'offset': '$offset',
+      },
+    ).query;
+    final values =
+        (await _request('GET', '/v1/hunting/candidates?$query'))
+            as List<dynamic>;
+    return values
+        .map(
+          (value) => HuntingCandidate.fromJson(
+            Map<String, dynamic>.from(value as Map),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   Future<PracticeSession> completeListeningSession(
     String id, {
     String? comprehensionReport,

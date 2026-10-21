@@ -1,9 +1,10 @@
 use domain::{
-    CorpusOccurrence, CorpusOccurrenceKind, HuntingCheckAnswer, HuntingOccurrence,
-    HuntingOccurrenceQueryResult, HuntingTarget, HuntingTargetId, HuntingTargetSourceKind,
-    HuntingTargetStatus, LearningEvent, LearningEventId, LearningEventKind, LearningEventSubject,
-    LearningEventSubjectKind, LexicalEntry, LexicalEntryId, LexicalEntryKind, ListeningInboxItemId,
-    MediaId, ObservationResult, PracticeMode, SubtitleTrackId,
+    CorpusOccurrence, CorpusOccurrenceKind, HuntingCandidate, HuntingCandidateId,
+    HuntingCandidateStatus, HuntingCheckAnswer, HuntingOccurrence, HuntingOccurrenceQueryResult,
+    HuntingTarget, HuntingTargetId, HuntingTargetSourceKind, HuntingTargetStatus, LearningEvent,
+    LearningEventId, LearningEventKind, LearningEventSubject, LearningEventSubjectKind,
+    LexicalEntry, LexicalEntryId, LexicalEntryKind, ListeningInboxItemId, MediaId,
+    ObservationResult, PracticeMode, SubtitleTrackId,
 };
 
 use crate::{
@@ -14,6 +15,16 @@ use crate::{
 const MAX_ACTIVE_HUNTING_TARGETS: usize = 5;
 
 impl PracticeUseCases {
+    pub fn list_hunting_candidates(
+        &self,
+        status: Option<HuntingCandidateStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
+        self.hunting
+            .list_hunting_candidates(status, limit.min(100), offset)
+    }
+
     pub fn create_hunting_target(
         &self,
         input: CreateHuntingTargetInput,
@@ -29,6 +40,7 @@ impl PracticeUseCases {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_owned);
+        let mut review_candidate_id = None;
 
         match input.source_kind {
             HuntingTargetSourceKind::Manual => {
@@ -37,6 +49,22 @@ impl PracticeUseCases {
                         "manual hunting target must not include source_id",
                     ));
                 }
+            }
+            HuntingTargetSourceKind::ReviewCandidate => {
+                let candidate_id = source_id.as_ref().ok_or(ApplicationError::Validation(
+                    "review candidate hunting target source_id",
+                ))?;
+                let candidate_id = HuntingCandidateId::parse(candidate_id.clone())?;
+                let candidate = self
+                    .hunting
+                    .get_hunting_candidate(&candidate_id)?
+                    .ok_or(ApplicationError::NotFound("hunting candidate"))?;
+                if candidate.lexical_entry_id != input.lexical_entry_id {
+                    return Err(ApplicationError::Conflict(
+                        "hunting candidate belongs to another lexical entry",
+                    ));
+                }
+                review_candidate_id = Some(candidate_id);
             }
             HuntingTargetSourceKind::ListeningInbox => {
                 let item_id = source_id.as_ref().ok_or(ApplicationError::Validation(
@@ -65,6 +93,9 @@ impl PracticeUseCases {
         if let Some(existing) = existing.as_ref()
             && existing.status == HuntingTargetStatus::Active
         {
+            if let Some(candidate_id) = review_candidate_id.as_ref() {
+                self.consume_review_candidate(candidate_id)?;
+            }
             return Ok(existing.clone());
         }
         if self
@@ -90,7 +121,26 @@ impl PracticeUseCases {
             updated_at_ms: now,
         })?;
 
+        if let Some(candidate_id) = review_candidate_id.as_ref() {
+            self.consume_review_candidate(candidate_id)?;
+        }
+
         Ok(target)
+    }
+
+    fn consume_review_candidate(
+        &self,
+        candidate_id: &HuntingCandidateId,
+    ) -> Result<(), ApplicationError> {
+        let mut candidate = self
+            .hunting
+            .get_hunting_candidate(candidate_id)?
+            .ok_or(ApplicationError::NotFound("hunting candidate"))?;
+        if candidate.status != HuntingCandidateStatus::Consumed {
+            candidate.status = HuntingCandidateStatus::Consumed;
+            self.hunting.upsert_hunting_candidate(&candidate)?;
+        }
+        Ok(())
     }
 
     pub fn list_hunting_targets(

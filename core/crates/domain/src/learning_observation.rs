@@ -18,6 +18,7 @@ pub enum ObservationTaskType {
     Dictation,
     SubtitleFade,
     ReviewRecall,
+    UpgradeConfirmation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,6 +165,18 @@ pub fn observation_spec_for_review(rating: ReviewRating) -> ObservationSpec {
             ReviewRating::Hard => ObservationOutcome::Partial,
             ReviewRating::Good | ReviewRating::Easy => ObservationOutcome::Success,
         },
+    }
+}
+
+/// Accepting a listening recognition-upgrade suggestion is a learner-authored
+/// success signal. It remains an observation until the learner reviews and
+/// confirms the resulting capability projection proposal.
+pub fn observation_spec_for_upgrade_confirmation() -> ObservationSpec {
+    ObservationSpec {
+        task_type: ObservationTaskType::UpgradeConfirmation,
+        capability: LexicalCapability::Listening,
+        assistance: AssistanceLevel::None,
+        outcome: ObservationOutcome::Success,
     }
 }
 

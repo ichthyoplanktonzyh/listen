@@ -1,6 +1,7 @@
 import '../data/repositories/resource_repository.dart';
 import '../models/api_failure.dart';
 import '../models/timeline.dart';
+import '../models/types.dart';
 import '../services/resource_export_file_service.dart';
 import 'player_controller.dart';
 import 'speech_enhancement_workflow_controller.dart';
@@ -58,13 +59,29 @@ class ResourceActionsCoordinator {
   // ── Timeline resource loading ──
 
   Future<void> loadTimelineResource(String trackId) async {
-    if (!speechEnhancement.repository.isAvailable) return;
-    final result = await speechEnhancement.loadTimelineResource(
-      trackId: trackId,
-      previous: existingTimelineResourceState(),
-    );
+    if (speechEnhancement.repository.isAvailable) {
+      final result = await speechEnhancement.loadTimelineResource(
+        trackId: trackId,
+        previous: existingTimelineResourceState(),
+      );
+      if (!isMounted() || subtitle.primaryTrack?.id != trackId) return;
+      applyTimelineResource(result);
+    }
+    await loadContentFit(trackId);
+  }
+
+  /// Fit describes the listening material; a missing profile hides only this
+  /// decoration and never changes availability or playback.
+  Future<void> loadContentFit(String trackId) async {
+    if (!repository.isAvailable) return;
+    ContentDifficultyProfile? profile;
+    try {
+      profile = await repository.contentFit(trackId);
+    } catch (_) {
+      profile = null;
+    }
     if (!isMounted() || subtitle.primaryTrack?.id != trackId) return;
-    applyTimelineResource(result);
+    subtitle.setContentFit(profile);
   }
 
   /// Snapshot of the currently-loaded timeline resource state; also used by

@@ -1,12 +1,16 @@
 use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
-use domain::ReviewCardState;
+use domain::{
+    RecognitionEvidence, ReviewCardState, SoundFitCalibration, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus,
+};
 
 use crate::evaluator::{PracticeAnswerEvaluator, practice_result, practice_score};
 use crate::{
     AppServices, ApplicationError, CompleteListeningSessionInput, CorpusIndexRepository,
-    CreatePracticeItem, CreatePracticeSession, CreateReviewItem, DisabledLearningLoopRepository,
+    CreatePracticeItem, CreatePracticeSession, CreateReviewItem, DifficultyRepository,
+    DisabledLearningLoopRepository, HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus,
     HuntingRepository, HuntingTarget, HuntingTargetId, HuntingTargetStatus, LearningEvent,
     LearningEventId, LearningEventKind, LearningEventRepository, LearningEventSubject,
     LearningEventSubjectKind, LearningObservationRepository, LexicalEntryId,
@@ -15,14 +19,15 @@ use crate::{
     ListeningInboxStatus, MediaRepository, ObservationContext, ObservationOrigin,
     ObservationResult, PracticeAnchorKind, PracticeAttempt, PracticeAttemptId, PracticeItem,
     PracticeItemId, PracticeMode, PracticeRepository, PracticeResult, PracticeSession,
-    PracticeSessionId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
-    ReviewQueueEntry, ReviewQueueRepository, ReviewRating, ReviewSchedule, ReviewSource,
-    ReviewSourceKind, ReviewSubmission, SubmitPracticeAttempt, SubmitReviewAttempt,
-    SubtitleSentenceId, SubtitleTrackRepository, clean_required, now_ms,
+    PracticeSessionId, RecognitionUpgradeRepository, ReviewAttempt, ReviewAttemptId, ReviewItem,
+    ReviewItemId, ReviewItemStatus, ReviewQueueEntry, ReviewQueueRepository, ReviewRating,
+    ReviewSchedule, ReviewSource, ReviewSourceKind, ReviewSubmission, SubmitPracticeAttempt,
+    SubmitReviewAttempt, SubtitleSentenceId, SubtitleTrackRepository, clean_required, now_ms,
     observation_spec_for_practice, observation_spec_for_review,
 };
 
 mod review;
+mod upgrade;
 use review::{
     REVIEW_ALGORITHM, migrate_legacy_schedule, next_review_schedule, preview_review_intervals,
     review_card,
@@ -42,6 +47,7 @@ pub struct PracticeUseCases {
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) media: Arc<dyn MediaRepository>,
+    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     lexical_learning: LexicalLearningUseCases,
 }
@@ -58,6 +64,7 @@ impl PracticeUseCases {
             subtitle_tracks: services.subtitle_tracks.clone(),
             corpus: services.corpus.clone(),
             media: services.media.clone(),
+            difficulty: services.difficulty.clone(),
             lexical_normalizers: services.lexical_normalizers.clone(),
             lexical_learning: LexicalLearningUseCases::from_services(services),
         }
@@ -275,6 +282,13 @@ impl PracticeUseCases {
         }
 
         let saved = self.practice.create_practice_attempt(&attempt)?;
+        if saved.result == PracticeResult::Correct {
+            self.lexical_learning()
+                .record_practice_recognition_evidence(&item, &saved, now)?;
+        }
+        // Calibration is supporting material guidance, not a prerequisite
+        // for recording a listening practice result.
+        let _ = self.record_practice_accuracy_feedback(item.session_id.as_ref(), saved.result);
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint(
                 "learning-event",
@@ -646,11 +660,20 @@ impl PracticeUseCases {
                 )?;
             }
         }
-        let generated_observation_ids = if input.rating == ReviewRating::Again {
-            self.record_review_failure(&item, now)?
-        } else {
-            Vec::new()
-        };
+        let (generated_observation_ids, hunting_candidate_ids, upgrade_suggestions) =
+            if input.rating == ReviewRating::Again {
+                let (observations, candidates) = self.record_review_failure(&item, now)?;
+                (observations, candidates, Vec::new())
+            } else {
+                let suggestions = if matches!(input.rating, ReviewRating::Good | ReviewRating::Easy)
+                {
+                    self.lexical_learning()
+                        .record_review_recognition_evidence(&item, &attempt, now)?
+                } else {
+                    Vec::new()
+                };
+                (Vec::new(), Vec::new(), suggestions)
+            };
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint("learning-event", &fingerprint),
             occurred_at_ms: now,
@@ -669,6 +692,14 @@ impl PracticeUseCases {
                     .iter()
                     .map(|id| id.as_str())
                     .collect::<Vec<_>>(),
+                "hunting_candidate_ids": hunting_candidate_ids
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>(),
+                "upgrade_suggestion_ids": upgrade_suggestions
+                    .iter()
+                    .map(|suggestion| suggestion.id.as_str())
+                    .collect::<Vec<_>>(),
             }),
             session_id: None,
         })?;
@@ -676,6 +707,8 @@ impl PracticeUseCases {
             attempt,
             schedule,
             generated_observation_ids,
+            hunting_candidate_ids,
+            upgrade_suggestions,
         })
     }
 
@@ -683,7 +716,7 @@ impl PracticeUseCases {
         &self,
         item: &ReviewItem,
         failed_at_ms: u64,
-    ) -> Result<Vec<LexicalObservationId>, ApplicationError> {
+    ) -> Result<(Vec<LexicalObservationId>, Vec<HuntingCandidateId>), ApplicationError> {
         let mut targets = Vec::<(LexicalEntryId, String, Option<SubtitleSentenceId>)>::new();
         if let Some(lexical_entry_id) = item.source.lexical_entry_id.clone() {
             let matching_anchor = item
@@ -720,6 +753,7 @@ impl PracticeUseCases {
 
         let mut seen = BTreeSet::new();
         let mut generated_observation_ids = Vec::new();
+        let mut hunting_candidate_ids = Vec::new();
         for (lexical_entry_id, target_snapshot, sentence_id) in targets {
             if !seen.insert(lexical_entry_id.as_str().to_owned()) {
                 continue;
@@ -744,8 +778,33 @@ impl PracticeUseCases {
                         })?;
                 generated_observation_ids.push(observation.id);
             }
+
+            let id = HuntingCandidateId::from_fingerprint(
+                "hunting-candidate",
+                &format!("{}:{}", item.id.as_str(), lexical_entry_id.as_str()),
+            );
+            let existing = self.hunting.get_hunting_candidate(&id)?;
+            let candidate = self.hunting.upsert_hunting_candidate(&HuntingCandidate {
+                id,
+                lexical_entry_id,
+                review_item_id: item.id.clone(),
+                sentence_id,
+                media_id: item.source.media_id.clone(),
+                track_id: item.source.track_id.clone(),
+                target_snapshot,
+                prompt_snapshot: item.prompt_snapshot.clone(),
+                failure_count: existing
+                    .as_ref()
+                    .map_or(1, |value| value.failure_count.saturating_add(1)),
+                status: HuntingCandidateStatus::Active,
+                created_at_ms: existing
+                    .as_ref()
+                    .map_or(failed_at_ms, |value| value.created_at_ms),
+                last_failed_at_ms: failed_at_ms,
+            })?;
+            hunting_candidate_ids.push(candidate.id);
         }
-        Ok(generated_observation_ids)
+        Ok((generated_observation_ids, hunting_candidate_ids))
     }
 
     /// Completes an extensive-listening session without projecting obsolete
@@ -779,14 +838,18 @@ impl PracticeUseCases {
             ));
         }
         let now = now_ms();
-        session.ended_at_ms = Some(now);
-        let session = self.practice.create_practice_session(&session)?;
+        let already_completed = session.ended_at_ms.is_some();
+        if !already_completed {
+            session.ended_at_ms = Some(now);
+            session = self.practice.create_practice_session(&session)?;
+        }
+        let completed_at_ms = session.ended_at_ms.unwrap_or(now);
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint(
                 "learning-event",
-                &format!("listening-completed:{}:{now}", session.id.as_str()),
+                &format!("listening-completed:{}", session.id.as_str()),
             ),
-            occurred_at_ms: now,
+            occurred_at_ms: completed_at_ms,
             kind: LearningEventKind::ListeningCompleted,
             subject: LearningEventSubject {
                 kind: LearningEventSubjectKind::PracticeSession,
@@ -801,7 +864,69 @@ impl PracticeUseCases {
             }),
             session_id: Some(session.id.clone()),
         })?;
+        if !already_completed {
+            let _ = self.record_content_fit_feedback(&session, input.comprehension_report);
+        }
         Ok(session)
+    }
+
+    fn record_content_fit_feedback(
+        &self,
+        session: &PracticeSession,
+        report: Option<domain::ListeningComprehensionReport>,
+    ) -> Result<(), ApplicationError> {
+        let Some(media_id) = session.media_id.as_ref() else {
+            return Ok(());
+        };
+        let Some(report) = report else {
+            return Ok(());
+        };
+        let mut calibration = self
+            .difficulty
+            .get_fit_calibration("media", media_id.as_str())?
+            .unwrap_or_else(|| SoundFitCalibration::new("media", media_id.as_str()));
+        match report {
+            domain::ListeningComprehensionReport::UnderstoodAll => {
+                calibration.reports_understood_all += 1
+            }
+            domain::ListeningComprehensionReport::GotTheGist => {
+                calibration.reports_got_the_gist += 1
+            }
+            domain::ListeningComprehensionReport::Unclear => calibration.reports_unclear += 1,
+        }
+        calibration.updated_at_ms = now_ms();
+        self.difficulty.save_fit_calibration(&calibration)?;
+        Ok(())
+    }
+
+    fn record_practice_accuracy_feedback(
+        &self,
+        session_id: Option<&PracticeSessionId>,
+        result: PracticeResult,
+    ) -> Result<(), ApplicationError> {
+        if matches!(result, PracticeResult::Completed | PracticeResult::Skipped) {
+            return Ok(());
+        }
+        let Some(session_id) = session_id else {
+            return Ok(());
+        };
+        let Some(session) = self.practice.get_practice_session(session_id)? else {
+            return Ok(());
+        };
+        let Some(media_id) = session.media_id.as_ref() else {
+            return Ok(());
+        };
+        let mut calibration = self
+            .difficulty
+            .get_fit_calibration("media", media_id.as_str())?
+            .unwrap_or_else(|| SoundFitCalibration::new("media", media_id.as_str()));
+        calibration.practice_attempts += 1;
+        if result == PracticeResult::Correct {
+            calibration.practice_correct += 1;
+        }
+        calibration.updated_at_ms = now_ms();
+        self.difficulty.save_fit_calibration(&calibration)?;
+        Ok(())
     }
 }
 
@@ -972,6 +1097,29 @@ impl ReviewQueueRepository for DisabledLearningLoopRepository {
 }
 
 impl HuntingRepository for DisabledLearningLoopRepository {
+    fn upsert_hunting_candidate(
+        &self,
+        _candidate: &HuntingCandidate,
+    ) -> Result<HuntingCandidate, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_hunting_candidate(
+        &self,
+        _id: &HuntingCandidateId,
+    ) -> Result<Option<HuntingCandidate>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_hunting_candidates(
+        &self,
+        _status: Option<HuntingCandidateStatus>,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
     fn upsert_hunting_target(
         &self,
         _target: &HuntingTarget,
@@ -992,6 +1140,48 @@ impl HuntingRepository for DisabledLearningLoopRepository {
         _limit: u32,
         _offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError> {
+        Err(Self::disabled())
+    }
+}
+
+impl RecognitionUpgradeRepository for DisabledLearningLoopRepository {
+    fn upsert_recognition_evidence(
+        &self,
+        _evidence: &RecognitionEvidence,
+    ) -> Result<RecognitionEvidence, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_recognition_evidence(
+        &self,
+        _lexical_entry_id: &LexicalEntryId,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<RecognitionEvidence>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_upgrade_suggestion(
+        &self,
+        _suggestion: &UpgradeSuggestion,
+    ) -> Result<UpgradeSuggestion, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_upgrade_suggestion(
+        &self,
+        _id: &UpgradeSuggestionId,
+    ) -> Result<Option<UpgradeSuggestion>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_upgrade_suggestions(
+        &self,
+        _lexical_entry_id: Option<&LexicalEntryId>,
+        _status: Option<UpgradeSuggestionStatus>,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<UpgradeSuggestion>, ApplicationError> {
         Err(Self::disabled())
     }
 }

@@ -542,14 +542,15 @@ class ReviewQueueEntry {
     required this.card,
   });
 
-  factory ReviewQueueEntry.fromJson(
-    Map<String, dynamic> json,
-  ) => ReviewQueueEntry(
-    item: ReviewItem.fromJson(json['item'] as Map<String, dynamic>),
-    schedule: ReviewSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
-    state: ReviewCardState.fromJson(json['state'] as String),
-    card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
-  );
+  factory ReviewQueueEntry.fromJson(Map<String, dynamic> json) =>
+      ReviewQueueEntry(
+        item: ReviewItem.fromJson(json['item'] as Map<String, dynamic>),
+        schedule: ReviewSchedule.fromJson(
+          json['schedule'] as Map<String, dynamic>,
+        ),
+        state: ReviewCardState.fromJson(json['state'] as String),
+        card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
+      );
 
   final ReviewItem item;
   final ReviewSchedule schedule;
@@ -578,6 +579,8 @@ class ReviewSubmission {
     required this.attempt,
     required this.schedule,
     required this.generatedObservationIds,
+    required this.huntingCandidateIds,
+    required this.upgradeSuggestions,
   });
 
   factory ReviewSubmission.fromJson(
@@ -589,11 +592,134 @@ class ReviewSubmission {
         ((json['generated_observation_ids'] as List<dynamic>?) ?? const [])
             .cast<String>()
             .toList(growable: false),
+    huntingCandidateIds:
+        ((json['hunting_candidate_ids'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+    upgradeSuggestions:
+        ((json['upgrade_suggestions'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) => UpgradeSuggestion.fromJson(
+                Map<String, dynamic>.from(value as Map),
+              ),
+            )
+            .toList(growable: false),
   );
 
   final ReviewAttempt attempt;
   final ReviewSchedule schedule;
   final List<String> generatedObservationIds;
+  final List<String> huntingCandidateIds;
+  final List<UpgradeSuggestion> upgradeSuggestions;
+}
+
+/// A listening review failure offered for an explicit promotion to a manual
+/// Hunting Target.
+class HuntingCandidate {
+  HuntingCandidate({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.reviewItemId,
+    required this.sentenceId,
+    required this.mediaId,
+    required this.trackId,
+    required this.targetSnapshot,
+    required this.promptSnapshot,
+    required this.failureCount,
+    required this.status,
+    required this.createdAtMs,
+    required this.lastFailedAtMs,
+  });
+
+  factory HuntingCandidate.fromJson(Map<String, dynamic> json) =>
+      HuntingCandidate(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        reviewItemId: json['review_item_id'] as String,
+        sentenceId: json['sentence_id'] as String?,
+        mediaId: json['media_id'] as String?,
+        trackId: json['track_id'] as String?,
+        targetSnapshot: json['target_snapshot'] as String,
+        promptSnapshot: json['prompt_snapshot'] as String,
+        failureCount: json['failure_count'] as int,
+        status: json['status'] as String,
+        createdAtMs: json['created_at_ms'] as int,
+        lastFailedAtMs: json['last_failed_at_ms'] as int,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String reviewItemId;
+  final String? sentenceId;
+  final String? mediaId;
+  final String? trackId;
+  final String targetSnapshot;
+  final String promptSnapshot;
+  final int failureCount;
+  final String status;
+  final int createdAtMs;
+  final int lastFailedAtMs;
+}
+
+/// A Core suggestion for a listening-only lexical status change.
+class UpgradeSuggestion {
+  const UpgradeSuggestion({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.lexicalDisplayForm,
+    required this.previousStatus,
+    required this.suggestedStatus,
+    required this.status,
+    required this.evidenceContextCount,
+    required this.evidenceIds,
+    required this.threshold,
+    required this.evidenceClass,
+    required this.createdAtMs,
+    required this.resolvedAtMs,
+    required this.cooldownUntilMs,
+    required this.capability,
+    required this.previousAssessment,
+    required this.suggestedAssessment,
+  });
+
+  factory UpgradeSuggestion.fromJson(Map<String, dynamic> json) =>
+      UpgradeSuggestion(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        lexicalDisplayForm: json['lexical_display_form'] as String,
+        previousStatus: json['previous_status'] as String?,
+        suggestedStatus: json['suggested_status'] as String?,
+        status: json['status'] as String,
+        evidenceContextCount: json['evidence_context_count'] as int,
+        evidenceIds: (json['evidence_ids'] as List<dynamic>).cast<String>(),
+        threshold: json['threshold'] as int,
+        evidenceClass: json['evidence_class'] as String,
+        createdAtMs: json['created_at_ms'] as int,
+        resolvedAtMs: json['resolved_at_ms'] as int?,
+        cooldownUntilMs: json['cooldown_until_ms'] as int?,
+        capability: json['capability'] as String?,
+        previousAssessment: json['previous_assessment'] as String?,
+        suggestedAssessment: json['suggested_assessment'] as String?,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String lexicalDisplayForm;
+  final String? previousStatus;
+  final String? suggestedStatus;
+  final String status;
+  final int evidenceContextCount;
+  final List<String> evidenceIds;
+  final int threshold;
+  final String evidenceClass;
+  final int createdAtMs;
+  final int? resolvedAtMs;
+  final int? cooldownUntilMs;
+  final String? capability;
+  final String? previousAssessment;
+  final String? suggestedAssessment;
+
+  bool get isListening => capability == 'listening';
 }
 
 class HuntingTarget {

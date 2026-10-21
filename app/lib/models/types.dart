@@ -9,3 +9,4 @@ part 'types/diagnosis.dart';
 part 'types/dictionary.dart';
 part 'types/pronunciation.dart';
 part 'types/media_fit.dart';
+part 'types/content_fit.dart';

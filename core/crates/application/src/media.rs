@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
 use crate::{
-    AppServices, ApplicationError, CorpusIndexRepository, LLTimelineImportRepository,
-    LLTimelineResourceRepository, LearnerProfileUseCases, LearningEventRepository,
-    LexicalEntryRepository, LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem,
-    MediaLibraryEntry, MediaRepository, MediaTriageIntent, PhoneTimelineRepository,
-    PlaybackProgressRepository, PronunciationProvider, PronunciationRepository,
-    PronunciationUseCases, ProsodyAnalysisRepository, RegisterMedia, SenseGroupRepository,
-    SubtitleTrack, SubtitleTrackId, SubtitleTrackRepository, SubtitleTrackStatus, TimeMs,
-    WordTimelineRepository, now_ms, require_text,
+    AppServices, ApplicationError, CoachDashboardRepository, CorpusIndexRepository,
+    DifficultyRepository, LLTimelineImportRepository, LLTimelineResourceRepository,
+    LearnerProfileUseCases, LearningEventRepository, LexicalEntryRepository,
+    LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem, MediaLibraryEntry,
+    MediaRepository, MediaTriageIntent, PhoneTimelineRepository, PlaybackProgressRepository,
+    PronunciationProvider, PronunciationRepository, PronunciationUseCases,
+    ProsodyAnalysisRepository, RegisterMedia, SenseGroupRepository, SubtitleTrack, SubtitleTrackId,
+    SubtitleTrackRepository, SubtitleTrackStatus, TimeMs, WordTimelineRepository, now_ms,
+    require_text,
 };
 use std::sync::Arc;
 
@@ -30,6 +31,8 @@ pub struct MediaAnalysisUseCases {
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
+    pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
+    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
     lexical_learning: LexicalLearningUseCases,
     learner_profile: LearnerProfileUseCases,
@@ -51,6 +54,8 @@ impl MediaAnalysisUseCases {
             corpus: services.corpus.clone(),
             lexical_entries: services.lexical_entries.clone(),
             learning_events: services.learning_events.clone(),
+            coach_dashboard: services.coach_dashboard.clone(),
+            difficulty: services.difficulty.clone(),
             pronunciation_providers: services.pronunciation_providers.clone(),
             lexical_learning: LexicalLearningUseCases::from_services(services),
             learner_profile: LearnerProfileUseCases::new(services.learner_profiles.clone()),
@@ -190,9 +195,13 @@ impl MediaAnalysisUseCases {
                 track.status == SubtitleTrackStatus::Available && track.language.is_some()
             });
         let primary_track_id = primary_track.as_ref().map(|track| track.id.clone());
+        let fit = primary_track_id
+            .as_ref()
+            .and_then(|track_id| self.content_fit_for_track(track_id).ok());
         Ok(MediaLibraryEntry {
             media,
             primary_track_id,
+            fit,
             triage_intent,
         })
     }

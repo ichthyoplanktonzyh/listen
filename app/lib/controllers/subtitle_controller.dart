@@ -47,6 +47,7 @@ class SubtitleState {
     this.llTimelineDocument,
     this.timelineResourceError,
     Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
+    this.contentFit,
   }) : _pronunciationBySentence = Map.unmodifiable(pronunciationBySentence),
        _timingsBySentence = Map.unmodifiable({
          for (final entry in timingsBySentence.entries)
@@ -152,6 +153,7 @@ class SubtitleState {
   final Map<String, PhoneticAnalysis> _phoneticAnalysisBySentence;
   Map<String, PhoneticAnalysis> get phoneticAnalysisBySentence =>
       Map.unmodifiable(_phoneticAnalysisBySentence);
+  final ContentDifficultyProfile? contentFit;
 
   SubtitleState copyWith({
     Object? primaryTrack = _unset,
@@ -188,6 +190,7 @@ class SubtitleState {
     Object? llTimelineDocument = _unset,
     Object? timelineResourceError = _unset,
     Map<String, PhoneticAnalysis>? phoneticAnalysisBySentence,
+    Object? contentFit = _unset,
   }) => SubtitleState(
     primaryTrack: identical(primaryTrack, _unset)
         ? this.primaryTrack
@@ -245,6 +248,9 @@ class SubtitleState {
         : timelineResourceError as String?,
     phoneticAnalysisBySentence:
         phoneticAnalysisBySentence ?? this.phoneticAnalysisBySentence,
+    contentFit: identical(contentFit, _unset)
+        ? this.contentFit
+        : contentFit as ContentDifficultyProfile?,
   );
 
   TimelineCursor get primaryCursor => TimelineCursor(
@@ -533,6 +539,7 @@ class SubtitleController extends ChangeNotifier {
         llTimelineDocument: null,
         timelineResourceError: null,
         phoneticAnalysisBySentence: const {},
+        contentFit: null,
       ),
     );
   }
@@ -553,6 +560,11 @@ class SubtitleController extends ChangeNotifier {
 
   void setTimelineResourceError(String error) =>
       _store.update((s) => s.copyWith(timelineResourceError: error));
+
+  ContentDifficultyProfile? get contentFit => _store.state.contentFit;
+
+  void setContentFit(ContentDifficultyProfile? profile) =>
+      _store.update((s) => s.copyWith(contentFit: profile));
 
   void clearTimelineResource() => _store.update(
     (s) => s.copyWith(

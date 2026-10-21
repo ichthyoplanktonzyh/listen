@@ -1,6 +1,8 @@
 mod background_jobs;
 mod capability_attempts;
+mod coach_dashboard;
 mod connection;
+mod content_fit;
 mod corpus;
 mod dictionary;
 mod learner_profile;

@@ -258,6 +258,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
     ),
     primaryTrackId: null,
     triageIntent: null,
+    fit: null,
   );
 
   /// True makes registration throw the way a core rejection does.
@@ -361,6 +362,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
       media: media,
       primaryTrackId: primaryTrackId,
       triageIntent: null,
+      fit: null,
     );
 
     _entries.add(entry);

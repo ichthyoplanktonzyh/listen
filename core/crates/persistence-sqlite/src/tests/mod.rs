@@ -5,9 +5,9 @@ use application::{
     ImportSubtitle, LLTimelineResourceRepository, LearningEventRepository,
     LearningObservationRepository, LexicalCapabilityRepository, LexicalEntryRepository,
     ListeningInboxRepository, MediaRepository, PhoneTimelineRepository, PhoneticAnalysisRepository,
-    PracticeRepository, ProsodyAnalysisRepository, RegisterMedia, ReviewQueueRepository,
-    SenseGroupRepository, SubtitleTrackRepository, UpsertLexicalEntry, VocabularyAssetRepository,
-    WordTimelineRepository,
+    PracticeRepository, ProsodyAnalysisRepository, RecognitionUpgradeRepository, RegisterMedia,
+    ReviewQueueRepository, SenseGroupRepository, SubtitleTrackRepository, UpsertLexicalEntry,
+    VocabularyAssetRepository, WordTimelineRepository,
 };
 
 use async_trait::async_trait;
@@ -294,6 +294,8 @@ impl DictionaryProvider for FakeChineseDictionary {
 }
 
 mod background_jobs;
+mod coach_dashboard;
+mod content_fit;
 mod l1_diagnosis;
 mod learner_profile;
 mod learning_loop;
@@ -305,6 +307,7 @@ mod media_library;
 mod migrations;
 mod package_lifecycle;
 mod phonetic_analysis;
+mod projection_review;
 mod semantic_embedding;
 mod subtitles_dictionary;
 mod timelines;

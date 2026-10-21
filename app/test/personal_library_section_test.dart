@@ -22,6 +22,7 @@ MediaLibraryEntry _entry({String id = 'media-1', String title = 'Media 1'}) =>
         'updated_at_ms': 2,
       },
       'primary_track_id': 'track-$id',
+      'fit': null,
       'triage_intent': null,
     });
 

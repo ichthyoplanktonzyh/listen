@@ -38,6 +38,7 @@ MediaLibraryEntry _entry(
   media: _media(id, title, updatedAtMs, kind: kind),
   primaryTrackId: null,
   triageIntent: null,
+  fit: null,
 );
 
 MaterialDetails _details(

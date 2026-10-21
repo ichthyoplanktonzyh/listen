@@ -124,6 +124,80 @@ extension PracticeReviewApi on LocalApi {
         }))
         as Map<String, dynamic>,
   );
+
+  Future<List<UpgradeSuggestion>> upgradeSuggestions({
+    String? lexicalEntryId,
+    String? status = 'pending',
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final query = <String, String>{
+      'lexical_entry_id': ?lexicalEntryId,
+      'status': ?status,
+      'limit': '$limit',
+      'offset': '$offset',
+    };
+    final values =
+        (await _request(
+              'GET',
+              '/v1/review/upgrade-suggestions?${Uri(queryParameters: query).query}',
+            ))
+            as List<dynamic>;
+    return values
+        .map(
+          (value) => UpgradeSuggestion.fromJson(
+            Map<String, dynamic>.from(value as Map),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<UpgradeSuggestion>> upgradeSuggestionHistory({
+    String? lexicalEntryId,
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final query = <String, String>{
+      'lexical_entry_id': ?lexicalEntryId,
+      'limit': '$limit',
+      'offset': '$offset',
+    };
+    final values =
+        (await _request(
+              'GET',
+              '/v1/review/upgrade-suggestions/history?${Uri(queryParameters: query).query}',
+            ))
+            as List<dynamic>;
+    return values
+        .map(
+          (value) => UpgradeSuggestion.fromJson(
+            Map<String, dynamic>.from(value as Map),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<UpgradeSuggestion> confirmUpgradeSuggestion(
+    String id,
+  ) async => UpgradeSuggestion.fromJson(
+    (await _request(
+          'POST',
+          '/v1/review/upgrade-suggestions/${Uri.encodeComponent(id)}/confirm',
+          const {},
+        ))
+        as Map<String, dynamic>,
+  );
+
+  Future<UpgradeSuggestion> rejectUpgradeSuggestion(
+    String id,
+  ) async => UpgradeSuggestion.fromJson(
+    (await _request(
+          'POST',
+          '/v1/review/upgrade-suggestions/${Uri.encodeComponent(id)}/reject',
+          const {},
+        ))
+        as Map<String, dynamic>,
+  );
 }
 
 void _requireListeningCustomStudy(CustomStudyRequest request) {

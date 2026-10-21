@@ -74,6 +74,7 @@ PersonalLibraryEntry audioLibraryEntry({
     ),
     primaryTrackId: null,
     triageIntent: null,
+    fit: null,
   );
   return PersonalLibraryEntry(
     details: materialDetails(

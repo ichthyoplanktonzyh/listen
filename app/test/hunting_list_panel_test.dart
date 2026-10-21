@@ -22,6 +22,9 @@ void main() {
         if (method == 'GET' && path.startsWith('/v1/hunting/targets?')) {
           return (statusCode: 200, body: jsonEncode([_target]));
         }
+        if (method == 'GET' && path.startsWith('/v1/hunting/candidates?')) {
+          return (statusCode: 200, body: jsonEncode([_candidate]));
+        }
         throw StateError('unexpected $method $path');
       },
     );
@@ -37,6 +40,7 @@ void main() {
     );
 
     String? openedEntry;
+    String? promotedCandidate;
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
@@ -51,6 +55,9 @@ void main() {
             controller: controller,
             onRefresh: () async {},
             onArchiveTarget: (_) async {},
+            onPromoteCandidate: (candidate) async {
+              promotedCandidate = candidate.id;
+            },
             onOpenEntry: (id) => openedEntry = id,
           ),
         ),
@@ -60,9 +67,14 @@ void main() {
     expect(find.text('Hunting List'), findsOneWidget);
     expect(find.text('would have'), findsOneWidget);
     expect(find.text('1 of 5 active targets'), findsOneWidget);
+    expect(find.text('Repeated listening review misses'), findsOneWidget);
+    expect(find.text('Missed in review 2 time(s)'), findsOneWidget);
 
     await tester.tap(find.text('would have'));
     expect(openedEntry, 'lexical-1');
+
+    await tester.tap(find.text('Add'));
+    expect(promotedCandidate, 'candidate-1');
   });
 }
 
@@ -75,4 +87,19 @@ final _target = <String, dynamic>{
   'status': 'active',
   'created_at_ms': 1,
   'updated_at_ms': 1,
+};
+
+final _candidate = <String, dynamic>{
+  'id': 'candidate-1',
+  'lexical_entry_id': 'lexical-2',
+  'review_item_id': 'review-item-1',
+  'sentence_id': 'sentence-1',
+  'media_id': 'media-1',
+  'track_id': 'track-1',
+  'target_snapshot': 'could have',
+  'prompt_snapshot': 'could have',
+  'failure_count': 2,
+  'status': 'active',
+  'created_at_ms': 1,
+  'last_failed_at_ms': 2,
 };

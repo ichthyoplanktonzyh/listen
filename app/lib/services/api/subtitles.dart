@@ -43,6 +43,15 @@ extension SubtitlesApi on LocalApi {
             as Map<String, dynamic>,
       );
 
+  Future<ContentDifficultyProfile> trackContentFit(String trackId) async =>
+      ContentDifficultyProfile.fromJson(
+        (await _request(
+              'GET',
+              '/v1/subtitles/${Uri.encodeComponent(trackId)}/content-fit',
+            ))
+            as Map<String, dynamic>,
+      );
+
   Future<SubtitleTrack> archiveSubtitle(String trackId) async =>
       SubtitleTrack.fromJson(
         (await _request(

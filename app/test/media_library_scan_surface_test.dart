@@ -27,6 +27,7 @@ MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
   ),
   primaryTrackId: null,
   triageIntent: null,
+  fit: null,
 );
 
 /// A media-only library row bound to [entry] — the shape [ListeningHome] and

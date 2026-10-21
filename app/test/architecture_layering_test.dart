@@ -289,8 +289,9 @@ const _modelWireCouplingBaseline = <String, int>{
   'lib/models/backend_event.dart': 23,
   'lib/models/listening.dart': 12,
   'lib/models/llm_provider.dart': 14,
-  // Listening review DTOs no longer carry removed study channels.
-  'lib/models/practice.dart': 84,
+  // ReviewSubmission now includes automatic listening-candidate and status
+  // suggestion ids from Core's review result; other study channels stay out.
+  'lib/models/practice.dart': 90,
   'lib/models/review_deck.dart': 35,
   // 28, down from 30: the whole-media TranscriptionJobView wire model is gone
   // along with the Core transcription-job surface it decoded.
@@ -310,11 +311,17 @@ const _modelWireCouplingBaseline = <String, int>{
   // only the ProsodyAnalysis projection remains as the chunk source.
   'lib/models/timeline/word_chunk.dart': 34,
   'lib/models/types.dart': 1,
+  // Core now supplies authoritative listening fit and calibration evidence.
+  'lib/models/types/content_fit.dart': 42,
+  // Registered media rows include the Core-computed fit projection.
+  'lib/models/types/media_fit.dart': 14,
   'lib/models/types/diagnosis.dart': 26,
   'lib/models/types/dictionary.dart': 46,
   'lib/models/types/lexical.dart': 91,
-  'lib/models/types/media_fit.dart': 11,
   'lib/models/types/pronunciation.dart': 60,
+  // These DTOs only carry listening dashboard and explicit-status evidence.
+  'lib/models/coach_dashboard.dart': 20,
+  'lib/models/projection_review.dart': 6,
   'lib/models/vocabulary_transfer.dart': 7,
 };
 

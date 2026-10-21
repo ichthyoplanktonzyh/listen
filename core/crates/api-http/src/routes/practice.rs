@@ -1,8 +1,10 @@
 use crate::{
-    ApiError, ApiState, ApplicationError, Deserialize, HuntingOccurrenceQueryResult, HuntingTarget,
-    HuntingTargetId, HuntingTargetStatus, Json, ListeningInboxItem, ListeningInboxItemId,
-    ListeningInboxStatus, MediaId, Path, PracticeAttempt, PracticeAttemptId, PracticeItem,
-    PracticeSession, PracticeSessionId, Query, ReviewItem, ReviewItemId, State, SubtitleTrackId,
+    ApiError, ApiState, ApplicationError, Deserialize, HuntingCandidate, HuntingCandidateStatus,
+    HuntingOccurrenceQueryResult, HuntingTarget, HuntingTargetId, HuntingTargetStatus, Json,
+    LexicalEntryId, ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus, MediaId, Path,
+    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId, Query,
+    ReviewItem, ReviewItemId, State, SubtitleTrackId, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus,
 };
 
 pub(crate) async fn create_practice_session(
@@ -138,6 +140,32 @@ pub(crate) async fn process_listening_inbox_item(
             services
                 .practice_learning()
                 .process_listening_inbox_item(&id, request)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct HuntingCandidateQuery {
+    status: Option<HuntingCandidateStatus>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn list_hunting_candidates(
+    State(state): State<ApiState>,
+    Query(query): Query<HuntingCandidateQuery>,
+) -> Result<Json<Vec<HuntingCandidate>>, ApiError> {
+    let status = Some(query.status.unwrap_or(HuntingCandidateStatus::Active));
+    let limit = query.limit.unwrap_or(100);
+    let offset = query.offset.unwrap_or(0);
+    state
+        .application
+        .execute("hunting.list_candidates", move |services| {
+            services
+                .practice_learning()
+                .list_hunting_candidates(status, limit, offset)
         })
         .await
         .map(Json)
@@ -381,6 +409,104 @@ pub(crate) async fn submit_review_attempt(
         .application
         .execute("review.submit_attempt", move |services| {
             services.practice_learning().submit_review_attempt(request)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpgradeSuggestionQuery {
+    lexical_entry_id: Option<String>,
+    status: Option<UpgradeSuggestionStatus>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn list_upgrade_suggestions(
+    State(state): State<ApiState>,
+    Query(query): Query<UpgradeSuggestionQuery>,
+) -> Result<Json<Vec<UpgradeSuggestion>>, ApiError> {
+    let lexical_entry_id = query
+        .lexical_entry_id
+        .map(LexicalEntryId::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    let status = Some(query.status.unwrap_or(UpgradeSuggestionStatus::Pending));
+    let limit = query.limit.unwrap_or(100);
+    let offset = query.offset.unwrap_or(0);
+    state
+        .application
+        .execute("upgrade.list", move |services| {
+            services.lexical_learning().upgrade_suggestions(
+                lexical_entry_id.as_ref(),
+                status,
+                limit,
+                offset,
+            )
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpgradeSuggestionHistoryQuery {
+    lexical_entry_id: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn upgrade_suggestion_history(
+    State(state): State<ApiState>,
+    Query(query): Query<UpgradeSuggestionHistoryQuery>,
+) -> Result<Json<Vec<UpgradeSuggestion>>, ApiError> {
+    let lexical_entry_id = query
+        .lexical_entry_id
+        .map(LexicalEntryId::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    let limit = query.limit.unwrap_or(100);
+    let offset = query.offset.unwrap_or(0);
+    state
+        .application
+        .execute("upgrade.history", move |services| {
+            services.lexical_learning().upgrade_suggestions(
+                lexical_entry_id.as_ref(),
+                None,
+                limit,
+                offset,
+            )
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn confirm_upgrade_suggestion(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<UpgradeSuggestion>, ApiError> {
+    let id = UpgradeSuggestionId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("upgrade.confirm", move |services| {
+            services.lexical_learning().confirm_upgrade_suggestion(&id)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn reject_upgrade_suggestion(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<UpgradeSuggestion>, ApiError> {
+    let id = UpgradeSuggestionId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("upgrade.reject", move |services| {
+            services.lexical_learning().reject_upgrade_suggestion(&id)
         })
         .await
         .map(Json)

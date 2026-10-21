@@ -9,8 +9,9 @@ use domain::{
     LearningObservation, LearningStatus, LexicalCapability, LexicalCapabilityHistory,
     LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
     LexicalObservation, LexicalOccurrence, LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId,
-    LexicalStatusHistory, LexicalStatusHistoryId, MediaId, SubtitleSentenceId,
-    VocabularyAssetBundle,
+    LexicalStatusHistory, LexicalStatusHistoryId, MediaId, ProjectionDecision,
+    ProjectionDecisionKind, ProjectionProposal, ProjectionProposalId, ProjectionProposalStatus,
+    SubtitleSentenceId, VocabularyAssetBundle,
 };
 use rusqlite::{OptionalExtension, params, params_from_iter};
 
@@ -27,7 +28,10 @@ mod capability;
 mod import_export;
 mod rows;
 
-use capability::{capability_history_row, read_capability_profile, sense_key};
+use capability::{
+    capability_history_row, read_capability_profile, read_capability_state, sense_key,
+    write_capability_history, write_capability_state,
+};
 use rows::{
     learning_observation_row, lexical_entry_row, lexical_history_row, lexical_observation_row,
     lexical_occurrence_row, read_all_lexical_sense_folder_occurrences,
@@ -116,6 +120,244 @@ impl LexicalCapabilityRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
+
+    fn listening_capability_watermark(
+        &self,
+        language: &LanguageCode,
+    ) -> Result<(u64, u64, u64, u64), ApplicationError> {
+        let conn = self.connection.lock();
+        let listening = json(&LexicalCapability::Listening)?;
+        conn.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM lexical_capability_history h
+                 JOIN lexical_entries e ON e.id=h.lexical_entry_id
+                 WHERE e.language=?1 AND h.capability=?2),
+                (SELECT COALESCE(MAX(h.changed_at_ms),0) FROM lexical_capability_history h
+                 JOIN lexical_entries e ON e.id=h.lexical_entry_id
+                 WHERE e.language=?1 AND h.capability=?2),
+                (SELECT COUNT(*) FROM lexical_capability_states s
+                 JOIN lexical_entries e ON e.id=s.lexical_entry_id
+                 WHERE e.language=?1 AND s.capability=?2),
+                (SELECT COALESCE(MAX(s.updated_at_ms),0) FROM lexical_capability_states s
+                 JOIN lexical_entries e ON e.id=s.lexical_entry_id
+                 WHERE e.language=?1 AND s.capability=?2)",
+            params![language.as_str(), listening],
+            |row| {
+                Ok((
+                    row.get::<_, u64>(0)?,
+                    row.get::<_, u64>(1)?,
+                    row.get::<_, u64>(2)?,
+                    row.get::<_, u64>(3)?,
+                ))
+            },
+        )
+        .map_err(repo)
+    }
+
+    fn save_projection_proposal(
+        &self,
+        proposal: &ProjectionProposal,
+    ) -> Result<ProjectionProposal, ApplicationError> {
+        if proposal.capability != LexicalCapability::Listening {
+            return Err(ApplicationError::Validation(
+                "only listening projection proposals are active",
+            ));
+        }
+        let conn = self.connection.lock();
+        conn.execute(
+            "INSERT OR IGNORE INTO projection_proposals
+             (id,lexical_entry_id,capability,algorithm_version,evidence_as_of_ms,proposal_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                proposal.id.as_str(),
+                proposal.lexical_entry_id.as_str(),
+                json(&proposal.capability)?,
+                proposal.algorithm_version,
+                proposal.evidence_as_of_ms,
+                json(proposal)?,
+                proposal.created_at_ms
+            ],
+        )
+        .map_err(repo)?;
+        drop(conn);
+        self.projection_proposal(&proposal.id)?.ok_or_else(|| {
+            ApplicationError::Repository("projection proposal was not persisted".into())
+        })
+    }
+
+    fn projection_proposal(
+        &self,
+        id: &ProjectionProposalId,
+    ) -> Result<Option<ProjectionProposal>, ApplicationError> {
+        let conn = self.connection.lock();
+        read_projection_proposal(&conn, id)
+    }
+
+    fn list_projection_proposals(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+    ) -> Result<Vec<ProjectionProposal>, ApplicationError> {
+        if capability.is_some_and(|value| value != LexicalCapability::Listening) {
+            return Ok(Vec::new());
+        }
+        let conn = self.connection.lock();
+        let listening = json(&LexicalCapability::Listening)?;
+        let mut statement = conn
+            .prepare(
+                "SELECT p.proposal_json,d.decision_json,
+                        EXISTS(SELECT 1 FROM projection_proposals newer
+                          WHERE newer.lexical_entry_id=p.lexical_entry_id
+                            AND newer.capability=p.capability
+                            AND (newer.evidence_as_of_ms>p.evidence_as_of_ms
+                              OR (newer.evidence_as_of_ms=p.evidence_as_of_ms
+                                AND (newer.created_at_ms>p.created_at_ms
+                                  OR (newer.created_at_ms=p.created_at_ms
+                                    AND newer.id>p.id)))))
+                 FROM projection_proposals p
+                 LEFT JOIN projection_decisions d ON d.proposal_id=p.id
+                 WHERE p.lexical_entry_id=?1 AND p.capability=?2
+                 ORDER BY p.evidence_as_of_ms DESC,p.created_at_ms DESC,p.id DESC",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(params![lexical_entry_id.as_str(), listening], |row| {
+                let mut proposal: ProjectionProposal = from_json(&row.get::<_, String>(0)?)?;
+                let decision = row
+                    .get::<_, Option<String>>(1)?
+                    .map(|value| from_json::<ProjectionDecision>(&value))
+                    .transpose()?;
+                proposal.status = match decision.map(|value| value.decision) {
+                    Some(ProjectionDecisionKind::Confirm) => ProjectionProposalStatus::Confirmed,
+                    Some(ProjectionDecisionKind::Reject) => ProjectionProposalStatus::Rejected,
+                    None if row.get::<_, bool>(2)? => ProjectionProposalStatus::Superseded,
+                    None => ProjectionProposalStatus::Pending,
+                };
+                Ok(proposal)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn resolve_projection_proposal(
+        &self,
+        decision: &ProjectionDecision,
+        proposal: &ProjectionProposal,
+        confirmed_projection: Option<CapabilityProjection>,
+    ) -> Result<(), ApplicationError> {
+        if proposal.capability != LexicalCapability::Listening {
+            return Err(ApplicationError::Validation(
+                "only listening projection proposals are active",
+            ));
+        }
+        let mut conn = self.connection.lock();
+        let tx = conn.transaction().map_err(repo)?;
+        if decision.proposal_id != proposal.id {
+            return Err(ApplicationError::Conflict(
+                "projection decision does not match proposal",
+            ));
+        }
+        let inserted = tx
+            .execute(
+                "INSERT INTO projection_decisions(id,proposal_id,decision_json,decided_at_ms)
+             SELECT ?1,p.id,?2,?3 FROM projection_proposals p
+             WHERE p.id=?4 AND p.lexical_entry_id=?5 AND p.capability=?6
+               AND NOT EXISTS(
+                 SELECT 1 FROM projection_decisions d WHERE d.proposal_id=p.id
+               )
+               AND NOT EXISTS(
+                 SELECT 1 FROM projection_proposals newer
+                 WHERE newer.lexical_entry_id=p.lexical_entry_id
+                   AND newer.capability=p.capability
+                   AND (newer.evidence_as_of_ms>p.evidence_as_of_ms
+                     OR (newer.evidence_as_of_ms=p.evidence_as_of_ms
+                       AND (newer.created_at_ms>p.created_at_ms
+                         OR (newer.created_at_ms=p.created_at_ms AND newer.id>p.id))))
+               )",
+                params![
+                    decision.id.as_str(),
+                    json(decision)?,
+                    decision.decided_at_ms,
+                    proposal.id.as_str(),
+                    proposal.lexical_entry_id.as_str(),
+                    json(&LexicalCapability::Listening)?,
+                ],
+            )
+            .map_err(repo)?;
+        if inserted != 1 {
+            return Err(ApplicationError::Conflict(
+                "projection proposal is already resolved or superseded",
+            ));
+        }
+        if let Some(projection) = confirmed_projection {
+            let previous = read_capability_state(
+                &tx,
+                &proposal.lexical_entry_id,
+                None,
+                LexicalCapability::Listening,
+            )?
+            .unwrap_or_default();
+            let mut next = previous.clone();
+            next.projection = Some(projection);
+            if previous != next {
+                write_capability_state(
+                    &tx,
+                    &proposal.lexical_entry_id,
+                    None,
+                    LexicalCapability::Listening,
+                    &next,
+                    decision.decided_at_ms,
+                )?;
+                write_capability_history(
+                    &tx,
+                    &proposal.lexical_entry_id,
+                    None,
+                    LexicalCapability::Listening,
+                    &previous,
+                    &next,
+                    CapabilityStateChangeKind::ProjectionUpdated,
+                    decision.decided_at_ms,
+                )?;
+            }
+        }
+        tx.commit().map_err(repo)
+    }
+}
+
+fn read_projection_proposal(
+    conn: &rusqlite::Connection,
+    id: &ProjectionProposalId,
+) -> Result<Option<ProjectionProposal>, ApplicationError> {
+    conn.query_row(
+        "SELECT p.proposal_json,d.decision_json,
+                EXISTS(SELECT 1 FROM projection_proposals newer
+                  WHERE newer.lexical_entry_id=p.lexical_entry_id
+                    AND newer.capability=p.capability
+                    AND (newer.evidence_as_of_ms>p.evidence_as_of_ms
+                      OR (newer.evidence_as_of_ms=p.evidence_as_of_ms
+                        AND (newer.created_at_ms>p.created_at_ms
+                          OR (newer.created_at_ms=p.created_at_ms AND newer.id>p.id)))))
+         FROM projection_proposals p
+         LEFT JOIN projection_decisions d ON d.proposal_id=p.id WHERE p.id=?1",
+        [id.as_str()],
+        |row| {
+            let mut proposal: ProjectionProposal = from_json(&row.get::<_, String>(0)?)?;
+            let decision = row
+                .get::<_, Option<String>>(1)?
+                .map(|value| from_json::<ProjectionDecision>(&value))
+                .transpose()?;
+            proposal.status = match decision.map(|value| value.decision) {
+                Some(ProjectionDecisionKind::Confirm) => ProjectionProposalStatus::Confirmed,
+                Some(ProjectionDecisionKind::Reject) => ProjectionProposalStatus::Rejected,
+                None if row.get::<_, bool>(2)? => ProjectionProposalStatus::Superseded,
+                None => ProjectionProposalStatus::Pending,
+            };
+            Ok(proposal)
+        },
+    )
+    .optional()
+    .map_err(repo)
 }
 
 impl LexicalEntryRepository for SqliteRepository {

@@ -1,11 +1,13 @@
 import '../../models/api_failure.dart';
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 import '../../services/api_service.dart';
 import '../../services/core_timeline_export.dart';
 
 abstract interface class ResourceRepository {
   bool get isAvailable;
   ApiFailure failureDetail(Object error);
+  Future<ContentDifficultyProfile> contentFit(String trackId);
   Future<List<SubtitleTrack>> mediaSubtitles(String mediaId);
   Future<List<WordTiming>> wordTimings(String trackId);
   Future<CoreTimelineExport> exportTimelineJson(String trackId);
@@ -31,6 +33,9 @@ class LocalResourceRepository implements ResourceRepository {
   bool get isAvailable => _getApi() != null;
   @override
   ApiFailure failureDetail(Object error) => describeApiFailure(error);
+  @override
+  Future<ContentDifficultyProfile> contentFit(String trackId) =>
+      _api.trackContentFit(trackId);
   @override
   Future<List<SubtitleTrack>> mediaSubtitles(String mediaId) =>
       _api.mediaSubtitles(mediaId);

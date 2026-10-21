@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 
 import '../models/adopted_composition.dart';
 import '../models/api_failure.dart';
+import '../models/coach_dashboard.dart';
 import '../models/discovery.dart';
 import '../models/learning_edition.dart';
 import '../models/learning_material.dart';
@@ -13,6 +14,7 @@ import '../models/listening.dart';
 import '../models/llm_provider.dart';
 import '../models/material_capability.dart';
 import '../models/practice.dart';
+import '../models/projection_review.dart';
 import '../models/review_deck.dart';
 import '../models/saved_vocabulary_count.dart';
 import '../models/runtime_resources.dart';
@@ -38,6 +40,8 @@ part 'api/capability_attempts.dart';
 part 'api/package_lifecycle.dart';
 part 'api/composition.dart';
 part 'api/source_identities.dart';
+part 'api/coach_dashboard.dart';
+part 'api/projection_review.dart';
 
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
   final file = File(path);

@@ -18,6 +18,7 @@ void main() {
       'updated_at_ms': 1700000001000,
     },
     'primary_track_id': 'track-1',
+    'fit': null,
     'triage_intent': 'pin_intensive',
   };
 
@@ -49,5 +50,14 @@ void main() {
     final entry = MediaLibraryEntry.fromJson(fixture);
 
     expect(MediaLibraryEntry.fromJson(entry.toJson()).toJson(), fixture);
+  });
+
+  test('requires Core to include its authoritative fit projection', () {
+    final withoutFit = Map<String, dynamic>.from(fixture)..remove('fit');
+
+    expect(
+      () => MediaLibraryEntry.fromJson(withoutFit),
+      throwsA(isA<FormatException>()),
+    );
   });
 }

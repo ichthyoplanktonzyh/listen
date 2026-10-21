@@ -2,7 +2,16 @@
 
 > Updated: 2026-10-22 (Asia/Shanghai).
 
-## Current focus
+## Recovery branch
+
+`codex/park-learning-coach` retains listening-based fit/calibration, dashboard
+recommendations, review-derived hunting candidates, and capability-upgrade
+proposals with explicit learner confirmation on the reduced baseline `f865d676`.
+It is a frozen recovery point for later evaluation. Other learning channels,
+AI conversation, and document materials remain deferred. The old familiar-material
+read model had no producer and is omitted here; its source remains at `f01ba17e`.
+
+## Main product scope
 
 Listen limits its active implementation to one audio/video listening
 journey: acquire a Source, process and adopt a Learning Material, learn in the
@@ -52,7 +61,7 @@ and validation target fresh isolated stores; no in-place upgrade of the earlier
 broad implementation is required. This does not authorize scripts or tests to
 reset the owner's actual local data.
 
-The listening baseline uses `listen-listening.sqlite` as its default database
+This recovery branch uses `listen-coach.sqlite` (schema 68) as its default database
 filename and does not probe or move the earlier `listen.sqlite`. An explicit
 database override is still supported, but incompatible stores are rejected
 instead of reset.

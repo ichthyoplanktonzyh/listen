@@ -1,6 +1,7 @@
 use domain::{
-    CapabilityFilter, CapabilityOverride, CapabilityProjection, CorpusOccurrence,
-    CorpusOccurrenceId, DictionaryEntry, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
+    CapabilityFilter, CapabilityOverride, CapabilityProjection, ContentDifficultyProfile,
+    CorpusOccurrence, CorpusOccurrenceId, DictionaryEntry, HuntingCandidate, HuntingCandidateId,
+    HuntingCandidateStatus, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
     LLTimelineArtifact, LLTimelineMetadata, LanguageCode, LearnerProfile, LearnerProfileId,
     LearningChangeSource, LearningEvent, LearningEventKind, LearningEventSubjectKind,
     LearningObservation, LearningStatus, LexicalCapability, LexicalCapabilityHistory,
@@ -12,10 +13,12 @@ use domain::{
     PhoneticAnalysisJobId, PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId,
     PhoneticFindingFeedback, PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem,
     PracticeItemId, PracticeSession, PracticeSessionId, ProsodyAnalysis, ProsodyAnalysisId,
-    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
-    SecretRef, SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, SubtitleSentence,
-    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
-    VocabularyAssetBundle, WordPronunciation, WordTimeline, WordTimelineId, WordTiming,
+    RecognitionEvidence, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId,
+    ReviewItemStatus, ReviewSchedule, SecretRef, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SentencePronunciation, SoundFitCalibration, SubtitleSentence, SubtitleSentenceId,
+    SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
+    WordTimeline, WordTimelineId, WordTiming,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -398,6 +401,49 @@ pub trait LexicalCapabilityRepository: Send + Sync {
         lexical_entry_id: &LexicalEntryId,
         sense_id: Option<&LexicalSenseId>,
     ) -> Result<Vec<LexicalCapabilityHistory>, ApplicationError>;
+    /// Count and timestamp watermarks for listening-only capability state.
+    /// Counts make same-millisecond changes invalidate derived read models.
+    fn listening_capability_watermark(
+        &self,
+        _language: &LanguageCode,
+    ) -> Result<(u64, u64, u64, u64), ApplicationError> {
+        Ok((0, 0, 0, 0))
+    }
+    fn save_projection_proposal(
+        &self,
+        _proposal: &domain::ProjectionProposal,
+    ) -> Result<domain::ProjectionProposal, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "projection review repository is not configured".into(),
+        ))
+    }
+    fn projection_proposal(
+        &self,
+        _id: &domain::ProjectionProposalId,
+    ) -> Result<Option<domain::ProjectionProposal>, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "projection review repository is not configured".into(),
+        ))
+    }
+    fn list_projection_proposals(
+        &self,
+        _lexical_entry_id: &LexicalEntryId,
+        _capability: Option<LexicalCapability>,
+    ) -> Result<Vec<domain::ProjectionProposal>, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "projection review repository is not configured".into(),
+        ))
+    }
+    fn resolve_projection_proposal(
+        &self,
+        _decision: &domain::ProjectionDecision,
+        _proposal: &domain::ProjectionProposal,
+        _confirmed_projection: Option<CapabilityProjection>,
+    ) -> Result<(), ApplicationError> {
+        Err(ApplicationError::Repository(
+            "projection review repository is not configured".into(),
+        ))
+    }
 }
 
 /// Lexical identity, lookup, normalization overrides, and vocabulary
@@ -620,8 +666,23 @@ pub trait ReviewQueueRepository: Send + Sync {
     ) -> Result<crate::ReviewDailyLimits, ApplicationError>;
 }
 
-/// Explicit listening targets and their check history are one workflow.
+/// Automatic candidates and explicit listening targets are two stages of the
+/// same workflow; candidate promotion remains a learner action.
 pub trait HuntingRepository: Send + Sync {
+    fn upsert_hunting_candidate(
+        &self,
+        candidate: &HuntingCandidate,
+    ) -> Result<HuntingCandidate, ApplicationError>;
+    fn get_hunting_candidate(
+        &self,
+        id: &HuntingCandidateId,
+    ) -> Result<Option<HuntingCandidate>, ApplicationError>;
+    fn list_hunting_candidates(
+        &self,
+        status: Option<HuntingCandidateStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HuntingCandidate>, ApplicationError>;
     fn upsert_hunting_target(
         &self,
         target: &HuntingTarget,
@@ -636,6 +697,36 @@ pub trait HuntingRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError>;
+}
+
+/// Listening recognition evidence and its learner-confirmed upgrade
+/// suggestions.
+pub trait RecognitionUpgradeRepository: Send + Sync {
+    fn upsert_recognition_evidence(
+        &self,
+        evidence: &RecognitionEvidence,
+    ) -> Result<RecognitionEvidence, ApplicationError>;
+    fn list_recognition_evidence(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<RecognitionEvidence>, ApplicationError>;
+    fn save_upgrade_suggestion(
+        &self,
+        suggestion: &UpgradeSuggestion,
+    ) -> Result<UpgradeSuggestion, ApplicationError>;
+    fn get_upgrade_suggestion(
+        &self,
+        id: &UpgradeSuggestionId,
+    ) -> Result<Option<UpgradeSuggestion>, ApplicationError>;
+    fn list_upgrade_suggestions(
+        &self,
+        lexical_entry_id: Option<&LexicalEntryId>,
+        status: Option<UpgradeSuggestionStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<UpgradeSuggestion>, ApplicationError>;
 }
 
 pub trait LearningEventRepository: Send + Sync {
@@ -655,12 +746,93 @@ pub trait LearningEventRepository: Send + Sync {
         offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError>;
     /// Distinct subject ids that carry at least one event of `kind` on
-    /// `subject_kind` — e.g. media marked as familiar material.
+    /// `subject_kind`.
     fn list_event_subject_ids(
         &self,
         kind: LearningEventKind,
         subject_kind: LearningEventSubjectKind,
     ) -> Result<Vec<String>, ApplicationError>;
+}
+
+/// Listening-only source facts for the coach. This contains activity counts
+/// and material self-reports, never synthesized claims for other channels.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachDashboardFacts {
+    pub practice_attempts: u64,
+    pub correct_practice_attempts: u64,
+    pub review_attempts: u64,
+    pub successful_review_attempts: u64,
+    pub extensive_sessions: u64,
+    pub extensive_listening_ms: u64,
+    pub due_review_items: u64,
+    pub active_hunting_candidates: u64,
+    pub l1_difficulty_hits: u64,
+    pub listening_capability_changes: u64,
+    pub materials: Vec<CoachMaterialFact>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachMaterialFact {
+    pub media_id: String,
+    pub title: String,
+    pub report_count: u64,
+    pub first_report: Option<String>,
+    pub latest_report: Option<String>,
+    pub reports_understood_all: u64,
+    pub reports_got_the_gist: u64,
+    pub reports_unclear: u64,
+    pub practice_attempts: u64,
+    pub practice_correct: u64,
+    pub triage_intent: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachEvidenceFact {
+    pub id: String,
+    pub occurred_at_ms: u64,
+    pub result: String,
+    pub source_kind: String,
+    pub snapshot: String,
+    pub source_available: bool,
+    pub unavailable_reason: Option<String>,
+}
+
+pub trait CoachDashboardRepository: Send + Sync {
+    fn coach_dashboard_facts(
+        &self,
+        period_start_ms: u64,
+        period_end_ms: u64,
+        as_of_ms: u64,
+    ) -> Result<CoachDashboardFacts, ApplicationError>;
+    fn coach_evidence(
+        &self,
+        metric: &str,
+        period_start_ms: u64,
+        period_end_ms: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<CoachEvidenceFact>, ApplicationError>;
+}
+
+pub trait DifficultyRepository: Send + Sync {
+    fn save_difficulty_profile(
+        &self,
+        profile: &ContentDifficultyProfile,
+    ) -> Result<ContentDifficultyProfile, ApplicationError>;
+    fn get_difficulty_profile(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+    ) -> Result<Option<ContentDifficultyProfile>, ApplicationError>;
+    fn save_fit_calibration(
+        &self,
+        calibration: &SoundFitCalibration,
+    ) -> Result<SoundFitCalibration, ApplicationError>;
+    fn get_fit_calibration(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+    ) -> Result<Option<SoundFitCalibration>, ApplicationError>;
 }
 
 pub trait ListeningInboxRepository: Send + Sync {

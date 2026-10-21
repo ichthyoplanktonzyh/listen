@@ -10,6 +10,7 @@ import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../common/api_failure_disclosure.dart';
 import '../common/listen_loading.dart';
+import '../panels/content_fit_card.dart';
 
 /// Home Personal Library for retained audio/video materials.
 ///
@@ -134,6 +135,7 @@ class _UnifiedLibraryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
+    final fit = entry.primaryMedia?.fit;
     final (icon, typeLabel) = entry.shape == MaterialShape.mixed
         ? (Icons.layers_outlined, l.text('libraryTypeMixed'))
         : entry.canWatch
@@ -185,6 +187,16 @@ class _UnifiedLibraryRow extends StatelessWidget {
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(color: colors.onSurfaceVariant),
                         ),
+                        if (fit != null)
+                          FitChip(
+                            label: l.text('contentFitMeaning'),
+                            fit: fit.meaning.fit,
+                          ),
+                        if (fit != null)
+                          FitChip(
+                            label: l.text('contentFitSound'),
+                            fit: fit.sound.fit,
+                          ),
                         if (hasSidecarSubtitle)
                           _Badge(
                             icon: Icons.subtitles_outlined,
@@ -286,6 +298,7 @@ class _LibraryRow extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final primaryMedia = entry.primaryMedia;
     final duration = primaryMedia?.media.durationMs;
+    final fit = primaryMedia?.fit;
     return Material(
       color: colors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(
@@ -335,6 +348,16 @@ class _LibraryRow extends StatelessWidget {
                             formatDuration(Duration(milliseconds: duration)),
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        if (fit != null)
+                          FitChip(
+                            label: l.text('contentFitMeaning'),
+                            fit: fit.meaning.fit,
+                          ),
+                        if (fit != null)
+                          FitChip(
+                            label: l.text('contentFitSound'),
+                            fit: fit.sound.fit,
                           ),
                         if (hasSidecarSubtitle)
                           // States what the folder holds, nothing more: the

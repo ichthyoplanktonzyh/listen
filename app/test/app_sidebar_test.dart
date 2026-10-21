@@ -31,11 +31,12 @@ int _selectedRowCount(WidgetTester tester) {
 }
 
 void main() {
-  test('the rail contains the three current shell destinations', () {
+  test('the rail contains the four current shell destinations', () {
     expect(AppRoute.values.map((route) => route.name), [
       'home',
       'library',
       'language',
+      'coach',
     ]);
   });
 
@@ -78,7 +79,7 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Library'), findsOneWidget);
     expect(find.text('My language'), findsOneWidget);
-    expect(find.text('Coach'), findsNothing);
+    expect(find.text('Coach'), findsOneWidget);
     expect(find.text('Start conversation'), findsNothing);
   });
 }

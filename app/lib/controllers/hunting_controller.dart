@@ -9,12 +9,16 @@ import '../state/store.dart';
 class HuntingState {
   HuntingState({
     List<HuntingTarget> targets = const [],
+    List<HuntingCandidate> candidates = const [],
     this.busy = false,
     this.error,
-  }) : _targets = List.unmodifiable(targets);
+  }) : _targets = List.unmodifiable(targets),
+       _candidates = List.unmodifiable(candidates);
 
   final List<HuntingTarget> _targets;
   List<HuntingTarget> get targets => List.unmodifiable(_targets);
+  final List<HuntingCandidate> _candidates;
+  List<HuntingCandidate> get candidates => List.unmodifiable(_candidates);
   final bool busy;
   final NamedFailure? error;
 
@@ -23,11 +27,13 @@ class HuntingState {
 
   HuntingState copyWith({
     List<HuntingTarget>? targets,
+    List<HuntingCandidate>? candidates,
     bool? busy,
     NamedFailure? error,
     bool clearError = false,
   }) => HuntingState(
     targets: targets ?? this.targets,
+    candidates: candidates ?? this.candidates,
     busy: busy ?? this.busy,
     error: clearError ? null : error ?? this.error,
   );
@@ -52,7 +58,8 @@ class HuntingController extends ChangeNotifier {
     _store.update((state) => state.copyWith(busy: true, clearError: true));
     try {
       final targets = await _repository.targets();
-      _store.replace(HuntingState(targets: targets));
+      final candidates = await _repository.candidates();
+      _store.replace(HuntingState(targets: targets, candidates: candidates));
       return true;
     } catch (error) {
       _store.update(
@@ -71,9 +78,18 @@ class HuntingController extends ChangeNotifier {
   Future<bool> addManual(LexicalEntry entry) =>
       _create(lexicalEntryId: entry.id, sourceKind: 'manual');
 
+  Future<bool> promoteCandidate(HuntingCandidate candidate) => _create(
+    lexicalEntryId: candidate.lexicalEntryId,
+    sourceKind: 'review_candidate',
+    sourceId: candidate.id,
+    candidateId: candidate.id,
+  );
+
   Future<bool> _create({
     required String lexicalEntryId,
     required String sourceKind,
+    String? sourceId,
+    String? candidateId,
   }) async {
     if (state.busy || state.containsLexicalEntry(lexicalEntryId)) return false;
     _store.update((state) => state.copyWith(busy: true, clearError: true));
@@ -81,11 +97,17 @@ class HuntingController extends ChangeNotifier {
       final target = await _repository.createTarget(
         lexicalEntryId: lexicalEntryId,
         sourceKind: sourceKind,
+        sourceId: sourceId,
       );
       _store.update(
         (state) => state.copyWith(
           busy: false,
           targets: [...state.targets, target],
+          candidates: candidateId == null
+              ? state.candidates
+              : state.candidates
+                    .where((candidate) => candidate.id != candidateId)
+                    .toList(growable: false),
         ),
       );
       return true;

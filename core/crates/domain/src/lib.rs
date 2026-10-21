@@ -79,6 +79,12 @@ pub use capability::*;
 mod learning_loop;
 pub use learning_loop::*;
 
+mod content_fit;
+pub use content_fit::*;
+
+mod projection_review;
+pub use projection_review::*;
+
 mod learning_observation;
 pub use learning_observation::*;
 
@@ -153,6 +159,11 @@ string_id!(PracticeAttemptId);
 string_id!(ReviewItemId);
 string_id!(ReviewAttemptId);
 string_id!(HuntingTargetId);
+string_id!(HuntingCandidateId);
+string_id!(RecognitionEvidenceId);
+string_id!(UpgradeSuggestionId);
+string_id!(ProjectionProposalId);
+string_id!(ProjectionDecisionId);
 string_id!(LearningEventId);
 string_id!(ListeningInboxItemId);
 string_id!(CorpusOccurrenceId);

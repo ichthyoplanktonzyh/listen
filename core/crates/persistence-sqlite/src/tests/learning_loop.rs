@@ -521,6 +521,121 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
 }
 
 #[test]
+fn only_unassisted_dictation_correctness_counts_as_recognition_evidence() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let media = transcription_media();
+    MediaRepository::upsert(repo.as_ref(), &media).unwrap();
+    let session = PracticeSession {
+        id: PracticeSessionId::parse("recognition-source-session").unwrap(),
+        mode: PracticeMode::Intensive,
+        media_id: Some(media.id.clone()),
+        track_id: None,
+        source: "test".into(),
+        started_at_ms: 1,
+        ended_at_ms: None,
+    };
+    repo.create_practice_session(&session).unwrap();
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "signal",
+        "signal",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
+    let anchor = PracticeAnchor {
+        kind: PracticeAnchorKind::LexicalEntry,
+        id: lexical.entry.id.as_str().into(),
+        label: Some("signal".into()),
+        lexical_entry_id: Some(lexical.entry.id.clone()),
+        sentence_id: None,
+        token_start: None,
+        token_end: None,
+        start_ms: None,
+        end_ms: None,
+    };
+    let target = PracticeTarget {
+        kind: PracticeTargetKind::Lexical,
+        id: Some(lexical.entry.id.as_str().into()),
+        sentence_id: None,
+        start_ms: None,
+        end_ms: None,
+    };
+
+    for kind in [PracticeKind::Cloze, PracticeKind::SubtitleFade] {
+        let item = services
+            .practice_learning()
+            .create_practice_item(application::CreatePracticeItem {
+                session_id: Some(session.id.clone()),
+                kind,
+                target: target.clone(),
+                prompt_snapshot: "signal".into(),
+                expected_text: "signal".into(),
+                anchors: vec![anchor.clone()],
+            })
+            .unwrap();
+        let attempt = services
+            .practice_learning()
+            .submit_practice_attempt(application::SubmitPracticeAttempt {
+                item_id: item.id,
+                text_answer: "signal".into(),
+                create_review_item_on_failure: false,
+            })
+            .unwrap();
+        assert_eq!(attempt.result, PracticeResult::Correct);
+        assert!(
+            repo.list_recognition_evidence(&lexical.entry.id, 10, 0)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    let dictation = services
+        .practice_learning()
+        .create_practice_item(application::CreatePracticeItem {
+            session_id: Some(session.id),
+            kind: PracticeKind::Dictation,
+            target,
+            prompt_snapshot: "signal".into(),
+            expected_text: "signal".into(),
+            anchors: vec![anchor],
+        })
+        .unwrap();
+    let attempt = services
+        .practice_learning()
+        .submit_practice_attempt(application::SubmitPracticeAttempt {
+            item_id: dictation.id,
+            text_answer: "signal".into(),
+            create_review_item_on_failure: false,
+        })
+        .unwrap();
+    assert_eq!(attempt.result, PracticeResult::Correct);
+    let evidence = repo
+        .list_recognition_evidence(&lexical.entry.id, 10, 0)
+        .unwrap();
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(
+        evidence[0].source_kind,
+        RecognitionEvidenceSourceKind::Practice
+    );
+    assert_eq!(
+        evidence[0].context_key,
+        format!("media:{}", media.id.as_str())
+    );
+}
+
+#[test]
 fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
@@ -654,7 +769,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         Err(application::ApplicationError::Validation(_))
     ));
 
-    services
+    let first_completion = services
         .practice_learning()
         .complete_listening_session(
             &session.id,
@@ -669,6 +784,20 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
             },
         )
         .unwrap();
+    let repeated_completion = services
+        .practice_learning()
+        .complete_listening_session(
+            &session.id,
+            application::CompleteListeningSessionInput {
+                comprehension_report: Some(ListeningComprehensionReport::Unclear),
+                hunting_summary: None,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        repeated_completion.ended_at_ms,
+        first_completion.ended_at_ms
+    );
     let events = repo
         .list_learning_events_for_session(&session.id, 100, 0)
         .unwrap();
@@ -676,6 +805,14 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         events
             .iter()
             .any(|event| event.kind == LearningEventKind::ListeningInboxCaptured)
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.kind == LearningEventKind::ListeningCompleted)
+            .count(),
+        1,
+        "a repeated completion request must not create another completion event"
     );
     let completed = events
         .iter()
@@ -850,4 +987,486 @@ fn review_queries_enforce_limits_and_custom_study_is_read_only() {
 
     let overview = practice.review_deck_overview(Some(now)).unwrap();
     assert_eq!(overview.counts.due, 2);
+}
+
+#[test]
+fn failed_review_records_context_evidence_and_hunting_candidate_without_status_change() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let media = services
+        .media_analysis()
+        .register_media(RegisterMedia {
+            path: "/tmp/review-evidence.mp4".into(),
+            fingerprint: "review-evidence".into(),
+            title: "Review evidence".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(5_000),
+            retain: None,
+        })
+        .unwrap();
+    let track = services
+        .media_analysis()
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id.clone(),
+            source_name: "timeline.srt".into(),
+            content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    let sentence = &track.sentences[0];
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "hello",
+        "Hello",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
+    let review = services
+        .practice_learning()
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::PracticeFailure,
+                id: None,
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: Some(media.id),
+                track_id: Some(track.id.clone()),
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("Hello".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: Some(sentence.id.clone()),
+                token_start: Some(0),
+                token_end: Some(0),
+                start_ms: Some(sentence.start.get()),
+                end_ms: Some(sentence.end.get()),
+            }],
+            prompt_snapshot: sentence.display_text.clone(),
+        })
+        .unwrap();
+
+    let submission = services
+        .practice_learning()
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: review.id.clone(),
+            rating: ReviewRating::Again,
+        })
+        .unwrap();
+
+    assert_eq!(submission.generated_observation_ids.len(), 1);
+    assert_eq!(submission.hunting_candidate_ids.len(), 1);
+    let observations = repo
+        .list_lexical_observations_by_sentence(&sentence.id)
+        .unwrap();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(
+        observations[0].result,
+        ObservationResult::NotRecognizedInContext
+    );
+    let candidates = services
+        .practice_learning()
+        .list_hunting_candidates(Some(HuntingCandidateStatus::Active), 10, 0)
+        .unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].review_item_id, review.id);
+    assert_eq!(candidates[0].failure_count, 1);
+    assert_eq!(candidates[0].target_snapshot, "Hello");
+    let existing_manual_target = services
+        .practice_learning()
+        .create_hunting_target(application::CreateHuntingTargetInput {
+            lexical_entry_id: lexical.entry.id.clone(),
+            source_kind: HuntingTargetSourceKind::Manual,
+            source_id: None,
+        })
+        .unwrap();
+    let target = services
+        .practice_learning()
+        .create_hunting_target(application::CreateHuntingTargetInput {
+            lexical_entry_id: lexical.entry.id.clone(),
+            source_kind: HuntingTargetSourceKind::ReviewCandidate,
+            source_id: Some(candidates[0].id.as_str().into()),
+        })
+        .unwrap();
+    assert_eq!(target, existing_manual_target);
+    assert_eq!(target.source_kind, HuntingTargetSourceKind::Manual);
+    assert_eq!(target.target_snapshot, "Hello");
+    assert_eq!(target.status, HuntingTargetStatus::Active);
+    assert_eq!(
+        services
+            .practice_learning()
+            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+            .unwrap(),
+        vec![target.clone()]
+    );
+    assert_eq!(
+        services
+            .practice_learning()
+            .list_hunting_candidates(Some(HuntingCandidateStatus::Consumed), 10, 0)
+            .unwrap()[0]
+            .id,
+        candidates[0].id
+    );
+    let archived = services
+        .practice_learning()
+        .archive_hunting_target(&target.id)
+        .unwrap();
+    assert_eq!(archived.status, HuntingTargetStatus::Archived);
+    assert!(
+        services
+            .practice_learning()
+            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        services
+            .lexical_learning()
+            .lexical_details(&lexical.entry.id)
+            .unwrap()
+            .unwrap()
+            .entry
+            .status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+
+    // ADR 0017: the same failed review also lands one channelized
+    // listening observation, deduplicated across source and anchors.
+    let channelized = repo
+        .list_learning_observations(&lexical.entry.id, Some(LexicalCapability::Listening), 10, 0)
+        .unwrap();
+    assert_eq!(channelized.len(), 1);
+    assert_eq!(channelized[0].task_type, ObservationTaskType::ReviewRecall);
+    assert_eq!(channelized[0].outcome, ObservationOutcome::Failure);
+    assert_eq!(channelized[0].assistance, AssistanceLevel::None);
+    assert_eq!(channelized[0].origin, ObservationOrigin::ReviewTask);
+    assert_eq!(channelized[0].surface_form.as_deref(), Some("Hello"));
+    assert_eq!(
+        channelized[0].source_ref.as_deref(),
+        Some(submission.attempt.id.as_str())
+    );
+}
+
+#[test]
+fn recognition_evidence_deduplicates_context_and_upgrade_history_round_trips() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let lexical_entry_id = LexicalEntryId::parse("lexical-upgrade-1").unwrap();
+    let first = RecognitionEvidence {
+        id: RecognitionEvidenceId::parse("evidence-1").unwrap(),
+        lexical_entry_id: lexical_entry_id.clone(),
+        context_key: "sentence:one".into(),
+        sentence_id: Some(SubtitleSentenceId::parse("one").unwrap()),
+        media_id: None,
+        source_kind: RecognitionEvidenceSourceKind::Review,
+        source_id: "review-attempt-1".into(),
+        occurred_at_ms: 10,
+    };
+    repo.upsert_recognition_evidence(&first).unwrap();
+    let mut replacement = first.clone();
+    replacement.id = RecognitionEvidenceId::parse("evidence-replacement").unwrap();
+    replacement.source_id = "review-attempt-2".into();
+    replacement.occurred_at_ms = 20;
+    let saved = repo.upsert_recognition_evidence(&replacement).unwrap();
+    assert_eq!(saved.source_id, "review-attempt-2");
+    assert_eq!(
+        repo.list_recognition_evidence(&lexical_entry_id, 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let suggestion = UpgradeSuggestion {
+        id: UpgradeSuggestionId::parse("suggestion-1").unwrap(),
+        lexical_entry_id: lexical_entry_id.clone(),
+        lexical_display_form: "would have".into(),
+        previous_status: LearningStatus::KnownNotRecognized,
+        suggested_status: LearningStatus::KnownRecognized,
+        status: UpgradeSuggestionStatus::Pending,
+        evidence_context_count: 5,
+        evidence_ids: vec![first.id],
+        threshold: 5,
+        evidence_class: "heuristic_proxy".into(),
+        created_at_ms: 30,
+        resolved_at_ms: None,
+        cooldown_until_ms: None,
+        capability: None,
+        previous_assessment: None,
+        suggested_assessment: None,
+    };
+    repo.save_upgrade_suggestion(&suggestion).unwrap();
+    assert_eq!(
+        repo.list_upgrade_suggestions(
+            Some(&lexical_entry_id),
+            Some(UpgradeSuggestionStatus::Pending),
+            10,
+            0,
+        )
+        .unwrap(),
+        vec![suggestion]
+    );
+}
+
+#[test]
+fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "would",
+        "would",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
+    let mut generated = Vec::new();
+    for index in 0..5 {
+        let sentence_id = SubtitleSentenceId::parse(format!("upgrade-context-{index}")).unwrap();
+        let review = services
+            .practice_learning()
+            .create_review_item(application::CreateReviewItem {
+                source: ReviewSource {
+                    kind: ReviewSourceKind::Sentence,
+                    id: Some(sentence_id.as_str().into()),
+                    practice_attempt_id: None,
+                    lexical_entry_id: Some(lexical.entry.id.clone()),
+                    media_id: None,
+                    track_id: None,
+                },
+                anchors: vec![PracticeAnchor {
+                    kind: PracticeAnchorKind::LexicalEntry,
+                    id: lexical.entry.id.as_str().into(),
+                    label: Some("would".into()),
+                    lexical_entry_id: Some(lexical.entry.id.clone()),
+                    sentence_id: Some(sentence_id),
+                    token_start: None,
+                    token_end: None,
+                    start_ms: None,
+                    end_ms: None,
+                }],
+                prompt_snapshot: format!("context {index}"),
+            })
+            .unwrap();
+        generated = services
+            .practice_learning()
+            .submit_review_attempt(application::SubmitReviewAttempt {
+                item_id: review.id,
+                rating: ReviewRating::Good,
+            })
+            .unwrap()
+            .upgrade_suggestions;
+    }
+    assert_eq!(generated.len(), 1);
+    assert_eq!(generated[0].evidence_context_count, 5);
+    assert_eq!(generated[0].capability, Some(LexicalCapability::Listening));
+    assert_eq!(
+        generated[0].suggested_assessment,
+        Some(CapabilityAssessment::Acquired)
+    );
+    assert_eq!(
+        services
+            .lexical_learning()
+            .lexical_details(&lexical.entry.id)
+            .unwrap()
+            .unwrap()
+            .entry
+            .status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+
+    let confirmed = services
+        .lexical_learning()
+        .confirm_upgrade_suggestion(&generated[0].id)
+        .unwrap();
+    assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&lexical.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
+    let details = services
+        .lexical_learning()
+        .lexical_details(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
+    assert_eq!(
+        details.history[0].change_source,
+        LearningChangeSource::CapabilityOverrideSync
+    );
+    let profile = services
+        .lexical_learning()
+        .lexical_capability_profile(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired
+    );
+    // ADR 0024: the legacy suggestion is evidence; only the separately
+    // confirmed Phase 3.17 proposal writes the projection.
+    let projection = profile.listening.projection.as_ref().unwrap();
+    assert_eq!(
+        projection.algorithm_version,
+        LISTENING_PROPOSAL_ALGORITHM_VERSION
+    );
+    assert_eq!(
+        projection.source,
+        CapabilityProjectionSource::EvidenceProjection
+    );
+    assert!(projection.confidence.is_some());
+    assert!(projection.evidence_as_of_ms.is_some());
+}
+
+#[test]
+fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "could",
+        "could",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
+    for index in 0..5 {
+        repo.upsert_recognition_evidence(&RecognitionEvidence {
+            id: RecognitionEvidenceId::parse(format!("reject-evidence-{index}")).unwrap(),
+            lexical_entry_id: lexical.entry.id.clone(),
+            context_key: format!("sentence:reject-{index}"),
+            sentence_id: Some(SubtitleSentenceId::parse(format!("reject-{index}")).unwrap()),
+            media_id: None,
+            source_kind: RecognitionEvidenceSourceKind::Review,
+            source_id: format!("attempt-{index}"),
+            occurred_at_ms: index,
+        })
+        .unwrap();
+    }
+    let final_review = services
+        .practice_learning()
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::Sentence,
+                id: Some("reject-4".into()),
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: None,
+                track_id: None,
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("could".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: Some(SubtitleSentenceId::parse("reject-4").unwrap()),
+                token_start: None,
+                token_end: None,
+                start_ms: None,
+                end_ms: None,
+            }],
+            prompt_snapshot: "reject context".into(),
+        })
+        .unwrap();
+    let suggestion = services
+        .practice_learning()
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: final_review.id,
+            rating: ReviewRating::Good,
+        })
+        .unwrap()
+        .upgrade_suggestions
+        .remove(0);
+    let rejected = services
+        .lexical_learning()
+        .reject_upgrade_suggestion(&suggestion.id)
+        .unwrap();
+    assert_eq!(rejected.status, UpgradeSuggestionStatus::Rejected);
+    assert!(rejected.cooldown_until_ms > rejected.resolved_at_ms);
+    assert_eq!(
+        services
+            .lexical_learning()
+            .lexical_details(&lexical.entry.id)
+            .unwrap()
+            .unwrap()
+            .entry
+            .status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    let next_review = services
+        .practice_learning()
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::Sentence,
+                id: Some("reject-next".into()),
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: None,
+                track_id: None,
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("could".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: Some(SubtitleSentenceId::parse("reject-next").unwrap()),
+                token_start: None,
+                token_end: None,
+                start_ms: None,
+                end_ms: None,
+            }],
+            prompt_snapshot: "new context during cooldown".into(),
+        })
+        .unwrap();
+    let during_cooldown = services
+        .practice_learning()
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: next_review.id,
+            rating: ReviewRating::Good,
+        })
+        .unwrap();
+    assert!(during_cooldown.upgrade_suggestions.is_empty());
 }

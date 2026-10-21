@@ -6,40 +6,43 @@ use domain::{
     CapabilityProjection, CapabilityProjectionSource, CapabilitySupport, CorpusOccurrence,
     CorpusOccurrenceId, CorpusOccurrenceKind, DetectedPhone, DiagnosisKind, DictionaryEntry,
     DictionaryEntryId, DictionaryLookupBundle, DictionaryProviderResult, ExternalVocabularyImport,
-    ExternalVocabularyImportSummary, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
-    L1DiagnosisContext, L1DiagnosisHint, L1DiagnosisSpan, L1DiagnosisSupport, LLTIMELINE_SCHEMA_V1,
-    LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator, LLTimelineId, LLTimelineMedia,
-    LLTimelineMetadata, LLTimelineRhythmFrame, LLTimelineSegment, LLTimelineToken, LanguageCode,
-    LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventId,
-    LearningEventKind, LearningEventSubject, LearningEventSubjectKind, LearningObservation,
-    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
-    LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalObservationId,
-    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, LexicalUnit, ListeningInboxItem,
-    ListeningInboxItemId, ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile,
-    LlmProviderProfileId, MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent,
-    ObservationOrigin, ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId,
-    PhoneTimelinePrecision, PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId,
-    PhoneticAnalysisJob, PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind,
-    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeKind, PracticeMode,
-    PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget, PracticeTargetKind,
-    PronunciationProviderInfo, ProsodicChunkProjection, ProsodyAnalysis, ProsodyAnalysisId,
-    ProsodyAnalysisSummary, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId,
-    ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId,
-    SecretRef, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary,
-    SenseGroupId, SentenceDiagnosis, SentencePronunciation, SubtitleSentence, SubtitleSentenceId,
-    SubtitleToken, SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus,
-    SyntacticAnalysis, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
-    VocabularyAssetBundle, WordPronunciation, WordTimeline, WordTimelineId,
-    WordTimelineLifecycleStage, WordTimelineSummary, WordTiming, detached_media_path,
-    learning_observation_id, normalize_lemma, observation_spec_for_marking,
-    observation_spec_for_practice, observation_spec_for_review, validate_syntactic_analysis,
+    ExternalVocabularyImportSummary, HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus,
+    HuntingTarget, HuntingTargetId, HuntingTargetStatus, L1DiagnosisContext, L1DiagnosisHint,
+    L1DiagnosisSpan, L1DiagnosisSupport, LLTIMELINE_SCHEMA_V1, LLTimelineArtifact,
+    LLTimelineDocument, LLTimelineGenerator, LLTimelineId, LLTimelineMedia, LLTimelineMetadata,
+    LLTimelineRhythmFrame, LLTimelineSegment, LLTimelineToken, LanguageCode, LearnerProfile,
+    LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventId, LearningEventKind,
+    LearningEventSubject, LearningEventSubjectKind, LearningObservation, LearningStatus,
+    LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId,
+    LexicalEntryKind, LexicalObservation, LexicalObservationId, LexicalOccurrenceId,
+    LexicalSenseFolder, LexicalSenseId, LexicalUnit, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId,
+    MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent, ObservationOrigin,
+    ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId, PhoneTimelinePrecision,
+    PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId, PhoneticAnalysisJob,
+    PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind, PracticeAttempt, PracticeAttemptId,
+    PracticeItem, PracticeItemId, PracticeKind, PracticeMode, PracticeResult, PracticeSession,
+    PracticeSessionId, PracticeTarget, PracticeTargetKind, PronunciationProviderInfo,
+    ProsodicChunkProjection, ProsodyAnalysis, ProsodyAnalysisId, ProsodyAnalysisSummary,
+    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating,
+    ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId, SecretRef, SenseGroup,
+    SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId,
+    SentenceDiagnosis, SentencePronunciation, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
+    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis,
+    TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, VocabularyAssetBundle,
+    WordPronunciation, WordTimeline, WordTimelineId, WordTimelineLifecycleStage,
+    WordTimelineSummary, WordTiming, detached_media_path, learning_observation_id, normalize_lemma,
+    observation_spec_for_marking, observation_spec_for_practice, observation_spec_for_review,
+    validate_syntactic_analysis,
 };
 
 mod background_jobs;
 pub mod batch_governor;
 
 mod chunks;
+mod coach_dashboard;
 mod composition;
+mod content_fit;
 mod corpus;
 mod diagnosis;
 mod dictionary;
@@ -60,6 +63,7 @@ mod package_lifecycle;
 mod phones;
 mod phonetic_fixture;
 mod practice;
+mod projection_review;
 mod pronunciation;
 mod pronunciation_providers;
 mod prosody;
@@ -81,6 +85,7 @@ pub use background_jobs::{
     BackgroundJobStore, BackgroundJobTransition, InMemoryBackgroundJobStore,
 };
 pub use chunks::foundation_chunk_policy;
+pub use coach_dashboard::*;
 pub use composition::*;
 pub(crate) use corpus::prosody_chunk_projections_from_document;
 pub use dictionary::DictionaryUseCases;
@@ -96,6 +101,7 @@ pub use material_capability::*;
 pub use media::MediaAnalysisUseCases;
 pub use package_lifecycle::*;
 pub use practice::PracticeUseCases;
+pub use projection_review::ProjectionReviewUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use prosody::*;
@@ -136,6 +142,7 @@ pub struct AppServices {
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
     pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
     pub(crate) lexical_content: Arc<dyn LexicalContentRepository>,
+    pub(crate) recognition_upgrades: Arc<dyn RecognitionUpgradeRepository>,
     pub(crate) vocabulary_assets: Arc<dyn VocabularyAssetRepository>,
     pub(crate) practice: Arc<dyn PracticeRepository>,
     pub(crate) review_queue: Arc<dyn ReviewQueueRepository>,
@@ -144,6 +151,8 @@ pub struct AppServices {
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
+    pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
+    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     pub(crate) semantic_embedding_index: Arc<dyn SemanticEmbeddingIndexRepository>,
     pub(crate) embedding_provider: Arc<dyn EmbeddingProvider>,
@@ -215,6 +224,14 @@ impl AppServices {
 
     pub fn semantic_embedding(&self) -> SemanticEmbeddingUseCases {
         SemanticEmbeddingUseCases::from_services(self)
+    }
+
+    pub fn projection_review(&self) -> ProjectionReviewUseCases {
+        ProjectionReviewUseCases::new(
+            self.lexical_capabilities.clone(),
+            self.learning_observations.clone(),
+            self.lexical_entries.clone(),
+        )
     }
 
     /// Materializes a package's `subtitle_text_track` as a real Core subtitle
@@ -494,6 +511,7 @@ impl AppServices {
             lexical_entries: learning_assets.clone(),
             learning_observations: learning_assets.clone(),
             lexical_content: learning_assets.clone(),
+            recognition_upgrades: Arc::new(DisabledLearningLoopRepository),
             vocabulary_assets: learning_assets,
             practice: Arc::new(DisabledLearningLoopRepository),
             review_queue: Arc::new(DisabledLearningLoopRepository),
@@ -502,6 +520,8 @@ impl AppServices {
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
             corpus: Arc::new(DisabledCorpusIndexRepository),
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
+            coach_dashboard: Arc::new(coach_dashboard::DisabledCoachDashboardRepository),
+            difficulty: Arc::new(content_fit::DisabledDifficultyRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
             semantic_embedding_index: Arc::new(DisabledSemanticEmbeddingIndexRepository),
             embedding_provider: Arc::new(UnavailableEmbeddingProvider),
@@ -555,13 +575,27 @@ impl AppServices {
         listening_inbox: Arc<dyn ListeningInboxRepository>,
     ) -> Self
     where
-        R: ReviewQueueRepository + HuntingRepository + 'static,
+        R: ReviewQueueRepository + HuntingRepository + RecognitionUpgradeRepository + 'static,
     {
         self.practice = practice;
         self.review_queue = review.clone();
         self.hunting = review.clone();
+        self.recognition_upgrades = review.clone();
         self.learning_events = learning_events;
         self.listening_inbox = listening_inbox;
+        self
+    }
+
+    pub fn with_coach_dashboard_repository(
+        mut self,
+        coach_dashboard: Arc<dyn CoachDashboardRepository>,
+    ) -> Self {
+        self.coach_dashboard = coach_dashboard;
+        self
+    }
+
+    pub fn with_difficulty_repository(mut self, difficulty: Arc<dyn DifficultyRepository>) -> Self {
+        self.difficulty = difficulty;
         self
     }
 

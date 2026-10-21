@@ -226,6 +226,7 @@ MediaLibraryEntry _mediaEntry(
   ),
   primaryTrackId: null,
   triageIntent: triageIntent,
+  fit: null,
 );
 
 MediaRendition _rendition(

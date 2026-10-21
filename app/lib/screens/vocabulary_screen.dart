@@ -174,6 +174,17 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 _snack(AppLocalizations.of(context).text('huntingArchived'));
               }
             },
+            onPromoteCandidate: (candidate) async {
+              final promoted = await hunting.promoteCandidate(candidate);
+              if (!mounted) return;
+              if (promoted) {
+                _snack(AppLocalizations.of(context).text('huntingAdded'));
+              } else if (hunting.state.error != null) {
+                _snack(
+                  AppLocalizations.of(context).text('huntingUpdateFailed'),
+                );
+              }
+            },
             onOpenEntry: (entryId) {
               Navigator.of(sheetContext).pop();
               unawaited(viewModel.openEntry(entryId));
@@ -529,6 +540,21 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               onListeningOverride: (conclusion) => _reportUpdate(
                 () => viewModel.setListeningOverride(value.entry, conclusion),
               ),
+              suggestions: state.suggestions,
+              suggestionsLoading: state.suggestionsLoading,
+              suggestionsFailure: state.suggestionsFailure,
+              projectionProposals: state.projectionProposals,
+              projectionProposalsLoading: state.projectionProposalsLoading,
+              projectionProposalsFailure: state.projectionProposalsFailure,
+              onConfirmUpgradeSuggestion: (suggestion) =>
+                  viewModel.confirmUpgradeSuggestion(value.entry, suggestion),
+              onRejectUpgradeSuggestion: (suggestion) =>
+                  viewModel.rejectUpgradeSuggestion(value.entry, suggestion),
+              onDecideProjectionProposal: (proposal, decision) =>
+                  viewModel.decideListeningProjectionProposal(
+                    proposal: proposal,
+                    decision: decision,
+                  ),
               onLoadEvidenceHistory: ({String? capability, int offset = 0}) =>
                   viewModel.observationHistory(value.entry.id, offset: offset),
               onSaveContent: (definition, note) =>

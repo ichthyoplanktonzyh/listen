@@ -1,4 +1,5 @@
 import '../../models/api_failure.dart';
+import '../../models/projection_review.dart';
 import '../../models/practice.dart';
 import '../../models/semantic_embedding.dart';
 import '../../models/types.dart';
@@ -49,6 +50,26 @@ class LexicalRepository implements OccurrenceMediaRepository {
 
   Future<LexicalEntryDetails> entryDetails(String entryId) =>
       _api.lexicalEntryDetails(entryId);
+
+  Future<List<UpgradeSuggestion>> upgradeSuggestions({
+    required String lexicalEntryId,
+  }) => _api.upgradeSuggestions(lexicalEntryId: lexicalEntryId);
+
+  Future<UpgradeSuggestion> confirmUpgradeSuggestion(String suggestionId) =>
+      _api.confirmUpgradeSuggestion(suggestionId);
+
+  Future<UpgradeSuggestion> rejectUpgradeSuggestion(String suggestionId) =>
+      _api.rejectUpgradeSuggestion(suggestionId);
+
+  Future<List<ProjectionProposalView>> projectionProposals(
+    String lexicalEntryId,
+  ) => _api.projectionProposals(lexicalEntryId);
+
+  Future<ProjectionProposalView> decideProjectionProposal({
+    required String proposalId,
+    required String decision,
+  }) =>
+      _api.decideProjectionProposal(proposalId: proposalId, decision: decision);
 
   Future<LexicalEntryDetails> upsertEntry(Map<String, dynamic> value) =>
       _api.upsertLexicalEntry(value);

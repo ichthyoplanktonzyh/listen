@@ -1,9 +1,10 @@
 use crate::{
     AppServices, ApplicationError, CapabilityProjectionSource, LanguageCode, LearningChangeSource,
-    LearningObservationRepository, LearningStatus, LexicalCapabilityRepository,
-    LexicalContentRepository, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
-    LexicalEntryRepository, LexicalNormalization, LexicalNormalizationProvider, LexicalUnit,
-    MediaRepository, PhraseCandidate, SubtitleSentenceId, SubtitleTrackRepository,
+    LearningEventRepository, LearningObservationRepository, LearningStatus,
+    LexicalCapabilityRepository, LexicalContentRepository, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalEntryRepository, LexicalNormalization,
+    LexicalNormalizationProvider, LexicalUnit, MediaRepository, PhraseCandidate,
+    PracticeRepository, RecognitionUpgradeRepository, SubtitleSentenceId, SubtitleTrackRepository,
     UpsertLexicalEntry, VocabularyAssetRepository, normalize_american_english, normalize_lemma,
     normalize_phrase, now_ms, phrase_candidates, require_text,
 };
@@ -20,6 +21,9 @@ pub struct LexicalLearningUseCases {
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
     pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
     pub(crate) lexical_content: Arc<dyn LexicalContentRepository>,
+    pub(crate) practice: Arc<dyn PracticeRepository>,
+    pub(crate) recognition_upgrades: Arc<dyn RecognitionUpgradeRepository>,
+    pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) vocabulary_assets: Arc<dyn VocabularyAssetRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
 }
@@ -33,6 +37,9 @@ impl LexicalLearningUseCases {
             lexical_entries: services.lexical_entries.clone(),
             learning_observations: services.learning_observations.clone(),
             lexical_content: services.lexical_content.clone(),
+            practice: services.practice.clone(),
+            recognition_upgrades: services.recognition_upgrades.clone(),
+            learning_events: services.learning_events.clone(),
             vocabulary_assets: services.vocabulary_assets.clone(),
             lexical_normalizers: services.lexical_normalizers.clone(),
         }

@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
+import '../../models/api_failure.dart';
+import '../../models/practice.dart';
+import '../../models/projection_review.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/motion.dart';
@@ -15,6 +18,7 @@ import '../common/listen_loading.dart';
 import 'dictionary_inline_clip_player.dart';
 import 'entry_detail_parts.dart';
 import 'entry_section_anchors.dart';
+import 'listening_status_suggestions.dart';
 import 'pronunciation_button.dart';
 
 /// The leaf widgets of this surface live in `entry_detail_parts.dart`; the
@@ -52,6 +56,15 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.onCollectCorpus,
     this.pronunciationLoading = false,
     this.onListeningOverride,
+    this.suggestions = const [],
+    this.suggestionsLoading = false,
+    this.suggestionsFailure,
+    this.projectionProposals = const [],
+    this.projectionProposalsLoading = false,
+    this.projectionProposalsFailure,
+    this.onConfirmUpgradeSuggestion,
+    this.onRejectUpgradeSuggestion,
+    this.onDecideProjectionProposal,
     this.onLoadEvidenceHistory,
     this.onSaveContent,
     this.onCreateSenseFolder,
@@ -90,6 +103,22 @@ class ListeningDictionaryEntryView extends StatefulWidget {
 
   /// Sets or clears the user's manual listening conclusion.
   final Future<void> Function(String? conclusion)? onListeningOverride;
+
+  final List<UpgradeSuggestion> suggestions;
+  final bool suggestionsLoading;
+  final ApiFailure? suggestionsFailure;
+  final List<ProjectionProposalView> projectionProposals;
+  final bool projectionProposalsLoading;
+  final ApiFailure? projectionProposalsFailure;
+  final Future<ApiFailure?> Function(UpgradeSuggestion)?
+  onConfirmUpgradeSuggestion;
+  final Future<ApiFailure?> Function(UpgradeSuggestion)?
+  onRejectUpgradeSuggestion;
+  final Future<ApiFailure?> Function(
+    ProjectionProposalView proposal,
+    String decision,
+  )?
+  onDecideProjectionProposal;
 
   /// Loads one page of the append-only evidence trail (issue #2). Read-only:
   /// the section renders listening history and never writes; paging via
@@ -591,6 +620,24 @@ class _ListeningDictionaryEntryViewState
       EntryCapabilityEditor(
         profile: widget.details.capabilityProfile,
         onListeningOverride: widget.onListeningOverride,
+      ),
+      const SizedBox(height: ListenSpacing.gap16),
+      ListeningStatusSuggestions(
+        suggestions: widget.suggestions,
+        suggestionsLoading: widget.suggestionsLoading,
+        suggestionsFailure: widget.suggestionsFailure,
+        proposals: widget.projectionProposals,
+        proposalsLoading: widget.projectionProposalsLoading,
+        proposalsFailure: widget.projectionProposalsFailure,
+        onConfirmSuggestion: widget.onConfirmUpgradeSuggestion == null
+            ? (_) async => null
+            : widget.onConfirmUpgradeSuggestion!,
+        onRejectSuggestion: widget.onRejectUpgradeSuggestion == null
+            ? (_) async => null
+            : widget.onRejectUpgradeSuggestion!,
+        onDecideProposal: widget.onDecideProjectionProposal == null
+            ? (_, _) async => null
+            : widget.onDecideProjectionProposal!,
       ),
     ],
   );

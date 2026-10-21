@@ -1,12 +1,12 @@
 use domain::{
-    CorpusOccurrence, CorpusOccurrenceId, HuntingCheckAnswer, HuntingTargetId,
-    HuntingTargetSourceKind, LearningEventId, LearningStatus, LexicalEntryId, LexicalEntryKind,
-    LexicalObservationId, ListeningComprehensionReport, ListeningInboxResolution, MediaId,
-    MediaItem, MediaKind, MediaTriageIntent, ObservationResult, PracticeAnchor, PracticeItemId,
-    PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, ReviewAttempt, ReviewCardState,
-    ReviewItem, ReviewItemId, ReviewRating, ReviewSchedule, ReviewSource, SubtitleSentenceId,
-    SubtitleTrackId, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
-    WordTimelineId, WordTiming,
+    ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId, HuntingCandidateId,
+    HuntingCheckAnswer, HuntingTargetId, HuntingTargetSourceKind, LearningEventId, LearningStatus,
+    LexicalEntryId, LexicalEntryKind, LexicalObservationId, ListeningComprehensionReport,
+    ListeningInboxResolution, MediaId, MediaItem, MediaKind, MediaTriageIntent, ObservationResult,
+    PracticeAnchor, PracticeItemId, PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget,
+    ReviewAttempt, ReviewCardState, ReviewItem, ReviewItemId, ReviewRating, ReviewSchedule,
+    ReviewSource, SubtitleSentenceId, SubtitleTrackId, TimelineCreator, TimelineMetrics,
+    TimelineStatus, TimingSource, UpgradeSuggestion, WordTimelineId, WordTiming,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +28,7 @@ pub struct MediaLibraryEntry {
     pub media: MediaItem,
     /// First available track, used by one-click listening session starts.
     pub primary_track_id: Option<SubtitleTrackId>,
+    pub fit: Option<ContentDifficultyProfile>,
     pub triage_intent: Option<MediaTriageIntent>,
 }
 
@@ -278,6 +279,8 @@ pub struct ReviewSubmission {
     pub attempt: ReviewAttempt,
     pub schedule: ReviewSchedule,
     pub generated_observation_ids: Vec<LexicalObservationId>,
+    pub hunting_candidate_ids: Vec<HuntingCandidateId>,
+    pub upgrade_suggestions: Vec<UpgradeSuggestion>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    HuntingTargetId, LanguageCode, LearningStatus, LexicalEntryId, LexicalObservationId,
-    ListeningInboxItemId, MediaId, PracticeAttemptId, PracticeItemId, PracticeSessionId,
-    ReviewAttemptId, ReviewItemId, SubtitleSentenceId, SubtitleTrackId,
+    CapabilityAssessment, HuntingCandidateId, HuntingTargetId, LanguageCode, LearningStatus,
+    LexicalCapability, LexicalEntryId, LexicalObservationId, ListeningInboxItemId, MediaId,
+    PracticeAttemptId, PracticeItemId, PracticeSessionId, RecognitionEvidenceId, ReviewAttemptId,
+    ReviewItemId, SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestionId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,7 +114,34 @@ pub enum ReviewCardState {
 #[serde(rename_all = "snake_case")]
 pub enum HuntingTargetSourceKind {
     Manual,
+    ReviewCandidate,
     ListeningInbox,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HuntingCandidateStatus {
+    Active,
+    Consumed,
+    Dismissed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecognitionEvidenceSourceKind {
+    Practice,
+    Review,
+    LexicalObservation,
+    Hunting,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpgradeSuggestionStatus {
+    Pending,
+    Accepted,
+    Rejected,
+    Obsolete,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -361,6 +389,61 @@ pub struct HuntingTarget {
     pub status: HuntingTargetStatus,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
+}
+
+/// A candidate derived from a failed listening review. It stays separate
+/// from the learner's explicit HuntingTarget until the learner promotes it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HuntingCandidate {
+    pub id: HuntingCandidateId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub review_item_id: ReviewItemId,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub media_id: Option<MediaId>,
+    pub track_id: Option<SubtitleTrackId>,
+    pub target_snapshot: String,
+    pub prompt_snapshot: String,
+    pub failure_count: u32,
+    pub status: HuntingCandidateStatus,
+    pub created_at_ms: u64,
+    pub last_failed_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecognitionEvidence {
+    pub id: RecognitionEvidenceId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub context_key: String,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub media_id: Option<MediaId>,
+    pub source_kind: RecognitionEvidenceSourceKind,
+    pub source_id: String,
+    pub occurred_at_ms: u64,
+}
+
+/// A listening upgrade recommendation with its evidence and explicit
+/// learner decision state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpgradeSuggestion {
+    pub id: UpgradeSuggestionId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub lexical_display_form: String,
+    pub previous_status: LearningStatus,
+    pub suggested_status: LearningStatus,
+    pub status: UpgradeSuggestionStatus,
+    pub evidence_context_count: u32,
+    pub evidence_ids: Vec<RecognitionEvidenceId>,
+    pub threshold: u32,
+    pub evidence_class: String,
+    pub created_at_ms: u64,
+    pub resolved_at_ms: Option<u64>,
+    pub cooldown_until_ms: Option<u64>,
+    #[serde(default)]
+    pub capability: Option<LexicalCapability>,
+    #[serde(default)]
+    pub previous_assessment: Option<CapabilityAssessment>,
+    #[serde(default)]
+    pub suggested_assessment: Option<CapabilityAssessment>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

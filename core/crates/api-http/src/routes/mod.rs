@@ -1,3 +1,4 @@
+pub(crate) mod coach;
 pub(crate) mod composition;
 pub(crate) mod corpus;
 pub(crate) mod dictionary;
@@ -12,6 +13,7 @@ pub(crate) mod media;
 pub(crate) mod package_lifecycle;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;
+pub(crate) mod projection_review;
 pub(crate) mod pronunciation;
 pub(crate) mod router;
 pub(crate) mod semantic_embedding;

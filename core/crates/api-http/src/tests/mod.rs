@@ -45,6 +45,8 @@ fn test_state_with_repository() -> (ApiState, Arc<SqliteRepository>) {
             repo.clone(),
         )
         .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+        .with_coach_dashboard_repository(repo.clone())
+        .with_difficulty_repository(repo.clone())
         .with_corpus_index_repository(repo.clone())
         .with_llm_provider_profile_repository(repo.clone())
         .with_material_repository(repo.clone())
@@ -255,6 +257,7 @@ async fn wait_for_phonetic_job(app: &Router, job_id: &str, expected: &[&str]) ->
     panic!("phonetic analysis job did not reach {expected:?}");
 }
 
+mod coach;
 mod general;
 mod llm;
 mod material;

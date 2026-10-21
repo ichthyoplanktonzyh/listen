@@ -10,6 +10,7 @@ import 'package:llplayer_next/models/learning_edition.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/composition_session_service.dart';
 import 'package:llplayer_next/services/core_timeline_export.dart';
 
@@ -388,6 +389,10 @@ final class _NoopWorkbenchResources implements ResourceRepository {
   ApiFailure failureDetail(Object error) => ApiFailure(raw: '$error');
 
   @override
+  Future<ContentDifficultyProfile> contentFit(String trackId) async =>
+      throw StateError('unexpected content fit lookup');
+
+  @override
   Future<List<SubtitleTrack>> mediaSubtitles(String mediaId) async => const [];
 
   @override
@@ -664,6 +669,10 @@ final class _CoreWorkbenchResources implements ResourceRepository {
 
   @override
   bool get isAvailable => true;
+
+  @override
+  Future<ContentDifficultyProfile> contentFit(String trackId) async =>
+      throw StateError('unexpected content fit lookup');
 
   @override
   ApiFailure failureDetail(Object error) => ApiFailure(raw: '$error');

@@ -1,6 +1,7 @@
 import '../../services/core_transport_service.dart';
 import '../../services/api_service.dart' show LocalApi;
 import 'capability_repository.dart';
+import 'coach_dashboard_repository.dart';
 import 'external_vocabulary_repository.dart';
 import 'hunting_repository.dart';
 import 'learning_assets_repository.dart';
@@ -84,6 +85,8 @@ final class LocalCoreRepositories {
   LearnerSettingsRepository get learnerSettings =>
       LocalLearnerSettingsRepository(_api);
   LlmProviderRepository get llmProvider => LocalLlmProviderRepository(_api);
+  CoachDashboardRepository get coachDashboard =>
+      LocalCoachDashboardRepository(() => _transport.currentApi);
   SyntaxCapabilityRepository get syntaxCapability =>
       LocalSyntaxCapabilityRepository(_api);
 }

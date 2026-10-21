@@ -29,8 +29,8 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 5.0.0 narrows material processing to audio/video and removes the
-    // document, conversation, production, and coaching surfaces.
+    // 5.0.0 narrows material processing to audio/video, removes document,
+    // conversation, and production surfaces, and retains listening-only coaching.
     assert!(
         openapi.contains("version: 5.0.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
@@ -56,6 +56,15 @@ fn openapi_version_snapshot_and_path_count() {
     assert!(
         openapi.contains("openapi: 3.1.0"),
         "OpenAPI spec version snapshot changed"
+    );
+    let dashboard_start = openapi.find("  /v1/coach/dashboard:\n").unwrap();
+    let dashboard_end = openapi[dashboard_start + 1..]
+        .find("\n  /v1/")
+        .map(|offset| dashboard_start + 1 + offset)
+        .unwrap_or(openapi.len());
+    assert!(
+        !openapi[dashboard_start..dashboard_end].contains("name: language"),
+        "the global listening dashboard must not imply a language filter"
     );
 
     // Count documented paths using the router source as the implementation fact
@@ -152,6 +161,7 @@ fn openapi_learning_observation_task_values_match_domain() {
         domain::ObservationTaskType::Dictation,
         domain::ObservationTaskType::SubtitleFade,
         domain::ObservationTaskType::ReviewRecall,
+        domain::ObservationTaskType::UpgradeConfirmation,
     ];
     let values = task_types
         .iter()

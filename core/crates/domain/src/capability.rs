@@ -68,6 +68,7 @@ pub struct CapabilityFilter {
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityProjectionSource {
     LegacyLearningStatusMigration,
+    EvidenceProjection,
     Import,
 }
 

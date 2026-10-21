@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../controllers/auxiliary_audio_controller.dart';
+import '../../controllers/coach_dashboard_controller.dart';
 import '../../controllers/hunting_controller.dart';
 import '../../controllers/occurrence_media_resolver.dart';
 import '../../controllers/review_controller.dart';
@@ -15,6 +16,7 @@ import '../../screens/review_deck_home_screen.dart';
 import '../../screens/review_queue_screen.dart';
 import '../../screens/vocabulary_screen.dart';
 import '../common/listen_error_state.dart';
+import '../coach/coach_dashboard_screen.dart';
 
 /// Shell-route hosts for the learning destinations.
 ///
@@ -251,6 +253,50 @@ class _ReviewRouteHostState
           ),
         );
       },
+    );
+  }
+}
+
+/// Route-scoped read-only listening coach.
+class CoachRouteControllers implements RouteScopedControllers {
+  const CoachRouteControllers({required this.controller});
+
+  final CoachDashboardController controller;
+
+  @override
+  void dispose() => controller.dispose();
+}
+
+class CoachRouteHost extends ShellRouteHost<CoachRouteControllers> {
+  const CoachRouteHost({
+    super.key,
+    required super.create,
+    required super.language,
+    required this.onOpenReview,
+    required this.onOpenHunting,
+    required this.onOpenContentHome,
+  });
+
+  final VoidCallback onOpenReview;
+  final VoidCallback onOpenHunting;
+  final VoidCallback onOpenContentHome;
+
+  @override
+  State<CoachRouteHost> createState() => _CoachRouteHostState();
+}
+
+class _CoachRouteHostState
+    extends ShellRouteHostState<CoachRouteHost, CoachRouteControllers> {
+  @override
+  Widget build(BuildContext context) {
+    final controllers = this.controllers;
+    if (controllers == null) return const _CoreUnavailablePane();
+    return CoachDashboardScreen(
+      controller: controllers.controller,
+      language: widget.language,
+      onOpenReview: widget.onOpenReview,
+      onOpenHunting: widget.onOpenHunting,
+      onOpenContentHome: widget.onOpenContentHome,
     );
   }
 }

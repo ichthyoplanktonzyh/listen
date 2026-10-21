@@ -34,6 +34,8 @@ fn build_app() -> Router {
         repo.clone(),
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+    .with_coach_dashboard_repository(repo.clone())
+    .with_difficulty_repository(repo.clone())
     .with_material_repository(repo.clone())
     .with_package_lifecycle_repository(repo.clone())
     .with_capability_attempt_repository(repo.clone())

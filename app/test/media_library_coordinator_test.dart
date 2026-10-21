@@ -35,6 +35,7 @@ Map<String, dynamic> _libraryEntryJson({
     'updated_at_ms': 0,
   },
   'primary_track_id': null,
+  'fit': null,
   'triage_intent': triageIntent,
 };
 

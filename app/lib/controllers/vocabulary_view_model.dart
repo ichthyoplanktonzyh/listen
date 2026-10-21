@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/lexical_repository.dart';
 import '../models/api_failure.dart';
 import '../models/practice.dart';
+import '../models/projection_review.dart';
 import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/external_link_opener.dart';
@@ -30,10 +31,18 @@ class VocabularyState {
     this.semanticSearching = false,
     this.pronunciationAudioUrl,
     this.pronunciationLoading = false,
+    List<UpgradeSuggestion> suggestions = const [],
+    this.suggestionsLoading = false,
+    this.suggestionsFailure,
+    List<ProjectionProposalView> projectionProposals = const [],
+    this.projectionProposalsLoading = false,
+    this.projectionProposalsFailure,
     List<CorpusOccurrence>? homeResults,
     this.homeSearching = false,
   }) : _words = List.unmodifiable(words),
        _semanticHits = List.unmodifiable(semanticHits),
+       _suggestions = List.unmodifiable(suggestions),
+       _projectionProposals = List.unmodifiable(projectionProposals),
        _homeResults = homeResults == null
            ? null
            : List.unmodifiable(homeResults);
@@ -53,6 +62,15 @@ class VocabularyState {
   final bool semanticSearching;
   final String? pronunciationAudioUrl;
   final bool pronunciationLoading;
+  final List<UpgradeSuggestion> _suggestions;
+  List<UpgradeSuggestion> get suggestions => List.unmodifiable(_suggestions);
+  final bool suggestionsLoading;
+  final ApiFailure? suggestionsFailure;
+  final List<ProjectionProposalView> _projectionProposals;
+  List<ProjectionProposalView> get projectionProposals =>
+      List.unmodifiable(_projectionProposals);
+  final bool projectionProposalsLoading;
+  final ApiFailure? projectionProposalsFailure;
   final List<CorpusOccurrence>? _homeResults;
   List<CorpusOccurrence>? get homeResults =>
       _homeResults == null ? null : List.unmodifiable(_homeResults);
@@ -73,6 +91,14 @@ class VocabularyState {
     String? pronunciationAudioUrl,
     bool clearPronunciationAudioUrl = false,
     bool? pronunciationLoading,
+    List<UpgradeSuggestion>? suggestions,
+    bool? suggestionsLoading,
+    ApiFailure? suggestionsFailure,
+    bool clearSuggestionsFailure = false,
+    List<ProjectionProposalView>? projectionProposals,
+    bool? projectionProposalsLoading,
+    ApiFailure? projectionProposalsFailure,
+    bool clearProjectionProposalsFailure = false,
     List<CorpusOccurrence>? homeResults,
     bool clearHomeResults = false,
     bool? homeSearching,
@@ -90,6 +116,17 @@ class VocabularyState {
         ? null
         : pronunciationAudioUrl ?? this.pronunciationAudioUrl,
     pronunciationLoading: pronunciationLoading ?? this.pronunciationLoading,
+    suggestions: suggestions ?? this.suggestions,
+    suggestionsLoading: suggestionsLoading ?? this.suggestionsLoading,
+    suggestionsFailure: clearSuggestionsFailure
+        ? null
+        : suggestionsFailure ?? this.suggestionsFailure,
+    projectionProposals: projectionProposals ?? this.projectionProposals,
+    projectionProposalsLoading:
+        projectionProposalsLoading ?? this.projectionProposalsLoading,
+    projectionProposalsFailure: clearProjectionProposalsFailure
+        ? null
+        : projectionProposalsFailure ?? this.projectionProposalsFailure,
     homeResults: clearHomeResults ? null : homeResults ?? this.homeResults,
     homeSearching: homeSearching ?? this.homeSearching,
   );
@@ -221,18 +258,84 @@ class VocabularyViewModel extends ChangeNotifier {
       (state) => state.copyWith(
         clearPronunciationAudioUrl: true,
         pronunciationLoading: true,
+        suggestions: const [],
+        suggestionsLoading: true,
+        clearSuggestionsFailure: true,
+        projectionProposals: const [],
+        projectionProposalsLoading: true,
+        clearProjectionProposalsFailure: true,
       ),
     );
     final value = await _repository.entryDetails(entryId);
     if (!_detailStillCurrent(request)) return;
     // The identity card can paint now — nothing below is awaited here.
     _set((state) => state.copyWith(details: value));
+    unawaited(_loadEntrySuggestions(entryId, request));
+    unawaited(_loadEntryProjectionProposals(entryId, request));
     unawaited(_loadEntryPronunciation(value.entry, request));
   }
 
   /// Whether a decoration that just resolved still belongs to the open entry.
   bool _detailStillCurrent(int request) =>
       !_disposed && request == _detailRequest;
+
+  Future<void> _loadEntrySuggestions(String entryId, int request) async {
+    try {
+      final suggestions = await _repository.upgradeSuggestions(
+        lexicalEntryId: entryId,
+      );
+      if (!_detailStillCurrent(request)) return;
+      _set(
+        (state) => state.copyWith(
+          suggestions: suggestions
+              .where(
+                (suggestion) =>
+                    suggestion.isListening && suggestion.status == 'pending',
+              )
+              .toList(growable: false),
+          suggestionsLoading: false,
+          clearSuggestionsFailure: true,
+        ),
+      );
+    } catch (error) {
+      if (!_detailStillCurrent(request)) return;
+      _set(
+        (state) => state.copyWith(
+          suggestions: const [],
+          suggestionsLoading: false,
+          suggestionsFailure: _repository.failureDetail(error),
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadEntryProjectionProposals(
+    String entryId,
+    int request,
+  ) async {
+    try {
+      final proposals = await _repository.projectionProposals(entryId);
+      if (!_detailStillCurrent(request)) return;
+      _set(
+        (state) => state.copyWith(
+          projectionProposals: proposals
+              .where((proposal) => proposal.isListening)
+              .toList(growable: false),
+          projectionProposalsLoading: false,
+          clearProjectionProposalsFailure: true,
+        ),
+      );
+    } catch (error) {
+      if (!_detailStillCurrent(request)) return;
+      _set(
+        (state) => state.copyWith(
+          projectionProposals: const [],
+          projectionProposalsLoading: false,
+          projectionProposalsFailure: _repository.failureDetail(error),
+        ),
+      );
+    }
+  }
 
   Future<void> _loadEntryPronunciation(LexicalEntry entry, int request) async {
     String? audio;
@@ -435,6 +538,69 @@ class VocabularyViewModel extends ChangeNotifier {
       );
       await openEntry(entry.id);
       unawaited(load());
+      return null;
+    } catch (error) {
+      return _repository.failureDetail(error);
+    }
+  }
+
+  Future<ApiFailure?> confirmUpgradeSuggestion(
+    LexicalEntry entry,
+    UpgradeSuggestion suggestion,
+  ) async {
+    if (!suggestion.isListening) {
+      return const ApiFailure(
+        raw: 'unsupported',
+        code: 'unsupported_capability',
+      );
+    }
+    try {
+      await _repository.confirmUpgradeSuggestion(suggestion.id);
+      await openEntry(entry.id);
+      unawaited(load());
+      return null;
+    } catch (error) {
+      return _repository.failureDetail(error);
+    }
+  }
+
+  Future<ApiFailure?> rejectUpgradeSuggestion(
+    LexicalEntry entry,
+    UpgradeSuggestion suggestion,
+  ) async {
+    if (!suggestion.isListening) {
+      return const ApiFailure(
+        raw: 'unsupported',
+        code: 'unsupported_capability',
+      );
+    }
+    try {
+      await _repository.rejectUpgradeSuggestion(suggestion.id);
+      await openEntry(entry.id);
+      return null;
+    } catch (error) {
+      return _repository.failureDetail(error);
+    }
+  }
+
+  Future<ApiFailure?> decideListeningProjectionProposal({
+    required ProjectionProposalView proposal,
+    required String decision,
+  }) async {
+    if (!proposal.isListening || !proposal.isPending) {
+      return const ApiFailure(raw: 'unsupported', code: 'unsupported_proposal');
+    }
+    if (decision != 'confirm' && decision != 'reject') {
+      return const ApiFailure(raw: 'unsupported', code: 'unsupported_decision');
+    }
+    try {
+      await _repository.decideProjectionProposal(
+        proposalId: proposal.id,
+        decision: decision,
+      );
+      final request = ++_detailRequest;
+      await _loadEntryProjectionProposals(proposal.lexicalEntryId, request);
+      if (decision == 'confirm') await openEntry(proposal.lexicalEntryId);
       return null;
     } catch (error) {
       return _repository.failureDetail(error);

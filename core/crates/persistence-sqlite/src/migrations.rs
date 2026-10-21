@@ -2,13 +2,13 @@ use rusqlite::Connection;
 
 use super::PersistenceError;
 
-/// Version 64 is the first listening-focused fresh-store schema. Earlier
-/// development schemas are intentionally unsupported and are never rewritten.
-pub const MIGRATION_VERSION: u32 = 64;
+/// Version 68 is the isolated listening-coach fresh-store schema. Listening
+/// main uses version 64; neither branch upgrades the other's store.
+pub const MIGRATION_VERSION: u32 = 68;
 
-/// Initializes an empty SQLite database from the single listening-focused
-/// bootstrap. Existing schemas are accepted only when they already use the
-/// current version; no historical migration or automatic reset is performed.
+/// Initializes the listening bootstrap plus the isolated coach tables.
+/// Existing schemas are accepted only when they already use the current
+/// version; no historical migration or automatic reset is performed.
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
     let current: u32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -33,6 +33,7 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
 
     let tx = connection.unchecked_transaction()?;
     tx.execute_batch(include_str!("../migrations/0064_listening_focus.sql"))?;
+    tx.execute_batch(include_str!("../migrations/0068_learning_coach.sql"))?;
     tx.pragma_update(None, "user_version", MIGRATION_VERSION)?;
     tx.commit()?;
     Ok(())

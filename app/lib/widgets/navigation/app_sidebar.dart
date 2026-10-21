@@ -19,9 +19,12 @@ enum AppRoute {
   /// The language the learner has collected, and the practice on it:
   /// vocabulary and review as segments of one page.
   language,
+
+  /// Read-only progress and explicit next steps for listening.
+  coach,
 }
 
-/// Persistent application navigation: three destinations, no group headings.
+/// Persistent application navigation: four destinations, no group headings.
 ///
 /// The rail used to carry seven destinations under three headings (content /
 /// learning / insight). Those headings were the symptom, not the structure —
@@ -103,6 +106,12 @@ class AppSidebar extends StatelessWidget {
                   label: l.text('sidebarMyLanguage'),
                   isSelected: currentRoute == AppRoute.language,
                   onTap: () => onRouteSelected(AppRoute.language),
+                ),
+                _SidebarItem(
+                  icon: Icons.insights_outlined,
+                  label: l.text('sidebarCoach'),
+                  isSelected: currentRoute == AppRoute.coach,
+                  onTap: () => onRouteSelected(AppRoute.coach),
                 ),
               ],
             ),

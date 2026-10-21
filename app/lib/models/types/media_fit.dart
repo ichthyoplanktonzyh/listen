@@ -74,19 +74,30 @@ class MediaLibraryEntry {
     required this.media,
     required this.primaryTrackId,
     required this.triageIntent,
+    required this.fit,
   });
 
-  factory MediaLibraryEntry.fromJson(Map<String, dynamic> json) =>
-      MediaLibraryEntry(
-        media: MediaItem.fromJson(
-          Map<String, dynamic>.from(json['media'] as Map),
-        ),
-        primaryTrackId: json['primary_track_id'] as String?,
-        triageIntent: json['triage_intent'] as String?,
-      );
+  factory MediaLibraryEntry.fromJson(Map<String, dynamic> json) {
+    if (!json.containsKey('fit')) {
+      throw const FormatException('MediaLibraryEntry requires fit');
+    }
+    return MediaLibraryEntry(
+      media: MediaItem.fromJson(
+        Map<String, dynamic>.from(json['media'] as Map),
+      ),
+      primaryTrackId: json['primary_track_id'] as String?,
+      triageIntent: json['triage_intent'] as String?,
+      fit: json['fit'] == null
+          ? null
+          : ContentDifficultyProfile.fromJson(
+              Map<String, dynamic>.from(json['fit'] as Map),
+            ),
+    );
+  }
 
   final MediaItem media;
   final String? primaryTrackId;
+  final ContentDifficultyProfile? fit;
 
   /// 'pin_extensive' | 'pin_intensive' | 'defer' | 'graduated' | null.
   final String? triageIntent;
@@ -94,6 +105,7 @@ class MediaLibraryEntry {
   Map<String, dynamic> toJson() => {
     'media': media.toJson(),
     'primary_track_id': primaryTrackId,
+    'fit': fit?.toJson(),
     'triage_intent': triageIntent,
   };
 }

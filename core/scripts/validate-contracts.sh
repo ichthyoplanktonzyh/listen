@@ -268,11 +268,15 @@ for (const required of [
   "/v1/semantic-search",
   "/v1/review/items",
   "/v1/listening-inbox/items",
+  "/v1/coach/dashboard",
+  "/v1/coach/evidence",
+  "/v1/hunting/candidates",
+  "/v1/review/upgrade-suggestions",
+  "/v1/projections/rebuild",
 ]) {
   if (!paths.includes(required)) throw new Error(`active listening path missing: ${required}`);
 }
 for (const prefix of [
-  "/v1/coach",
   "/v1/realtime",
   "/v1/production-corpus",
   "/v1/production-gap",
@@ -292,13 +296,9 @@ for (const prefix of [
 for (const retired of [
   "DocumentRendition",
   "DocumentRenditionInput",
-  "HuntingCandidate",
-  "UpgradeSuggestion",
   "RecordingAsset",
   "ShadowingComparison",
   "SemanticTask",
-  "CoachDashboard",
-  "ContentDifficultyProfile",
   "ProductionCorpus",
   "PersonalExpression",
   "RealtimeConversation",
@@ -322,12 +322,25 @@ const learningObservationBlock = lines.slice(learningObservationStart, learningO
 const taskTypeEnum = learningObservationBlock.match(/^        task_type: \{ enum: \[([^\]]+)\] \}$/m)?.[1]
   .split(",")
   .map(value => value.trim());
-assertEqual(taskTypeEnum, ["context_marking", "cloze", "dictation", "subtitle_fade", "review_recall"], "listening task type enum");
+assertEqual(taskTypeEnum, ["context_marking", "cloze", "dictation", "subtitle_fade", "review_recall", "upgrade_confirmation"], "listening task type enum");
 if (!openapi.includes("Content Package v3 carrier") || openapi.includes("Content Package v2 carrier")) {
   throw new Error("package installation must describe the active Content Package v3 carrier");
 }
-if (/^\s+(document_renditions|familiar_material|fit):/m.test(openapi)) {
+if (/^\s+(document_renditions|familiar_material):/m.test(openapi)) {
   throw new Error("retired document or derived-coaching fields remain in the wire contract");
+}
+if (/cross_modal_review|personal_expression|^\s+channels:$|^\s+features:$/m.test(openapi)) {
+  throw new Error("non-listening coach dimensions remain in the wire contract");
+}
+const coachDashboardStart = openapi.indexOf("  /v1/coach/dashboard:\n");
+if (coachDashboardStart < 0) throw new Error("listening coach dashboard path missing");
+const coachDashboardEnd = openapi.indexOf("\n  /v1/", coachDashboardStart + 1);
+const coachDashboardContract = openapi.slice(
+  coachDashboardStart,
+  coachDashboardEnd < 0 ? undefined : coachDashboardEnd,
+);
+if (/name: language/.test(coachDashboardContract)) {
+  throw new Error("global listening dashboard must not claim an unsupported language filter");
 }
 for (const active of ["/v1/speech-synthesis/capability", "/v1/speech-synthesis/cache", "/v1/semantic-embedding/capability", "/v1/corpus/search"]) {
   if (!paths.includes(active)) throw new Error(`retained listening foundation missing: ${active}`);

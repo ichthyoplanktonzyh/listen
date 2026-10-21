@@ -18,6 +18,7 @@ import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../utils/transcript_translation.dart';
 import '../panels/listening_inbox_panel.dart';
+import '../panels/content_fit_card.dart';
 import '../panels/transcript_panel.dart';
 import '../panels/word_bubble.dart';
 import '../panels/word_learning_panel.dart';
@@ -174,6 +175,25 @@ class _SidePanelState extends State<SidePanel> {
         SidePanelTabs(
           selected: learningController.tab,
           onSelected: learningController.selectTab,
+        ),
+        ListenableBuilder(
+          listenable: subtitleController,
+          builder: (context, _) {
+            final profile = subtitleController.contentFit;
+            if (learningController.tab != SidePanelTab.transcript ||
+                profile == null) {
+              return const SizedBox.shrink();
+            }
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                ListenSpacing.gap12,
+                ListenSpacing.gap8,
+                ListenSpacing.gap12,
+                ListenSpacing.gap8,
+              ),
+              child: ContentFitCard(profile: profile),
+            );
+          },
         ),
         Expanded(
           child: switch (learningController.tab) {

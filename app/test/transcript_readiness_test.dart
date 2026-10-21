@@ -1127,6 +1127,10 @@ final class _FakeResourceRepository implements ResourceRepository {
 
   @override
   bool get isAvailable => true;
+
+  @override
+  Future<ContentDifficultyProfile> contentFit(String trackId) async =>
+      throw StateError('unexpected content fit lookup');
   @override
   ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
   @override

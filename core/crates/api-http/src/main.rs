@@ -62,6 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_package_lifecycle_repository(repository.clone())
     .with_content_package_candidate_import_repository(repository.clone())
     .with_capability_attempt_repository(repository.clone())
+    .with_coach_dashboard_repository(repository.clone())
+    .with_difficulty_repository(repository.clone())
     .with_source_identity_repository(repository.clone());
     let services = services.with_semantic_embedding(repository.clone(), semantic_embedding.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
@@ -159,13 +161,13 @@ fn database_path() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
         let home = PathBuf::from(env::var_os("HOME").expect("HOME is required"));
-        home.join("Library/Application Support/listen/listen-listening.sqlite")
+        home.join("Library/Application Support/listen/listen-coach.sqlite")
     }
     #[cfg(target_os = "windows")]
     {
         let local_app_data =
             PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"));
-        local_app_data.join("listen/listen-listening.sqlite")
+        local_app_data.join("listen/listen-coach.sqlite")
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -174,7 +176,7 @@ fn database_path() -> PathBuf {
                 .join(".local/share")
                 .into_os_string()
         }));
-        data_home.join("listen/listen-listening.sqlite")
+        data_home.join("listen/listen-coach.sqlite")
     }
 }
 

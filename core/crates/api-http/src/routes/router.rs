@@ -2,6 +2,7 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 
+use super::coach::{coach_dashboard, coach_evidence, graduate_coach_material};
 use super::composition::{read_composition_resource_payload, read_material_composition};
 use super::corpus::{reindex_corpus, search_corpus};
 use super::dictionary::{diagnose_sentence, dictionary_lookup};
@@ -22,10 +23,10 @@ use super::material_capability::{
     start_material_capability_attempt,
 };
 use super::media::{
-    archive_subtitle, delete_subtitle, export_subtitle, import_lltimeline,
-    import_lltimeline_for_media, import_subtitle, list_media_library, media_subtitles, read_media,
-    read_subtitle, register_media, restore_subtitle, retain_media, set_media_triage_intent,
-    unretain_media, update_track_language,
+    archive_subtitle, content_fit_calibration_samples, delete_subtitle, export_subtitle,
+    import_lltimeline, import_lltimeline_for_media, import_subtitle, list_media_library,
+    media_subtitles, read_media, read_subtitle, register_media, restore_subtitle, retain_media,
+    set_media_triage_intent, track_content_fit, unretain_media, update_track_language,
 };
 use super::package_lifecycle::{
     adopt_learning_edition, delete_learning_edition, install_material_package,
@@ -41,12 +42,17 @@ use super::phonetic_analysis::{
 };
 use super::practice::{
     archive_hunting_target, capture_listening_inbox_item, complete_listening_session,
-    create_hunting_target, create_practice_item, create_practice_session, create_review_item,
-    custom_study, list_due_review_items, list_hunting_occurrences, list_hunting_targets,
-    list_listening_inbox_items, practice_attempt, process_listening_inbox_item,
-    review_daily_limits, review_deck_overview, review_interval_preview, review_item, review_queue,
+    confirm_upgrade_suggestion, create_hunting_target, create_practice_item,
+    create_practice_session, create_review_item, custom_study, list_due_review_items,
+    list_hunting_candidates, list_hunting_occurrences, list_hunting_targets,
+    list_listening_inbox_items, list_upgrade_suggestions, practice_attempt,
+    process_listening_inbox_item, reject_upgrade_suggestion, review_daily_limits,
+    review_deck_overview, review_interval_preview, review_item, review_queue,
     submit_custom_study_attempt, submit_hunting_check, submit_practice_attempt,
-    submit_review_attempt, update_review_daily_limits,
+    submit_review_attempt, update_review_daily_limits, upgrade_suggestion_history,
+};
+use super::projection_review::{
+    audit_projection, decide_projection, list_projection_proposals, rebuild_projections,
 };
 use super::pronunciation::{
     analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
@@ -222,6 +228,14 @@ fn media_analysis_routes() -> Router<ApiState> {
             axum::routing::patch(update_track_language),
         )
         .route("/v1/subtitles/{track_id}/export", get(export_subtitle))
+        .route(
+            "/v1/subtitles/{track_id}/content-fit",
+            get(track_content_fit),
+        )
+        .route(
+            "/v1/content-fit/calibration-samples",
+            get(content_fit_calibration_samples),
+        )
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
         .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
         .route(
@@ -514,6 +528,12 @@ fn learning_routes() -> Router<ApiState> {
             get(super::lexical_entries::phrase_candidates),
         )
         .route("/v1/practice/sessions", post(create_practice_session))
+        .route("/v1/coach/dashboard", get(coach_dashboard))
+        .route("/v1/coach/evidence", get(coach_evidence))
+        .route(
+            "/v1/coach/materials/{media_id}/graduate",
+            post(graduate_coach_material),
+        )
         .route(
             "/v1/listening/sessions/{id}/complete",
             post(complete_listening_session),
@@ -529,6 +549,7 @@ fn learning_routes() -> Router<ApiState> {
             "/v1/listening-inbox/items/{id}/process",
             post(process_listening_inbox_item),
         )
+        .route("/v1/hunting/candidates", get(list_hunting_candidates))
         .route(
             "/v1/hunting/targets",
             get(list_hunting_targets).post(create_hunting_target),
@@ -557,6 +578,31 @@ fn learning_routes() -> Router<ApiState> {
             get(review_interval_preview),
         )
         .route("/v1/review/attempts", post(submit_review_attempt))
+        .route(
+            "/v1/review/upgrade-suggestions",
+            get(list_upgrade_suggestions),
+        )
+        .route(
+            "/v1/review/upgrade-suggestions/history",
+            get(upgrade_suggestion_history),
+        )
+        .route(
+            "/v1/review/upgrade-suggestions/{id}/confirm",
+            post(confirm_upgrade_suggestion),
+        )
+        .route(
+            "/v1/review/upgrade-suggestions/{id}/reject",
+            post(reject_upgrade_suggestion),
+        )
+        .route("/v1/projections/rebuild", post(rebuild_projections))
+        .route(
+            "/v1/projections/entries/{id}",
+            get(list_projection_proposals).post(audit_projection),
+        )
+        .route(
+            "/v1/projections/proposals/{id}/decision",
+            post(decide_projection),
+        )
         .route("/v1/vocabulary", get(list_vocabulary))
         .route("/v1/corpus/search", get(search_corpus))
         .route("/v1/corpus/reindex", post(reindex_corpus))

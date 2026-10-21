@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
+import 'controllers/coach_dashboard_controller.dart';
 import 'controllers/discovery_view_model.dart';
 import 'controllers/core_session_controller.dart';
 import 'controllers/download_controller.dart';
@@ -110,6 +111,7 @@ import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/learning_edition_panel.dart';
 import 'widgets/panels/listening_inbox_panel.dart';
 import 'widgets/panels/sentence_analysis_window.dart';
+import 'widgets/vocabulary/hunting_list_panel.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/player/player_global_shortcuts.dart';
 import 'widgets/player/retention_menu.dart';
@@ -1486,6 +1488,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  CoachRouteControllers? _createCoachRouteControllers() {
+    if (!coreSessionController.state.isConnected) return null;
+    return CoachRouteControllers(
+      controller: CoachDashboardController(coreRepositories.coachDashboard),
+    );
+  }
+
   /// Projects an adopted media composition's structured transcript and
   /// alignment into the workbench.
   TranscriptReadinessViewModel get _readinessViewModel =>
@@ -1731,6 +1740,37 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Future<void> _openCoachHuntingList() async {
+    await huntingController.load();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: HuntingListPanel(
+            controller: huntingController,
+            onRefresh: () async {
+              await huntingController.load();
+            },
+            onArchiveTarget: (target) async {
+              await huntingController.archive(target);
+            },
+            onPromoteCandidate: (candidate) async {
+              await huntingController.promoteCandidate(candidate);
+            },
+            onOpenEntry: (entryId) {
+              Navigator.of(sheetContext).pop();
+              unawaited(_showVocabulary(initialEntryId: entryId));
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Switches the transcript between original, bilingual and translation.
   Widget _translationMenu() => TranslationModeButton(
     mode: settingsController.transcriptTranslation,
@@ -1792,7 +1832,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     AppRoute.home => _homePane(),
     AppRoute.library => _libraryPane(),
     AppRoute.language => _languagePane(),
+    AppRoute.coach => _coachPane(),
   };
+
+  Widget _coachPane() => CoachRouteHost(
+    create: coreSessionController.state.isConnected
+        ? _createCoachRouteControllers
+        : null,
+    language: _routeLanguage,
+    onOpenReview: _openReviewQueue,
+    onOpenHunting: () => unawaited(_openCoachHuntingList()),
+    onOpenContentHome: () => currentRoute.value = AppRoute.home,
+  );
 
   Widget _homePane() => HomePane(
     discovery: discoveryViewModel,

@@ -20,11 +20,13 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    HuntingOccurrenceQueryResult, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
-    LanguageCode, LearningStatus, LexicalEntryId, ListeningInboxItem, ListeningInboxItemId,
-    ListeningInboxStatus, MediaAvailability, MediaId, MediaKind, MediaTriageIntent,
-    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
-    ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, VocabularyAssetBundle,
+    HuntingCandidate, HuntingCandidateStatus, HuntingOccurrenceQueryResult, HuntingTarget,
+    HuntingTargetId, HuntingTargetStatus, LanguageCode, LearningStatus, LexicalEntryId,
+    ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus, MediaAvailability, MediaId,
+    MediaKind, MediaTriageIntent, PracticeAttempt, PracticeAttemptId, PracticeItem,
+    PracticeSession, PracticeSessionId, ReviewItem, ReviewItemId, SubtitleSentenceId,
+    SubtitleTrackId, UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus,
+    VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;

@@ -6,10 +6,12 @@ info:
     Versioned loopback-only application-service adapter. Playback control is
     excluded. Contract `5.0.0` narrows the active product to audio/video
     learning: Media Materials, media-derived structured reading and alignment,
-    listening activities, learner-owned listening facts, and review. Standalone
-    document materials, conversation, production tasks, and coaching are not
-    part of this API contract. Responses stay path-free, and package adoption
-    binds generated listening resources to an exact media revision.
+    listening activities, listening-only coaching, learner-owned listening
+    facts, and review. Standalone document materials, conversation, and
+    production tasks are not part of this API contract. Coaching recommendations
+    remain evidence-based and never bypass learner confirmation. Responses stay
+    path-free, and package adoption binds generated listening resources to an
+    exact media revision.
 servers:
   - url: http://127.0.0.1:{port}
     variables:
@@ -1096,6 +1098,42 @@ paths:
         - { name: format, in: query, schema: { type: string, default: srt } }
       responses:
         "200": { description: Generated SRT subtitle }
+
+  /v1/subtitles/{track_id}/content-fit:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: trackContentFit
+      description: >-
+        Dual-dimension content fit (ADR 0018) for the track's media, served
+        from a fingerprint-validated cache. Bands are expectation management,
+        never gates; signals explain each band.
+      parameters:
+        - { name: track_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Media-level dual-dimension content difficulty profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContentDifficultyProfile" }
+
+  /v1/content-fit/calibration-samples:
+    get:
+      operationId: contentFitCalibrationSamples
+      description: >-
+        Export v3 feature snapshots, uncalibrated predictions, frozen v2
+        comparison bands, and eligible user-feedback labels for offline
+        threshold search. Missing evidence remains null.
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Content-fit calibration samples
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CalibrationSample" }
   /v1/pronunciation/providers:
     get:
       operationId: pronunciationProviders
@@ -1932,6 +1970,49 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PracticeSession" }
+
+  /v1/coach/dashboard:
+    get:
+      operationId: coachDashboard
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 365, default: 7 } }
+      responses:
+        "200":
+          description: Read-only coaching view derived exclusively from listening facts across languages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoachDashboard" }
+
+  /v1/coach/evidence:
+    get:
+      operationId: coachEvidence
+      parameters:
+        - { name: metric, in: query, required: true, schema: { type: string } }
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 365, default: 7 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Paginated listening source facts for one dashboard metric
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CoachEvidenceItem" }
+
+  /v1/coach/materials/{media_id}/graduate:
+    parameters:
+      - { name: media_id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: graduateCoachMaterial
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User-confirmed graduated listening material library entry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaLibraryEntry" }
   /v1/listening/sessions/{id}/complete:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -2037,6 +2118,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ListeningInboxItem" }
+
+  /v1/hunting/candidates:
+    get:
+      operationId: listHuntingCandidates
+      parameters:
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/HuntingCandidateStatus" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Review-failure candidates awaiting an explicit user decision
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HuntingCandidate" }
   /v1/llm/providers:
     get:
       operationId: listLlmProviders
@@ -2394,6 +2491,123 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewSubmission" }
+
+  /v1/review/upgrade-suggestions:
+    get:
+      operationId: listUpgradeSuggestions
+      parameters:
+        - { name: lexical_entry_id, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/UpgradeSuggestionStatus" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Pending recognition upgrade suggestions by default
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
+
+  /v1/review/upgrade-suggestions/history:
+    get:
+      operationId: upgradeSuggestionHistory
+      parameters:
+        - { name: lexical_entry_id, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Recognition upgrade suggestion history
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
+
+  /v1/review/upgrade-suggestions/{id}/confirm:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: confirmUpgradeSuggestion
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User-confirmed recognition status upgrade
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpgradeSuggestion" }
+
+  /v1/review/upgrade-suggestions/{id}/reject:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: rejectUpgradeSuggestion
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Rejected suggestion with cooldown
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpgradeSuggestion" }
+
+  /v1/projections/rebuild:
+    post:
+      operationId: rebuildProjectionProposals
+      parameters:
+        - { name: language, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Replayed immutable evidence into versioned proposals without changing projections or overrides.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProjectionAudit" } }
+
+  /v1/projections/entries/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listProjectionProposals
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Proposal history for one lexical entry.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProjectionProposal" } }
+    post:
+      operationId: auditProjectionEntry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Listening-only qualification report and refreshed proposals.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectionAudit" }
+
+  /v1/projections/proposals/{id}/decision:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: decideProjectionProposal
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [confirm, reject] }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Append-only decision; confirmation is the sole projection writer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectionProposal" }
   /v1/learning-resources:
     get:
       operationId: learningResources
@@ -3099,10 +3313,14 @@ components:
         updated_at_ms: { type: integer, minimum: 0 }
     MediaLibraryEntry:
       type: object
-      required: [media, primary_track_id, triage_intent]
+      required: [media, primary_track_id, fit, triage_intent]
       properties:
         media: { $ref: "#/components/schemas/MediaItem" }
         primary_track_id: { type: [string, "null"] }
+        fit:
+          oneOf:
+            - { $ref: "#/components/schemas/ContentDifficultyProfile" }
+            - { type: "null" }
         triage_intent:
           type: [string, "null"]
           enum: [pin_extensive, pin_intensive, defer, graduated, null]
@@ -4754,14 +4972,16 @@ components:
         rating: { $ref: "#/components/schemas/ReviewRating" }
     ReviewSubmission:
       type: object
-      required: [attempt, schedule, generated_observation_ids]
+      required: [attempt, schedule, generated_observation_ids, hunting_candidate_ids, upgrade_suggestions]
       properties:
         attempt: { $ref: "#/components/schemas/ReviewAttempt" }
         schedule: { $ref: "#/components/schemas/ReviewSchedule" }
         generated_observation_ids: { type: array, items: { type: string } }
+        hunting_candidate_ids: { type: array, items: { type: string } }
+        upgrade_suggestions: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
     HuntingTargetSourceKind:
       type: string
-      enum: [manual, listening_inbox]
+      enum: [manual, review_candidate, listening_inbox]
     HuntingTargetStatus:
       type: string
       enum: [active, archived]
@@ -4826,7 +5046,7 @@ components:
         lexical_entry_id: { type: string }
         sense_id: { type: [string, "null"] }
         capability: { enum: [reading, listening, speaking, writing] }
-        task_type: { enum: [context_marking, cloze, dictation, subtitle_fade, review_recall] }
+        task_type: { enum: [context_marking, cloze, dictation, subtitle_fade, review_recall, upgrade_confirmation] }
         outcome: { enum: [success, partial, failure] }
         assistance: { enum: [none, partial_text, full_text] }
         surface_form: { type: [string, "null"] }
@@ -5615,3 +5835,275 @@ components:
       description: >
         The media binding behind a rendition. A local path is never part of a
         binding.
+
+    FitSignal:
+      type: object
+      required: [kind, value, decisive]
+      properties:
+        kind:
+          type: string
+          enum: [unknown_meaning_density, unassessed_density, known_not_recognized_density,
+                 speech_rate_wpm, weak_form_density, compression_density, mean_chunk_length,
+                 comprehension_report_unclear_ratio, practice_correct_rate,
+                 mean_sense_group_length, sense_group_density, multi_word_expression_density,
+                 unknown_phrase_density, unassessed_phrase_density, syntax_depth,
+                 mean_dependency_span, pause_ratio, replay_density, lookup_density,
+                 subtitle_timing_quality]
+        value: { type: number, format: float }
+        # True when this signal selected or escalated the band (vs informational).
+        decisive: { type: boolean }
+        contribution:
+          type: number
+          format: float
+          minimum: -1
+          maximum: 1
+    DifficultyDimension:
+      type: object
+      required: [fit, signals]
+      properties:
+        fit: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        signals:
+          type: array
+          items: { $ref: "#/components/schemas/FitSignal" }
+        score: { type: number, format: float, minimum: 0, maximum: 1 }
+    ContentDifficultyProfile:
+      type: object
+      required: [subject_kind, subject_id, language, meaning, sound,
+                 assessed_token_ratio, evidence_grade, algorithm_version,
+                 computed_at_ms, input_fingerprint]
+      properties:
+        # "media" today; "sentence" is a reserved seam (ADR 0018 decision 5).
+        subject_kind: { type: string }
+        subject_id: { type: string }
+        language: { type: string }
+        meaning: { $ref: "#/components/schemas/DifficultyDimension" }
+        sound: { $ref: "#/components/schemas/DifficultyDimension" }
+        # Share of word tokens with any vocabulary assessment; below the
+        # honesty threshold the UI must show the degraded-estimate state.
+        assessed_token_ratio: { type: number, format: float, minimum: 0, maximum: 1 }
+        evidence_grade: { type: string, enum: [initial_estimate, usage_calibrated] }
+        algorithm_version: { type: string }
+        computed_at_ms: { type: integer }
+        input_fingerprint: { type: string }
+        feature_snapshot: { $ref: "#/components/schemas/ContentFitFeatureSnapshot" }
+        feature_coverage: { $ref: "#/components/schemas/FeatureCoverage" }
+    ContentFitFeatureSnapshot:
+      type: object
+      required: [unknown_meaning_density, unassessed_density,
+                 known_not_recognized_density, speech_rate_wpm,
+                 weak_form_density, compression_density, mean_chunk_length,
+                 mean_sense_group_length, sense_group_density,
+                 multi_word_expression_density, unknown_phrase_density,
+                 unassessed_phrase_density, syntax_depth, mean_dependency_span,
+                 pause_ratio, replay_density, lookup_density,
+                 subtitle_timing_quality, assessed_token_ratio]
+      properties:
+        unknown_meaning_density: { type: number, format: float, minimum: 0, maximum: 1 }
+        unassessed_density: { type: number, format: float, minimum: 0, maximum: 1 }
+        known_not_recognized_density: { type: number, format: float, minimum: 0, maximum: 1 }
+        speech_rate_wpm: { type: [number, "null"], format: float, minimum: 0 }
+        weak_form_density: { type: [number, "null"], format: float, minimum: 0 }
+        compression_density: { type: [number, "null"], format: float, minimum: 0 }
+        mean_chunk_length: { type: [number, "null"], format: float, minimum: 0 }
+        mean_sense_group_length: { type: [number, "null"], format: float, minimum: 0 }
+        sense_group_density: { type: [number, "null"], format: float, minimum: 0 }
+        multi_word_expression_density: { type: [number, "null"], format: float, minimum: 0 }
+        unknown_phrase_density: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        unassessed_phrase_density: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        syntax_depth: { type: [number, "null"], format: float, minimum: 0 }
+        mean_dependency_span: { type: [number, "null"], format: float, minimum: 0 }
+        pause_ratio: { type: [number, "null"], format: float, minimum: 0 }
+        replay_density: { type: [number, "null"], format: float, minimum: 0 }
+        lookup_density: { type: [number, "null"], format: float, minimum: 0 }
+        subtitle_timing_quality: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        assessed_token_ratio: { type: number, format: float, minimum: 0, maximum: 1 }
+    FeatureCoverage:
+      type: object
+      required: [total_features, available_features, coverage_ratio, missing_features]
+      properties:
+        total_features: { type: integer, minimum: 0 }
+        available_features: { type: integer, minimum: 0 }
+        coverage_ratio: { type: number, format: float, minimum: 0, maximum: 1 }
+        missing_features:
+          type: array
+          items:
+            type: string
+            enum: [speech_rate_wpm, weak_form_density, compression_density,
+                   mean_chunk_length, mean_sense_group_length, sense_group_density,
+                   multi_word_expression_density, unknown_phrase_density,
+                   unassessed_phrase_density, syntax_depth, mean_dependency_span,
+                   pause_ratio, replay_density, lookup_density,
+                   subtitle_timing_quality]
+    CalibrationSample:
+      type: object
+      required: [subject_kind, subject_id, language, snapshot,
+                 predicted_meaning_score, predicted_sound_score,
+                 predicted_meaning_band, predicted_sound_band,
+                 v2_meaning_band, v2_sound_band, observed_difficulty,
+                 reports_understood_all, reports_got_the_gist,
+                 reports_unclear, practice_attempts, practice_correct,
+                 sampled_at_ms]
+      properties:
+        subject_kind: { type: string }
+        subject_id: { type: string }
+        language: { type: string }
+        snapshot: { $ref: "#/components/schemas/ContentFitFeatureSnapshot" }
+        predicted_meaning_score: { type: number, format: float, minimum: 0, maximum: 1 }
+        predicted_sound_score: { type: number, format: float, minimum: 0, maximum: 1 }
+        predicted_meaning_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        predicted_sound_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        v2_meaning_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        v2_sound_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        observed_difficulty: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        reports_understood_all: { type: integer, minimum: 0 }
+        reports_got_the_gist: { type: integer, minimum: 0 }
+        reports_unclear: { type: integer, minimum: 0 }
+        practice_attempts: { type: integer, minimum: 0 }
+        practice_correct: { type: integer, minimum: 0 }
+        sampled_at_ms: { type: integer, minimum: 0 }
+    ProjectionEvidenceRef:
+      type: object
+      required: [observation_id, source_ref, task_type, outcome, occurred_at_ms, snapshot]
+      properties:
+        observation_id: { type: string }
+        source_ref: { type: [string, "null"] }
+        task_type: { type: string }
+        outcome: { type: string, enum: [success, partial, failure] }
+        occurred_at_ms: { type: integer, minimum: 0 }
+        snapshot: { type: string }
+    ProjectionProposal:
+      type: object
+      required: [id, lexical_entry_id, capability, proposed_conclusion, algorithm_version, confidence, evidence_as_of_ms, evidence, rationale, status, created_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        capability: { const: listening }
+        proposed_conclusion: { type: string, enum: [not_acquired, acquired] }
+        algorithm_version: { type: string }
+        confidence: { type: [number, "null"], minimum: 0, maximum: 1 }
+        evidence_as_of_ms: { type: integer, minimum: 0 }
+        evidence: { type: array, items: { $ref: "#/components/schemas/ProjectionEvidenceRef" } }
+        rationale: { type: string }
+        status: { type: string, enum: [pending, confirmed, rejected, superseded] }
+        created_at_ms: { type: integer, minimum: 0 }
+    ChannelQualificationReport:
+      type: object
+      required: [capability, qualification, algorithm_version, qualifying_evidence_count, reason]
+      properties:
+        capability: { const: listening }
+        qualification: { type: string, enum: [qualified, insufficient_evidence] }
+        algorithm_version: { type: string }
+        qualifying_evidence_count: { type: integer, minimum: 0 }
+        reason: { type: string }
+    ProjectionAudit:
+      type: object
+      required: [lexical_entry_id, reports, proposals]
+      properties:
+        lexical_entry_id: { type: string }
+        reports: { type: array, items: { $ref: "#/components/schemas/ChannelQualificationReport" } }
+        proposals: { type: array, items: { $ref: "#/components/schemas/ProjectionProposal" } }
+    HuntingCandidateStatus:
+      type: string
+      enum: [active, consumed, dismissed]
+    HuntingCandidate:
+      type: object
+      required: [id, lexical_entry_id, review_item_id, sentence_id, media_id, track_id, target_snapshot, prompt_snapshot, failure_count, status, created_at_ms, last_failed_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        review_item_id: { type: string }
+        sentence_id: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        target_snapshot: { type: string }
+        prompt_snapshot: { type: string }
+        failure_count: { type: integer, minimum: 0 }
+        status: { $ref: "#/components/schemas/HuntingCandidateStatus" }
+        created_at_ms: { type: integer, minimum: 0 }
+        last_failed_at_ms: { type: integer, minimum: 0 }
+    UpgradeSuggestionStatus:
+      type: string
+      enum: [pending, accepted, rejected, obsolete]
+    UpgradeSuggestion:
+      type: object
+      required: [id, lexical_entry_id, lexical_display_form, previous_status, suggested_status, status, evidence_context_count, evidence_ids, threshold, evidence_class, created_at_ms, resolved_at_ms, cooldown_until_ms, capability, previous_assessment, suggested_assessment]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        lexical_display_form: { type: string }
+        previous_status: { $ref: "#/components/schemas/LearningStatus" }
+        suggested_status: { $ref: "#/components/schemas/LearningStatus" }
+        status: { $ref: "#/components/schemas/UpgradeSuggestionStatus" }
+        evidence_context_count: { type: integer, minimum: 0 }
+        evidence_ids: { type: array, items: { type: string } }
+        threshold: { type: integer, minimum: 1 }
+        evidence_class: { type: string }
+        created_at_ms: { type: integer, minimum: 0 }
+        resolved_at_ms: { type: [integer, "null"], minimum: 0 }
+        cooldown_until_ms: { type: [integer, "null"], minimum: 0 }
+        capability: { type: [string, "null"], enum: [listening, null] }
+        previous_assessment: { type: [string, "null"], enum: [not_acquired, acquired, unassessed, null] }
+        suggested_assessment: { type: [string, "null"], enum: [not_acquired, acquired, unassessed, null] }
+    CoachMetric:
+      type: object
+      required: [key, value, source, authority_layer]
+      properties:
+        key: { type: string }
+        value: { type: integer, minimum: 0 }
+        source: { type: string }
+        authority_layer: { type: string }
+    CoachSuggestionDestination:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [review_queue, hunting_list, content_home] }
+    CoachSuggestion:
+      type: object
+      required: [id, kind, title_key, reason_key, destination, evidence_source, evidence_count]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        title_key: { type: string }
+        reason_key: { type: string }
+        destination: { $ref: "#/components/schemas/CoachSuggestionDestination" }
+        evidence_source: { type: string }
+        evidence_count: { type: integer, minimum: 0 }
+    CoachMaterialInsight:
+      type: object
+      required: [media_id, title, report_count, first_report, latest_report, reports_understood_all, reports_got_the_gist, reports_unclear, practice_attempts, practice_correct, triage_intent, graduation_candidate, recommended_intent]
+      properties:
+        media_id: { type: string }
+        title: { type: string }
+        report_count: { type: integer, minimum: 0 }
+        first_report: { type: [string, "null"], enum: [understood_all, got_the_gist, unclear, null] }
+        latest_report: { type: [string, "null"], enum: [understood_all, got_the_gist, unclear, null] }
+        reports_understood_all: { type: integer, minimum: 0 }
+        reports_got_the_gist: { type: integer, minimum: 0 }
+        reports_unclear: { type: integer, minimum: 0 }
+        practice_attempts: { type: integer, minimum: 0 }
+        practice_correct: { type: integer, minimum: 0 }
+        triage_intent: { type: [string, "null"], enum: [pin_extensive, pin_intensive, defer, graduated, null] }
+        graduation_candidate: { type: boolean }
+        recommended_intent: { type: [string, "null"], enum: [pin_extensive, pin_intensive, null] }
+    CoachEvidenceItem:
+      type: object
+      required: [id, occurred_at_ms, result, source_kind, snapshot, source_available]
+      properties:
+        id: { type: string }
+        occurred_at_ms: { type: integer, minimum: 0 }
+        result: { type: string }
+        source_kind: { type: string }
+        snapshot: { type: string }
+        source_available: { type: boolean }
+        unavailable_reason: { type: string }
+    CoachDashboard:
+      type: object
+      required: [period_start_ms, period_end_ms, generated_at_ms, listening_metrics, suggestions, starter_checklist, materials]
+      properties:
+        period_start_ms: { type: integer, minimum: 0 }
+        period_end_ms: { type: integer, minimum: 0 }
+        generated_at_ms: { type: integer, minimum: 0 }
+        listening_metrics: { type: array, items: { $ref: "#/components/schemas/CoachMetric" } }
+        suggestions: { type: array, items: { $ref: "#/components/schemas/CoachSuggestion" } }
+        starter_checklist: { type: array, items: { type: string } }
+        materials: { type: array, items: { $ref: "#/components/schemas/CoachMaterialInsight" } }
