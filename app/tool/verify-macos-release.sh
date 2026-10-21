@@ -178,15 +178,27 @@ assert_sqlite_value() {
     fail "$description: expected $expected, got $actual"
 }
 
-launch_packaged_app() (
-  unset LISTEN_SOURCE_ROOT LISTEN_CORE_RUNTIME_DIR LISTEN_GEN_RELEASE_MANIFEST
-  unset LISTEN_GEN_LOCK_PATH LLPLAYERNEXT_API_BINARY LLPLAYERNEXT_WHISPER_CLI
-  unset LLPLAYERNEXT_FFMPEG LLPLAYERNEXT_FFPROBE LLPLAYERNEXT_VERIFY_GEN_BUNDLE
-  export HOME="$isolated_home"
-  export PATH="$minimal_path"
-  export LLPLAYERNEXT_SUPPORT_DIR="$isolated_support"
-  exec "$app/Contents/MacOS/listen"
-)
+launch_packaged_app() {
+  local database_path="$1"
+  local media_path="$2"
+  local primary_subtitle_path="${3:-}"
+  local secondary_subtitle_path="${4:-}"
+  local -a environment=(
+    "HOME=$isolated_home"
+    "PATH=$minimal_path"
+    "TMPDIR=$tmp"
+    "LLPLAYERNEXT_SUPPORT_DIR=$isolated_support"
+    "LLPLAYERNEXT_DB=$database_path"
+    "LLPLAYERNEXT_SMOKE_MEDIA=$media_path"
+  )
+  if [[ -n "$primary_subtitle_path" ]]; then
+    environment+=("LLPLAYERNEXT_SMOKE_SUBTITLE=$primary_subtitle_path")
+  fi
+  if [[ -n "$secondary_subtitle_path" ]]; then
+    environment+=("LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE=$secondary_subtitle_path")
+  fi
+  exec /usr/bin/env -i "${environment[@]}" "$app/Contents/MacOS/listen"
+}
 
 if [[ ! -f "$fixture_source/generated/sample-video.mp4" ]]; then
   "$fixture_source/generate.sh"
@@ -297,11 +309,12 @@ print(
 )
 PY
 
-LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
-LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-video.mp4" \
-LLPLAYERNEXT_SMOKE_SUBTITLE="$fixtures/generated/long-timeline.srt" \
-LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE="$fixtures/subtitles/timeline.vtt" \
-  launch_packaged_app >"$tmp/desktop.log" 2>&1 &
+launch_packaged_app \
+  "$tmp/mvp.sqlite" \
+  "$fixtures/generated/sample-video.mp4" \
+  "$fixtures/generated/long-timeline.srt" \
+  "$fixtures/subtitles/timeline.vtt" \
+  >"$tmp/desktop.log" 2>&1 &
 pid=$!
 
 for _ in $(seq 1 100); do
@@ -323,11 +336,12 @@ assert_sqlite_value \
   "playback progress count"
 stop_app
 
-LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
-LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-video.mp4" \
-LLPLAYERNEXT_SMOKE_SUBTITLE="$fixtures/generated/long-timeline.srt" \
-LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE="$fixtures/subtitles/timeline.vtt" \
-  launch_packaged_app >>"$tmp/desktop.log" 2>&1 &
+launch_packaged_app \
+  "$tmp/mvp.sqlite" \
+  "$fixtures/generated/sample-video.mp4" \
+  "$fixtures/generated/long-timeline.srt" \
+  "$fixtures/subtitles/timeline.vtt" \
+  >>"$tmp/desktop.log" 2>&1 &
 pid=$!
 sleep 3
 assert_app_running
@@ -335,9 +349,10 @@ assert_sqlite_value 'SELECT count(*) FROM media_items;' "1" "reopen media item c
 assert_sqlite_value 'SELECT count(*) FROM subtitle_tracks;' "2" "reopen subtitle track count"
 stop_app
 
-LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
-LLPLAYERNEXT_SMOKE_MEDIA="$fixtures/generated/sample-audio.m4a" \
-  launch_packaged_app >>"$tmp/desktop.log" 2>&1 &
+launch_packaged_app \
+  "$tmp/mvp.sqlite" \
+  "$fixtures/generated/sample-audio.m4a" \
+  >>"$tmp/desktop.log" 2>&1 &
 pid=$!
 if ! python3 "$root/tool/wait_for_sqlite_value.py" \
   "$tmp/mvp.sqlite" \
