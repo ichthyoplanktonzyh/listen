@@ -284,7 +284,7 @@ class MediaLibraryCoordinator {
     final media = entry.primaryMedia;
     if (media == null) return;
     if (!repository.isAvailable) {
-      // Unavailable State (CONTEXT.md): triage is a direct click on a library
+      // Honest unavailable state: triage is a direct click on a library
       // row, so report the missing core instead of silently doing nothing.
       player.setStatus(text('statusConnectLocalCoreFirst'));
       return;

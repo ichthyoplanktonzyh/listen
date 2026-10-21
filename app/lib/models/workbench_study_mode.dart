@@ -22,9 +22,8 @@ enum WorkbenchStudyMode {
   blindListening,
 
   /// The current sentence, blanked, to be refilled from a pool of word choices.
-  /// The pool and answers are a backend gap (see workbench-backend-gaps.md), so
-  /// this mode currently renders an honest, unavailable placeholder rather than
-  /// a fabricated exercise.
+  /// The pool and answers are not implemented, so this mode currently renders
+  /// an honest unavailable placeholder rather than a fabricated exercise.
   wordSelection;
 
   bool get isBlind => this == WorkbenchStudyMode.blindListening;

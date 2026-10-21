@@ -1,15 +1,14 @@
 # Listen Content Package v2
 
-Content Package v2 is the material-centered release contract that succeeds
-the v1 resource package. One canonical `release.json` fixes exactly one
+Content Package v2 is a material-centered release contract.
+One canonical `release.json` fixes exactly one
 Learning Edition of exactly one Material Revision and names an exact set of
 resources, renditions, and entrypoints. Release, resource, blob, Media
 Rendition, and delivery identity are distinct and independent: no archive path
 or URL participates in any of them.
 
-V1 remains a separate, unchanged legacy contract (`../v1`). V2 never
-reinterprets v1 semantics, and no v1 field is reused with a different meaning
-here.
+This directory documents v2. The [v3 contract](../v3/README.md) is documented
+separately; schemas and field meanings are version-specific.
 
 ## Contract files
 

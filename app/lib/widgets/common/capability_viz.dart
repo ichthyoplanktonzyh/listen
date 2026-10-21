@@ -16,8 +16,7 @@ import '../../theme/typography.dart';
 
 /// The capability portrait's graphic language (issue #47), shared by the
 /// coach dashboard and every vocabulary-entry scale so the two read as one
-/// system. Owner-approved direction (design-notes/listen-capability-viz.html):
-/// compass ring for the aggregate overview, echo bars for per-channel detail,
+/// system: a compass ring for the aggregate overview, echo bars for per-channel detail,
 /// and the three-state mini ring at entry scales. Rendering only — analysis
 /// data and evidence gating stay untouched, and gap annotations juxtapose
 /// existing counts instead of deriving new metrics in the frontend.

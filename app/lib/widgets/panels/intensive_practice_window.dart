@@ -687,8 +687,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
 
   // Honest placeholder: the "replay N times at rate R with a gap of I" auto-
   // listen loop is not built yet, so this pill previews the intended settings
-  // without wiring them to practice state. Non-interactive on purpose; the gap
-  // is logged in docs/product/workbench-backend-gaps.md.
+  // without wiring them to practice state. It is non-interactive on purpose.
   Widget _settingsPill() {
     final colors = Theme.of(context).colorScheme;
     return Tooltip(

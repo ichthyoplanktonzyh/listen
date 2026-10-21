@@ -47,7 +47,6 @@ there is no checked-in GitHub Actions workflow running these gates.
 
 ## Documentation
 
-`CONTEXT.md` adds only App interaction language. Project semantics and active
-status/roadmap live at the repository root. Module `.planning/`, old handoffs
-and local ADRs are implementation/history evidence; do not execute superseded
-plans. Root and module changelogs are release-only.
+Shared documentation lives at the root. See [runtime architecture](../docs/architecture/runtime.md)
+and [App UI checks](../docs/development/app-ui.md). Do not create a local
+product glossary, roadmap, planning tree, or handoff log.

@@ -43,7 +43,7 @@ class VocabularyActionsCoordinator {
     this.refreshDiagnosis = refreshDiagnosis;
   }
 
-  /// Unavailable State (CONTEXT.md): user-triggered vocabulary actions report
+  /// Honest unavailable state: user-triggered vocabulary actions report
   /// the missing core instead of silently doing nothing. Background loads
   /// (word/phrase entries, phrase candidates) use the repository availability
   /// signal and stay silent.

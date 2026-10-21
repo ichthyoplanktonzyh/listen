@@ -58,8 +58,6 @@ checks. Report actual local results; no checked-in Actions workflow runs them.
 
 ## Documentation
 
-Root model, glossary, context map, journeys, roadmap and state are canonical.
-`.planning/codebase/` supplies local implementation context but may lag code;
-old phase plans and split-repository handoffs are historical. Do not restart an
-old phase or follow a cross-repository restriction superseded by decision 0005.
-Module changelogs are release-only. Preserve unrelated work.
+Shared product definitions, current scope, architecture, and workflow live at
+the root. Keep executable contract notes, test-data instructions, and runtime
+license notices beside their files. Do not restore old planning or ADR tasks.

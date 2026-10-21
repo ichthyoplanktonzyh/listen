@@ -322,7 +322,7 @@ Future<void> searchOpenSubtitlesFlow({
   final l = AppLocalizations.of(context);
   var preparation = controller.prepare();
   if (preparation is OpenSubtitlesUnavailable) {
-    // Unavailable State (CONTEXT.md): the OpenSubtitles search is a user menu
+    // Honest unavailable state: the OpenSubtitles search is a user menu
     // entry; report the missing core instead of swallowing the click.
     controller.reportStatus(l.text('statusConnectLocalCoreFirst'));
     return;

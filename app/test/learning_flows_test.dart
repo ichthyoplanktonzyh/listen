@@ -147,7 +147,7 @@ void main() {
       await tester.tap(find.text('go'));
       await tester.pumpAndSettle();
 
-      // Honest refusal (CONTEXT.md Unavailable State): no navigation, but the
+      // Honest refusal: no navigation, but the
       // click reports why instead of dying silently.
       expect(find.text('go'), findsOneWidget);
       expect(player.status, 'Connect the local core first');

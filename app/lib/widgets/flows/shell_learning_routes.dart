@@ -97,8 +97,8 @@ abstract class ShellRouteHostState<
   }
 }
 
-/// One voice for every destination the core gates (Unavailable State,
-/// CONTEXT.md): the route renders the reason instead of a dead surface.
+/// One voice for every destination the Core gates while unavailable: the route
+/// renders the reason instead of a dead surface.
 class _CoreUnavailablePane extends StatelessWidget {
   const _CoreUnavailablePane();
 

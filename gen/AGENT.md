@@ -31,6 +31,7 @@ It shares one repository and feature branch with `app/` and `core/`.
 - Do not commit virtualenvs, model weights, generated packages, provider
   credentials or local task history. Source availability grants no license.
 
-`CONTEXT.md` adds production-specific terms; root documents own shared product
-semantics and active status/roadmap. Do not restore superseded split-repository
-workflow rules from historical documents. Preserve unrelated work.
+Shared product definitions and priorities live at the root. Technical references
+are [Gen development](../docs/development/gen.md), [machine events](../docs/protocols/gen-machine-events.md),
+and [release bundles](../docs/protocols/gen-release-bundle.md). Do not create
+local product planning or duplicate schemas. Preserve unrelated work.

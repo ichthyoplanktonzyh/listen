@@ -133,8 +133,8 @@ final class DocumentSessionFailed extends DocumentSessionState {
   final DocumentSessionFailure failure;
 }
 
-/// A named failure kind the UI can speak (CONTEXT.md: name the failure, hand
-/// the detail to the disclosure).
+/// A named failure kind the UI can speak: name the failure and hand the detail
+/// to the disclosure.
 enum DocumentSessionFailureKind {
   coreUnavailable,
   tooLarge,

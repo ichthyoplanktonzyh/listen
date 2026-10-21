@@ -1,5 +1,8 @@
 # Listen Project Model
 
+This document describes product direction. Current scope and execution priority
+are defined in [STATE.md](STATE.md) and [ROADMAP.md](ROADMAP.md).
+
 > Status: owner-approved theoretical baseline, revision 3, 2026-09-08.
 
 This document is the project-level authority for Listen's theoretical model.

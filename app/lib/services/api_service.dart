@@ -104,7 +104,7 @@ ApiFailure describeApiFailure(Object error) => error is ApiFailure
 
 /// The pluggable transport behind [LocalApi]. Production uses a `dart:io`
 /// [HttpClient]; tests inject a fake so the client can be exercised without a
-/// live sidecar (see CONCERNS.md A1).
+/// live sidecar.
 typedef ApiTransport =
     Future<ApiResponse> Function(String method, String path, String? body);
 
@@ -131,7 +131,7 @@ class LocalApi {
   ]);
 
   /// Test-only constructor that drives the API through an injected
-  /// [ApiTransport] instead of a live sidecar. See CONCERNS.md A1.
+  /// [ApiTransport] instead of a live sidecar.
   factory LocalApi.withTransport({
     required String baseUrl,
     required String token,

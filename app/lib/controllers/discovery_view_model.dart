@@ -740,7 +740,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// Every candidate is confirmed against Core's *registered* media, never
   /// against the Personal Library listing. The library projection is retained
   /// media only, and an adopted download is deliberately Temporary Material
-  /// (`retain: false`, CONTEXT.md Retention Decision) — so asking the library
+  /// (`retain: false`, not learner retention) — so asking the library
   /// whether a downloaded episode exists always answered no, the ledger row
   /// was then dropped as stale, and the next visit offered the very download
   /// that had already happened. (Core's own contract test states the rule:

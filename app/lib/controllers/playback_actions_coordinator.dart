@@ -330,7 +330,7 @@ class PlaybackActionsCoordinator {
 
   Future<void> archiveCurrentMedia() async {
     if (!repository.isAvailable || player.mediaId == null) {
-      // Unavailable State (CONTEXT.md): name the cause and the recovery
+      // Honest unavailable state: name the cause and the recovery
       // action instead of silently doing nothing (#24). The menu item is
       // disabled in this state, but other entry paths still land here.
       player.setStatus(_t('statusOpenMediaAndCoreFirst'));

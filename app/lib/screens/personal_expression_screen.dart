@@ -37,12 +37,10 @@ typedef OpenPersonalExpressionPattern =
 /// (`template_visible` / `slot_hints` / `keywords` / `no_text`); this list only
 /// *presents* them, it never adds semantics (呈现≠语义).
 ///
-/// The 月白→青 light migration (design-notes/listen-expression-redesign.html,
-/// owner 方向 A · 2026-07-24): the template is borrowed language (月白
-/// [ListenColors.moonWhite]), your own sentence is your signal
-/// (`colorScheme.primary`). Retiring one rung of scaffolding moves one part of
-/// the light from moon to teal — so `moonFlex` decreases and `signalFlex`
-/// increases monotonically down the ladder (0.75 → 0.5 → 0.25 → 0.0 moon).
+/// The template is borrowed language (月白 [ListenColors.moonWhite]); your own
+/// sentence is your signal (`colorScheme.primary`). Retiring one rung of
+/// scaffolding moves the light from moon to teal, so `moonFlex` decreases and
+/// `signalFlex` increases down the ladder (0.75 → 0.5 → 0.25 → 0.0 moon).
 const _ladderRungs = <_LadderRung>[
   _LadderRung(
     value: 'template_visible',

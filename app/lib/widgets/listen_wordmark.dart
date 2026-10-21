@@ -16,9 +16,8 @@ import '../theme/typography.dart';
 class ListenWordmark extends StatelessWidget {
   const ListenWordmark({super.key, this.size = 22, this.withText = true});
 
-  /// Height of the square mark. The wordmark text scales with it
-  /// (lockup ratio from `design-notes/listen-mark-exploration.html`:
-  /// 30px mark ↔ 27px text ↔ 12px gap).
+  /// Height of the square mark. At the base size the wordmark uses a 27px text
+  /// height and a 12px gap.
   final double size;
 
   /// False renders the bare mark (favicon-like contexts).

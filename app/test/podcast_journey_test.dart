@@ -318,7 +318,7 @@ void main() {
       (tester) async {
         // The real shape of the bug, end to end. Adoption registers a
         // download as Temporary Material (`retain: false` — acquisition is
-        // not retention, CONTEXT.md Retention Decision), and Core's Personal
+        // not learner retention), and Core's Personal
         // Library projection lists retained media only. Recognition used to
         // confirm its ledger row against that projection, never found the
         // episode there, deleted the row as stale, and offered the very

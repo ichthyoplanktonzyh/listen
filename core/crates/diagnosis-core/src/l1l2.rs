@@ -9,8 +9,7 @@
 //! - **Profile content** (which difficulty categories exist for a pair, and
 //!   the one-sentence transfer explanation) is grounded in published
 //!   contrastive phonology / L2 listening research. Citation keys live on
-//!   each rule; full references and per-rule review notes are recorded in
-//!   `.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-L1-PROFILE-EVIDENCE.md`.
+//!   each rule and identify the sources behind that profile content.
 //! - **Identification rules** (mapping a category onto the audible-structure
 //!   v1 shape: document-level `rhythm_frames` weak groups / compression spans
 //!   and 2.16 connected-speech families) are `heuristic_proxy` — they inherit

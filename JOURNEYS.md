@@ -1,5 +1,8 @@
 # Learner Journeys
 
+This document describes product direction. Current scope and execution priority
+are defined in [STATE.md](STATE.md) and [ROADMAP.md](ROADMAP.md).
+
 Listen may coordinate acquisition, compilation, provider execution,
 qualification, packaging, installation, and adoption internally. The Learner
 experiences one coherent path from Raw Source to authentic Learning Experience

@@ -84,7 +84,7 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
   /// interrogate the same content.
   Future<void> openL1Check() async {
     if (!repository.isAvailable) {
-      // Unavailable State (CONTEXT.md): the L1-check button is a direct
+      // Honest unavailable state: the L1-check button is a direct
       // click, so a missing core is reported, never swallowed.
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
