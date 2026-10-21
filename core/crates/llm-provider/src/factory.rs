@@ -1,18 +1,29 @@
-//! Builds the subtitle-analysis runtime from a stored provider profile and a resolved secret.
+//! Builds a semantic provider from a stored profile + a resolved secret.
+//!
+//! This is the one place adapter kind maps to a concrete adapter. Adding a
+//! protocol is a new match arm here plus a new adapter module — the rubric and
+//! judgment contracts above do not change (Phase 3.12 exit signal).
 
 use std::time::Duration;
 
-use application::{SemanticLlmRuntime, SemanticLlmRuntimeFactory, SenseGroupPartitionProvider};
+use application::{
+    OutputFeedbackProvider, SemanticJudgeProvider, SemanticLlmRuntime, SemanticLlmRuntimeFactory,
+    SemanticRubricProvider, SenseGroupPartitionProvider,
+};
 use domain::{CapabilityClaim, LlmAdapterKind, LlmProviderError, LlmProviderProfile};
 
 use crate::{AnthropicMessagesAdapter, LlmSemanticProvider, OpenAiChatAdapter};
 
+/// A built provider, keyed by protocol. Exposes both application seams plus the
+/// capability probe over one constructed adapter.
 enum BuiltSemanticProvider {
     OpenAi(LlmSemanticProvider<OpenAiChatAdapter>),
     Anthropic(LlmSemanticProvider<AnthropicMessagesAdapter>),
 }
 
 impl BuiltSemanticProvider {
+    /// Constructs the provider for `profile`, injecting the already-resolved
+    /// `api_key` (from the secure store). `None` is a keyless/local endpoint.
     fn build(
         profile: &LlmProviderProfile,
         api_key: Option<String>,
@@ -45,6 +56,27 @@ impl BuiltSemanticProvider {
         }
     }
 
+    fn as_judge(&self) -> &dyn SemanticJudgeProvider {
+        match self {
+            Self::OpenAi(provider) => provider,
+            Self::Anthropic(provider) => provider,
+        }
+    }
+
+    fn as_rubric(&self) -> &dyn SemanticRubricProvider {
+        match self {
+            Self::OpenAi(provider) => provider,
+            Self::Anthropic(provider) => provider,
+        }
+    }
+
+    fn as_feedback(&self) -> &dyn OutputFeedbackProvider {
+        match self {
+            Self::OpenAi(provider) => provider,
+            Self::Anthropic(provider) => provider,
+        }
+    }
+
     fn as_sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
         match self {
             Self::OpenAi(provider) => provider,
@@ -52,6 +84,7 @@ impl BuiltSemanticProvider {
         }
     }
 
+    /// Measures real structured-output support against the endpoint.
     async fn probe(&self) -> Result<CapabilityClaim, LlmProviderError> {
         use application::LlmChatAdapter;
         match self {
@@ -63,6 +96,18 @@ impl BuiltSemanticProvider {
 
 #[async_trait::async_trait]
 impl SemanticLlmRuntime for BuiltSemanticProvider {
+    fn rubric(&self) -> &dyn SemanticRubricProvider {
+        self.as_rubric()
+    }
+
+    fn judge(&self) -> &dyn SemanticJudgeProvider {
+        self.as_judge()
+    }
+
+    fn feedback(&self) -> &dyn OutputFeedbackProvider {
+        self.as_feedback()
+    }
+
     fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
         self.as_sense_groups()
     }
@@ -72,6 +117,7 @@ impl SemanticLlmRuntime for BuiltSemanticProvider {
     }
 }
 
+/// Adapter-crate implementation of the application-owned runtime factory.
 #[derive(Debug, Default)]
 pub struct LlmSemanticRuntimeFactory;
 

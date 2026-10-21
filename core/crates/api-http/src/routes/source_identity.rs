@@ -1,4 +1,4 @@
-//! Source Identity HTTP surface (contract `5.0.0`).
+//! Source Identity HTTP surface (contract `5.1.0`).
 //!
 //! Wire adaptation only: mapping a discovered item's source-scoped canonical
 //! key to an exact Material Revision and resolving it back. Feed GUIDs, URLs,

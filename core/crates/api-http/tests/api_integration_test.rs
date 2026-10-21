@@ -186,9 +186,8 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The Phase 1 canonical contract is locked exactly: 5.0.0 is the contract
-    // that rebuilds the learning-material surface on source assets and typed
-    // document/media renditions.
+    // The canonical contract keeps learning materials on audio/video source
+    // assets and restores the independent learning-activity APIs additively.
     assert_eq!(body["contract_version"], CONTRACT_VERSION);
     assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
 }

@@ -55,6 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         repository.clone(),
         repository.clone(),
     )
+    .with_recording_repository(repository.clone())
+    .with_reading_position_repository(repository.clone())
+    .with_semantic_task_repository(repository.clone())
+    .with_production_corpus_repository(repository.clone())
+    .with_personal_expression_repository(repository.clone())
     .with_corpus_index_repository(repository.clone())
     .with_learner_profile_repository(repository.clone())
     .with_llm_provider_profile_repository(repository.clone())
@@ -159,13 +164,13 @@ fn database_path() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
         let home = PathBuf::from(env::var_os("HOME").expect("HOME is required"));
-        home.join("Library/Application Support/listen/listen-listening.sqlite")
+        home.join("Library/Application Support/listen/listen-channels.sqlite")
     }
     #[cfg(target_os = "windows")]
     {
         let local_app_data =
             PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"));
-        local_app_data.join("listen/listen-listening.sqlite")
+        local_app_data.join("listen/listen-channels.sqlite")
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -174,7 +179,7 @@ fn database_path() -> PathBuf {
                 .join(".local/share")
                 .into_os_string()
         }));
-        data_home.join("listen/listen-listening.sqlite")
+        data_home.join("listen/listen-channels.sqlite")
     }
 }
 

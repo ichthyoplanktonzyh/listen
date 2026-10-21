@@ -59,6 +59,13 @@ readiness; synchronized text and media require the exact alignment anchors.
 App uses this projection when selecting an Edition instead of inferring
 readiness from resource-kind names.
 
+## Recovery branch boundary
+
+The deferred reading, writing, and speaking activities consume the audio/video
+material baseline and add typed semantic-task, feedback, recording, and text-card
+interfaces. Native recording is limited to shadowing. Realtime conversation,
+document processing, and coaching are not dependencies of these activities.
+
 ## Persistence and boundaries
 
 Core owns durable domain storage and migrations. App also has local preferences,
@@ -69,7 +76,7 @@ the supported baseline is a fresh store. Implementation and tests use isolated
 stores and never reset a real learner's database. Published package identities
 and release artifacts remain immutable.
 
-The default listening store is named `listen-listening.sqlite`. The runtime
+The default store on this recovery branch is named `listen-channels.sqlite`. The runtime
 does not fall back to or move the old `listen.sqlite`; an explicit database
 override must select a compatible fresh store.
 

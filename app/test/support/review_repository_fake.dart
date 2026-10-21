@@ -11,6 +11,17 @@ import 'package:llplayer_next/models/types.dart';
 /// call still fails loudly instead of quietly returning an empty success.
 abstract class FakeReviewRepositoryBase implements ReviewRepository {
   @override
+  Future<AnkiPackageImportSummary> importAnkiPackage({
+    required String packagePath,
+    required String mediaDirectory,
+  }) => throw UnimplementedError('importAnkiPackage');
+
+  @override
+  Future<AnkiPackageExportSummary> exportAnkiPackage(
+    AnkiPackageExportRequest request,
+  ) => throw UnimplementedError('exportAnkiPackage');
+
+  @override
   Future<ReviewQueue> queue({int limit = 20}) =>
       throw UnimplementedError('queue');
 

@@ -87,6 +87,12 @@ abstract final class ListenColors {
   /// learner has never studied.
   static const moonBlue = Color(0xff6db3ff);
 
+  /// Rubric-output verdicts in light and dark themes.
+  static const verdictCovered = Color(0xff27702b);
+  static const verdictPartial = Color(0xffa04d00);
+  static const darkVerdictCovered = Color(0xff5cc389);
+  static const darkVerdictPartial = Color(0xffefa05c);
+
   /// The stage ground is half a stop darker than the
   /// quiet room, so the shell reads as "lights off" and only the content
   /// glows. Stage mode dims the room under *both* themes — it is
@@ -140,6 +146,14 @@ extension ListenSchemeShades on ColorScheme {
   Color get pressedPrimary => brightness == Brightness.light
       ? ListenColors.primaryPressed
       : ListenColors.darkPrimaryPressed;
+
+  Color get verdictCovered => brightness == Brightness.light
+      ? ListenColors.verdictCovered
+      : ListenColors.darkVerdictCovered;
+
+  Color get verdictPartial => brightness == Brightness.light
+      ? ListenColors.verdictPartial
+      : ListenColors.darkVerdictPartial;
 }
 
 abstract final class ListenTheme {

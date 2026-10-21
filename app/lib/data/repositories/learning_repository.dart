@@ -52,12 +52,22 @@ abstract interface class LearningRepository {
     Map<String, dynamic>? source,
   });
 
-  Future<void> setListeningOverride(
-    String entryId, {
+  Future<void> setCapabilityOverride(
+    String entryId,
+    String capability, {
     String? conclusion,
   });
 
   Future<Diagnosis> diagnose(String sentenceId);
+
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  });
 
   Future<L1SpecialtyView> l1SpecialtyOccurrences({
     required String difficultyKind,
@@ -157,15 +167,37 @@ class LocalLearningRepository implements LearningRepository {
   );
 
   @override
-  Future<void> setListeningOverride(
-    String entryId, {
+  Future<void> setCapabilityOverride(
+    String entryId,
+    String capability, {
     String? conclusion,
   }) async {
-    await _api.setCapabilityOverride(entryId, 'listening', conclusion: conclusion);
+    await _api.setCapabilityOverride(
+      entryId,
+      capability,
+      conclusion: conclusion,
+    );
   }
 
   @override
   Future<Diagnosis> diagnose(String sentenceId) => _api.diagnose(sentenceId);
+
+  @override
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  }) => _api.recordReadingMarking(
+    lexicalEntryId: lexicalEntryId,
+    sentenceId: sentenceId,
+    surfaceForm: surfaceForm,
+    mediaId: mediaId,
+    translationVisible: translationVisible,
+    understood: understood,
+  );
 
   @override
   Future<L1SpecialtyView> l1SpecialtyOccurrences({
@@ -233,8 +265,9 @@ class UnavailableLearningRepository implements LearningRepository {
   }) => _unavailable();
 
   @override
-  Future<void> setListeningOverride(
-    String entryId, {
+  Future<void> setCapabilityOverride(
+    String entryId,
+    String capability, {
     String? conclusion,
   }) => _unavailable();
 
@@ -256,6 +289,16 @@ class UnavailableLearningRepository implements LearningRepository {
 
   @override
   Future<Diagnosis> diagnose(String sentenceId) => _unavailable();
+
+  @override
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  }) => _unavailable();
 
   @override
   Future<L1SpecialtyView> l1SpecialtyOccurrences({

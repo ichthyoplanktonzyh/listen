@@ -49,7 +49,8 @@ class SidePanel extends StatefulWidget {
     required this.onOpenWord,
     required this.onSeekCue,
     this.onSeekWord,
-    required this.onSetListeningOverride,
+    required this.onSetWordStatus,
+    required this.onSetCapabilityOverride,
     required this.onSaveSelectedLearningContent,
     required this.onObserveSelected,
     required this.onOpenSlicePlayback,
@@ -77,7 +78,9 @@ class SidePanel extends StatefulWidget {
   /// Single-tap a transcript word to play from that word. Null keeps single-tap
   /// dictionary lookup (see [TranscriptPanel.onSeekWord]).
   final Future<void> Function(SubtitleToken token, Cue cue)? onSeekWord;
-  final Future<void> Function(String? conclusion) onSetListeningOverride;
+  final ValueChanged<String?> onSetWordStatus;
+  final Future<void> Function(String capability, String? conclusion)
+  onSetCapabilityOverride;
   final Future<void> Function(String? definition, String? note)
   onSaveSelectedLearningContent;
   final Future<void> Function(bool heard) onObserveSelected;
@@ -119,8 +122,6 @@ class _SidePanelState extends State<SidePanel> {
   Future<void> _saveSelectedLearningContent(String? definition, String? note) =>
       widget.onSaveSelectedLearningContent(definition, note);
   Future<void> _observeSelected(bool heard) => widget.onObserveSelected(heard);
-  Future<void> _setListeningOverride(String? conclusion) =>
-      widget.onSetListeningOverride(conclusion);
   Future<void> _refreshListeningInbox() => widget.onRefreshListeningInbox();
   Future<void> _replayListeningInboxItem(ListeningInboxItem item) =>
       widget.onReplayListeningInboxItem(item);
@@ -257,11 +258,12 @@ class _SidePanelState extends State<SidePanel> {
             dictionary: learningController.selectedDictionary,
             pronunciation: learningController.selectedPronunciation,
             languageProfile: learningController.currentLanguageProfile,
+            onStatus: widget.onSetWordStatus,
             onSave: _saveSelectedLearningContent,
             onSource: widget.onOpenSlicePlayback,
             onHeard: () => _observeSelected(true),
             onNotHeard: () => _observeSelected(false),
-            onListeningOverride: _setListeningOverride,
+            onCapabilityOverride: widget.onSetCapabilityOverride,
             onRecordSource: widget.onRecordCurrentSource,
             onCorrectLemma: widget.onCorrectLemma,
             onOpenListeningDictionary: widget.onOpenListeningDictionary == null

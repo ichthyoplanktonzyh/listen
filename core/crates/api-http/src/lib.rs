@@ -5,8 +5,8 @@ use std::time::Instant;
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, DictionaryProvider, EnglishPronunciationProvider,
-    ImportSubtitle, InMemorySecretStore, RegisterMedia, SecretStore, SyntacticAnalysisProvider,
-    SyntacticConsumerOrchestrator, SyntacticProductQualification,
+    ImportSubtitle, InMemorySecretStore, RecordSpeakingProduction, RegisterMedia, SecretStore,
+    SyntacticAnalysisProvider, SyntacticConsumerOrchestrator, SyntacticProductQualification,
 };
 use axum::body::Body;
 use axum::extract::{MatchedPath, Path, Query, State};
@@ -40,8 +40,8 @@ use application_executor::ApplicationExecutor;
 use local_runtime::{
     CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
     LearningPreparationCoordinator, LearningResourceManager, PhoneticAnalysisCoordinator,
-    SoundLineCoordinator, SpeechBatchCoordinator, SpeechSynthesisManager,
-    SubtitleSearchCoordinator,
+    RecordingTranscriptionCoordinator, SoundLineCoordinator, SpeechBatchCoordinator,
+    SpeechSynthesisManager, SubtitleSearchCoordinator,
 };
 pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
 pub use secret_store_keychain::KeychainSecretStore;
@@ -56,12 +56,12 @@ pub fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// Contract 5.0.0 is the breaking listening-focused HTTP surface. It accepts
-/// audio/video materials, removes document-only and non-listening workflows,
-/// and retains media package installation/adoption. API generation remains 1,
-/// the workspace version remains 0.7.0, the fresh SQLite schema is v64, and
-/// the Content Package v3 format is unchanged.
-pub const CONTRACT_VERSION: &str = "5.0.0";
+/// Contract 5.1.0 restores independent reading, writing, speaking, semantic
+/// task, personal expression, production corpus, and imported text-card
+/// workflows over the listening-focused 5.0 API. Media processing remains
+/// audio/video-only; conversation and coaching stay excluded. API generation
+/// remains 1, the fresh SQLite schema is v66, and Content Package v3 is stable.
+pub const CONTRACT_VERSION: &str = "5.1.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))
@@ -69,6 +69,7 @@ fn next_correlation_id() -> String {
 
 #[derive(Clone)]
 pub struct AnalysisRuntime {
+    pub transcription: Arc<dyn application::RecordingTranscriptionService>,
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub sound_line: Arc<SoundLineCoordinator>,
@@ -124,6 +125,7 @@ impl ApiState {
         R: application::PhoneticAnalysisRepository
             + application::BackgroundJobStore
             + application::LearningPreparationRunRepository
+            + application::TranscriptionRepository
             + 'static,
     {
         let (events, _) = broadcast::channel(128);
@@ -134,6 +136,14 @@ impl ApiState {
                 Arc::new(EnglishPronunciationProvider),
                 Arc::new(ChinesePronunciationProvider::new()),
             ]);
+        let transcription = Arc::new(
+            RecordingTranscriptionCoordinator::new(
+                services.clone(),
+                repository.clone(),
+                events.clone(),
+            )
+            .expect("recording transcription coordinator must initialize"),
+        );
         #[cfg(test)]
         let phonetic_analysis = Arc::new(
             PhoneticAnalysisCoordinator::new_with_test_provider(
@@ -164,6 +174,7 @@ impl ApiState {
         Self {
             application: ApplicationExecutor::new(services.clone()),
             analysis: AnalysisRuntime {
+                transcription,
                 phonetic_analysis,
                 speech_jobs,
                 sound_line,

@@ -571,23 +571,24 @@ void main() {
         expect(find.text('Could not update'), findsOneWidget);
         expect(find.text('Details'), findsOneWidget);
         // The failed write does not re-read the entry, so the pane keeps the
-        // state the user was looking at — listening is still unassessed.
+        // state the user was looking at — the selected reading dimension is
+        // still unassessed.
         expect(bench.exact('/v1/lexical-entries/entry-1'), detailsBefore);
         expect(inDetail(find.text('Listening')), findsOneWidget);
         expect(
           tester
               .widget<SegmentedButton<String>>(
-                inDetail(find.byType(SegmentedButton<String>)),
+                inDetail(find.byType(SegmentedButton<String>)).first,
               )
               .selected,
           isEmpty,
-          reason: 'the existing listening assessment remains unassessed',
+          reason: 'the reading assessment remains unassessed',
         );
         expect(
           bench.calls
               .where((call) => call.path.contains('/capability/'))
               .map((call) => call.path),
-          ['/v1/lexical-entries/entry-1/capability/listening'],
+          ['/v1/lexical-entries/entry-1/capability/reading'],
         );
       },
     );
@@ -625,13 +626,13 @@ void main() {
         expect(
           bench.hits('/v1/vocabulary?'),
           listBefore + 1,
-          reason: 'the listening assessment filter reads the updated status',
+          reason: 'the current reading filter reads the updated status',
         );
         expect(
           bench.calls
               .where((call) => call.path.contains('/capability/'))
               .map((call) => call.path),
-          ['/v1/lexical-entries/entry-1/capability/listening'],
+          ['/v1/lexical-entries/entry-1/capability/reading'],
         );
       },
     );

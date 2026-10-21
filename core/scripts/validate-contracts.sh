@@ -232,7 +232,7 @@ if (!Array.isArray(examples) || examples.length === 0) throw new Error("player e
 if (events.properties.version.const !== 1) throw new Error("event schema version missing");
 
 const version = openapi.match(/^  version: ([0-9]+\.[0-9]+\.[0-9]+)$/m)?.[1];
-if (version !== "5.0.0") throw new Error(`OpenAPI contract version is ${version}, expected 5.0.0`);
+if (version !== "5.1.0") throw new Error(`OpenAPI contract version is ${version}, expected 5.1.0`);
 if (!openapi.includes("openapi: 3.1.0")) throw new Error("OpenAPI specification version must remain 3.1.0");
 if (!client.includes(`localApiV1ContractVersion = "${version}"`)) throw new Error("generated contract version differs from OpenAPI");
 
@@ -268,22 +268,21 @@ for (const required of [
   "/v1/semantic-search",
   "/v1/review/items",
   "/v1/listening-inbox/items",
+  "/v1/reading/positions/{track_id}",
+  "/v1/semantic/rubrics",
+  "/v1/recordings",
+  "/v1/review/anki/import",
+  "/v1/personal-expression/patterns",
+  "/v1/production-corpus/search",
 ]) {
   if (!paths.includes(required)) throw new Error(`active listening path missing: ${required}`);
 }
 for (const prefix of [
   "/v1/coach",
   "/v1/realtime",
-  "/v1/production-corpus",
   "/v1/production-gap",
-  "/v1/personal-expression",
-  "/v1/reading",
   "/v1/speaking",
   "/v1/writing",
-  "/v1/recordings",
-  "/v1/recording-transcriptions",
-  "/v1/shadowing",
-  "/v1/anki",
 ]) {
   if (paths.some(path => path === prefix || path.startsWith(`${prefix}/`))) {
     throw new Error(`retired product path remains in OpenAPI: ${prefix}`);
@@ -294,13 +293,8 @@ for (const retired of [
   "DocumentRenditionInput",
   "HuntingCandidate",
   "UpgradeSuggestion",
-  "RecordingAsset",
-  "ShadowingComparison",
-  "SemanticTask",
   "CoachDashboard",
   "ContentDifficultyProfile",
-  "ProductionCorpus",
-  "PersonalExpression",
   "RealtimeConversation",
 ]) {
   if (schemas.includes(retired)) throw new Error(`retired schema remains in OpenAPI: ${retired}`);
@@ -311,8 +305,8 @@ if (llmUseStart < 0) throw new Error("retained LlmUse schema missing");
 let llmUseEnd = llmUseStart + 1;
 while (llmUseEnd < lines.length && !/^    [A-Za-z][A-Za-z0-9_]*:\s*$/.test(lines[llmUseEnd])) llmUseEnd++;
 const llmUseBlock = lines.slice(llmUseStart, llmUseEnd).join("\n");
-if (!llmUseBlock.includes("enum: [sense_group_partition]") || /rubric_generation|semantic_judgment/.test(llmUseBlock)) {
-  throw new Error("LlmUse must contain only the retained sense_group_partition use");
+if (!llmUseBlock.includes("enum: [rubric_generation, semantic_judgment, sense_group_partition]")) {
+  throw new Error("LlmUse must expose the restored semantic-task uses and retained sense-group use");
 }
 const learningObservationStart = lines.indexOf("    LearningObservation:");
 if (learningObservationStart < 0) throw new Error("retained LearningObservation schema missing");
@@ -322,7 +316,7 @@ const learningObservationBlock = lines.slice(learningObservationStart, learningO
 const taskTypeEnum = learningObservationBlock.match(/^        task_type: \{ enum: \[([^\]]+)\] \}$/m)?.[1]
   .split(",")
   .map(value => value.trim());
-assertEqual(taskTypeEnum, ["context_marking", "cloze", "dictation", "subtitle_fade", "review_recall"], "listening task type enum");
+assertEqual(taskTypeEnum, ["context_marking", "cloze", "dictation", "subtitle_fade", "shadowing", "review_recall", "reading_context_marking", "speaking_production"], "learning observation task type enum");
 if (!openapi.includes("Content Package v3 carrier") || openapi.includes("Content Package v2 carrier")) {
   throw new Error("package installation must describe the active Content Package v3 carrier");
 }

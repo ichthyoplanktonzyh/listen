@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 #[test]
-fn fresh_database_bootstraps_listening_schema_and_review_budget() {
+fn fresh_database_bootstraps_channel_schema_and_review_budget() {
     let repo = SqliteRepository::in_memory().unwrap();
     assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
 
@@ -26,6 +26,23 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
         "review_items",
         "review_schedules",
         "review_settings",
+        "semantic_rubrics",
+        "semantic_task_attempts",
+        "semantic_judgments",
+        "judgment_adjudications",
+        "reading_positions",
+        "writing_feedback_findings",
+        "writing_finding_dispositions",
+        "writing_drafts",
+        "production_corpus_documents",
+        "user_sentence_patterns",
+        "personal_expression_attempts",
+        "recording_assets",
+        "shadowing_analyses",
+        "anki_decks",
+        "anki_review_items",
+        "anki_review_history",
+        "transcription_models",
         "hunting_targets",
         "corpus_occurrences",
     ] {
@@ -33,10 +50,6 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
     }
     for retired in [
         "realtime_conversation_sessions",
-        "recording_assets",
-        "semantic_task_attempts",
-        "personal_expression_attempts",
-        "reading_positions",
         "content_difficulty_profiles",
         "content_fit_calibrations",
         "projection_proposals",
@@ -44,8 +57,6 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
         "recognition_evidence",
         "upgrade_suggestions",
         "hunting_candidates",
-        "anki_review_items",
-        "anki_review_history",
         "material_document_renditions",
         "transcription_jobs",
     ] {
@@ -76,10 +87,10 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
 #[test]
 fn fresh_file_store_reopens_without_reapplying_defaults() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("listen-listening.sqlite");
+    let path = temp.path().join("listen-channels.sqlite");
     {
         let repo = SqliteRepository::open(&path).unwrap();
-        assert_eq!(repo.schema_version().unwrap(), 64);
+        assert_eq!(repo.schema_version().unwrap(), 66);
         repo.connection
             .lock()
             .execute(
@@ -90,7 +101,7 @@ fn fresh_file_store_reopens_without_reapplying_defaults() {
     }
     {
         let repo = SqliteRepository::open(&path).unwrap();
-        assert_eq!(repo.schema_version().unwrap(), 64);
+        assert_eq!(repo.schema_version().unwrap(), 66);
         let budget: (u32, u32) = repo
             .connection
             .lock()
@@ -114,7 +125,7 @@ fn rejects_old_store_read_only_without_backup_or_lock_sidecar() {
             .execute_batch(
                 "CREATE TABLE learner_facts(id TEXT PRIMARY KEY, body TEXT NOT NULL);
                  INSERT INTO learner_facts VALUES ('kept','opaque');
-                 PRAGMA user_version=63;",
+                 PRAGMA user_version=64;",
             )
             .unwrap();
     }
@@ -126,13 +137,13 @@ fn rejects_old_store_read_only_without_backup_or_lock_sidecar() {
     assert!(matches!(
         error,
         PersistenceError::UnsupportedSchemaVersion {
-            found: 63,
-            expected: 64
+            found: 64,
+            expected: 66
         }
     ));
     assert_eq!(fs::read(&path).unwrap(), original);
     assert!(!PathBuf::from(format!("{}.lock", path.display())).exists());
-    assert!(!PathBuf::from(format!("{}.pre-migration-v63.bak", path.display())).exists());
+    assert!(!PathBuf::from(format!("{}.pre-migration-v64.bak", path.display())).exists());
 }
 
 #[test]

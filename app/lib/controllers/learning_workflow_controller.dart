@@ -4,6 +4,12 @@ import '../models/timeline.dart';
 import '../models/types.dart';
 import 'learning_controller.dart';
 
+class LearningWordStatusUpdate {
+  const LearningWordStatusUpdate({required this.tokenText});
+
+  final String tokenText;
+}
+
 class LearningWorkflowController {
   factory LearningWorkflowController({
     LearningRepository repository = const UnavailableLearningRepository(),
@@ -233,6 +239,32 @@ class LearningWorkflowController {
     return details;
   }
 
+  Future<LearningWordStatusUpdate?> setSelectedWordStatus({
+    required String? selected,
+    required String language,
+    required LearningController learning,
+    required bool Function() isMounted,
+    required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
+    sourceFor,
+  }) async {
+    final token = learning.selectedToken;
+    final cue = learning.selectedCue;
+    if (token?.normalized == null || cue == null || !_repository.isAvailable) {
+      return null;
+    }
+    final details = await _repository.upsertWord(
+      token!.normalized!,
+      token.text,
+      selected,
+      language: language,
+      source: sourceFor(token, cue),
+    );
+    if (!isMounted()) return null;
+    learning.updateSingleWordEntry(token.normalized!, details.entry);
+    learning.selectWord(details);
+    return LearningWordStatusUpdate(tokenText: token.text);
+  }
+
   Future<void> saveSelectedLearningContent({
     required String? definition,
     required String? note,
@@ -276,7 +308,8 @@ class LearningWorkflowController {
     return true;
   }
 
-  Future<void> setListeningOverride({
+  Future<void> setCapabilityOverride({
+    required String capability,
     required String? conclusion,
     required LearningController learning,
     required bool Function() isMounted,
@@ -286,7 +319,11 @@ class LearningWorkflowController {
     // Same ownership split as [saveSelectedLearningContent]: silence here,
     // feedback in the coordinator.
     if (entry == null || !_repository.isAvailable) return;
-    await _repository.setListeningOverride(entry.id, conclusion: conclusion);
+    await _repository.setCapabilityOverride(
+      entry.id,
+      capability,
+      conclusion: conclusion,
+    );
     if (conclusion == 'not_acquired' && sourceFor != null) {
       final token = learning.selectedToken;
       final cue = learning.selectedCue;
@@ -318,6 +355,19 @@ class LearningWorkflowController {
     learning.selectWord(details);
   }
 
+  Future<void> setListeningOverride({
+    required String? conclusion,
+    required LearningController learning,
+    required bool Function() isMounted,
+    Map<String, dynamic>? Function(SubtitleToken token, Cue cue)? sourceFor,
+  }) => setCapabilityOverride(
+    capability: 'listening',
+    conclusion: conclusion,
+    learning: learning,
+    isMounted: isMounted,
+    sourceFor: sourceFor,
+  );
+
   Future<void> refreshDiagnosis({
     required Cue? cue,
     Future<Diagnosis> Function(String cueId)? diagnose,
@@ -340,6 +390,22 @@ class LearningWorkflowController {
       }
     }
   }
+
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  }) => _repository.recordReadingMarking(
+    lexicalEntryId: lexicalEntryId,
+    sentenceId: sentenceId,
+    surfaceForm: surfaceForm,
+    mediaId: mediaId,
+    translationVisible: translationVisible,
+    understood: understood,
+  );
 
   Future<L1SpecialtyView> l1SpecialtyOccurrences({
     required String difficultyKind,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/content_channel.dart';
 import '../../models/workbench_study_mode.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
@@ -25,12 +26,16 @@ class MaterialWorkbench extends StatefulWidget {
     required this.mediaFraction,
     required this.onMediaFractionChanged,
     this.onCollapse,
+    this.selectedChannel = ContentChannel.listening,
+    this.immersiveStage,
     this.studyMode = WorkbenchStudyMode.normal,
     this.subtitleMenu,
     this.studyMenu,
     this.translationMenu,
     this.listeningMenu,
     this.learningEditionAction,
+    this.onShadow,
+    this.canShadow = false,
     this.onOpenSettings,
     this.retentionMenu,
   });
@@ -44,6 +49,11 @@ class MaterialWorkbench extends StatefulWidget {
   final double mediaFraction;
   final ValueChanged<double> onMediaFractionChanged;
   final VoidCallback? onCollapse;
+
+  /// The channel that owns the workbench body. Listening uses the side panel;
+  /// the other channels supply their own media-backed surface.
+  final ContentChannel selectedChannel;
+  final Widget? immersiveStage;
 
   /// The selected listening display, used to animate transcript changes.
   final WorkbenchStudyMode studyMode;
@@ -65,6 +75,10 @@ class MaterialWorkbench extends StatefulWidget {
   /// This is material-scoped, so it lives on the workbench rather than in a
   /// global tools menu.
   final Widget? learningEditionAction;
+
+  /// Starts direct shadowing for the currently playing transcript sentence.
+  final VoidCallback? onShadow;
+  final bool canShadow;
 
   /// Opens app settings.
   ///
@@ -131,15 +145,14 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
             translationMenu: widget.translationMenu,
             listeningMenu: widget.listeningMenu,
             learningEditionAction: widget.learningEditionAction,
+            onShadow: widget.onShadow,
+            canShadow: widget.canShadow,
             onOpenSettings: widget.onOpenSettings,
             retentionMenu: widget.retentionMenu,
           ),
           Expanded(
             child: videoPane == null
-                ? ContentSettle(
-                    settleKey: widget.studyMode,
-                    child: widget.learningPanel,
-                  )
+                ? _channelBody()
                 : LayoutBuilder(
                     builder: (context, constraints) {
                       if (constraints.maxWidth <
@@ -180,10 +193,7 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
                               },
                             ),
                             Expanded(
-                              child: ContentSettle(
-                                settleKey: widget.studyMode,
-                                child: widget.learningPanel,
-                              ),
+                              child: _channelBody(),
                             ),
                           ],
                         );
@@ -227,10 +237,7 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
                             },
                           ),
                           Expanded(
-                            child: ContentSettle(
-                              settleKey: widget.studyMode,
-                              child: widget.learningPanel,
-                            ),
+                            child: _channelBody(),
                           ),
                         ],
                       );
@@ -239,6 +246,17 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _channelBody() {
+    final stage = widget.immersiveStage;
+    if (stage != null) {
+      return ContentSettle(settleKey: widget.selectedChannel, child: stage);
+    }
+    return ContentSettle(
+      settleKey: widget.studyMode,
+      child: widget.learningPanel,
     );
   }
 }
@@ -252,6 +270,8 @@ class _SessionHeader extends StatelessWidget {
     required this.translationMenu,
     required this.listeningMenu,
     required this.learningEditionAction,
+    required this.onShadow,
+    required this.canShadow,
     required this.onOpenSettings,
     required this.retentionMenu,
   });
@@ -263,6 +283,8 @@ class _SessionHeader extends StatelessWidget {
   final Widget? translationMenu;
   final Widget? listeningMenu;
   final Widget? learningEditionAction;
+  final VoidCallback? onShadow;
+  final bool canShadow;
   final VoidCallback? onOpenSettings;
   final Widget? retentionMenu;
 
@@ -289,6 +311,19 @@ class _SessionHeader extends StatelessWidget {
             Expanded(child: _Breadcrumb(materialTitle: materialTitle)),
             ?learningEditionAction,
             ?listeningMenu,
+            if (onShadow != null) ...[
+              _gap,
+              IconButton(
+                key: const Key('workbench-shadow'),
+                tooltip: canShadow
+                    ? l.text('workbenchShadowTooltip')
+                    : l.text('workbenchShadowNoCue'),
+                onPressed: canShadow ? onShadow : null,
+                iconSize: ListenIconSize.chrome,
+                color: colors.onSurfaceVariant,
+                icon: const Icon(Icons.mic_none_outlined),
+              ),
+            ],
             if (translationMenu != null) ...[_gap, translationMenu!],
             if (studyMenu != null) ...[_gap, studyMenu!],
             if (subtitleMenu != null) ...[_gap, subtitleMenu!],

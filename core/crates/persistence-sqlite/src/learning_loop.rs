@@ -1,6 +1,7 @@
 use application::{
-    ApplicationError, HuntingRepository, LearningEventRepository, ListeningInboxRepository,
-    PracticeRepository, ReviewDailyLimits, ReviewQueueRepository,
+    AnkiPackageExportRequest, AnkiPackageExportSummary, AnkiPackageImportRequest,
+    AnkiPackageImportSummary, ApplicationError, HuntingRepository, LearningEventRepository,
+    ListeningInboxRepository, PracticeRepository, ReviewDailyLimits, ReviewQueueRepository,
 };
 use domain::{
     HuntingTarget, HuntingTargetId, HuntingTargetStatus, LearningEvent, LearningEventKind,
@@ -462,6 +463,50 @@ impl ReviewQueueRepository for SqliteRepository {
         )
         .map_err(repo)?;
         Ok(limits)
+    }
+
+    fn list_imported_deck_schedules(
+        &self,
+    ) -> Result<Vec<application::ImportedDeckSchedule>, ApplicationError> {
+        let conn = self.connection.lock();
+        let mut statement = conn
+            .prepare(
+                "SELECT a.item_id,a.guid,a.deck_id,d.name,d.parent_deck_id,s.schedule_json
+                 FROM anki_review_items a
+                 JOIN anki_decks d ON d.deck_id=a.deck_id
+                 JOIN review_schedules s ON s.item_id=a.item_id
+                 ORDER BY d.name,a.item_id",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([], |row| {
+                Ok(application::ImportedDeckSchedule {
+                    item_id: ReviewItemId::parse(row.get::<_, String>(0)?)
+                        .map_err(crate::domain_sql)?,
+                    anki_guid: row.get(1)?,
+                    deck_id: row.get(2)?,
+                    name: row.get(3)?,
+                    parent_deck_id: row.get(4)?,
+                    schedule: from_json(&row.get::<_, String>(5)?)?,
+                })
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn import_anki_package(
+        &self,
+        request: &AnkiPackageImportRequest,
+    ) -> Result<AnkiPackageImportSummary, ApplicationError> {
+        super::anki::import_package(self, request)
+    }
+
+    fn export_anki_package(
+        &self,
+        request: &AnkiPackageExportRequest,
+    ) -> Result<AnkiPackageExportSummary, ApplicationError> {
+        super::anki::export_package(self, request)
     }
 }
 

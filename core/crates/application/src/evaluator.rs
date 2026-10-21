@@ -36,7 +36,9 @@ impl EvaluationStrategy {
     pub fn for_kind(kind: PracticeKind) -> Self {
         let equivalence_policy = match kind {
             PracticeKind::Dictation => EquivalencePolicy::SurfaceOnly,
-            PracticeKind::Cloze | PracticeKind::SubtitleFade => EquivalencePolicy::Lemma,
+            PracticeKind::Cloze | PracticeKind::SubtitleFade | PracticeKind::Shadowing => {
+                EquivalencePolicy::Lemma
+            }
         };
         Self { equivalence_policy }
     }

@@ -9,6 +9,7 @@ import 'package:llplayer_next/controllers/practice_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/practice_controller.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
+import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/data/repositories/hunting_repository.dart';
 import 'package:llplayer_next/localization.dart';
@@ -26,6 +27,8 @@ class _Harness {
   final huntingSession = HuntingSessionController();
   final extensive = ExtensiveListeningController();
   final adapter = DesktopPlayerAdapter();
+  final recordingAdapter = DesktopPlayerAdapter();
+  final settings = SettingsController();
 
   late final playback = PlaybackActionsCoordinator(
     adapter: adapter,
@@ -38,8 +41,11 @@ class _Harness {
     player: player,
     subtitle: subtitle,
     learning: learning,
+    slicePlayer: slicePlayer,
     playbackActions: playback,
+    settings: settings,
     adapter: adapter,
+    recordingAdapter: recordingAdapter,
   );
 
   late final huntingActions = HuntingActionsCoordinator(
@@ -81,6 +87,8 @@ class _Harness {
     subtitle.dispose();
     player.dispose();
     learning.dispose();
+    settings.dispose();
+    recordingAdapter.dispose();
   }
 }
 

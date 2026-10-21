@@ -4,6 +4,7 @@ use crate::{
     ListeningInboxStatus, MediaId, Path, PracticeAttempt, PracticeAttemptId, PracticeItem,
     PracticeSession, PracticeSessionId, Query, ReviewItem, ReviewItemId, State, SubtitleTrackId,
 };
+use domain::{RecordingAsset, RecordingAssetId, ShadowingComparison};
 
 pub(crate) async fn create_practice_session(
     State(state): State<ApiState>,
@@ -424,4 +425,134 @@ pub(crate) async fn review_item(
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("review item"))
+}
+
+pub(crate) async fn import_anki_package(
+    State(state): State<ApiState>,
+    Json(request): Json<application::AnkiPackageImportRequest>,
+) -> Result<Json<application::AnkiPackageImportSummary>, ApiError> {
+    state
+        .application
+        .execute("review.import_anki", move |services| {
+            services.practice_learning().import_anki_package(request)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn export_anki_package(
+    State(state): State<ApiState>,
+    Json(request): Json<application::AnkiPackageExportRequest>,
+) -> Result<Json<application::AnkiPackageExportSummary>, ApiError> {
+    state
+        .application
+        .execute("review.export_anki", move |services| {
+            services.practice_learning().export_anki_package(request)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn create_recording_asset(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CreateRecordingAsset>,
+) -> Result<Json<RecordingAsset>, ApiError> {
+    state
+        .application
+        .execute("recording.create", move |services| {
+            services.recordings().create_recording_asset(request)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn recording_asset(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<RecordingAsset>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("recording.get", move |services| {
+            services.recordings().recording_asset(&id)
+        })
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("recording asset"))
+}
+
+pub(crate) async fn delete_recording_asset(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<RecordingAsset>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("recording.delete", move |services| {
+            services.recordings().delete_recording_asset(&id)
+        })
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("recording asset"))
+}
+
+pub(crate) async fn recording_audio_facts(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<domain::RecordingAudioFacts>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("recording.audio_facts", move |services| {
+            services.recordings().recording_audio_facts(&id)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn latest_shadowing_analysis(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<domain::ShadowingAnalysisRecord>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("recording.shadowing_analysis", move |services| {
+            services.recordings().latest_shadowing_analysis(&id)
+        })
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("shadowing analysis"))
+}
+
+pub(crate) async fn complete_shadowing_attempt(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CompleteShadowingAttempt>,
+) -> Result<Json<PracticeAttempt>, ApiError> {
+    state
+        .application
+        .execute("recording.complete_shadowing", move |services| {
+            services.recordings().complete_shadowing_attempt(request)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn compare_shadowing(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CreateShadowingComparison>,
+) -> Result<Json<ShadowingComparison>, ApiError> {
+    state
+        .application
+        .execute("recording.compare_shadowing", move |services| {
+            services.recordings().compare_shadowing(request)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
 }

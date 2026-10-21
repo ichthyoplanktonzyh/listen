@@ -7,32 +7,40 @@ use domain::{
     CorpusOccurrenceId, CorpusOccurrenceKind, DetectedPhone, DiagnosisKind, DictionaryEntry,
     DictionaryEntryId, DictionaryLookupBundle, DictionaryProviderResult, ExternalVocabularyImport,
     ExternalVocabularyImportSummary, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
-    L1DiagnosisContext, L1DiagnosisHint, L1DiagnosisSpan, L1DiagnosisSupport, LLTIMELINE_SCHEMA_V1,
-    LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator, LLTimelineId, LLTimelineMedia,
-    LLTimelineMetadata, LLTimelineRhythmFrame, LLTimelineSegment, LLTimelineToken, LanguageCode,
-    LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventId,
-    LearningEventKind, LearningEventSubject, LearningEventSubjectKind, LearningObservation,
-    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
-    LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalObservationId,
-    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, LexicalUnit, ListeningInboxItem,
-    ListeningInboxItemId, ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile,
-    LlmProviderProfileId, MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent,
-    ObservationOrigin, ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId,
+    JudgmentAdjudication, L1DiagnosisContext, L1DiagnosisHint, L1DiagnosisSpan, L1DiagnosisSupport,
+    LLTIMELINE_SCHEMA_V1, LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator,
+    LLTimelineId, LLTimelineMedia, LLTimelineMetadata, LLTimelineRhythmFrame, LLTimelineSegment,
+    LLTimelineToken, LanguageCode, LearnerProfile, LearnerProfileId, LearningChangeSource,
+    LearningEvent, LearningEventId, LearningEventKind, LearningEventSubject,
+    LearningEventSubjectKind, LearningObservation, LearningStatus, LexicalCapability,
+    LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
+    LexicalObservation, LexicalObservationId, LexicalOccurrenceId, LexicalSenseFolder,
+    LexicalSenseId, LexicalUnit, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId,
+    MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent, ObservationOrigin,
+    ObservationResult, ObservationSpec, PersonalExpressionAttempt, PhoneTimeline, PhoneTimelineId,
     PhoneTimelinePrecision, PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId,
     PhoneticAnalysisJob, PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind,
     PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeKind, PracticeMode,
     PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget, PracticeTargetKind,
+    ProductionCorpusDocument, ProductionCorpusEntry, ProductionCorpusHit,
     PronunciationProviderInfo, ProsodicChunkProjection, ProsodyAnalysis, ProsodyAnalysisId,
-    ProsodyAnalysisSummary, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId,
-    ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId,
-    SecretRef, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary,
-    SenseGroupId, SentenceDiagnosis, SentencePronunciation, SubtitleSentence, SubtitleSentenceId,
-    SubtitleToken, SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus,
-    SyntacticAnalysis, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
+    ProsodyAnalysisSummary, ReadingPosition, ReviewAttempt, ReviewAttemptId, ReviewItem,
+    ReviewItemId, ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind,
+    RhythmFrameId, SecretRef, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
+    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroup,
+    SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId,
+    SentenceDiagnosis, SentencePronunciation, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
+    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis,
+    TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
+    UserSentencePatternAsset, UserSentencePatternId, UserSentencePatternVersion,
     VocabularyAssetBundle, WordPronunciation, WordTimeline, WordTimelineId,
-    WordTimelineLifecycleStage, WordTimelineSummary, WordTiming, detached_media_path,
-    learning_observation_id, normalize_lemma, observation_spec_for_marking,
-    observation_spec_for_practice, observation_spec_for_review, validate_syntactic_analysis,
+    WordTimelineLifecycleStage, WordTimelineSummary, WordTiming, WritingDraft,
+    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    WritingFindingDispositionId, detached_media_path, learning_observation_id, normalize_lemma,
+    observation_spec_for_marking, observation_spec_for_practice,
+    observation_spec_for_reading_marking, observation_spec_for_review,
+    observation_spec_for_speaking_production, validate_syntactic_analysis,
 };
 
 mod background_jobs;
@@ -57,16 +65,21 @@ mod material_capability;
 mod media;
 mod package_candidates;
 mod package_lifecycle;
+mod personal_expression;
 mod phones;
 mod phonetic_fixture;
 mod practice;
+mod production_corpus;
 mod pronunciation;
 mod pronunciation_providers;
 mod prosody;
 mod providers;
+mod reading;
+mod recording;
 mod repositories;
 mod secret_store;
 mod semantic_embedding;
+mod semantic_task;
 mod sense_groups;
 mod source_identity;
 mod speech_synthesis;
@@ -95,14 +108,19 @@ pub use llm_provider::LlmProviderUseCases;
 pub use material_capability::*;
 pub use media::MediaAnalysisUseCases;
 pub use package_lifecycle::*;
+pub use personal_expression::PersonalExpressionUseCases;
 pub use practice::PracticeUseCases;
+pub use production_corpus::ProductionCorpusUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use prosody::*;
 pub use providers::*;
+pub use reading::ReadingUseCases;
+pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use semantic_embedding::*;
+pub use semantic_task::SemanticUseCases;
 pub use sense_groups::foundation_rule_sense_group_policy;
 pub use source_identity::*;
 pub use speech_synthesis::*;
@@ -142,8 +160,13 @@ pub struct AppServices {
     pub(crate) hunting: Arc<dyn HuntingRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
+    pub(crate) recordings: Arc<dyn RecordingRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
+    pub(crate) reading_positions: Arc<dyn ReadingPositionRepository>,
+    pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
+    pub(crate) production_corpus: Arc<dyn ProductionCorpusRepository>,
+    pub(crate) personal_expression: Arc<dyn PersonalExpressionRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     pub(crate) semantic_embedding_index: Arc<dyn SemanticEmbeddingIndexRepository>,
     pub(crate) embedding_provider: Arc<dyn EmbeddingProvider>,
@@ -154,6 +177,32 @@ pub struct AppServices {
 impl AppServices {
     pub fn practice_learning(&self) -> PracticeUseCases {
         PracticeUseCases::from_services(self)
+    }
+
+    pub fn recordings(&self) -> RecordingUseCases {
+        RecordingUseCases::new(
+            self.recordings.clone(),
+            self.practice.clone(),
+            self.learning_events.clone(),
+            self.subtitle_tracks.clone(),
+            self.word_timelines.clone(),
+        )
+    }
+
+    pub fn reading(&self) -> ReadingUseCases {
+        ReadingUseCases::new(self.reading_positions.clone())
+    }
+
+    pub fn semantic(&self) -> SemanticUseCases {
+        SemanticUseCases::new(self.semantic_tasks.clone())
+    }
+
+    pub fn production_corpus(&self) -> ProductionCorpusUseCases {
+        ProductionCorpusUseCases::from_services(self)
+    }
+
+    pub fn personal_expression(&self) -> PersonalExpressionUseCases {
+        PersonalExpressionUseCases::new(self.personal_expression.clone())
     }
 
     pub fn media_analysis(&self) -> MediaAnalysisUseCases {
@@ -500,8 +549,13 @@ impl AppServices {
             hunting: Arc::new(DisabledLearningLoopRepository),
             learning_events: Arc::new(DisabledLearningLoopRepository),
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
+            recordings: Arc::new(DisabledLearningLoopRepository),
             corpus: Arc::new(DisabledCorpusIndexRepository),
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
+            reading_positions: Arc::new(DisabledReadingPositionRepository),
+            semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
+            production_corpus: Arc::new(DisabledProductionCorpusRepository),
+            personal_expression: Arc::new(DisabledPersonalExpressionRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
             semantic_embedding_index: Arc::new(DisabledSemanticEmbeddingIndexRepository),
             embedding_provider: Arc::new(UnavailableEmbeddingProvider),
@@ -575,6 +629,43 @@ impl AppServices {
         learner_profiles: Arc<dyn LearnerProfileRepository>,
     ) -> Self {
         self.learner_profiles = learner_profiles;
+        self
+    }
+
+    pub fn with_recording_repository(mut self, repository: Arc<dyn RecordingRepository>) -> Self {
+        self.recordings = repository;
+        self
+    }
+
+    pub fn with_reading_position_repository(
+        mut self,
+        repository: Arc<dyn ReadingPositionRepository>,
+    ) -> Self {
+        self.reading_positions = repository;
+        self
+    }
+
+    pub fn with_semantic_task_repository(
+        mut self,
+        repository: Arc<dyn SemanticTaskRepository>,
+    ) -> Self {
+        self.semantic_tasks = repository;
+        self
+    }
+
+    pub fn with_production_corpus_repository(
+        mut self,
+        repository: Arc<dyn ProductionCorpusRepository>,
+    ) -> Self {
+        self.production_corpus = repository;
+        self
+    }
+
+    pub fn with_personal_expression_repository(
+        mut self,
+        repository: Arc<dyn PersonalExpressionRepository>,
+    ) -> Self {
+        self.personal_expression = repository;
         self
     }
 
@@ -706,6 +797,262 @@ impl SemanticEmbeddingIndexRepository for DisabledSemanticEmbeddingIndexReposito
 }
 
 struct DisabledLearningLoopRepository;
+
+struct DisabledReadingPositionRepository;
+impl ReadingPositionRepository for DisabledReadingPositionRepository {
+    fn save_reading_position(
+        &self,
+        _: &ReadingPosition,
+    ) -> Result<ReadingPosition, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "reading position repository is not configured".into(),
+        ))
+    }
+    fn get_reading_position(
+        &self,
+        _: &SubtitleTrackId,
+    ) -> Result<Option<ReadingPosition>, ApplicationError> {
+        Ok(None)
+    }
+}
+
+struct DisabledSemanticTaskRepository;
+impl DisabledSemanticTaskRepository {
+    fn disabled() -> ApplicationError {
+        ApplicationError::Repository("semantic task repository is not configured".into())
+    }
+}
+impl SemanticTaskRepository for DisabledSemanticTaskRepository {
+    fn save_semantic_rubric(&self, _: &SemanticRubric) -> Result<SemanticRubric, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_semantic_rubric(
+        &self,
+        _: &SemanticRubricId,
+        _: u32,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn latest_semantic_rubric(
+        &self,
+        _: &SemanticRubricId,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn find_semantic_rubric_by_source(
+        &self,
+        _: Option<&MediaId>,
+        _: u64,
+        _: u64,
+        _: SemanticTaskKind,
+        _: &LanguageCode,
+        _: &str,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn save_semantic_attempt(
+        &self,
+        _: &SemanticTaskAttempt,
+    ) -> Result<SemanticTaskAttempt, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_semantic_attempt(
+        &self,
+        _: &SemanticTaskAttemptId,
+    ) -> Result<Option<SemanticTaskAttempt>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_semantic_attempts_for_rubric(
+        &self,
+        _: &SemanticRubricId,
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        _: &[SemanticTaskKind],
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn save_semantic_judgment(
+        &self,
+        _: &SemanticJudgment,
+    ) -> Result<SemanticJudgment, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_semantic_judgment(
+        &self,
+        _: &SemanticJudgmentId,
+    ) -> Result<Option<SemanticJudgment>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_semantic_judgments_for_attempt(
+        &self,
+        _: &SemanticTaskAttemptId,
+    ) -> Result<Vec<SemanticJudgment>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn save_judgment_adjudication(
+        &self,
+        _: &JudgmentAdjudication,
+    ) -> Result<JudgmentAdjudication, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_judgment_adjudications(
+        &self,
+        _: &SemanticJudgmentId,
+    ) -> Result<Vec<JudgmentAdjudication>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn save_writing_feedback_finding(
+        &self,
+        _: &WritingFeedbackFinding,
+    ) -> Result<WritingFeedbackFinding, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_writing_feedback_finding(
+        &self,
+        _: &WritingFeedbackFindingId,
+    ) -> Result<Option<WritingFeedbackFinding>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_writing_feedback_findings(
+        &self,
+        _: &SemanticTaskAttemptId,
+    ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn save_writing_finding_disposition(
+        &self,
+        _: &WritingFindingDisposition,
+    ) -> Result<WritingFindingDisposition, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_writing_finding_disposition(
+        &self,
+        _: &WritingFindingDispositionId,
+    ) -> Result<Option<WritingFindingDisposition>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_writing_finding_dispositions(
+        &self,
+        _: &WritingFeedbackFindingId,
+    ) -> Result<Vec<WritingFindingDisposition>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn upsert_writing_draft(
+        &self,
+        _: &SemanticRubricId,
+        _: &WritingDraft,
+        _: u64,
+    ) -> Result<WritingDraft, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_writing_draft(
+        &self,
+        _: &SemanticRubricId,
+    ) -> Result<Option<WritingDraft>, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn delete_writing_draft(&self, _: &SemanticRubricId) -> Result<(), ApplicationError> {
+        Err(Self::disabled())
+    }
+}
+
+struct DisabledProductionCorpusRepository;
+impl ProductionCorpusRepository for DisabledProductionCorpusRepository {
+    fn replace_production_entries_for_rubric(
+        &self,
+        _: &SemanticRubricId,
+        _: &[ProductionCorpusDocument],
+        _: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+    fn replace_all_production_entries(
+        &self,
+        _: &[ProductionCorpusDocument],
+        _: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+    fn list_production_entries_by_key(
+        &self,
+        _: &LanguageCode,
+        _: &str,
+        _: u32,
+        _: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn search_production_documents(
+        &self,
+        _: &LanguageCode,
+        _: &str,
+        _: u32,
+        _: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
+
+struct DisabledPersonalExpressionRepository;
+impl PersonalExpressionRepository for DisabledPersonalExpressionRepository {
+    fn create_pattern(
+        &self,
+        _: &UserSentencePatternAsset,
+    ) -> Result<UserSentencePatternAsset, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn append_pattern_version(
+        &self,
+        _: &UserSentencePatternId,
+        _: &UserSentencePatternVersion,
+        _: u64,
+    ) -> Result<UserSentencePatternAsset, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn get_pattern(
+        &self,
+        _: &UserSentencePatternId,
+    ) -> Result<Option<UserSentencePatternAsset>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_patterns(
+        &self,
+        _: Option<&LanguageCode>,
+        _: Option<&str>,
+    ) -> Result<Vec<UserSentencePatternAsset>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn list_pattern_versions(
+        &self,
+        _: &UserSentencePatternId,
+    ) -> Result<Vec<UserSentencePatternVersion>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn delete_pattern(&self, _: &UserSentencePatternId) -> Result<bool, ApplicationError> {
+        Ok(false)
+    }
+    fn save_personal_expression_attempt(
+        &self,
+        _: &PersonalExpressionAttempt,
+    ) -> Result<PersonalExpressionAttempt, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn list_personal_expression_attempts(
+        &self,
+        _: &UserSentencePatternId,
+    ) -> Result<Vec<PersonalExpressionAttempt>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
 
 impl DisabledLearningLoopRepository {
     fn disabled() -> ApplicationError {
@@ -1549,6 +1896,255 @@ pub(crate) fn chunk_partition_config_for_track_source(
         speech_analysis::chunking::ChunkPartitionConfig::for_asr_generated_subtitle()
     } else {
         speech_analysis::chunking::ChunkPartitionConfig::default()
+    }
+}
+
+impl ReadingPositionRepository for DisabledLearningLoopRepository {
+    fn save_reading_position(
+        &self,
+        _position: &domain::ReadingPosition,
+    ) -> Result<domain::ReadingPosition, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_reading_position(
+        &self,
+        _track_id: &SubtitleTrackId,
+    ) -> Result<Option<domain::ReadingPosition>, ApplicationError> {
+        Ok(None)
+    }
+}
+
+impl SemanticTaskRepository for DisabledLearningLoopRepository {
+    fn save_semantic_rubric(
+        &self,
+        _rubric: &domain::SemanticRubric,
+    ) -> Result<domain::SemanticRubric, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_semantic_rubric(
+        &self,
+        _id: &domain::SemanticRubricId,
+        _version: u32,
+    ) -> Result<Option<domain::SemanticRubric>, ApplicationError> {
+        Ok(None)
+    }
+    fn latest_semantic_rubric(
+        &self,
+        _id: &domain::SemanticRubricId,
+    ) -> Result<Option<domain::SemanticRubric>, ApplicationError> {
+        Ok(None)
+    }
+    fn find_semantic_rubric_by_source(
+        &self,
+        _media_id: Option<&MediaId>,
+        _start_ms: u64,
+        _end_ms: u64,
+        _purpose: domain::SemanticTaskKind,
+        _response_language: &LanguageCode,
+        _source_sha256: &str,
+    ) -> Result<Option<domain::SemanticRubric>, ApplicationError> {
+        Ok(None)
+    }
+    fn save_semantic_attempt(
+        &self,
+        _attempt: &domain::SemanticTaskAttempt,
+    ) -> Result<domain::SemanticTaskAttempt, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_semantic_attempt(
+        &self,
+        _id: &domain::SemanticTaskAttemptId,
+    ) -> Result<Option<domain::SemanticTaskAttempt>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_semantic_attempts_for_rubric(
+        &self,
+        _rubric_id: &domain::SemanticRubricId,
+    ) -> Result<Vec<domain::SemanticTaskAttempt>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        _kinds: &[domain::SemanticTaskKind],
+    ) -> Result<Vec<domain::SemanticTaskAttempt>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn save_semantic_judgment(
+        &self,
+        _judgment: &domain::SemanticJudgment,
+    ) -> Result<domain::SemanticJudgment, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_semantic_judgment(
+        &self,
+        _id: &domain::SemanticJudgmentId,
+    ) -> Result<Option<domain::SemanticJudgment>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_semantic_judgments_for_attempt(
+        &self,
+        _attempt_id: &domain::SemanticTaskAttemptId,
+    ) -> Result<Vec<domain::SemanticJudgment>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn save_judgment_adjudication(
+        &self,
+        _adjudication: &domain::JudgmentAdjudication,
+    ) -> Result<domain::JudgmentAdjudication, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_judgment_adjudications(
+        &self,
+        _judgment_id: &domain::SemanticJudgmentId,
+    ) -> Result<Vec<domain::JudgmentAdjudication>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn save_writing_feedback_finding(
+        &self,
+        _finding: &domain::WritingFeedbackFinding,
+    ) -> Result<domain::WritingFeedbackFinding, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_writing_feedback_finding(
+        &self,
+        _id: &domain::WritingFeedbackFindingId,
+    ) -> Result<Option<domain::WritingFeedbackFinding>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_writing_feedback_findings(
+        &self,
+        _attempt_id: &domain::SemanticTaskAttemptId,
+    ) -> Result<Vec<domain::WritingFeedbackFinding>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn save_writing_finding_disposition(
+        &self,
+        _disposition: &domain::WritingFindingDisposition,
+    ) -> Result<domain::WritingFindingDisposition, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_writing_finding_disposition(
+        &self,
+        _id: &domain::WritingFindingDispositionId,
+    ) -> Result<Option<domain::WritingFindingDisposition>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_writing_finding_dispositions(
+        &self,
+        _finding_id: &domain::WritingFeedbackFindingId,
+    ) -> Result<Vec<domain::WritingFindingDisposition>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn upsert_writing_draft(
+        &self,
+        _rubric_id: &domain::SemanticRubricId,
+        _draft: &domain::WritingDraft,
+        _updated_at_ms: u64,
+    ) -> Result<domain::WritingDraft, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_writing_draft(
+        &self,
+        _rubric_id: &domain::SemanticRubricId,
+    ) -> Result<Option<domain::WritingDraft>, ApplicationError> {
+        Ok(None)
+    }
+    fn delete_writing_draft(
+        &self,
+        _rubric_id: &domain::SemanticRubricId,
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+}
+
+impl ProductionCorpusRepository for DisabledLearningLoopRepository {
+    fn replace_production_entries_for_rubric(
+        &self,
+        _rubric_id: &domain::SemanticRubricId,
+        _documents: &[domain::ProductionCorpusDocument],
+        _entries: &[domain::ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn replace_all_production_entries(
+        &self,
+        _documents: &[domain::ProductionCorpusDocument],
+        _entries: &[domain::ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_production_entries_by_key(
+        &self,
+        _language: &LanguageCode,
+        _normalized_key: &str,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<domain::ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn search_production_documents(
+        &self,
+        _language: &LanguageCode,
+        _query: &str,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<domain::ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
+
+impl PersonalExpressionRepository for DisabledLearningLoopRepository {
+    fn create_pattern(
+        &self,
+        _asset: &domain::UserSentencePatternAsset,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn append_pattern_version(
+        &self,
+        _pattern_id: &domain::UserSentencePatternId,
+        _version: &domain::UserSentencePatternVersion,
+        _updated_at_ms: u64,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn get_pattern(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Option<domain::UserSentencePatternAsset>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_patterns(
+        &self,
+        _language: Option<&LanguageCode>,
+        _query: Option<&str>,
+    ) -> Result<Vec<domain::UserSentencePatternAsset>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn list_pattern_versions(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::UserSentencePatternVersion>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn delete_pattern(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<bool, ApplicationError> {
+        Ok(false)
+    }
+    fn save_personal_expression_attempt(
+        &self,
+        _attempt: &domain::PersonalExpressionAttempt,
+    ) -> Result<domain::PersonalExpressionAttempt, ApplicationError> {
+        Err(Self::disabled())
+    }
+    fn list_personal_expression_attempts(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::PersonalExpressionAttempt>, ApplicationError> {
+        Ok(Vec::new())
     }
 }
 

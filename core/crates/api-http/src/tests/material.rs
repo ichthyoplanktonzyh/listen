@@ -1,4 +1,4 @@
-//! Focused media-only learning-material wire tests (contract `5.0.0`).
+//! Focused media-only learning-material wire tests (contract `5.1.0`).
 //!
 //! These tests pin the explicit response/input DTO shapes used by the active
 //! audio/video material path. Components remain typed and path-free.

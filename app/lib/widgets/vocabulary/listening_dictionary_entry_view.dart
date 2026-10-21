@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
+import '../../models/production_corpus.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/motion.dart';
@@ -50,8 +51,14 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.onSearchLibrary,
     this.onPlayCorpus,
     this.onCollectCorpus,
+    this.showProductionCorpus = false,
+    this.productionHits,
+    this.productionLoadFailed = false,
+    this.onOpenProductionAttempt,
+    this.onShadowing,
+    this.evidenceCapability,
     this.pronunciationLoading = false,
-    this.onListeningOverride,
+    this.onCapabilityOverride,
     this.onLoadEvidenceHistory,
     this.onSaveContent,
     this.onCreateSenseFolder,
@@ -83,17 +90,24 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   /// Returns true when persisted.
   final Future<bool> Function(CorpusOccurrence occurrence)? onCollectCorpus;
 
+  final bool showProductionCorpus;
+  final List<ProductionCorpusHitView>? productionHits;
+  final bool productionLoadFailed;
+  final ValueChanged<ProductionCorpusHitView>? onOpenProductionAttempt;
+  final Future<void> Function(LexicalOccurrence occurrence)? onShadowing;
+  final String? evidenceCapability;
+
   /// True while the dictionary provider lookup that yields
   /// [pronunciationAudioUrl] is still in flight. Same rule as above: the
   /// pronunciation control waits by itself, nothing else does.
   final bool pronunciationLoading;
 
-  /// Sets or clears the user's manual listening conclusion.
-  final Future<void> Function(String? conclusion)? onListeningOverride;
+  /// Sets or clears one channel's manual capability conclusion.
+  final Future<void> Function(String capability, String? conclusion)?
+  onCapabilityOverride;
 
-  /// Loads one page of the append-only evidence trail (issue #2). Read-only:
-  /// the section renders listening history and never writes; paging via
-  /// [offset].
+  /// Loads one page of the append-only evidence trail. Read-only: the section
+  /// renders channel history and never writes; paging via [offset].
   final Future<List<LearningObservationView>> Function({
     String? capability,
     int offset,
@@ -433,6 +447,13 @@ class _ListeningDictionaryEntryViewState
         count: occurrences.isEmpty ? null : occurrences.length,
         child: _clipsSection(l, occurrences, unassignedOccurrences),
       ),
+      if (widget.showProductionCorpus)
+        EntryDetailSection(
+          id: 'output',
+          anchorKey: _anchorKey('output'),
+          label: l.text('dictionaryAnchorOutput'),
+          child: _outputSection(l),
+        ),
       if (widget.onCreateSenseFolder != null)
         EntryDetailSection(
           id: 'senses',
@@ -585,12 +606,13 @@ class _ListeningDictionaryEntryViewState
         EntryEvidenceSection(
           key: ValueKey('evidence-${widget.details.entry.id}'),
           loader: widget.onLoadEvidenceHistory!,
+          capability: widget.evidenceCapability,
         ),
         const SizedBox(height: ListenSpacing.gap12),
       ],
       EntryCapabilityEditor(
         profile: widget.details.capabilityProfile,
-        onListeningOverride: widget.onListeningOverride,
+        onOverride: widget.onCapabilityOverride,
       ),
     ],
   );
@@ -982,6 +1004,9 @@ class _ListeningDictionaryEntryViewState
       onReview: widget.onReviewClip == null
           ? null
           : () => unawaited(widget.onReviewClip!(occurrence)),
+      onShadowing: widget.onShadowing == null
+          ? null
+          : () => unawaited(widget.onShadowing!(occurrence)),
       onHeard: occurrence.sentenceId == null
           ? null
           : () => _mark(key, occurrence, true),
@@ -1027,6 +1052,90 @@ class _ListeningDictionaryEntryViewState
       const SizedBox(height: ListenSpacing.gap8),
     ],
   );
+
+  Widget _outputSection(AppLocalizations l) {
+    final hits = widget.productionHits;
+    if (hits == null && !widget.productionLoadFailed) {
+      return Row(
+        key: const Key('dictionary-output-loading'),
+        children: [
+          const ListenLoading.inline(size: 16),
+          const SizedBox(width: ListenSpacing.gap8),
+          Text(l.text('myOutputLoading')),
+        ],
+      );
+    }
+    if (widget.productionLoadFailed) {
+      return Text(l.text('myOutputUnavailable'));
+    }
+    if (hits!.isEmpty) return Text(l.text('myOutputEmpty'));
+
+    final documents = <String, ProductionCorpusHitView>{};
+    for (final hit in hits) {
+      documents.putIfAbsent(hit.document.id, () => hit);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l
+              .text(hits.length == 1 ? 'myOutputCountOne' : 'myOutputCount')
+              .replaceAll('{count}', '${hits.length}'),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: ListenSpacing.gap8),
+        for (final hit in documents.values)
+          ListTile(
+            key: ValueKey('production-output-${hit.document.id}'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              hit.document.responseText,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              '${_assistanceLabel(l, hit.document.assistance)} · '
+              '${l.text('revision')} ${hit.document.responseRevision}',
+            ),
+            trailing: Wrap(
+              spacing: ListenSpacing.gap4,
+              children: [
+                if (widget.onSpeakSynthetic != null)
+                  PronunciationButton(
+                    key: ValueKey('production-speech-${hit.document.id}'),
+                    tooltip: l.text('readAloudSynthetic'),
+                    busy: widget.speechBusy,
+                    synthetic: true,
+                    onPressed: () => widget.onSpeakSynthetic!(
+                      hit.document.responseText,
+                      'production_corpus_readback',
+                    ),
+                  ),
+                if (widget.onOpenProductionAttempt != null)
+                  IconButton(
+                    tooltip: l.text('myOutputAttempt'),
+                    icon: const Icon(Icons.open_in_new),
+                    onPressed: () => widget.onOpenProductionAttempt!(hit),
+                  ),
+              ],
+            ),
+            onTap: widget.onOpenProductionAttempt == null
+                ? null
+                : () => widget.onOpenProductionAttempt!(hit),
+          ),
+      ],
+    );
+  }
+
+  String _assistanceLabel(AppLocalizations l, String value) => switch (value) {
+    'content_anchored' => l.text('productionAssistanceContent'),
+    'source_reconstruction' => l.text('productionAssistanceReconstruction'),
+    'learner_revision' => l.text('productionAssistanceRevision'),
+    'explicit_target' => l.text('productionAssistanceTarget'),
+    'model_suggested' => l.text('productionAssistanceModel'),
+    'direct_imitation' => l.text('productionAssistanceImitation'),
+    _ => l.text('productionAssistanceUnknown'),
+  };
 
   /// External references honour the copyright guardrail: a link out only,
   /// never downloaded or treated as local practice material.

@@ -58,6 +58,9 @@ pub use syntactic_analysis::*;
 mod construction;
 pub use construction::*;
 
+mod personal_expression;
+pub use personal_expression::*;
+
 mod phone_timeline;
 pub use phone_timeline::*;
 
@@ -79,8 +82,26 @@ pub use capability::*;
 mod learning_loop;
 pub use learning_loop::*;
 
+mod recording;
+pub use recording::*;
+
 mod learning_observation;
 pub use learning_observation::*;
+
+mod semantic_task;
+pub use semantic_task::*;
+
+mod production_corpus;
+pub use production_corpus::*;
+
+mod writing_feedback;
+pub use writing_feedback::*;
+
+mod reading;
+pub use reading::*;
+
+mod transcription;
+pub use transcription::*;
 
 mod llm_provider;
 pub use llm_provider::*;
@@ -135,6 +156,8 @@ string_id!(BackgroundJobId);
 string_id!(SubtitleTrackId);
 string_id!(SubtitleSentenceId);
 string_id!(DictionaryEntryId);
+string_id!(RecordingTranscriptionJobId);
+string_id!(TranscriptionModelId);
 string_id!(WordTimelineId);
 string_id!(PhoneTimelineId);
 string_id!(RhythmFrameId);
@@ -165,12 +188,24 @@ string_id!(SentenceExemplarId);
 string_id!(ConstructionId);
 string_id!(ConstructionOccurrenceId);
 string_id!(UserSentencePatternId);
+string_id!(UserSentencePatternVersionId);
+string_id!(PersonalExpressionAttemptId);
+string_id!(RecordingAssetId);
+string_id!(SemanticRubricId);
+string_id!(SemanticTaskAttemptId);
+string_id!(SemanticJudgmentId);
+string_id!(JudgmentAdjudicationId);
+string_id!(WritingFeedbackFindingId);
+string_id!(WritingFindingDispositionId);
+string_id!(ProductionCorpusDocumentId);
+string_id!(ProductionCorpusEntryId);
 string_id!(LlmProviderProfileId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);
 string_id!(PhoneticAnalysisJobId);
 string_id!(PhoneticAnalysisId);
 string_id!(PhoneticFindingId);
+string_id!(ShadowingAnalysisId);
 string_id!(LearningMaterialId);
 string_id!(MaterialRevisionId);
 string_id!(LearningEditionId);

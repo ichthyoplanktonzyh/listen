@@ -19,6 +19,9 @@ enum AppRoute {
   /// The language the learner has collected, and the practice on it:
   /// vocabulary and review as segments of one page.
   language,
+
+  /// Saved language patterns the learner can return to and practise.
+  expressions,
 }
 
 /// Persistent application navigation: three destinations, no group headings.
@@ -103,6 +106,12 @@ class AppSidebar extends StatelessWidget {
                   label: l.text('sidebarMyLanguage'),
                   isSelected: currentRoute == AppRoute.language,
                   onTap: () => onRouteSelected(AppRoute.language),
+                ),
+                _SidebarItem(
+                  icon: Icons.bookmark_border,
+                  label: l.text('sidebarExpressions'),
+                  isSelected: currentRoute == AppRoute.expressions,
+                  onTap: () => onRouteSelected(AppRoute.expressions),
                 ),
               ],
             ),

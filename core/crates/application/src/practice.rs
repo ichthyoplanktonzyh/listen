@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use domain::ReviewCardState;
@@ -398,6 +398,23 @@ impl PracticeUseCases {
         let mut accepted_new = 0;
         let mut accepted_reviews = 0;
         let mut entries = Vec::new();
+        let mut imported_origins = self
+            .review_queue
+            .list_imported_deck_schedules()?
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.item_id,
+                    crate::ReviewItemOrigin {
+                        kind: crate::ReviewOriginKind::ImportedAnki,
+                        anki_guid: Some(entry.anki_guid),
+                        deck_id: Some(entry.deck_id),
+                        deck_name: Some(entry.name),
+                        has_listening_enhancements: false,
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
         for (item, schedule) in self.review_queue.list_due_review_items(at_ms, 10_000)? {
             let schedule = migrate_legacy_schedule(&schedule);
             let accepted = match schedule.state() {
@@ -416,7 +433,8 @@ impl PracticeUseCases {
                 ReviewCardState::Learning | ReviewCardState::Relearning => true,
             };
             if accepted {
-                entries.push(review_queue_entry(item, schedule));
+                let origin = imported_origins.remove(&item.id);
+                entries.push(review_queue_entry(item, schedule, origin));
             }
             if entries.len() >= limit.min(100) as usize {
                 break;
@@ -449,13 +467,59 @@ impl PracticeUseCases {
         at_ms: Option<u64>,
     ) -> Result<crate::ReviewDeckOverview, ApplicationError> {
         let at_ms = at_ms.unwrap_or_else(now_ms);
-        let mut counts = crate::ReviewStateCounts::default();
+        let imported = self.review_queue.list_imported_deck_schedules()?;
+        let imported_ids = imported
+            .iter()
+            .map(|entry| entry.item_id.clone())
+            .collect::<HashSet<_>>();
+        let mut channels = [
+            crate::ReviewChannel::Listening,
+            crate::ReviewChannel::Speaking,
+            crate::ReviewChannel::Reading,
+            crate::ReviewChannel::Writing,
+        ]
+        .into_iter()
+        .map(|channel| crate::ReviewChannelCounts {
+            channel,
+            counts: crate::ReviewStateCounts::default(),
+        })
+        .collect::<Vec<_>>();
         for (item, schedule) in self.review_queue.list_review_items_with_schedules(10_000)? {
-            let _ = item;
-            add_schedule_count(&mut counts, &migrate_legacy_schedule(&schedule), at_ms);
+            if imported_ids.contains(&item.id) {
+                continue;
+            }
+            let channel = primary_review_channel(&item);
+            let counts = &mut channels
+                .iter_mut()
+                .find(|entry| entry.channel == channel)
+                .expect("all channels are initialized")
+                .counts;
+            add_schedule_count(counts, &migrate_legacy_schedule(&schedule), at_ms);
+        }
+        let mut decks =
+            BTreeMap::<(String, String, Option<String>), crate::ReviewStateCounts>::new();
+        for entry in imported {
+            add_schedule_count(
+                decks
+                    .entry((entry.deck_id, entry.name, entry.parent_deck_id))
+                    .or_default(),
+                &migrate_legacy_schedule(&entry.schedule),
+                at_ms,
+            );
         }
         Ok(crate::ReviewDeckOverview {
-            counts,
+            channels,
+            imported_decks: decks
+                .into_iter()
+                .map(
+                    |((deck_id, name, parent_deck_id), counts)| crate::ImportedDeckCounts {
+                        deck_id,
+                        name,
+                        parent_deck_id,
+                        counts,
+                    },
+                )
+                .collect(),
             limit_status: self.review_limit_status(at_ms)?,
         })
     }
@@ -466,6 +530,23 @@ impl PracticeUseCases {
     ) -> Result<crate::CustomStudyQueue, ApplicationError> {
         let at_ms = request.at_ms.unwrap_or_else(now_ms);
         let limit = request.limit.unwrap_or(20).min(100) as usize;
+        let imported_origins = self
+            .review_queue
+            .list_imported_deck_schedules()?
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.item_id,
+                    crate::ReviewItemOrigin {
+                        kind: crate::ReviewOriginKind::ImportedAnki,
+                        anki_guid: Some(entry.anki_guid),
+                        deck_id: Some(entry.deck_id),
+                        deck_name: Some(entry.name),
+                        has_listening_enhancements: false,
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
         let mut entries = self
             .review_queue
             .list_review_items_with_schedules(10_000)?
@@ -477,11 +558,18 @@ impl PracticeUseCases {
                     crate::CustomStudyKind::ReviewAhead => {
                         schedule.state() != ReviewCardState::New && schedule.due_at_ms > at_ms
                     }
+                    crate::CustomStudyKind::Channel { channel } => {
+                        !imported_origins.contains_key(&item.id)
+                            && primary_review_channel(&item) == *channel
+                    }
                     crate::CustomStudyKind::Forgotten { minimum_lapses } => {
                         schedule.lapse_count >= minimum_lapses.unwrap_or(2).max(1)
                     }
                 };
-                selected.then(|| review_queue_entry(item, schedule))
+                selected.then(|| {
+                    let origin = imported_origins.get(&item.id).cloned();
+                    review_queue_entry(item, schedule, origin)
+                })
             })
             .collect::<Vec<_>>();
         if matches!(&request.kind, crate::CustomStudyKind::Forgotten { .. }) {
@@ -492,6 +580,26 @@ impl PracticeUseCases {
             entries,
             advances_normal_schedule: matches!(&request.kind, crate::CustomStudyKind::ReviewAhead),
         })
+    }
+
+    pub fn import_anki_package(
+        &self,
+        request: crate::AnkiPackageImportRequest,
+    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError> {
+        if request.package_path.trim().is_empty() || request.media_directory.trim().is_empty() {
+            return Err(ApplicationError::Validation("anki package paths"));
+        }
+        self.review_queue.import_anki_package(&request)
+    }
+
+    pub fn export_anki_package(
+        &self,
+        request: crate::AnkiPackageExportRequest,
+    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError> {
+        if request.package_path.trim().is_empty() {
+            return Err(ApplicationError::Validation("anki export path"));
+        }
+        self.review_queue.export_anki_package(&request)
     }
 
     /// Pure FSRS prediction. It reads the schedule once and performs no
@@ -595,7 +703,7 @@ impl PracticeUseCases {
         } else {
             schedule
         };
-        {
+        if is_audio_backed_listening_review(&item) {
             let spec = observation_spec_for_review(input.rating);
             let fallback_sentence = item
                 .anchors
@@ -646,11 +754,12 @@ impl PracticeUseCases {
                 )?;
             }
         }
-        let generated_observation_ids = if input.rating == ReviewRating::Again {
-            self.record_review_failure(&item, now)?
-        } else {
-            Vec::new()
-        };
+        let generated_observation_ids =
+            if input.rating == ReviewRating::Again && is_audio_backed_listening_review(&item) {
+                self.record_review_failure(&item, now)?
+            } else {
+                Vec::new()
+            };
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint("learning-event", &fingerprint),
             occurred_at_ms: now,
@@ -805,7 +914,11 @@ impl PracticeUseCases {
     }
 }
 
-fn review_queue_entry(item: ReviewItem, schedule: ReviewSchedule) -> ReviewQueueEntry {
+fn review_queue_entry(
+    item: ReviewItem,
+    schedule: ReviewSchedule,
+    origin: Option<crate::ReviewItemOrigin>,
+) -> ReviewQueueEntry {
     let state = schedule.state();
     let card = review_card(&item);
     ReviewQueueEntry {
@@ -813,7 +926,45 @@ fn review_queue_entry(item: ReviewItem, schedule: ReviewSchedule) -> ReviewQueue
         schedule,
         state,
         card,
+        origin: origin.unwrap_or_else(crate::ReviewItemOrigin::native),
     }
+}
+
+/// Assign each native card to one deterministic activity channel. Imported
+/// Anki cards are kept in their original deck tree and filtered separately.
+fn primary_review_channel(item: &ReviewItem) -> crate::ReviewChannel {
+    match item.source.kind {
+        ReviewSourceKind::SpeakingAttempt => crate::ReviewChannel::Speaking,
+        ReviewSourceKind::Sentence => crate::ReviewChannel::Reading,
+        ReviewSourceKind::PracticeFailure
+            if !item.anchors.is_empty()
+                && item
+                    .anchors
+                    .iter()
+                    .all(|anchor| anchor.kind == PracticeAnchorKind::Sentence)
+                && !has_audio_source_context(item) =>
+        {
+            crate::ReviewChannel::Writing
+        }
+        ReviewSourceKind::LexicalEntry
+        | ReviewSourceKind::PracticeFailure
+        | ReviewSourceKind::ListeningInbox
+        | ReviewSourceKind::Chunk
+        | ReviewSourceKind::ConnectedSpeech => crate::ReviewChannel::Listening,
+    }
+}
+
+fn has_audio_source_context(item: &ReviewItem) -> bool {
+    item.source.media_id.is_some() && item.source.track_id.is_some()
+}
+
+/// Listening review evidence must remain tied to an audio-backed source.
+/// Reading and speaking may carry lexical anchors, and imported Anki cards
+/// have lexical anchors without media provenance; none of those are listening
+/// observations. Audio-backed practice/listening cards retain review evidence.
+fn is_audio_backed_listening_review(item: &ReviewItem) -> bool {
+    has_audio_source_context(item)
+        && primary_review_channel(item) == crate::ReviewChannel::Listening
 }
 
 fn add_schedule_count(

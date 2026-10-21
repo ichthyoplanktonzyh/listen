@@ -155,7 +155,9 @@ pub(super) fn review_card(item: &ReviewItem) -> ReviewCard {
             target.as_deref().unwrap_or_default(),
         )),
         ReviewCardKind::PhrasePresence => target.clone(),
-        ReviewCardKind::WordRecognition | ReviewCardKind::SourceSentenceRecall => None,
+        ReviewCardKind::WordRecognition
+        | ReviewCardKind::SourceSentenceRecall
+        | ReviewCardKind::DelayedRetelling => None,
     };
     let answer = match kind {
         ReviewCardKind::WordRecognition => target
@@ -163,7 +165,8 @@ pub(super) fn review_card(item: &ReviewItem) -> ReviewCard {
             .unwrap_or_else(|| item.prompt_snapshot.clone()),
         ReviewCardKind::ChunkCloze
         | ReviewCardKind::PhrasePresence
-        | ReviewCardKind::SourceSentenceRecall => item.prompt_snapshot.clone(),
+        | ReviewCardKind::SourceSentenceRecall
+        | ReviewCardKind::DelayedRetelling => item.prompt_snapshot.clone(),
     };
     ReviewCard {
         kind,
@@ -179,6 +182,7 @@ fn review_card_kind(item: &ReviewItem) -> ReviewCardKind {
         ReviewSourceKind::Chunk => ReviewCardKind::ChunkCloze,
         ReviewSourceKind::ConnectedSpeech => ReviewCardKind::PhrasePresence,
         ReviewSourceKind::Sentence => ReviewCardKind::SourceSentenceRecall,
+        ReviewSourceKind::SpeakingAttempt => ReviewCardKind::DelayedRetelling,
         ReviewSourceKind::PracticeFailure | ReviewSourceKind::ListeningInbox => {
             if item
                 .anchors
@@ -210,7 +214,7 @@ fn review_card_target(item: &ReviewItem, kind: ReviewCardKind) -> Option<String>
         ReviewCardKind::WordRecognition => PracticeAnchorKind::LexicalEntry,
         ReviewCardKind::ChunkCloze => PracticeAnchorKind::Chunk,
         ReviewCardKind::PhrasePresence => PracticeAnchorKind::ConnectedSpeech,
-        ReviewCardKind::SourceSentenceRecall => return None,
+        ReviewCardKind::SourceSentenceRecall | ReviewCardKind::DelayedRetelling => return None,
     };
     item.anchors
         .iter()

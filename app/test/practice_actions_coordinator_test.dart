@@ -4,6 +4,8 @@ import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/practice_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/practice_controller.dart';
+import 'package:llplayer_next/controllers/settings_controller.dart';
+import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
@@ -18,6 +20,10 @@ _wire() {
   final player = PlayerController();
   final subtitle = SubtitleController();
   final adapter = DesktopPlayerAdapter();
+  final recordingAdapter = DesktopPlayerAdapter();
+  final slicePlayer = SlicePlayerController();
+  final settings = SettingsController();
+  final learning = LearningController();
   final playback = PlaybackActionsCoordinator(
     adapter: adapter,
     player: player,
@@ -31,15 +37,22 @@ _wire() {
         practice: practice,
         player: player,
         subtitle: subtitle,
-        learning: LearningController(),
+        learning: learning,
+        slicePlayer: slicePlayer,
         playbackActions: playback,
+        settings: settings,
         adapter: adapter,
+        recordingAdapter: recordingAdapter,
       )..bind(
         isMounted: () => true,
         refreshDiagnosis: () async => diagnosis++,
         seekCue: (cue) async => seeks.add(cue),
       );
   addTearDown(adapter.dispose);
+  addTearDown(recordingAdapter.dispose);
+  addTearDown(slicePlayer.dispose);
+  addTearDown(settings.dispose);
+  addTearDown(learning.dispose);
   addTearDown(practice.dispose);
   return (
     coordinator: coordinator,

@@ -17,6 +17,59 @@ extension PracticeReviewApi on LocalApi {
             as Map<String, dynamic>,
       );
 
+  Future<RecordingAsset> createRecordingAsset(
+    CreateRecordingAsset input,
+  ) async => RecordingAsset.fromJson(
+    (await _request('POST', '/v1/recordings', input.toJson()))
+        as Map<String, dynamic>,
+  );
+
+  Future<RecordingAsset> recordingAsset(String id) async =>
+      RecordingAsset.fromJson(
+        (await _request('GET', '/v1/recordings/${Uri.encodeComponent(id)}'))
+            as Map<String, dynamic>,
+      );
+
+  Future<RecordingAsset> deleteRecordingAsset(String id) async =>
+      RecordingAsset.fromJson(
+        (await _request(
+              'DELETE',
+              '/v1/recordings/${Uri.encodeComponent(id)}',
+            ))
+            as Map<String, dynamic>,
+      );
+
+  Future<RecordingAudioFacts> recordingAudioFacts(String recordingId) async =>
+      RecordingAudioFacts.fromJson(
+        (await _request(
+              'GET',
+              '/v1/recordings/${Uri.encodeComponent(recordingId)}/audio-facts',
+            ))
+            as Map<String, dynamic>,
+      );
+
+  Future<PracticeAttempt> completeShadowingAttempt({
+    required String itemId,
+    required String recordingId,
+  }) async => PracticeAttempt.fromJson(
+    (await _request('POST', '/v1/practice/shadowing-attempts', {
+          'item_id': itemId,
+          'recording_id': recordingId,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<ShadowingComparison> compareShadowing({
+    required String recordingId,
+    required String referenceWavPath,
+  }) async => ShadowingComparison.fromJson(
+    (await _request('POST', '/v1/shadowing/comparisons', {
+          'recording_id': recordingId,
+          'reference_wav_path': referenceWavPath,
+        }))
+        as Map<String, dynamic>,
+  );
+
   Future<PracticeAttempt> submitPracticeAttempt(
     SubmitPracticeAttempt input,
   ) async => PracticeAttempt.fromJson(
@@ -91,7 +144,6 @@ extension PracticeReviewApi on LocalApi {
   );
 
   Future<CustomStudyQueue> customStudy(CustomStudyRequest request) async {
-    _requireListeningCustomStudy(request);
     return CustomStudyQueue.fromJson(
       (await _request('POST', '/v1/review/custom-study', request.toJson()))
           as Map<String, dynamic>,
@@ -103,7 +155,6 @@ extension PracticeReviewApi on LocalApi {
     required String rating,
     required CustomStudyRequest request,
   }) async {
-    _requireListeningCustomStudy(request);
     return ReviewSubmission.fromJson(
       (await _request('POST', '/v1/review/custom-study/attempts', {
             'item_id': itemId,
@@ -124,15 +175,22 @@ extension PracticeReviewApi on LocalApi {
         }))
         as Map<String, dynamic>,
   );
-}
 
-void _requireListeningCustomStudy(CustomStudyRequest request) {
-  if (request.kind == CustomStudyKind.channel &&
-      request.channel != 'listening') {
-    throw ArgumentError.value(
-      request.channel,
-      'channel',
-      'manual custom study supports listening only',
-    );
-  }
+  Future<AnkiPackageImportSummary> importAnkiPackage({
+    required String packagePath,
+    required String mediaDirectory,
+  }) async => AnkiPackageImportSummary.fromJson(
+    (await _request('POST', '/v1/review/anki/import', {
+          'package_path': packagePath,
+          'media_directory': mediaDirectory,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<AnkiPackageExportSummary> exportAnkiPackage(
+    AnkiPackageExportRequest request,
+  ) async => AnkiPackageExportSummary.fromJson(
+    (await _request('POST', '/v1/review/anki/export', request.toJson()))
+        as Map<String, dynamic>,
+  );
 }

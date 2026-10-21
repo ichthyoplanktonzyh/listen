@@ -8,6 +8,7 @@ import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 import '../../utils/format_duration.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
@@ -18,13 +19,18 @@ import '../common/listen_loading.dart';
 /// expanding is the explicit "show me the evidence" act (the system's
 /// knowledge waits for the user to come look, it never pushes).
 class EntryEvidenceSection extends StatefulWidget {
-  const EntryEvidenceSection({super.key, required this.loader});
+  const EntryEvidenceSection({
+    super.key,
+    required this.loader,
+    this.capability,
+  });
 
   final Future<List<LearningObservationView>> Function({
     String? capability,
     int offset,
   })
   loader;
+  final String? capability;
 
   @override
   State<EntryEvidenceSection> createState() => _EntryEvidenceSectionState();
@@ -49,7 +55,10 @@ class _EntryEvidenceSectionState extends State<EntryEvidenceSection> {
       loadFailed = false;
     });
     try {
-      final page = await widget.loader(capability: 'listening', offset: offset);
+      final page = await widget.loader(
+        capability: widget.capability,
+        offset: offset,
+      );
       if (!mounted) return;
       setState(() {
         loading = false;
@@ -485,6 +494,7 @@ class EntryClipTile extends StatelessWidget {
     required this.onReveal,
     required this.onPlay,
     required this.onReview,
+    this.onShadowing,
     required this.onHeard,
     required this.onNotHeard,
   });
@@ -498,6 +508,7 @@ class EntryClipTile extends StatelessWidget {
   final VoidCallback onReveal;
   final VoidCallback onPlay;
   final VoidCallback? onReview;
+  final VoidCallback? onShadowing;
   final VoidCallback? onHeard;
   final VoidCallback? onNotHeard;
 
@@ -602,6 +613,12 @@ class EntryClipTile extends StatelessWidget {
                 icon: const Icon(Icons.playlist_add_outlined),
                 onPressed: onReview,
               ),
+            if (onShadowing != null)
+              IconButton(
+                tooltip: l.text('workbenchShadowTooltip'),
+                icon: const Icon(Icons.mic_none_outlined),
+                onPressed: onShadowing,
+              ),
             IconButton.filledTonal(
               tooltip: l.text('dictionaryPlayClip'),
               icon: Icon(linked ? Icons.headphones_outlined : Icons.link_off),
@@ -649,68 +666,105 @@ class _HighlightedSentence extends StatelessWidget {
   }
 }
 
-/// The manually editable listening conclusion for this lexical entry.
+/// Manually editable learner conclusions for the four learning channels.
 class EntryCapabilityEditor extends StatelessWidget {
   const EntryCapabilityEditor({
     super.key,
     required this.profile,
-    this.onListeningOverride,
+    this.onOverride,
   });
 
   final LexicalCapabilityProfile? profile;
-  final Future<void> Function(String? conclusion)? onListeningOverride;
+  final Future<void> Function(String capability, String? conclusion)?
+  onOverride;
+
+  static const _channels = [
+    ('reading', 'capabilityReading', Icons.menu_book_outlined),
+    ('listening', 'capabilityListening', Icons.hearing_outlined),
+    ('speaking', 'capabilitySpeaking', Icons.record_voice_over_outlined),
+    ('writing', 'capabilityWriting', Icons.edit_outlined),
+  ];
+
+  CapabilityDimensionState? _dimension(String channel) {
+    final value = profile;
+    if (value == null) return null;
+    return switch (channel) {
+      'reading' => value.reading,
+      'listening' => value.listening,
+      'speaking' => value.speaking,
+      _ => value.writing,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final colors = Theme.of(context).colorScheme;
-    final dimension = profile?.listening;
-    final assessment = dimension?.effectiveAssessment ?? 'unassessed';
-    final assessed = assessment == 'acquired' || assessment == 'not_acquired';
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          Icons.hearing_outlined,
-          size: ListenIconSize.control,
-          color: capabilityAssessmentColor(colors, assessment),
-        ),
-        const SizedBox(width: ListenSpacing.gap8),
-        Expanded(
-          child: Text(
-            l.text('capabilityListening'),
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ),
-        SegmentedButton<String>(
-          showSelectedIcon: false,
-          emptySelectionAllowed: true,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          segments: [
-            for (final value in const ['acquired', 'not_acquired'])
-              ButtonSegment<String>(value: value, label: Text(l.text(value))),
-          ],
-          selected: assessed ? {assessment} : const <String>{},
-          onSelectionChanged: onListeningOverride == null
-              ? null
-              : (selection) => unawaited(
-                  onListeningOverride!(
-                    selection.isEmpty ? null : selection.first,
-                  ),
-                ),
-        ),
-        if (dimension?.userOverride != null)
+        for (final (channel, label, icon) in _channels)
           Padding(
-            padding: const EdgeInsets.only(left: ListenSpacing.gap4),
-            child: Tooltip(
-              message: l.text('capabilityUserOverride'),
-              child: Icon(
-                Icons.person_outline,
-                size: ListenIconSize.inline,
-                color: colors.outline,
-              ),
-            ),
+            padding: const EdgeInsets.only(bottom: ListenSpacing.gap4),
+            child: _channelRow(context, l, channel, label, icon),
           ),
       ],
+    );
+  }
+
+  Widget _channelRow(
+    BuildContext context,
+    AppLocalizations l,
+    String channel,
+    String label,
+    IconData icon,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final dimension = _dimension(channel);
+    final assessment = dimension?.effectiveAssessment ?? 'unassessed';
+    final assessed = assessment == 'acquired' || assessment == 'not_acquired';
+    return Padding(
+      padding: const EdgeInsets.only(right: ListenSpacing.gap8),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: ListenIconSize.control,
+            color: capabilityAssessmentColor(colors, assessment),
+          ),
+          const SizedBox(width: ListenSpacing.gap6),
+          Expanded(child: Text(l.text(label), style: ListenType.reading)),
+          SegmentedButton<String>(
+            showSelectedIcon: false,
+            emptySelectionAllowed: true,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: [
+              for (final value in const ['acquired', 'not_acquired'])
+                ButtonSegment<String>(
+                  value: value,
+                  label: Text(l.text(value), style: ListenType.body),
+                ),
+            ],
+            selected: assessed ? {assessment} : const <String>{},
+            onSelectionChanged: onOverride == null
+                ? null
+                : (selection) => unawaited(
+                    onOverride!(channel, selection.isEmpty ? null : selection.first),
+                  ),
+          ),
+          if (dimension?.userOverride != null)
+            Padding(
+              padding: const EdgeInsets.only(left: ListenSpacing.gap4),
+              child: Tooltip(
+                message: l.text('capabilityUserOverride'),
+                child: Icon(
+                  Icons.person_outline,
+                  size: ListenIconSize.inline,
+                  color: colors.outline,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

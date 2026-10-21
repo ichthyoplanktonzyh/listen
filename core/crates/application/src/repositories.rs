@@ -618,6 +618,236 @@ pub trait ReviewQueueRepository: Send + Sync {
         &self,
         limits: crate::ReviewDailyLimits,
     ) -> Result<crate::ReviewDailyLimits, ApplicationError>;
+    fn list_imported_deck_schedules(
+        &self,
+    ) -> Result<Vec<crate::ImportedDeckSchedule>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn import_anki_package(
+        &self,
+        _request: &crate::AnkiPackageImportRequest,
+    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "Anki import is not configured".into(),
+        ))
+    }
+    fn export_anki_package(
+        &self,
+        _request: &crate::AnkiPackageExportRequest,
+    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "Anki export is not configured".into(),
+        ))
+    }
+}
+
+pub trait ReadingPositionRepository: Send + Sync {
+    fn save_reading_position(
+        &self,
+        position: &domain::ReadingPosition,
+    ) -> Result<domain::ReadingPosition, ApplicationError>;
+    fn get_reading_position(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<domain::ReadingPosition>, ApplicationError>;
+}
+
+pub trait RecordingRepository: Send + Sync {
+    fn save_recording_asset(
+        &self,
+        asset: &domain::RecordingAsset,
+    ) -> Result<domain::RecordingAsset, ApplicationError>;
+    fn get_recording_asset(
+        &self,
+        id: &domain::RecordingAssetId,
+    ) -> Result<Option<domain::RecordingAsset>, ApplicationError>;
+    fn delete_recording_asset(
+        &self,
+        id: &domain::RecordingAssetId,
+    ) -> Result<Option<domain::RecordingAsset>, ApplicationError>;
+    fn save_shadowing_analysis(
+        &self,
+        record: &domain::ShadowingAnalysisRecord,
+    ) -> Result<domain::ShadowingAnalysisRecord, ApplicationError>;
+    fn latest_shadowing_analysis(
+        &self,
+        recording_id: &domain::RecordingAssetId,
+    ) -> Result<Option<domain::ShadowingAnalysisRecord>, ApplicationError>;
+}
+
+pub trait SemanticTaskRepository: Send + Sync {
+    fn save_semantic_rubric(
+        &self,
+        rubric: &domain::SemanticRubric,
+    ) -> Result<domain::SemanticRubric, ApplicationError>;
+    fn get_semantic_rubric(
+        &self,
+        id: &domain::SemanticRubricId,
+        version: u32,
+    ) -> Result<Option<domain::SemanticRubric>, ApplicationError>;
+    fn latest_semantic_rubric(
+        &self,
+        id: &domain::SemanticRubricId,
+    ) -> Result<Option<domain::SemanticRubric>, ApplicationError>;
+    fn find_semantic_rubric_by_source(
+        &self,
+        media_id: Option<&MediaId>,
+        start_ms: u64,
+        end_ms: u64,
+        purpose: domain::SemanticTaskKind,
+        response_language: &LanguageCode,
+        source_sha256: &str,
+    ) -> Result<Option<domain::SemanticRubric>, ApplicationError>;
+    fn save_semantic_attempt(
+        &self,
+        attempt: &domain::SemanticTaskAttempt,
+    ) -> Result<domain::SemanticTaskAttempt, ApplicationError>;
+    fn get_semantic_attempt(
+        &self,
+        id: &domain::SemanticTaskAttemptId,
+    ) -> Result<Option<domain::SemanticTaskAttempt>, ApplicationError>;
+    fn list_semantic_attempts_for_rubric(
+        &self,
+        rubric_id: &domain::SemanticRubricId,
+    ) -> Result<Vec<domain::SemanticTaskAttempt>, ApplicationError>;
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        kinds: &[domain::SemanticTaskKind],
+    ) -> Result<Vec<domain::SemanticTaskAttempt>, ApplicationError>;
+    fn save_semantic_judgment(
+        &self,
+        judgment: &domain::SemanticJudgment,
+    ) -> Result<domain::SemanticJudgment, ApplicationError>;
+    fn get_semantic_judgment(
+        &self,
+        id: &domain::SemanticJudgmentId,
+    ) -> Result<Option<domain::SemanticJudgment>, ApplicationError>;
+    fn list_semantic_judgments_for_attempt(
+        &self,
+        attempt_id: &domain::SemanticTaskAttemptId,
+    ) -> Result<Vec<domain::SemanticJudgment>, ApplicationError>;
+    fn save_judgment_adjudication(
+        &self,
+        adjudication: &domain::JudgmentAdjudication,
+    ) -> Result<domain::JudgmentAdjudication, ApplicationError>;
+    fn list_judgment_adjudications(
+        &self,
+        judgment_id: &domain::SemanticJudgmentId,
+    ) -> Result<Vec<domain::JudgmentAdjudication>, ApplicationError>;
+    fn save_writing_feedback_finding(
+        &self,
+        finding: &domain::WritingFeedbackFinding,
+    ) -> Result<domain::WritingFeedbackFinding, ApplicationError>;
+    fn get_writing_feedback_finding(
+        &self,
+        id: &domain::WritingFeedbackFindingId,
+    ) -> Result<Option<domain::WritingFeedbackFinding>, ApplicationError>;
+    fn list_writing_feedback_findings(
+        &self,
+        attempt_id: &domain::SemanticTaskAttemptId,
+    ) -> Result<Vec<domain::WritingFeedbackFinding>, ApplicationError>;
+    fn save_writing_finding_disposition(
+        &self,
+        disposition: &domain::WritingFindingDisposition,
+    ) -> Result<domain::WritingFindingDisposition, ApplicationError>;
+    fn get_writing_finding_disposition(
+        &self,
+        id: &domain::WritingFindingDispositionId,
+    ) -> Result<Option<domain::WritingFindingDisposition>, ApplicationError>;
+    fn list_writing_finding_dispositions(
+        &self,
+        finding_id: &domain::WritingFeedbackFindingId,
+    ) -> Result<Vec<domain::WritingFindingDisposition>, ApplicationError>;
+    fn upsert_writing_draft(
+        &self,
+        rubric_id: &domain::SemanticRubricId,
+        draft: &domain::WritingDraft,
+        updated_at_ms: u64,
+    ) -> Result<domain::WritingDraft, ApplicationError>;
+    fn get_writing_draft(
+        &self,
+        rubric_id: &domain::SemanticRubricId,
+    ) -> Result<Option<domain::WritingDraft>, ApplicationError>;
+    fn delete_writing_draft(
+        &self,
+        rubric_id: &domain::SemanticRubricId,
+    ) -> Result<(), ApplicationError>;
+}
+
+pub trait ProductionCorpusRepository: Send + Sync {
+    fn replace_production_entries_for_rubric(
+        &self,
+        rubric_id: &domain::SemanticRubricId,
+        documents: &[domain::ProductionCorpusDocument],
+        entries: &[domain::ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
+    fn replace_all_production_entries(
+        &self,
+        documents: &[domain::ProductionCorpusDocument],
+        entries: &[domain::ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
+    fn list_production_entries_by_key(
+        &self,
+        language: &LanguageCode,
+        normalized_key: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<domain::ProductionCorpusHit>, ApplicationError>;
+    fn search_production_documents(
+        &self,
+        language: &LanguageCode,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<domain::ProductionCorpusHit>, ApplicationError>;
+}
+
+pub trait PersonalExpressionRepository: Send + Sync {
+    fn create_pattern(
+        &self,
+        asset: &domain::UserSentencePatternAsset,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
+    fn append_pattern_version(
+        &self,
+        pattern_id: &domain::UserSentencePatternId,
+        version: &domain::UserSentencePatternVersion,
+        updated_at_ms: u64,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
+    fn get_pattern(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Option<domain::UserSentencePatternAsset>, ApplicationError>;
+    fn list_patterns(
+        &self,
+        language: Option<&LanguageCode>,
+        query: Option<&str>,
+    ) -> Result<Vec<domain::UserSentencePatternAsset>, ApplicationError>;
+    fn list_pattern_versions(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::UserSentencePatternVersion>, ApplicationError>;
+    fn delete_pattern(&self, id: &domain::UserSentencePatternId) -> Result<bool, ApplicationError>;
+    fn save_personal_expression_attempt(
+        &self,
+        attempt: &domain::PersonalExpressionAttempt,
+    ) -> Result<domain::PersonalExpressionAttempt, ApplicationError>;
+    fn list_personal_expression_attempts(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::PersonalExpressionAttempt>, ApplicationError>;
+}
+
+pub trait TranscriptionRepository: Send + Sync {
+    fn upsert_model(
+        &self,
+        model: &domain::TranscriptionModelDescriptor,
+    ) -> Result<domain::TranscriptionModelDescriptor, ApplicationError>;
+    fn list_models(&self) -> Result<Vec<domain::TranscriptionModelDescriptor>, ApplicationError>;
+    fn get_model(
+        &self,
+        id: &domain::TranscriptionModelId,
+    ) -> Result<Option<domain::TranscriptionModelDescriptor>, ApplicationError>;
+    fn delete_model(&self, id: &domain::TranscriptionModelId) -> Result<(), ApplicationError>;
 }
 
 /// Explicit listening targets and their check history are one workflow.

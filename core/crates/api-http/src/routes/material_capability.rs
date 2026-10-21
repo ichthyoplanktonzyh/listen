@@ -1,4 +1,4 @@
-//! Material Capability HTTP surface (contract `5.0.0`).
+//! Material Capability HTTP surface (contract `5.1.0`).
 //!
 //! Wire adaptation only: the five-state capability projection, durable
 //! production attempts, and explicit attempt finalization. Attempts are the

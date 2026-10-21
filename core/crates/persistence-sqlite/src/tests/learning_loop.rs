@@ -849,5 +849,201 @@ fn review_queries_enforce_limits_and_custom_study_is_read_only() {
     assert_eq!(schedule_snapshot, after_custom);
 
     let overview = practice.review_deck_overview(Some(now)).unwrap();
-    assert_eq!(overview.counts.due, 2);
+    let due_count = |channel| {
+        overview
+            .channels
+            .iter()
+            .find(|entry| entry.channel == channel)
+            .unwrap()
+            .counts
+            .due
+    };
+    assert_eq!(due_count(application::ReviewChannel::Listening), 1);
+    assert_eq!(due_count(application::ReviewChannel::Reading), 1);
+    assert_eq!(
+        overview
+            .channels
+            .iter()
+            .map(|entry| entry.counts.due)
+            .sum::<u32>(),
+        2
+    );
+}
+
+#[test]
+fn non_listening_review_sources_do_not_write_listening_facts() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let media = services
+        .media_analysis()
+        .register_media(RegisterMedia {
+            path: "/tmp/review-source-audio.mp4".into(),
+            fingerprint: "review-source-audio".into(),
+            title: "Review source audio".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+            retain: None,
+        })
+        .unwrap();
+    let track = services
+        .media_analysis()
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id.clone(),
+            source_name: "timeline.srt".into(),
+            content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    let sentence = track.sentences.first().unwrap();
+    let lexical = upsert_word_asset(&services, "en", "hello", "hello", None, None);
+    let practice = services.practice_learning();
+    let lexical_anchor = || PracticeAnchor {
+        kind: PracticeAnchorKind::LexicalEntry,
+        id: lexical.entry.id.as_str().into(),
+        label: Some("hello".into()),
+        lexical_entry_id: Some(lexical.entry.id.clone()),
+        sentence_id: Some(sentence.id.clone()),
+        token_start: None,
+        token_end: None,
+        start_ms: None,
+        end_ms: None,
+    };
+    let sentence_anchor = || PracticeAnchor {
+        kind: PracticeAnchorKind::Sentence,
+        id: sentence.id.as_str().into(),
+        label: Some(sentence.original_text.clone()),
+        lexical_entry_id: None,
+        sentence_id: Some(sentence.id.clone()),
+        token_start: None,
+        token_end: None,
+        start_ms: Some(sentence.start.get()),
+        end_ms: Some(sentence.end.get()),
+    };
+    let create_item = |kind, id: &str, media_id, track_id, source_entry, anchors| {
+        practice
+            .create_review_item(application::CreateReviewItem {
+                source: ReviewSource {
+                    kind,
+                    id: Some(id.into()),
+                    practice_attempt_id: None,
+                    lexical_entry_id: source_entry,
+                    media_id,
+                    track_id,
+                },
+                anchors,
+                prompt_snapshot: sentence.original_text.clone(),
+            })
+            .unwrap()
+    };
+
+    // Reading and speaking review cards may carry a lexical anchor and even
+    // point back to an AV transcript. Their task source still must not create
+    // listening recall or recognition-failure facts. Plain Anki text cards
+    // have lexical anchors but no audio provenance at all.
+    let non_listening = [
+        create_item(
+            ReviewSourceKind::SpeakingAttempt,
+            "speaking-review",
+            Some(media.id.clone()),
+            Some(track.id.clone()),
+            None,
+            vec![lexical_anchor()],
+        ),
+        create_item(
+            ReviewSourceKind::Sentence,
+            "reading-review",
+            Some(media.id.clone()),
+            Some(track.id.clone()),
+            None,
+            vec![lexical_anchor()],
+        ),
+        create_item(
+            ReviewSourceKind::LexicalEntry,
+            "imported-anki-review",
+            None,
+            None,
+            None,
+            vec![lexical_anchor()],
+        ),
+    ];
+    for item in non_listening {
+        let result = practice
+            .submit_review_attempt(application::SubmitReviewAttempt {
+                item_id: item.id,
+                rating: ReviewRating::Again,
+            })
+            .unwrap();
+        assert!(result.generated_observation_ids.is_empty());
+        assert_eq!(
+            repo.get_review_attempt(&result.attempt.id).unwrap(),
+            Some(result.attempt)
+        );
+    }
+    assert!(
+        repo.list_learning_observations(&lexical.entry.id, None, 100, 0)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        repo.list_lexical_observations_by_sentence(&sentence.id)
+            .unwrap()
+            .is_empty()
+    );
+
+    // A failed audio-backed sentence-recall review retains both the
+    // channelized listening recall and the explicit contextual failure fact.
+    let listening_item = create_item(
+        ReviewSourceKind::PracticeFailure,
+        "audio-source-sentence-recall",
+        Some(media.id),
+        Some(track.id),
+        Some(lexical.entry.id.clone()),
+        vec![sentence_anchor()],
+    );
+    let review_card = practice
+        .review_queue(Some(application::now_ms()), 100)
+        .unwrap()
+        .entries
+        .into_iter()
+        .find(|entry| entry.item.id == listening_item.id)
+        .unwrap();
+    assert_eq!(
+        review_card.card.kind,
+        application::ReviewCardKind::SourceSentenceRecall
+    );
+    let result = practice
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: listening_item.id,
+            rating: ReviewRating::Again,
+        })
+        .unwrap();
+    assert_eq!(result.generated_observation_ids.len(), 1);
+    let observations = repo
+        .list_learning_observations(&lexical.entry.id, None, 100, 0)
+        .unwrap();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0].capability, LexicalCapability::Listening);
+    assert_eq!(observations[0].task_type, ObservationTaskType::ReviewRecall);
+    assert_eq!(observations[0].outcome, ObservationOutcome::Failure);
+    assert_eq!(observations[0].sentence_id.as_ref(), Some(&sentence.id));
+    assert_eq!(observations[0].media_id.as_ref(), Some(&track.media_id));
+    let failures = repo
+        .list_lexical_observations_by_sentence(&sentence.id)
+        .unwrap();
+    assert_eq!(failures.len(), 1);
+    assert_eq!(
+        failures[0].result,
+        ObservationResult::NotRecognizedInContext
+    );
 }

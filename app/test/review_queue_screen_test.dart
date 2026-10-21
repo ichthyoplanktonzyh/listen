@@ -119,6 +119,13 @@ Map<String, dynamic> _reviewItem({
   },
   'state': state,
   'card': {'kind': kind, 'cue': cue, 'answer': answer, 'target': target},
+  'origin': {
+    'kind': 'native',
+    'anki_guid': null,
+    'deck_id': null,
+    'deck_name': null,
+    'has_listening_enhancements': true,
+  },
 };
 
 /// The `/v1/review/queue` envelope: entries plus the daily-budget status that
@@ -245,6 +252,8 @@ void main() {
             controller: ReviewController(LocalReviewRepository(api)),
             resolver: _fakeResolver(),
             slicePlayer: SlicePlayerController(),
+            onStartShadowing: (_) async {},
+            onStartDelayedRetelling: (_) async {},
           ),
         ),
       );
@@ -347,6 +356,8 @@ void main() {
               controller: ReviewController(LocalReviewRepository(api)),
               resolver: _fakeResolver(),
               slicePlayer: SlicePlayerController(),
+              onStartShadowing: (_) async {},
+              onStartDelayedRetelling: (_) async {},
             ),
           ),
         );
@@ -411,6 +422,8 @@ void main() {
             controller: ReviewController(LocalReviewRepository(api)),
             resolver: _fakeResolver(),
             slicePlayer: slicePlayer,
+            onStartShadowing: (_) async {},
+            onStartDelayedRetelling: (_) async {},
           ),
         ),
       );
@@ -474,6 +487,8 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(reachable: false),
           slicePlayer: slicePlayer,
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -526,6 +541,8 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -598,6 +615,8 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -647,6 +666,8 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -692,6 +713,8 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -731,6 +754,8 @@ void main() {
           controller: ReviewController(LocalReviewRepository(api)),
           resolver: _fakeResolver(),
           slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );

@@ -2,7 +2,16 @@
 
 > Updated: 2026-10-22 (Asia/Shanghai).
 
-## Current focus
+## Recovery branch
+
+`codex/park-other-learning-channels` retains independent reading, writing,
+speaking, shadowing, semantic output assessment, personal-expression training,
+the semantic-attempt production corpus, and imported text-flashcard activities
+on the reduced baseline `f865d676`. Reading can consume media transcripts;
+document-material intake, AI conversation, and coaching remain deferred.
+This branch is a frozen recovery point for later evaluation.
+
+## Main product scope
 
 Listen limits its active implementation to one audio/video listening
 journey: acquire a Source, process and adopt a Learning Material, learn in the
@@ -52,7 +61,7 @@ and validation target fresh isolated stores; no in-place upgrade of the earlier
 broad implementation is required. This does not authorize scripts or tests to
 reset the owner's actual local data.
 
-The listening baseline uses `listen-listening.sqlite` as its default database
+This recovery branch uses `listen-channels.sqlite` (schema 66) as its default database
 filename and does not probe or move the earlier `listen.sqlite`. An explicit
 database override is still supported, but incompatible stores are rejected
 instead of reset.

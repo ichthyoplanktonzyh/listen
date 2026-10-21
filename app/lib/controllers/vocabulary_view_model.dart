@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/lexical_repository.dart';
 import '../models/api_failure.dart';
 import '../models/practice.dart';
+import '../models/production_corpus.dart';
+import '../models/semantic_task.dart';
 import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/external_link_opener.dart';
@@ -19,6 +21,7 @@ import 'occurrence_media_resolver.dart';
 /// is what makes every `copyWith` publish — the same contract `setState` had.
 class VocabularyState {
   VocabularyState({
+    this.capability = 'listening',
     this.assessment,
     this.search = '',
     this.loading = true,
@@ -30,15 +33,23 @@ class VocabularyState {
     this.semanticSearching = false,
     this.pronunciationAudioUrl,
     this.pronunciationLoading = false,
+    List<ProductionCorpusHitView>? productionHits,
+    this.productionLoadFailed = false,
     List<CorpusOccurrence>? homeResults,
     this.homeSearching = false,
   }) : _words = List.unmodifiable(words),
        _semanticHits = List.unmodifiable(semanticHits),
+       _productionHits = productionHits == null
+           ? null
+           : List.unmodifiable(productionHits),
        _homeResults = homeResults == null
            ? null
            : List.unmodifiable(homeResults);
 
-  /// Null means the learner has not chosen a listening-status filter.
+  /// The vocabulary channel shown by the entry book.
+  final String capability;
+
+  /// Null means the learner has not chosen an assessment filter.
   final String? assessment;
   final String search;
   final bool loading;
@@ -53,12 +64,17 @@ class VocabularyState {
   final bool semanticSearching;
   final String? pronunciationAudioUrl;
   final bool pronunciationLoading;
+  final List<ProductionCorpusHitView>? _productionHits;
+  List<ProductionCorpusHitView>? get productionHits =>
+      _productionHits == null ? null : List.unmodifiable(_productionHits);
+  final bool productionLoadFailed;
   final List<CorpusOccurrence>? _homeResults;
   List<CorpusOccurrence>? get homeResults =>
       _homeResults == null ? null : List.unmodifiable(_homeResults);
   final bool homeSearching;
 
   VocabularyState copyWith({
+    String? capability,
     String? assessment,
     bool clearAssessment = false,
     String? search,
@@ -73,10 +89,14 @@ class VocabularyState {
     String? pronunciationAudioUrl,
     bool clearPronunciationAudioUrl = false,
     bool? pronunciationLoading,
+    List<ProductionCorpusHitView>? productionHits,
+    bool clearProductionHits = false,
+    bool? productionLoadFailed,
     List<CorpusOccurrence>? homeResults,
     bool clearHomeResults = false,
     bool? homeSearching,
   }) => VocabularyState(
+    capability: capability ?? this.capability,
     assessment: clearAssessment ? null : assessment ?? this.assessment,
     search: search ?? this.search,
     loading: loading ?? this.loading,
@@ -90,6 +110,10 @@ class VocabularyState {
         ? null
         : pronunciationAudioUrl ?? this.pronunciationAudioUrl,
     pronunciationLoading: pronunciationLoading ?? this.pronunciationLoading,
+    productionHits: clearProductionHits
+        ? null
+        : productionHits ?? this.productionHits,
+    productionLoadFailed: productionLoadFailed ?? this.productionLoadFailed,
     homeResults: clearHomeResults ? null : homeResults ?? this.homeResults,
     homeSearching: homeSearching ?? this.homeSearching,
   );
@@ -175,7 +199,7 @@ class VocabularyViewModel extends ChangeNotifier {
 
   // ── The book ──
 
-  /// Runs the book query for the listening vocabulary and selected status.
+  /// Runs the book query for the selected capability and assessment.
   ///
   /// No `try`: a failed list has no state today, so the error escapes as an
   /// unhandled async error and `loading` stays true forever (contract D1).
@@ -185,11 +209,17 @@ class VocabularyViewModel extends ChangeNotifier {
     _set((state) => state.copyWith(loading: true));
     final values = await _repository.listVocabulary(
       language: language,
-      capability: 'listening',
+      capability: state.capability,
       assessment: state.assessment,
       search: state.search,
     );
     _set((state) => state.copyWith(words: values, loading: false));
+  }
+
+  void selectCapability(String capability) {
+    if (state.capability == capability) return;
+    _set((state) => state.copyWith(capability: capability));
+    unawaited(load());
   }
 
   void selectAssessment(String? value) {
@@ -221,6 +251,8 @@ class VocabularyViewModel extends ChangeNotifier {
       (state) => state.copyWith(
         clearPronunciationAudioUrl: true,
         pronunciationLoading: true,
+        clearProductionHits: true,
+        productionLoadFailed: false,
       ),
     );
     final value = await _repository.entryDetails(entryId);
@@ -228,6 +260,7 @@ class VocabularyViewModel extends ChangeNotifier {
     // The identity card can paint now — nothing below is awaited here.
     _set((state) => state.copyWith(details: value));
     unawaited(_loadEntryPronunciation(value.entry, request));
+    unawaited(_loadEntryProduction(value.entry, request));
   }
 
   /// Whether a decoration that just resolved still belongs to the open entry.
@@ -261,6 +294,29 @@ class VocabularyViewModel extends ChangeNotifier {
         pronunciationAudioUrl: audio,
         clearPronunciationAudioUrl: audio == null,
         pronunciationLoading: false,
+      ),
+    );
+  }
+
+  Future<void> _loadEntryProduction(LexicalEntry entry, int request) async {
+    List<ProductionCorpusHitView> output;
+    var failed = false;
+    try {
+      output = await _repository.searchProductionCorpus(
+        language: entry.language,
+        query: entry.kind == 'phrase'
+            ? entry.displayForm
+            : entry.normalizedForm,
+      );
+    } catch (_) {
+      output = const [];
+      failed = true;
+    }
+    if (!_detailStillCurrent(request)) return;
+    _set(
+      (state) => state.copyWith(
+        productionHits: output,
+        productionLoadFailed: failed,
       ),
     );
   }
@@ -423,14 +479,15 @@ class VocabularyViewModel extends ChangeNotifier {
   // Each returns the failure to name, or `null` when it worked. The sentence
   // itself belongs to the view.
 
-  Future<ApiFailure?> setListeningOverride(
+  Future<ApiFailure?> setCapabilityOverride(
     LexicalEntry entry,
+    String capability,
     String? conclusion,
   ) async {
     try {
       await _repository.setCapabilityOverride(
         entry.id,
-        'listening',
+        capability,
         conclusion: conclusion,
       );
       await openEntry(entry.id);
@@ -440,6 +497,11 @@ class VocabularyViewModel extends ChangeNotifier {
       return _repository.failureDetail(error);
     }
   }
+
+  Future<ApiFailure?> setListeningOverride(
+    LexicalEntry entry,
+    String? conclusion,
+  ) => setCapabilityOverride(entry, 'listening', conclusion);
 
   Future<ApiFailure?> saveContent(
     LexicalEntry entry,
@@ -540,12 +602,16 @@ class VocabularyViewModel extends ChangeNotifier {
 
   Future<List<LearningObservationView>> observationHistory(
     String lexicalEntryId, {
+    String? capability,
     int offset = 0,
   }) => _repository.observationHistory(
     lexicalEntryId,
-    capability: 'listening',
+    capability: capability ?? state.capability,
     offset: offset,
   );
+
+  Future<SemanticAttemptView> productionAttempt(String attemptId) =>
+      _repository.productionAttempt(attemptId);
 
   // ── Practice exits ──
 

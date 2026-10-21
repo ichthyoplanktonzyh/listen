@@ -1,5 +1,7 @@
 import '../../models/api_failure.dart';
 import '../../models/practice.dart';
+import '../../models/production_corpus.dart';
+import '../../models/semantic_task.dart';
 import '../../models/semantic_embedding.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
@@ -75,6 +77,14 @@ class LexicalRepository implements OccurrenceMediaRepository {
     capability: capability,
     offset: offset,
   );
+
+  Future<List<ProductionCorpusHitView>> searchProductionCorpus({
+    required String language,
+    required String query,
+  }) => _api.searchProductionCorpus(language: language, query: query);
+
+  Future<SemanticAttemptView> productionAttempt(String attemptId) =>
+      _api.semanticAttempt(attemptId);
 
   // ── Semantic search ──
 

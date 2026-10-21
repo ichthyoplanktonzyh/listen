@@ -1,20 +1,23 @@
 //! Phase 3.12 vendor-neutral LLM provider surface.
 //!
 //! Manages provider profiles (secure config, never the secret) and dispatches
-//! provider-backed subtitle analysis. The raw key enters exactly once through
+//! provider-backed rubric/judgment. The raw key enters exactly once through
 //! `register_llm_provider` (write-only) and is never returned: responses use
 //! [`ProviderProfileView`], which exposes `has_credential`, not `auth_ref`.
 //!
-//! Provider credentials never enter responses; analysis output is validated
-//! and saved through the media-analysis use case.
+//! Judgments produced here are unqualified `heuristic_proxy` (ADR 0022 §7): no
+//! observation or projection is written, and nothing is surfaced as learning
+//! feedback until Phase 3.12.1 grants display qualification.
 
 use crate::{
     ApiError, ApiState, ApplicationError, Deserialize, Json, Path, Serialize, State, StatusCode,
 };
+use application::RubricGenerationRequest;
 use domain::{
-    CapabilityClaim, CostBudget, DataRetentionPreference, LlmAdapterKind, LlmBatchPolicy,
-    LlmProviderProfile, LlmProviderProfileId, LlmUse, ProviderCapability, SenseGroupAnalysis,
-    SubtitleTrackId, TimelineStatus, llm_provider_profile_id,
+    CapabilityClaim, CostBudget, DataRetentionPreference, LanguageCode, LlmAdapterKind,
+    LlmBatchPolicy, LlmProviderProfile, LlmProviderProfileId, LlmUse, ProviderCapability,
+    RubricPointImportance, SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind,
+    SenseGroupAnalysis, SubtitleTrackId, TimelineStatus, llm_provider_profile_id,
 };
 
 /// Client-facing view of a profile. Deliberately omits `auth_ref`: the settings
@@ -209,6 +212,168 @@ pub(crate) async fn probe_llm_provider(
         .await?;
     Ok(Json(ProbeResult {
         structured_output: claim,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProviderJudgeRequest {
+    pub attempt_id: String,
+    pub response_revision: u32,
+}
+
+/// Judges one stored attempt through a provider and records the result. On any
+/// provider error (offline/auth/refusal/truncated/schema-invalid) nothing is
+/// written and a standardized, secret-free error is returned.
+pub(crate) async fn judge_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderJudgeRequest>,
+) -> Result<Json<SemanticJudgment>, ApiError> {
+    let attempt_id =
+        SemanticTaskAttemptId::parse(request.attempt_id).map_err(ApplicationError::from)?;
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
+    let response_revision = request.response_revision;
+    let now = application::now_ms();
+    let judgment = state
+        .application
+        .execute_async("llm.judge_attempt", move |services| async move {
+            services
+                .llm_providers()
+                .judge_attempt(
+                    &id,
+                    &attempt_id,
+                    response_revision,
+                    now,
+                    secret_store.as_ref(),
+                    factory.as_ref(),
+                )
+                .await
+        })
+        .await?;
+    Ok(Json(judgment))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProviderFeedbackRequest {
+    pub attempt_id: String,
+    pub response_revision: u32,
+}
+
+/// Free-text qualitative feedback view. Ephemeral by design: nothing is
+/// persisted server-side, so a refused or cut-off answer costs nothing.
+#[derive(Debug, Serialize)]
+pub(crate) struct OutputFeedbackView {
+    pub feedback: String,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+}
+
+/// Gives teacher-style free-text feedback on one stored output-task attempt
+/// (speaking/writing), with the rubric source transcript and task prompt as
+/// context. Distinct from `judge_via_llm_provider`, which Reading keeps for
+/// per-point rubric judgments.
+pub(crate) async fn feedback_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderFeedbackRequest>,
+) -> Result<Json<OutputFeedbackView>, ApiError> {
+    let attempt_id =
+        SemanticTaskAttemptId::parse(request.attempt_id).map_err(ApplicationError::from)?;
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
+    let response_revision = request.response_revision;
+    let draft = state
+        .application
+        .execute_async("llm.feedback_attempt", move |services| async move {
+            services
+                .llm_providers()
+                .feedback_on_attempt(
+                    &id,
+                    &attempt_id,
+                    response_revision,
+                    secret_store.as_ref(),
+                    factory.as_ref(),
+                )
+                .await
+        })
+        .await?;
+    Ok(Json(OutputFeedbackView {
+        feedback: draft.feedback,
+        model_id: draft.model_id,
+        prompt_version: draft.prompt_version,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProviderRubricRequest {
+    pub purpose: SemanticTaskKind,
+    pub source_language: LanguageCode,
+    pub response_language: LanguageCode,
+    pub transcript_snapshot: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct RubricPointDraftView {
+    pub importance: RubricPointImportance,
+    pub statement: String,
+    pub accepted_paraphrase_notes: Option<String>,
+}
+
+/// Content-only rubric proposal. Deliberately omits identity/version/source
+/// snapshot: those are minted only when the user saves an approved rubric
+/// through the manual create path, so the vendor layer never becomes a rubric
+/// identity writer (ADR 0021 four-layer separation).
+#[derive(Debug, Serialize)]
+pub(crate) struct RubricDraftView {
+    pub points: Vec<RubricPointDraftView>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+}
+
+/// Generates a rubric draft (information points only) for one source segment.
+/// The draft is not persisted; the client shows it for review/edit and saves an
+/// approved rubric through the normal create path. On any provider error nothing
+/// is returned and a standardized, secret-free error is surfaced.
+pub(crate) async fn generate_rubric_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderRubricRequest>,
+) -> Result<Json<RubricDraftView>, ApiError> {
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
+    let generation = RubricGenerationRequest {
+        purpose: request.purpose,
+        source_language: request.source_language,
+        response_language: request.response_language,
+        transcript_snapshot: request.transcript_snapshot,
+    };
+    let draft = state
+        .application
+        .execute_async("llm.generate_rubric", move |services| async move {
+            services
+                .llm_providers()
+                .generate_rubric(&id, &generation, secret_store.as_ref(), factory.as_ref())
+                .await
+        })
+        .await?;
+    Ok(Json(RubricDraftView {
+        points: draft
+            .points
+            .into_iter()
+            .map(|point| RubricPointDraftView {
+                importance: point.importance,
+                statement: point.statement,
+                accepted_paraphrase_notes: point.accepted_paraphrase_notes,
+            })
+            .collect(),
+        model_id: draft.model_id,
+        prompt_version: draft.prompt_version,
+        schema_version: draft.schema_version,
     }))
 }
 

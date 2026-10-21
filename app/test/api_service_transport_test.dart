@@ -296,55 +296,48 @@ void main() {
       expect(result.hits.single.similarity, closeTo(0.82, 0.001));
     });
 
-    test(
-      'custom study sends listening only and rejects other channels early',
-      () async {
-        final calls = <String>[];
-        final api = LocalApi.withTransport(
-          baseUrl: 'http://test',
-          token: 'tok',
-          transport: (method, path, body) async {
-            calls.add('$method $path');
-            expect(jsonDecode(body!), {
-              'kind': 'channel',
-              'channel': 'listening',
-              'limit': 10,
-            });
-            return (
-              statusCode: 200,
-              body: jsonEncode({
-                'entries': <Object>[],
-                'advances_normal_schedule': false,
-              }),
-            );
-          },
-        );
+    test('custom study serializes the selected review channel', () async {
+      final calls = <String>[];
+      final channels = <String>[];
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          calls.add('$method $path');
+          final payload = jsonDecode(body!) as Map<String, dynamic>;
+          expect(payload['kind'], 'channel');
+          expect(payload['limit'], 10);
+          channels.add(payload['channel'] as String);
+          return (
+            statusCode: 200,
+            body: jsonEncode({
+              'entries': <Object>[],
+              'advances_normal_schedule': false,
+            }),
+          );
+        },
+      );
 
-        await expectLater(
-          api.customStudy(
-            const CustomStudyRequest(
-              kind: CustomStudyKind.channel,
-              channel: 'speaking',
-              limit: 10,
-            ),
-          ),
-          throwsArgumentError,
-        );
-        expect(calls, isEmpty);
-
+      for (final channel in const [
+        'listening',
+        'reading',
+        'speaking',
+        'writing',
+      ]) {
         final queue = await api.customStudy(
-          const CustomStudyRequest(
+          CustomStudyRequest(
             kind: CustomStudyKind.channel,
-            channel: 'listening',
+            channel: channel,
             limit: 10,
           ),
         );
-
-        expect(calls, ['POST /v1/review/custom-study']);
         expect(queue.entries, isEmpty);
         expect(queue.advancesNormalSchedule, isFalse);
-      },
-    );
+      }
+
+      expect(calls, List.filled(4, 'POST /v1/review/custom-study'));
+      expect(channels, ['listening', 'reading', 'speaking', 'writing']);
+    });
 
     group('Core 5.0 media membership contract', () {
       late Directory temp;

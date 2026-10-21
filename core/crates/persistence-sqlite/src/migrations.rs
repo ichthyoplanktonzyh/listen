@@ -2,13 +2,12 @@ use rusqlite::Connection;
 
 use super::PersistenceError;
 
-/// Version 64 is the first listening-focused fresh-store schema. Earlier
-/// development schemas are intentionally unsupported and are never rewritten.
-pub const MIGRATION_VERSION: u32 = 64;
+/// Version 66 is the fresh store for the parked learning-channel experiment.
+pub const MIGRATION_VERSION: u32 = 66;
 
-/// Initializes an empty SQLite database from the single listening-focused
-/// bootstrap. Existing schemas are accepted only when they already use the
-/// current version; no historical migration or automatic reset is performed.
+/// Initializes an empty branch-specific store from the listening foundation
+/// plus the channel and imported-card schema. Existing schemas are accepted
+/// only when they already use this branch's version.
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
     let current: u32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -33,6 +32,9 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
 
     let tx = connection.unchecked_transaction()?;
     tx.execute_batch(include_str!("../migrations/0064_listening_focus.sql"))?;
+    tx.execute_batch(include_str!(
+        "../migrations/0066_other_learning_channels.sql"
+    ))?;
     tx.pragma_update(None, "user_version", MIGRATION_VERSION)?;
     tx.commit()?;
     Ok(())

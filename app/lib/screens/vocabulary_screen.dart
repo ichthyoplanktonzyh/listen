@@ -10,6 +10,7 @@ import '../controllers/vocabulary_view_model.dart';
 import '../controllers/semantic_search_view_model.dart';
 import '../localization.dart';
 import '../models/api_failure.dart';
+import '../models/production_corpus.dart';
 import '../models/types.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
@@ -23,6 +24,9 @@ import '../widgets/vocabulary/semantic_search_dialog.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
 import '../widgets/common/capability_viz.dart' show capabilityAssessmentColor;
 import '../widgets/vocabulary/vocabulary_book_view.dart';
+
+typedef VocabularyShadowingCallback =
+    Future<void> Function(String path, Map<String, dynamic> occurrence);
 
 /// The listening dictionary workbench.
 ///
@@ -46,6 +50,7 @@ class VocabularyScreen extends StatefulWidget {
     required this.auxiliaryAudio,
     this.initialEntryId,
     this.onPauseBackgroundPlayback,
+    this.onStartShadowing,
   });
 
   final VocabularyViewModel viewModel;
@@ -61,6 +66,8 @@ class VocabularyScreen extends StatefulWidget {
   /// Pauses whatever is playing behind this route (the primary player) so a
   /// slice owns audio focus alone, matching the workbench behaviour.
   final Future<void> Function()? onPauseBackgroundPlayback;
+  final Future<void> Function(String path, Map<String, dynamic> occurrence)?
+  onStartShadowing;
 
   @override
   State<VocabularyScreen> createState() => _VocabularyScreenState();
@@ -68,6 +75,12 @@ class VocabularyScreen extends StatefulWidget {
 
 class _VocabularyScreenState extends State<VocabularyScreen> {
   static const assessmentFilters = ['acquired', 'not_acquired', 'unassessed'];
+  static const _capabilities = [
+    ('reading', 'capabilityReading'),
+    ('listening', 'capabilityListening'),
+    ('speaking', 'capabilitySpeaking'),
+    ('writing', 'capabilityWriting'),
+  ];
 
   VocabularyViewModel get viewModel => widget.viewModel;
 
@@ -89,7 +102,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     // The hunting controller is shared with the app shell, whose
     // ListenableBuilder is already subscribed while this route's first build
     // is in progress — load() notifies synchronously, so defer it past the
-    // frame (same pattern as realtime_conversation_panel).
+    // frame, after the screen's own listener has attached.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(hunting.load());
     });
@@ -229,6 +242,61 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       return;
     }
     await _playOccurrenceMap(playable);
+  }
+
+  Future<void> _startShadowingOccurrence(LexicalOccurrence occurrence) async {
+    final path = slicePlayer.state.path;
+    final callback = widget.onStartShadowing;
+    if (path == null || callback == null) return;
+    await slicePlayer.pause();
+    await callback(path, occurrence.toJson());
+  }
+
+  Future<void> _openProductionAttempt(ProductionCorpusHitView hit) async {
+    final attempt = await viewModel.productionAttempt(hit.document.attemptId);
+    if (!mounted) return;
+    final l = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.text('myOutputAttempt')),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.contentColumnMax,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(hit.document.responseText),
+              const SizedBox(height: ListenSpacing.gap8),
+              Text(
+                '${l.text('myOutputActivityLabel')}: '
+                '${hit.document.activityKind.replaceAll('_', ' ')} · '
+                '${l.text('revision')} ${hit.document.responseRevision}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: ListenSpacing.gap12),
+              for (final response in attempt.responses) ...[
+                Text(
+                  '${l.text('revision')} ${response.revision}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: ListenSpacing.gap4),
+                SelectableText(response.transcript),
+                const SizedBox(height: ListenSpacing.gap12),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.text('close')),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Outcomes the view turns into a sentence ──
@@ -525,12 +593,29 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               onPlayCorpus: (occurrence) => unawaited(_playCorpus(occurrence)),
               onCollectCorpus: (occurrence) =>
                   _collectCorpus(value.entry, occurrence),
+              showProductionCorpus: true,
+              productionHits: state.productionHits,
+              productionLoadFailed: state.productionLoadFailed,
+              onOpenProductionAttempt: (hit) =>
+                  unawaited(_openProductionAttempt(hit)),
+              onShadowing: widget.onStartShadowing == null
+                  ? null
+                  : _startShadowingOccurrence,
+              evidenceCapability: state.capability,
               pronunciationLoading: state.pronunciationLoading,
-              onListeningOverride: (conclusion) => _reportUpdate(
-                () => viewModel.setListeningOverride(value.entry, conclusion),
+              onCapabilityOverride: (capability, conclusion) => _reportUpdate(
+                () => viewModel.setCapabilityOverride(
+                  value.entry,
+                  capability,
+                  conclusion,
+                ),
               ),
               onLoadEvidenceHistory: ({String? capability, int offset = 0}) =>
-                  viewModel.observationHistory(value.entry.id, offset: offset),
+                  viewModel.observationHistory(
+                    value.entry.id,
+                    capability: capability,
+                    offset: offset,
+                  ),
               onSaveContent: (definition, note) =>
                   _saveContent(value.entry, definition, note),
               onCreateSenseFolder: (label, definition, gloss, externalRef) =>
@@ -674,9 +759,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     );
   }
 
-  /// The list column (left of the workbench, or the whole narrow screen): the
-  /// search box, the persistent gap entry, the channel/assessment lens, then
-  /// the word list.
+  /// The list column (left of the workbench, or the whole narrow screen):
+  /// search, channel and assessment filters, then the word list.
   Widget _listColumn(AppLocalizations l) {
     final colors = Theme.of(context).colorScheme;
     return Column(
@@ -709,6 +793,17 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               ],
             ],
           ),
+        ),
+        _filterRow(
+          children: [
+            for (final (value, label) in _capabilities)
+              ChoiceChip(
+                label: Text(l.text(label)),
+                visualDensity: VisualDensity.compact,
+                selected: state.capability == value,
+                onSelected: (_) => viewModel.selectCapability(value),
+              ),
+          ],
         ),
         _filterRow(
           children: [
@@ -763,6 +858,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     return VocabularyBookView(
       words: state.words,
       onWord: (value) => unawaited(viewModel.openEntry(value.entry.id)),
+      focusCapability: state.capability,
       selectedEntryId: state.details?.entry.id,
     );
   }

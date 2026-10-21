@@ -124,15 +124,52 @@ class VocabularyActionsCoordinator {
     }
   }
 
-  Future<void> setListeningOverride(String? conclusion) async {
+  Future<void> setSelectedWordStatus(String? selected) async {
     if (!_requireRepository()) return;
     try {
-      await workflow.setListeningOverride(
+      final update = await workflow.setSelectedWordStatus(
+        selected: selected,
+        language: settings.resolveLearningLanguage(
+          subtitle.primaryTrack?.language,
+        ),
+        learning: learning,
+        isMounted: isMounted,
+        sourceFor: _sourceFor,
+      );
+      if (isMounted() && update != null) {
+        player.setStatus(
+          text('statusGlobalWordStatusUpdated').replaceAll(
+            '{word}',
+            update.tokenText,
+          ),
+        );
+      }
+      await refreshDiagnosis();
+    } catch (error) {
+      if (isMounted()) {
+        player.setStatus(
+          text('statusWordUpdateFailed'),
+          error: true,
+          failure: workflow.failureDetail(error),
+        );
+      }
+    }
+  }
+
+  Future<void> setCapabilityOverride(
+    String capability,
+    String? conclusion,
+  ) async {
+    if (!_requireRepository()) return;
+    try {
+      await workflow.setCapabilityOverride(
+        capability: capability,
         conclusion: conclusion,
         learning: learning,
         isMounted: isMounted,
         sourceFor: _sourceFor,
       );
+      await refreshDiagnosis();
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
@@ -143,6 +180,9 @@ class VocabularyActionsCoordinator {
       }
     }
   }
+
+  Future<void> setListeningOverride(String? conclusion) =>
+      setCapabilityOverride('listening', conclusion);
 
   Future<void> saveSelectedLearningContent(
     String? definition,

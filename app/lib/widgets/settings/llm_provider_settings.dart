@@ -9,9 +9,9 @@ import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
 import '../common/listen_loading.dart';
 
-/// Configure vendor-neutral LLM providers for optional sense-group analysis.
-/// Keys are write-only (stored in the OS keychain by the backend); this widget
-/// never displays or holds a secret after submit.
+/// Configure vendor-neutral LLM providers for semantic tasks and optional
+/// sense-group analysis. Keys are write-only (stored in the OS keychain by the
+/// backend); this widget never displays or holds a secret after submit.
 class LlmProviderSettings extends StatefulWidget {
   const LlmProviderSettings({super.key, required this.viewModel});
 
@@ -29,6 +29,8 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   final _modelCtrl = TextEditingController();
   final _secretCtrl = TextEditingController();
   String _adapterKind = 'openai_chat_completions';
+  bool _useRubric = false;
+  bool _useJudgment = true;
   bool _useSenseGroups = true;
 
   @override
@@ -47,7 +49,11 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   }
 
   Future<void> _register() async {
-    final uses = <String>[if (_useSenseGroups) 'sense_group_partition'];
+    final uses = <String>[
+      if (_useRubric) 'rubric_generation',
+      if (_useJudgment) 'semantic_judgment',
+      if (_useSenseGroups) 'sense_group_partition',
+    ];
     if (_baseUrlCtrl.text.trim().isEmpty ||
         _modelCtrl.text.trim().isEmpty ||
         uses.isEmpty) {
@@ -118,7 +124,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
           ),
         ),
         const SizedBox(height: ListenSpacing.gap8),
-        Text(l.text('llmSenseGroupNotice'), style: theme.textTheme.bodySmall),
+        Text(l.text('llmNotQualified'), style: theme.textTheme.bodySmall),
         const SizedBox(height: ListenSpacing.gap12),
         if (state.failure != null)
           Padding(
@@ -265,13 +271,38 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         ),
         const SizedBox(height: ListenSpacing.gap8),
         Text(l.text('llmAllowedUses')),
-        CheckboxListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: _useSenseGroups,
-          onChanged: (v) => setState(() => _useSenseGroups = v ?? false),
-          title: Text(l.text('llmUseSenseGroups')),
+        Wrap(
+          children: [
+            for (final option in [
+              ('rubric_generation', l.text('llmUseRubric'), _useRubric),
+              ('semantic_judgment', l.text('llmUseJudgment'), _useJudgment),
+              (
+                'sense_group_partition',
+                l.text('llmUseSenseGroups'),
+                _useSenseGroups,
+              ),
+            ])
+              SizedBox(
+                width: 220,
+                child: CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: option.$3,
+                  onChanged: (value) => setState(() {
+                    switch (option.$1) {
+                      case 'rubric_generation':
+                        _useRubric = value ?? false;
+                      case 'semantic_judgment':
+                        _useJudgment = value ?? false;
+                      case 'sense_group_partition':
+                        _useSenseGroups = value ?? false;
+                    }
+                  }),
+                  title: Text(option.$2),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: ListenSpacing.gap8),
         Align(

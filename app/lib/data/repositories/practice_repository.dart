@@ -8,6 +8,16 @@ abstract interface class PracticeRepository {
   Future<PracticeItem> createItem(CreatePracticeItem input);
   Future<PracticeAttempt> submitAttempt(SubmitPracticeAttempt input);
   Future<ReviewItem> createReview(CreateReviewItem input);
+  Future<RecordingAsset> createRecording(CreateRecordingAsset input);
+  Future<PracticeAttempt> completeShadowing({
+    required String itemId,
+    required String recordingId,
+  });
+  Future<ShadowingComparison> compareShadowing({
+    required String recordingId,
+    required String referenceWavPath,
+  });
+  Future<void> deleteRecording(String id);
 }
 
 final class LocalPracticeRepository implements PracticeRepository {
@@ -36,6 +46,33 @@ final class LocalPracticeRepository implements PracticeRepository {
   @override
   Future<ReviewItem> createReview(CreateReviewItem input) =>
       _current.createReviewItem(input);
+
+  @override
+  Future<RecordingAsset> createRecording(CreateRecordingAsset input) =>
+      _current.createRecordingAsset(input);
+
+  @override
+  Future<PracticeAttempt> completeShadowing({
+    required String itemId,
+    required String recordingId,
+  }) => _current.completeShadowingAttempt(
+    itemId: itemId,
+    recordingId: recordingId,
+  );
+
+  @override
+  Future<ShadowingComparison> compareShadowing({
+    required String recordingId,
+    required String referenceWavPath,
+  }) => _current.compareShadowing(
+    recordingId: recordingId,
+    referenceWavPath: referenceWavPath,
+  );
+
+  @override
+  Future<void> deleteRecording(String id) async {
+    await _current.deleteRecordingAsset(id);
+  }
 }
 
 final class UnavailablePracticeRepository implements PracticeRepository {
@@ -55,4 +92,19 @@ final class UnavailablePracticeRepository implements PracticeRepository {
       _unavailable;
   @override
   Future<ReviewItem> createReview(CreateReviewItem input) => _unavailable;
+  @override
+  Future<RecordingAsset> createRecording(CreateRecordingAsset input) =>
+      _unavailable;
+  @override
+  Future<PracticeAttempt> completeShadowing({
+    required String itemId,
+    required String recordingId,
+  }) => _unavailable;
+  @override
+  Future<ShadowingComparison> compareShadowing({
+    required String recordingId,
+    required String referenceWavPath,
+  }) => _unavailable;
+  @override
+  Future<void> deleteRecording(String id) => _unavailable;
 }

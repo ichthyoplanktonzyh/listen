@@ -17,7 +17,12 @@ pub enum ObservationTaskType {
     Cloze,
     Dictation,
     SubtitleFade,
+    Shadowing,
     ReviewRecall,
+    /// Direct word-level understanding mark made in the reading posture.
+    ReadingContextMarking,
+    /// User-confirmed production of an explicitly selected lexical target.
+    SpeakingProduction,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +122,35 @@ pub fn observation_spec_for_marking(result: ObservationResult) -> ObservationSpe
     }
 }
 
+pub fn observation_spec_for_reading_marking(
+    understood: bool,
+    translation_visible: bool,
+) -> ObservationSpec {
+    ObservationSpec {
+        task_type: ObservationTaskType::ReadingContextMarking,
+        capability: LexicalCapability::Reading,
+        assistance: if translation_visible {
+            AssistanceLevel::FullText
+        } else {
+            AssistanceLevel::None
+        },
+        outcome: if understood {
+            ObservationOutcome::Success
+        } else {
+            ObservationOutcome::Failure
+        },
+    }
+}
+
+pub fn observation_spec_for_speaking_production(assistance: AssistanceLevel) -> ObservationSpec {
+    ObservationSpec {
+        task_type: ObservationTaskType::SpeakingProduction,
+        capability: LexicalCapability::Speaking,
+        assistance,
+        outcome: ObservationOutcome::Success,
+    }
+}
+
 /// Returns `None` for skipped and non-evaluated completed attempts: neither is
 /// capability evidence.
 pub fn observation_spec_for_practice(
@@ -144,6 +178,11 @@ pub fn observation_spec_for_practice(
             ObservationTaskType::SubtitleFade,
             LexicalCapability::Listening,
             AssistanceLevel::PartialText,
+        ),
+        PracticeKind::Shadowing => (
+            ObservationTaskType::Shadowing,
+            LexicalCapability::Speaking,
+            AssistanceLevel::FullText,
         ),
     };
     Some(ObservationSpec {

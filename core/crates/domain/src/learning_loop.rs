@@ -21,6 +21,7 @@ pub enum PracticeKind {
     Cloze,
     Dictation,
     SubtitleFade,
+    Shadowing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +80,7 @@ pub enum ReviewSourceKind {
     Chunk,
     Sentence,
     ConnectedSpeech,
+    SpeakingAttempt,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

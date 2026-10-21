@@ -260,13 +260,17 @@ const _rawTransportMapBaseline = <String, int>{
   'lib/controllers/learning_assets_view_models.dart': 3,
   'lib/controllers/learning_controller.dart': 1,
   'lib/controllers/learning_flow_view_models.dart': 3,
-  'lib/controllers/learning_workflow_controller.dart': 5,
+  'lib/controllers/learning_workflow_controller.dart': 7,
   'lib/controllers/media_session_coordinator.dart': 3,
   'lib/controllers/occurrence_media_resolver.dart': 2,
   'lib/controllers/playback_actions_coordinator.dart': 1,
+  'lib/controllers/practice_actions_coordinator.dart': 1,
+  'lib/controllers/reading_channel_coordinator.dart': 2,
   'lib/controllers/slice_player_controller.dart': 2,
   'lib/controllers/vocabulary_actions_coordinator.dart': 1,
   'lib/controllers/vocabulary_view_model.dart': 2,
+  'lib/controllers/writing_channel_coordinator.dart': 2,
+  'lib/controllers/writing_task_controller.dart': 1,
   'lib/data/repositories/core_session_repository.dart': 2,
   'lib/data/repositories/external_vocabulary_repository.dart': 2,
   'lib/data/repositories/learning_assets_repository.dart': 2,
@@ -274,15 +278,22 @@ const _rawTransportMapBaseline = <String, int>{
   'lib/data/repositories/lexical_repository.dart': 2,
   'lib/data/repositories/media_session_repository.dart': 2,
   'lib/data/repositories/playback_repository.dart': 3,
-  'lib/screens/vocabulary_screen.dart': 1,
+  'lib/data/repositories/reading_task_repository.dart': 2,
+  'lib/data/repositories/speaking_task_repository.dart': 2,
+  'lib/data/repositories/writing_task_repository.dart': 4,
+  'lib/screens/vocabulary_screen.dart': 3,
   'lib/widgets/flows/learning_flows.dart': 2,
   'lib/widgets/layout/side_panel.dart': 1,
   'lib/widgets/panels/word_learning_panel.dart': 1,
+  'lib/widgets/panels/reading_word_inspector.dart': 1,
+  'lib/widgets/channels/reading_channel.dart': 1,
   'lib/widgets/vocabulary/vocabulary_details_view.dart': 4,
 };
 
 const _modelWireCouplingBaseline = <String, int>{
   'lib/models/api_failure.dart': 1,
+  'lib/models/personal_expression.dart': 33,
+  'lib/models/reading.dart': 2,
   // 23, down from 27: the whole-media TranscriptionJobChangedEvent wire model
   // is gone. The app prepares transcripts through the pinned listen-gen package
   // journey and no longer parses Core's transcription-job SSE envelopes.
@@ -290,11 +301,13 @@ const _modelWireCouplingBaseline = <String, int>{
   'lib/models/listening.dart': 12,
   'lib/models/llm_provider.dart': 14,
   // Listening review DTOs no longer carry removed study channels.
-  'lib/models/practice.dart': 84,
-  'lib/models/review_deck.dart': 35,
+  'lib/models/practice.dart': 138,
+  'lib/models/review_deck.dart': 51,
+  'lib/models/production_corpus.dart': 10,
   // 28, down from 30: the whole-media TranscriptionJobView wire model is gone
   // along with the Core transcription-job surface it decoded.
-  'lib/models/runtime_resources.dart': 18,
+  'lib/models/runtime_resources.dart': 28,
+  'lib/models/semantic_task.dart': 67,
   'lib/models/semantic_embedding.dart': 18,
   'lib/models/speech_synthesis.dart': 12,
   'lib/models/syntax_capability.dart': 4,

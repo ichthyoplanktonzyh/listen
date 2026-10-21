@@ -134,7 +134,7 @@ void main() {
     expect(selected, same(word));
   });
 
-  test('book status reflects listening assessment only', () {
+  test('book status follows the selected capability lens', () {
     LexicalCapabilityProfile profile({String? listening, String? speaking}) =>
         LexicalCapabilityProfile.fromJson({
           'lexical_entry_id': 'e1',
@@ -160,19 +160,23 @@ void main() {
           'writing': <String, dynamic>{},
         });
 
-    expect(vocabularyRowStatus(null), VocabularyRowStatus.firstSeen);
     expect(
-      vocabularyRowStatus(profile(speaking: 'not_acquired')),
+      vocabularyRowStatus(null, 'listening'),
+      VocabularyRowStatus.firstSeen,
+    );
+    expect(
+      vocabularyRowStatus(profile(speaking: 'not_acquired'), 'listening'),
       VocabularyRowStatus.unassessed,
     );
     expect(
       vocabularyRowStatus(
         profile(listening: 'acquired', speaking: 'not_acquired'),
+        'listening',
       ),
       VocabularyRowStatus.acquired,
     );
     expect(
-      vocabularyRowStatus(profile(listening: 'not_acquired')),
+      vocabularyRowStatus(profile(listening: 'not_acquired'), 'listening'),
       VocabularyRowStatus.notAcquired,
     );
   });
@@ -202,9 +206,7 @@ void main() {
     expect(find.byTooltip('First seen'), findsOneWidget);
   });
 
-  testWidgets('the status bar always follows listening assessment', (
-    tester,
-  ) async {
+  testWidgets('the status bar follows the selected capability', (tester) async {
     final word = vocabularyDetails(
       displayForm: 'rather',
       capabilityProfile: LexicalCapabilityProfile.fromJson(const {
@@ -229,11 +231,17 @@ void main() {
     );
     expect(word.capabilityProfile!.listening.effectiveAssessment, 'acquired');
     expect(
-      vocabularyRowStatus(word.capabilityProfile),
+      vocabularyRowStatus(word.capabilityProfile, 'listening'),
       VocabularyRowStatus.acquired,
     );
     await tester.pumpWidget(
-      localized(VocabularyBookView(words: [word], onWord: (_) {})),
+      localized(
+        VocabularyBookView(
+          words: [word],
+          onWord: (_) {},
+          focusCapability: 'listening',
+        ),
+      ),
     );
 
     final colors = Theme.of(tester.element(find.text('rather'))).colorScheme;
@@ -333,6 +341,7 @@ void main() {
           ),
           onPlay: (_) {},
           onMark: (_, _) async => true,
+          evidenceCapability: 'listening',
           onLoadEvidenceHistory: ({String? capability, int offset = 0}) {
             requestedCapabilities.add(capability);
             return Future.value(observations);
@@ -559,7 +568,7 @@ void main() {
     expect(find.textContaining('≈60 wpm'), findsOneWidget);
   });
 
-  testWidgets('the learner can set or clear listening assessment', (
+  testWidgets('the learner can set or clear a listening assessment', (
     tester,
   ) async {
     final conclusions = <String?>[];
@@ -593,28 +602,40 @@ void main() {
         ),
         onPlay: _ignoreOccurrence,
         onMark: _ignoreMark,
-        onListeningOverride: (conclusion) async => conclusions.add(conclusion),
+        onCapabilityOverride: (capability, conclusion) async {
+          if (capability == 'listening') conclusions.add(conclusion);
+        },
       ),
     );
 
     await tester.pumpWidget(view(profile(null)));
-    expect(find.byType(SegmentedButton<String>), findsOneWidget);
+    expect(find.byType(SegmentedButton<String>), findsNWidgets(4));
     expect(find.text('Listening'), findsOneWidget);
-    expect(find.text('Speaking'), findsNothing);
-    expect(find.text('Writing'), findsNothing);
-    await tester.ensureVisible(find.text('Acquired'));
-    await tester.tap(find.text('Acquired'));
+    expect(find.text('Reading'), findsOneWidget);
+    expect(find.text('Speaking'), findsOneWidget);
+    expect(find.text('Writing'), findsOneWidget);
+    final listeningEditor = find.byType(SegmentedButton<String>).at(1);
+    final listeningAcquired = find.descendant(
+      of: listeningEditor,
+      matching: find.text('Acquired'),
+    );
+    await tester.ensureVisible(listeningEditor);
+    await tester.tap(listeningAcquired);
     expect(conclusions, ['acquired']);
 
     await tester.pumpWidget(view(profile('acquired')));
     final editor = tester.widget<SegmentedButton<String>>(
-      find.byType(SegmentedButton<String>),
+      find.byType(SegmentedButton<String>).at(1),
     );
     expect(editor.selected, {'acquired'});
     expect(find.byTooltip('Your own call'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Acquired'));
-    await tester.tap(find.text('Acquired'));
+    final refreshedListeningAcquired = find.descendant(
+      of: find.byType(SegmentedButton<String>).at(1),
+      matching: find.text('Acquired'),
+    );
+    await tester.ensureVisible(refreshedListeningAcquired);
+    await tester.tap(refreshedListeningAcquired);
     expect(conclusions, ['acquired', null]);
   });
 
@@ -860,7 +881,8 @@ void main() {
         WordLearningPanel(
           details: _helloDetails,
           dictionary: _helloDictionary,
-          onListeningOverride: (_) async {},
+          onStatus: (_) {},
+          onCapabilityOverride: (_, _) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},
@@ -884,7 +906,7 @@ void main() {
       tester.widget<ListView>(find.byType(ListView)).padding,
       ListenPadding.card,
     );
-    expect(find.text('Listening'), findsWidgets);
+    expect(find.text('Capability profile'), findsOneWidget);
   });
 
   testWidgets('lemma correction is offered only where a token is selected', (
@@ -898,7 +920,8 @@ void main() {
         WordLearningPanel(
           details: _helloDetails,
           dictionary: _helloDictionary,
-          onListeningOverride: (_) async {},
+          onStatus: (_) {},
+          onCapabilityOverride: (_, _) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},
@@ -914,7 +937,8 @@ void main() {
         WordLearningPanel(
           details: _helloDetails,
           dictionary: _helloDictionary,
-          onListeningOverride: (_) async {},
+          onStatus: (_) {},
+          onCapabilityOverride: (_, _) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},
@@ -940,7 +964,8 @@ void main() {
             details: _helloDetails,
             dictionary: _helloDictionary,
             pronunciation: _helloPronunciation,
-            onListeningOverride: (_) async {},
+            onStatus: (_) {},
+            onCapabilityOverride: (_, _) async {},
             onSave: (value, memo) async {
               definition = value;
               note = memo;
@@ -992,7 +1017,8 @@ void main() {
             details: _coffeeDetails,
             dictionary: _coffeeDictionary,
             languageProfile: _zhPinyinProfile,
-            onListeningOverride: (_) async {},
+            onStatus: (_) {},
+            onCapabilityOverride: (_, _) async {},
             onSave: (_, _) async {},
             onSource: (_) {},
             onHeard: () {},
@@ -1020,7 +1046,8 @@ void main() {
         WordLearningPanel(
           details: _studentDetails,
           dictionary: _studentDictionary,
-          onListeningOverride: (_) async {},
+          onStatus: (_) {},
+          onCapabilityOverride: (_, _) async {},
           onSave: (_, _) async {},
           onSource: (_) {},
           onHeard: () {},

@@ -8,3 +8,8 @@ pub use crate::phone_recognition::{
 };
 pub use crate::phonetic_alignment::{CanonicalPhone, align_phones};
 pub use crate::phonetic_findings::findings_from_alignments;
+pub use crate::shadowing_comparison::{
+    CanonicalPhoneWithTime, RecordingAudioAnalysis, ShadowingAudioAnalysis,
+    ShadowingComparisonError, analyze_pcm16_wav_path, compare_pcm16_wav_paths,
+    compare_shadowing_v2,
+};

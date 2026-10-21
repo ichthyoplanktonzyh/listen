@@ -5,6 +5,7 @@ import '../../controllers/hunting_controller.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/learning_assets_view_models.dart';
 import '../../controllers/learning_flow_view_models.dart';
+import '../../controllers/personal_expression_view_model.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/semantic_search_view_model.dart';
@@ -12,7 +13,9 @@ import '../../controllers/slice_player_controller.dart';
 import '../../controllers/vocabulary_view_model.dart';
 import '../../learning_assets_ui.dart';
 import '../../localization.dart';
+import '../../models/personal_expression.dart';
 import '../../models/types.dart';
+import '../../screens/personal_expression_screen.dart';
 import '../../screens/vocabulary_screen.dart';
 
 /// Dialog- and navigation-driven listening flows extracted from the
@@ -44,6 +47,79 @@ class _OwnedNotifiersRouteState extends State<_OwnedNotifiersRoute> {
   Widget build(BuildContext context) => widget.child;
 }
 
+Future<PersonalExpressionDetailOutcome> openPersonalExpressionDetailFlow({
+  required BuildContext context,
+  required SentencePatternAssetView pattern,
+  required PersonalExpressionDetailViewModelFactory createViewModel,
+  Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
+  Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
+}) async {
+  final viewModel = createViewModel(pattern);
+  final outcome = await Navigator.of(context)
+      .push<PersonalExpressionDetailOutcome>(
+        MaterialPageRoute(
+          builder: (_) => _OwnedNotifiersRoute(
+            notifiers: [viewModel],
+            child: PersonalExpressionDetailScreen(
+              viewModel: viewModel,
+              pattern: pattern,
+              onPlaySource: onPlaySource,
+              onStartSpeaking: onStartSpeaking == null
+                  ? null
+                  : (value) async {
+                      Navigator.of(context).pop();
+                      await onStartSpeaking(value);
+                    },
+            ),
+          ),
+        ),
+      );
+  return outcome ?? PersonalExpressionDetailOutcome.closed;
+}
+
+/// Opens the source-aware personal-expression desk over the current surface.
+/// Reading and speaking tasks use this for a deliberate save; the persistent
+/// expressions destination remains the shell route.
+Future<void> openPersonalExpressionFlow({
+  required BuildContext context,
+  required PersonalExpressionViewModel? viewModel,
+  required PersonalExpressionDetailViewModelFactory? createDetailViewModel,
+  required PlayerController playerController,
+  required PersonalExpressionSourceView initialSource,
+  Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
+  Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
+}) async {
+  if (viewModel == null || createDetailViewModel == null) {
+    viewModel?.dispose();
+    playerController.setStatus(
+      AppLocalizations.of(context).text('statusConnectLocalCoreFirst'),
+    );
+    return;
+  }
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => _OwnedNotifiersRoute(
+        notifiers: [viewModel],
+        child: PersonalExpressionScreen(
+          viewModel: viewModel,
+          language: viewModel.language,
+          initialSource: initialSource,
+          onPlaySource: onPlaySource,
+          onStartSpeaking: onStartSpeaking,
+          onOpenPattern: (detailContext, pattern) =>
+              openPersonalExpressionDetailFlow(
+                context: detailContext,
+                pattern: pattern,
+                createViewModel: createDetailViewModel,
+                onPlaySource: onPlaySource,
+                onStartSpeaking: onStartSpeaking,
+              ),
+        ),
+      ),
+    ),
+  );
+}
+
 Future<void> openLearningAssetsFlow({
   required BuildContext context,
   required LearningAssetsViewModel? viewModel,
@@ -64,9 +140,7 @@ Future<void> openLearningAssetsFlow({
     MaterialPageRoute(
       builder: (_) => _OwnedNotifiersRoute(
         notifiers: [viewModel],
-        child: LearningAssetsScreen(
-          viewModel: viewModel,
-        ),
+        child: LearningAssetsScreen(viewModel: viewModel),
       ),
     ),
   );
@@ -210,6 +284,7 @@ Future<void> showVocabularyFlow({
   required AuxiliaryAudioController auxiliaryAudio,
   required Future<void> Function() pauseBackgroundPlayback,
   String? initialEntryId,
+  VocabularyShadowingCallback? onStartShadowing,
 }) async {
   if (viewModel == null || semanticSearchViewModel == null) {
     viewModel?.dispose();
@@ -240,6 +315,7 @@ Future<void> showVocabularyFlow({
           auxiliaryAudio: auxiliaryAudio,
           initialEntryId: initialEntryId,
           onPauseBackgroundPlayback: pauseBackgroundPlayback,
+          onStartShadowing: onStartShadowing,
         ),
       ),
     ),

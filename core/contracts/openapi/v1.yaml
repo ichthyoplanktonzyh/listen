@@ -1,15 +1,18 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 5.0.0
+  version: 5.1.0
   description: >
     Versioned loopback-only application-service adapter. Playback control is
-    excluded. Contract `5.0.0` narrows the active product to audio/video
-    learning: Media Materials, media-derived structured reading and alignment,
-    listening activities, learner-owned listening facts, and review. Standalone
-    document materials, conversation, production tasks, and coaching are not
-    part of this API contract. Responses stay path-free, and package adoption
-    binds generated listening resources to an exact media revision.
+    excluded. Contract `5.1.0` keeps audio/video material acquisition and the
+    listening-first journey, while restoring independent reading, writing,
+    speaking, shadowing, semantic-task feedback, personal expression, semantic
+    production corpus, and imported text flashcard activities. Document
+    materials, realtime conversation, and coaching recommendations remain out
+    of scope. Core-managed media and material resource responses omit local
+    source paths; local recording and transcription-model asset descriptors
+    may include their filesystem locations. Package adoption binds generated
+    listening resources to an exact media revision.
 servers:
   - url: http://127.0.0.1:{port}
     variables:
@@ -2869,6 +2872,1028 @@ paths:
       operationId: updatePhoneticFindingFeedback
       responses:
         "200": { description: Persisted user feedback for one finding }
+  /v1/personal-expression/patterns:
+    get:
+      operationId: listSentencePatterns
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+        - { name: query, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: User-owned personal expression assets
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternAsset" } }
+    post:
+      operationId: createSentencePattern
+      description: Explicitly creates a durable pattern; candidates never call this endpoint automatically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSentencePattern" }
+      responses:
+        "201":
+          description: Created pattern
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+
+  /v1/personal-expression/patterns/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: sentencePattern
+      responses:
+        "200":
+          description: Pattern with current immutable version and source snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+    put:
+      operationId: reviseSentencePattern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SentencePatternVersionInput" }
+      responses:
+        "200":
+          description: Pattern after appending a version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+    delete:
+      operationId: deleteSentencePattern
+      responses:
+        "204": { description: Explicitly deleted pattern and its own history }
+
+  /v1/personal-expression/patterns/{id}/attempts:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: personalExpressionAttempts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Channel-separated use history and 3.17 handoff facts
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionAttempt" } }
+    post:
+      operationId: recordPersonalExpressionAttempt
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordPersonalExpressionAttempt" }
+      responses:
+        "201":
+          description: Immutable completed use fact; not an observation or projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalExpressionAttempt" }
+
+  /v1/reading/positions/{track_id}:
+    get:
+      operationId: readingPosition
+      description: >
+        Phase 3.13 reading cursor: one overwritable row per subtitle track.
+        Deliberately not append-only — the position is a cursor, not
+        evidence; reading history lives in the semantic-task family.
+      parameters:
+        - name: track_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The saved reading position, or null when never saved.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ReadingPosition" }
+                  - { type: "null" }
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: saveReadingPosition
+      parameters:
+        - name: track_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anchor_cue_id, paragraph_index]
+              properties:
+                media_id:
+                  type: [string, "null"]
+                anchor_cue_id:
+                  type: string
+                  description: First cue id of the paragraph the reader is at.
+                paragraph_index:
+                  type: integer
+                  minimum: 0
+                  description: Display hint; anchor_cue_id is the durable key.
+      responses:
+        "200":
+          description: The upserted reading position.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReadingPosition" }
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/recordings/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: recordingAsset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+    delete:
+      operationId: deleteRecordingAsset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+
+  /v1/semantic/attempts/{id}/writing-findings:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: writingFindings
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Append-only feedback findings for one writing attempt
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+    post:
+      operationId: createWritingFinding
+      description: Records a provider finding against one exact learner revision without changing learner text.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response_revision, layer, severity, message, provenance]
+              properties:
+                response_revision: { type: integer, minimum: 1 }
+                layer: { $ref: "#/components/schemas/WritingFeedbackLayer" }
+                severity: { $ref: "#/components/schemas/WritingFindingSeverity" }
+                source_span: { $ref: "#/components/schemas/WritingSourceSpan" }
+                message: { type: string, minLength: 1 }
+                suggested_replacement: { type: [string, "null"] }
+                provenance: { $ref: "#/components/schemas/WritingFeedbackProvenance" }
+      responses:
+        "200":
+          description: Persisted writing feedback finding
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+
+  /v1/semantic/writing-drafts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: writingDraft
+      description: Reads mutable crash-recovery text for a rubric; this projection is not learning evidence.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Draft or null
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/WritingDraft" }
+                  - { type: "null" }
+    put:
+      operationId: saveWritingDraft
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt_snapshot, transcript]
+              properties:
+                prompt_snapshot: { type: string, minLength: 1 }
+                transcript: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Saved scratch projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingDraft" }
+    delete:
+      operationId: deleteWritingDraft
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Draft removed }
+
+  /v1/semantic/writing-findings/{id}/dispositions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: writingFindingDispositions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Append-only learner decisions for one writing finding
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFindingDisposition" }
+    post:
+      operationId: createWritingFindingDisposition
+      description: Records accept/reject; acceptance cites a new immutable attempt with a later learner revision and never applies provider text.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { $ref: "#/components/schemas/WritingFindingDecision" }
+                resulting_attempt_id: { type: [string, "null"] }
+                resulting_response_revision: { type: [integer, "null"], minimum: 1 }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Persisted writing finding disposition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingFindingDisposition" }
+
+  /v1/llm/providers/{id}/feedback:
+    post:
+      operationId: feedbackViaLlmProvider
+      description: >
+        Gives teacher-style free-text qualitative feedback on one stored
+        output-task attempt (speaking/writing). The provider receives the
+        rubric source transcript, the task prompt snapshot, and the learner
+        response; the reply is ephemeral — nothing is persisted and no
+        observation/projection is written. Reading keeps the per-point judge
+        route instead. On any provider error nothing is returned and a
+        standardized, secret-free error is surfaced.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, response_revision]
+              properties:
+                attempt_id: { type: string }
+                response_revision: { type: integer }
+      responses:
+        "200":
+          description: Free-text feedback (not persisted)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [feedback]
+                properties:
+                  feedback: { type: string }
+                  model_id: { type: [string, "null"] }
+                  prompt_version: { type: [string, "null"] }
+
+  /v1/llm/providers/{id}/judge:
+    post:
+      operationId: judgeViaLlmProvider
+      description: >
+        Judges one stored attempt through the provider and records the result as
+        an unqualified heuristic_proxy judgment (no observation/projection, no
+        learning surface until Phase 3.12.1). On any provider error nothing is
+        written and a standardized, secret-free error is returned.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, response_revision]
+              properties:
+                attempt_id: { type: string }
+                response_revision: { type: integer }
+      responses:
+        "200":
+          description: Recorded judgment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticJudgment" }
+
+  /v1/llm/providers/{id}/rubric:
+    post:
+      operationId: generateRubricViaLlmProvider
+      description: >
+        Generates a scoring-rubric draft (information points only) for one source
+        segment through the provider. Returns a content-only draft; identity,
+        versioning, and persistence stay in the manual save path, so the vendor
+        layer never mints or stores a rubric. On any provider error nothing is
+        returned and a standardized, secret-free error is surfaced.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, source_language, response_language, transcript_snapshot]
+              properties:
+                purpose: { $ref: "#/components/schemas/SemanticTaskKind" }
+                source_language: { type: string }
+                response_language: { type: string }
+                transcript_snapshot: { type: string }
+      responses:
+        "200":
+          description: Rubric draft (points only, not persisted)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [points]
+                properties:
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [importance, statement]
+                      properties:
+                        importance: { $ref: "#/components/schemas/RubricPointImportance" }
+                        statement: { type: string }
+                        accepted_paraphrase_notes: { type: [string, "null"] }
+                  model_id: { type: [string, "null"] }
+                  prompt_version: { type: [string, "null"] }
+                  schema_version: { type: [string, "null"] }
+
+  /v1/personal-expression/export:
+    get:
+      operationId: exportPersonalExpression
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Portable durable pattern, version, snapshot, and use-history bundle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalExpressionExportBundle" }
+
+  /v1/personal-expression/patterns/{id}/versions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: sentencePatternVersions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Immutable version history
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternVersion" } }
+
+  /v1/practice/shadowing-attempts:
+    post:
+      operationId: completeShadowingAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteShadowingAttempt" }
+      responses:
+        "200":
+          description: Persisted non-evaluated shadowing completion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PracticeAttempt" }
+
+  /v1/production-corpus/reindex:
+    post:
+      operationId: reindexProductionCorpus
+      responses:
+        "200":
+          description: Atomically rebuilds the production corpus from immutable writing attempts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionCorpusReindexResult" }
+
+  /v1/production-corpus/search:
+    get:
+      operationId: searchProductionCorpus
+      description: Searches the rebuildable corpus of learner-authored writing by normalized lemma or FTS phrase.
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Learner-output occurrences with their one-copy response document and assistance provenance
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProductionCorpusHit" } }
+
+  /v1/reading/markings:
+    post:
+      operationId: recordReadingMarking
+      description: >
+        Explicit reading-posture word marking (Phase 3.13): one user act on
+        one word writes one reading-channel observation. Assistance records
+        whether a translation was visible. Paragraph task results never
+        write word-level observations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lexical_entry_id, surface_form, translation_visible, understood]
+              properties:
+                lexical_entry_id: { type: string }
+                sentence_id: { type: [string, "null"] }
+                surface_form: { type: string }
+                media_id: { type: [string, "null"] }
+                translation_visible: { type: boolean }
+                understood: { type: boolean }
+      responses:
+        "204":
+          description: Observation appended (idempotent on identical replay).
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/recording-transcriptions:
+    post:
+      operationId: createRecordingTranscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecordingTranscription" }
+      responses:
+        "200":
+          description: Queued short-recording transcription; never a speaking score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+
+  /v1/recording-transcriptions/{job_id}:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: recordingTranscriptionJob
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Ephemeral short-recording transcription state and raw ASR result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+
+  /v1/recording-transcriptions/{job_id}/cancel:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cancelRecordingTranscription
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Cancelled short-recording transcription
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+
+  /v1/recordings:
+    post:
+      operationId: createRecordingAsset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecordingAsset" }
+      responses:
+        "200":
+          description: Persisted local recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+
+  /v1/recordings/{id}/audio-facts:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: recordingAudioFacts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Objective duration, pause, and waveform facts; never a speaking score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAudioFacts" }
+
+  /v1/recordings/{id}/shadowing-analysis:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: latestShadowingAnalysis
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Latest persisted, versioned Shadowing v2 analysis for the recording
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShadowingAnalysisRecord" }
+
+  /v1/review/anki/export:
+    post:
+      operationId: exportAnkiPackage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnkiPackageExportRequest" }
+      responses:
+        "200":
+          description: Exported apkg summary with explicit fidelity report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnkiPackageExportSummary" }
+
+  /v1/review/anki/import:
+    post:
+      operationId: importAnkiPackage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnkiPackageImportRequest" }
+      responses:
+        "200":
+          description: Imported apkg cards, deck tree, FSRS state, revlog and media summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnkiPackageImportSummary" }
+
+  /v1/semantic/adjudications:
+    post:
+      operationId: createJudgmentAdjudication
+      description: >
+        User confirms or corrects one judged point. This is an adjudication of
+        one automatic assertion, not a capability override; the original
+        judgment stays byte-identical.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [judgment_id, point_id, prior_verdict, user_verdict]
+              properties:
+                judgment_id: { type: string }
+                point_id: { type: string }
+                prior_verdict: { $ref: "#/components/schemas/PointVerdict" }
+                user_verdict: { $ref: "#/components/schemas/PointVerdict" }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Persisted adjudication
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JudgmentAdjudication" }
+
+  /v1/semantic/attempts:
+    post:
+      operationId: createSemanticAttempt
+      description: >
+        Records a finished clip-level attempt. The attempt only completes or is
+        abandoned; per-point outcome lives in a separate judgment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, target, rubric_id, rubric_version, conditions, responses, status, started_at_ms]
+              properties:
+                kind: { $ref: "#/components/schemas/SemanticTaskKind" }
+                target: { $ref: "#/components/schemas/PracticeTarget" }
+                anchors:
+                  type: array
+                  items: { $ref: "#/components/schemas/PracticeAnchor" }
+                rubric_id: { type: string }
+                rubric_version: { type: integer, minimum: 1 }
+                conditions: { $ref: "#/components/schemas/SemanticTaskConditions" }
+                responses:
+                  type: array
+                  items: { $ref: "#/components/schemas/AttemptResponse" }
+                status: { $ref: "#/components/schemas/SemanticAttemptStatus" }
+                started_at_ms: { type: integer, minimum: 0 }
+                ended_at_ms: { type: [integer, "null"], minimum: 0 }
+      responses:
+        "200":
+          description: Persisted semantic task attempt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+
+  /v1/semantic/attempts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: semanticAttempt
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: One semantic task attempt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+
+  /v1/semantic/attempts/{id}/judgments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: semanticAttemptJudgments
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Judgments over this attempt's responses, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SemanticJudgment" }
+
+  /v1/semantic/attempts/{id}/speaking-targets:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: confirmSpeakingTarget
+      description: User confirms a literal lexical target produced in a completed constructed-speaking response.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lexical_entry_id, surface_form, sentence_id]
+              properties:
+                lexical_entry_id: { type: string }
+                surface_form: { type: string, minLength: 1 }
+                sentence_id: { type: [string, "null"] }
+      responses:
+        "204": { description: Idempotent speaking observation appended }
+
+  /v1/semantic/attempts/{id}/writing-findings/local:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: generateLocalWritingFindings
+      description: Runs the bundled offline rule checker only after an explicit learner request and appends revision-bound heuristic findings.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response_revision]
+              properties:
+                response_revision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Persisted local findings, possibly empty
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+
+  /v1/semantic/judgments:
+    post:
+      operationId: createSemanticJudgment
+      description: >
+        Records one per-point (or abstaining) judgment over one response
+        revision. Absent or failed evaluation is never synthesized.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, response_revision, rubric_id, rubric_version, rubric_source_sha256, response_transcript_sha256, provenance, evidence_class]
+              properties:
+                attempt_id: { type: string }
+                response_revision: { type: integer, minimum: 1 }
+                rubric_id: { type: string }
+                rubric_version: { type: integer, minimum: 1 }
+                rubric_source_sha256: { type: string }
+                response_transcript_sha256: { type: string }
+                points:
+                  type: array
+                  items: { $ref: "#/components/schemas/PointJudgment" }
+                abstain: { $ref: "#/components/schemas/JudgmentAbstain" }
+                provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+                raw_output: {}
+                evidence_class: { type: string }
+      responses:
+        "200":
+          description: Persisted judgment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticJudgment" }
+
+  /v1/semantic/judgments/{id}/adjudications:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: semanticJudgmentAdjudications
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User adjudications of this judgment, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/JudgmentAdjudication" }
+
+  /v1/semantic/rubrics:
+    post:
+      operationId: createSemanticRubric
+      description: >
+        Phase 3.11 semantic task fact layer (ADR 0021). Append-only: rubric
+        revisions POST a higher version, never rewriting an earlier one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, source, response_language, points, provenance]
+              properties:
+                purpose: { $ref: "#/components/schemas/SemanticTaskKind" }
+                source: { $ref: "#/components/schemas/RubricSource" }
+                response_language: { type: string }
+                points:
+                  type: array
+                  items: { $ref: "#/components/schemas/RubricPoint" }
+                version: { type: integer, minimum: 1, default: 1 }
+                provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+                revision: { $ref: "#/components/schemas/RubricRevisionNote" }
+      responses:
+        "200":
+          description: Persisted rubric version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticRubric" }
+
+  /v1/semantic/rubrics/lookup:
+    get:
+      operationId: lookupSemanticRubric
+      description: >
+        Read-side rubric lookup by source identity (Phase 3.13). Returns the
+        latest version matching the segment, purpose, response language, and
+        source snapshot hash, or null — clients cannot re-derive the
+        server-minted fingerprint id.
+      parameters:
+        - { name: media_id, in: query, schema: { type: string } }
+        - {
+            name: start_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: end_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: purpose,
+            in: query,
+            required: true,
+            schema: { $ref: "#/components/schemas/SemanticTaskKind" },
+          }
+        - {
+            name: response_language,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            name: source_sha256,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          description: The latest matching rubric, or null.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/SemanticRubric" }
+                  - { type: "null" }
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/semantic/rubrics/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: semanticRubric
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: query, required: false, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Requested (or latest) rubric version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticRubric" }
+
+  /v1/semantic/rubrics/{id}/attempts:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: semanticRubricAttempts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Attempts recorded against this rubric, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+
+  /v1/shadowing/comparisons:
+    post:
+      operationId: compareShadowing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateShadowingComparison" }
+      responses:
+        "200":
+          description: Objective duration, pause, and waveform comparison
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShadowingComparison" }
+
+  /v1/transcription/models:
+    get:
+      operationId: transcriptionModels
+      responses:
+        "200":
+          description: Model catalog and installation states
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TranscriptionModelDescriptor" }
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/transcription/models/install:
+    post:
+      operationId: installTranscriptionModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TranscriptionModelIdRequest" }
+      responses:
+        "200":
+          description: Whether a model installation was started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscriptionModelInstallStarted" }
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/transcription/models/register-custom:
+    post:
+      operationId: registerCustomTranscriptionModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterCustomTranscriptionModelRequest" }
+      responses:
+        "200":
+          description: Registered custom transcription model
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscriptionModelDescriptor" }
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/transcription/models/{model_id}:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: deleteTranscriptionModel
+      responses:
+        "204": { description: Model removed }
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/transcription/models/{model_id}/cancel-install:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cancelTranscriptionModelInstall
+      responses:
+        "200":
+          description: Updated model state after cancelling installation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscriptionModelDescriptor" }
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/transcription/providers:
+    get:
+      operationId: transcriptionProviders
+      responses:
+        "200":
+          description: Available transcription providers and runtimes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TranscriptionProviderInfo" }
+        default:
+          $ref: "#/components/responses/Error"
+
 components:
   parameters:
     MediaId:
@@ -4390,7 +5415,7 @@ components:
     PracticeMode:
       enum: [intensive, extensive, review, specialty]
     PracticeKind:
-      enum: [cloze, dictation, subtitle_fade]
+      enum: [cloze, dictation, subtitle_fade, shadowing]
     PracticeTargetKind:
       enum: [lexical, sentence, chunk, segment, connected_speech]
     PracticeAnchorKind:
@@ -4400,7 +5425,7 @@ components:
     PracticeTokenResult:
       enum: [correct, equivalent, missing, extra, mismatch]
     ReviewSourceKind:
-      enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech]
+      enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech, speaking_attempt]
     ReviewItemStatus:
       enum: [active, suspended, archived]
     ReviewRating:
@@ -4458,7 +5483,7 @@ components:
       enum: [openai_chat_completions, anthropic_messages]
     LlmUse:
       type: string
-      enum: [sense_group_partition]
+      enum: [rubric_generation, semantic_judgment, sense_group_partition]
     DataRetentionPreference:
       type: string
       enum: [no_retention, provider_default, unknown]
@@ -4675,12 +5700,22 @@ components:
         target: { type: [string, "null"] }
     ReviewQueueEntry:
       type: object
-      required: [item, schedule, state, card]
+      required: [item, schedule, state, card, origin]
       properties:
         item: { $ref: "#/components/schemas/ReviewItem" }
         schedule: { $ref: "#/components/schemas/ReviewSchedule" }
         state: { $ref: "#/components/schemas/ReviewCardState" }
         card: { $ref: "#/components/schemas/ReviewCard" }
+        origin: { $ref: "#/components/schemas/ReviewItemOrigin" }
+    ReviewItemOrigin:
+      type: object
+      required: [kind, anki_guid, deck_id, deck_name, has_listening_enhancements]
+      properties:
+        kind: { enum: [native, imported_anki] }
+        anki_guid: { type: [string, "null"] }
+        deck_id: { type: [string, "null"] }
+        deck_name: { type: [string, "null"] }
+        has_listening_enhancements: { type: boolean }
     ReviewIntervalPreview:
       type: object
       required: [rating, due_at_ms, interval_days, state]
@@ -4717,18 +5752,37 @@ components:
         new: { type: integer, minimum: 0 }
         due: { type: integer, minimum: 0 }
         learning: { type: integer, minimum: 0 }
+    ReviewChannel:
+      type: string
+      enum: [listening, speaking, reading, writing]
+    ReviewChannelCounts:
+      type: object
+      required: [channel, counts]
+      properties:
+        channel: { $ref: "#/components/schemas/ReviewChannel" }
+        counts: { $ref: "#/components/schemas/ReviewStateCounts" }
+    ImportedDeckCounts:
+      type: object
+      required: [deck_id, name, parent_deck_id, counts]
+      properties:
+        deck_id: { type: string }
+        name: { type: string }
+        parent_deck_id: { type: [string, "null"] }
+        counts: { $ref: "#/components/schemas/ReviewStateCounts" }
     ReviewDeckOverview:
       type: object
-      required: [counts, limit_status]
+      required: [channels, imported_decks, limit_status]
       properties:
-        counts: { $ref: "#/components/schemas/ReviewStateCounts" }
+        channels: { type: array, items: { $ref: "#/components/schemas/ReviewChannelCounts" } }
+        imported_decks: { type: array, items: { $ref: "#/components/schemas/ImportedDeckCounts" } }
         limit_status: { $ref: "#/components/schemas/ReviewLimitStatus" }
     CustomStudyRequest:
       type: object
       required: [kind]
-      description: A read-only listening review queue filtered by new cards, upcoming reviews, or forgotten cards.
+      description: A targeted review queue filtered by state, channel, or lapse count.
       properties:
-        kind: { type: string, enum: [more_new, review_ahead, forgotten] }
+        kind: { type: string, enum: [more_new, review_ahead, channel, forgotten] }
+        channel: { $ref: "#/components/schemas/ReviewChannel" }
         minimum_lapses: { type: [integer, "null"], minimum: 1 }
         limit: { type: [integer, "null"], minimum: 1, maximum: 100 }
         at_ms: { type: [integer, "null"], minimum: 0 }
@@ -4826,7 +5880,7 @@ components:
         lexical_entry_id: { type: string }
         sense_id: { type: [string, "null"] }
         capability: { enum: [reading, listening, speaking, writing] }
-        task_type: { enum: [context_marking, cloze, dictation, subtitle_fade, review_recall] }
+        task_type: { enum: [context_marking, cloze, dictation, subtitle_fade, shadowing, review_recall, reading_context_marking, speaking_production] }
         outcome: { enum: [success, partial, failure] }
         assistance: { enum: [none, partial_text, full_text] }
         surface_form: { type: [string, "null"] }
@@ -5615,3 +6669,816 @@ components:
       description: >
         The media binding behind a rendition. A local path is never part of a
         binding.
+    CreateSentencePattern:
+      allOf:
+        - type: object
+          required: [language, source]
+          properties:
+            language: { type: string }
+            source: { $ref: "#/components/schemas/PatternSourceSnapshot" }
+        - { $ref: "#/components/schemas/SentencePatternVersionInput" }
+
+    PatternSourceKind:
+      enum: [transcript, dictionary_occurrence, reading, speaking_attempt, writing_attempt, production_corpus, semantic_candidate, manual]
+
+    PatternSourceSnapshot:
+      type: object
+      required: [kind, text]
+      properties:
+        kind: { $ref: "#/components/schemas/PatternSourceKind" }
+        text: { type: string, minLength: 1 }
+        title: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        semantic_attempt_id: { type: [string, "null"] }
+        start_ms: { type: [integer, "null"], minimum: 0 }
+        end_ms: { type: [integer, "null"], minimum: 0 }
+        candidate_ref: { type: [string, "null"] }
+
+    PersonalExpressionAssistance:
+      enum: [template_visible, slot_hints, keywords, no_text]
+
+    PersonalExpressionAttempt:
+      allOf:
+        - { $ref: "#/components/schemas/RecordPersonalExpressionAttempt" }
+        - type: object
+          required: [id, pattern_id, completed_at_ms]
+          properties:
+            id: { type: string }
+            pattern_id: { type: string }
+            completed_at_ms: { type: integer, minimum: 0 }
+
+    PersonalExpressionChannel:
+      enum: [speaking, writing]
+
+    PersonalExpressionSelfAssessment:
+      enum: [needs_work, partly_expressed, expressed]
+
+    PlayableSegment:
+      type: object
+      required: [media_id, start_ms, end_ms, label, subtitle_snapshot, availability]
+      properties:
+        media_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        label: { type: string }
+        subtitle_snapshot: { type: string }
+        availability: { $ref: "#/components/schemas/PlayableSegmentAvailability" }
+
+    PlayableSegmentAvailability:
+      enum: [available, missing_media, missing_timeline]
+
+    ReadingPosition:
+      type: object
+      required:
+        [track_id, media_id, anchor_cue_id, paragraph_index, updated_at_ms]
+      properties:
+        track_id: { type: string }
+        media_id: { type: [string, "null"] }
+        anchor_cue_id:
+          type: string
+          description: Paragraph anchor — the paragraph's first cue id.
+        paragraph_index: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+
+    RecordPersonalExpressionAttempt:
+      type: object
+      required: [pattern_version_id, channel, assistance, response_text, self_assessment]
+      properties:
+        pattern_version_id: { type: string }
+        channel: { $ref: "#/components/schemas/PersonalExpressionChannel" }
+        assistance: { $ref: "#/components/schemas/PersonalExpressionAssistance" }
+        response_text: { type: string, minLength: 1 }
+        raw_transcript: { type: [string, "null"] }
+        recording_asset_id: { type: [string, "null"] }
+        semantic_attempt_id: { type: [string, "null"] }
+        self_assessment: { $ref: "#/components/schemas/PersonalExpressionSelfAssessment" }
+        context_note: { type: [string, "null"] }
+
+    RecordingAsset:
+      type: object
+      required: [id, file_path, created_at_ms, duration_ms, practice_attempt_id, target, source_segment, language, audio, recorder_version]
+      properties:
+        id: { type: string }
+        file_path: { type: string }
+        created_at_ms: { type: integer, minimum: 0 }
+        duration_ms: { type: integer, minimum: 1 }
+        practice_attempt_id: { type: [string, "null"] }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        source_segment: { $ref: "#/components/schemas/PlayableSegment" }
+        language: { type: string }
+        audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
+        recorder_version: { type: string }
+
+    RecordingAudioMetadata:
+      type: object
+      required: [container, codec, sample_rate_hz, channels, sample_format, byte_length, content_sha256]
+      properties:
+        container: { type: string }
+        codec: { type: string }
+        sample_rate_hz: { type: integer, minimum: 1 }
+        channels: { type: integer, minimum: 1 }
+        sample_format: { type: string }
+        byte_length: { type: integer, minimum: 1 }
+        content_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+
+    SentencePatternVersionInput:
+      type: object
+      required: [name, pattern_text, slots]
+      properties:
+        name: { type: string, minLength: 1 }
+        pattern_text: { type: string, minLength: 1 }
+        slots: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternSlot" } }
+        note: { type: [string, "null"] }
+        system_construction_id: { type: [string, "null"] }
+
+    UserSentencePatternAsset:
+      type: object
+      required: [id, language, source, current_version, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        source: { $ref: "#/components/schemas/PatternSourceSnapshot" }
+        current_version: { $ref: "#/components/schemas/UserSentencePatternVersion" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+
+    UserSentencePatternSlot:
+      type: object
+      required: [name, required]
+      properties:
+        name: { type: string, minLength: 1 }
+        prompt: { type: [string, "null"] }
+        example_value: { type: [string, "null"] }
+        required: { type: boolean }
+
+    UserSentencePatternVersion:
+      allOf:
+        - { $ref: "#/components/schemas/SentencePatternVersionInput" }
+        - type: object
+          required: [id, pattern_id, version, created_at_ms]
+          properties:
+            id: { type: string }
+            pattern_id: { type: string }
+            version: { type: integer, minimum: 1 }
+            created_at_ms: { type: integer, minimum: 0 }
+
+    WritingDraft:
+      type: object
+      required: [rubric_id, prompt_snapshot, transcript, updated_at_ms]
+      properties:
+        rubric_id: { type: string }
+        prompt_snapshot: { type: string }
+        transcript: { type: string }
+        updated_at_ms: { type: integer, minimum: 0 }
+
+    WritingFeedbackFinding:
+      type: object
+      required: [id, attempt_id, response_revision, response_transcript_sha256, layer, severity, source_span, message, suggested_replacement, provenance, created_at_ms]
+      properties:
+        id: { type: string }
+        attempt_id: { type: string }
+        response_revision: { type: integer, minimum: 1 }
+        response_transcript_sha256: { type: string }
+        layer: { $ref: "#/components/schemas/WritingFeedbackLayer" }
+        severity: { $ref: "#/components/schemas/WritingFindingSeverity" }
+        source_span: { $ref: "#/components/schemas/WritingSourceSpan" }
+        message: { type: string }
+        suggested_replacement: { type: [string, "null"] }
+        provenance: { $ref: "#/components/schemas/WritingFeedbackProvenance" }
+        created_at_ms: { type: integer, minimum: 0 }
+
+    WritingFeedbackGenerator:
+      enum: [local_rule, llm, manual]
+
+    WritingFeedbackLayer:
+      enum: [task_completion, information_coverage, organization, cohesion, word_choice, grammar, spelling, punctuation]
+
+    WritingFeedbackProvenance:
+      type: object
+      required: [generator, provider_id, provider_version, ruleset_version, evidence_class]
+      properties:
+        generator: { $ref: "#/components/schemas/WritingFeedbackGenerator" }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        ruleset_version: { type: [string, "null"] }
+        evidence_class: { type: string }
+
+    WritingFindingDecision:
+      enum: [accepted, rejected]
+
+    WritingFindingDisposition:
+      type: object
+      required: [id, finding_id, decision, resulting_attempt_id, resulting_response_revision, note, occurred_at_ms]
+      properties:
+        id: { type: string }
+        finding_id: { type: string }
+        decision: { $ref: "#/components/schemas/WritingFindingDecision" }
+        resulting_attempt_id: { type: [string, "null"] }
+        resulting_response_revision: { type: [integer, "null"], minimum: 1 }
+        note: { type: [string, "null"] }
+        occurred_at_ms: { type: integer, minimum: 0 }
+
+    WritingFindingSeverity:
+      enum: [notice, suggestion, important]
+
+    WritingSourceSpan:
+      type: object
+      required: [start_char, end_char]
+      properties:
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 1 }
+    AbstainReason:
+      enum: [unreliable_transcript, empty_response, generator_refused, other]
+
+    AnkiPackageExportRequest:
+      type: object
+      required: [package_path]
+      properties:
+        package_path: { type: string }
+        deck_ids: { type: array, items: { type: string } }
+        channels: { type: array, items: { $ref: "#/components/schemas/ReviewChannel" } }
+
+    AnkiPackageExportSummary:
+      type: object
+      required: [exported_cards, exported_revlog_entries, exported_media_files, fidelity, warnings]
+      properties:
+        exported_cards: { type: integer, minimum: 0 }
+        exported_revlog_entries: { type: integer, minimum: 0 }
+        exported_media_files: { type: integer, minimum: 0 }
+        fidelity:
+          type: object
+          required: [cards_with_media_slices, video_slices_rendered_as_audio, media_render_failures, omitted_capabilities]
+          properties:
+            cards_with_media_slices: { type: integer, minimum: 0 }
+            video_slices_rendered_as_audio: { type: integer, minimum: 0 }
+            media_render_failures: { type: integer, minimum: 0 }
+            omitted_capabilities: { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
+
+    AnkiPackageImportRequest:
+      type: object
+      required: [package_path, media_directory]
+      properties:
+        package_path: { type: string }
+        media_directory: { type: string }
+
+    AnkiPackageImportSummary:
+      type: object
+      required: [imported_cards, updated_cards, skipped_cards, imported_decks, imported_revlog_entries, imported_media_files, warnings]
+      properties:
+        imported_cards: { type: integer, minimum: 0 }
+        updated_cards: { type: integer, minimum: 0 }
+        skipped_cards: { type: integer, minimum: 0 }
+        imported_decks: { type: integer, minimum: 0 }
+        imported_revlog_entries: { type: integer, minimum: 0 }
+        imported_media_files: { type: integer, minimum: 0 }
+        warnings: { type: array, items: { type: string } }
+
+    AsrReliability:
+      enum: [reliable, suspect, unreliable]
+
+    AttemptResponse:
+      type: object
+      required: [revision, raw_transcript, transcript, source, recording_asset_id, asr_reliability, language, recorded_at_ms]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        raw_transcript: { type: [string, "null"] }
+        transcript: { type: string }
+        source: { $ref: "#/components/schemas/ResponseTranscriptSource" }
+        recording_asset_id: { type: [string, "null"] }
+        asr_reliability: { $ref: "#/components/schemas/AsrReliability" }
+        language: { type: string }
+        recorded_at_ms: { type: integer, minimum: 0 }
+
+    AudioPauseInterval:
+      type: object
+      required: [start_ms, end_ms]
+      properties:
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+
+    AudioQualitySummary:
+      type: object
+      required: [snr_db, clipping_ratio, dc_offset, sample_rate_hz, channels]
+      properties:
+        snr_db: { type: number }
+        clipping_ratio: { type: number, minimum: 0, maximum: 1 }
+        dc_offset: { type: number }
+        sample_rate_hz: { type: integer, minimum: 1 }
+        channels: { type: integer, minimum: 1 }
+
+    AudioWaveformSummary:
+      type: object
+      required: [duration_ms, bucket_ms, peaks, rms]
+      properties:
+        duration_ms: { type: integer, minimum: 0 }
+        bucket_ms: { type: integer, minimum: 1 }
+        peaks: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
+        rms: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
+
+    CompleteShadowingAttempt:
+      type: object
+      required: [item_id, recording_id]
+      properties:
+        item_id: { type: string }
+        recording_id: { type: string }
+
+    CreateRecordingAsset:
+      type: object
+      required: [file_path, duration_ms, target, source_segment, language, audio, recorder_version]
+      properties:
+        file_path: { type: string }
+        duration_ms: { type: integer, minimum: 1 }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        source_segment: { $ref: "#/components/schemas/PlayableSegment" }
+        language: { type: string }
+        audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
+        recorder_version: { type: string }
+
+    CreateRecordingTranscription:
+      type: object
+      required: [recording_id, model_id]
+      properties:
+        recording_id: { type: string }
+        model_id: { type: string }
+        language: { type: [string, "null"] }
+
+    CreateShadowingComparison:
+      type: object
+      required: [recording_id, reference_wav_path]
+      properties:
+        recording_id: { type: string }
+        reference_wav_path: { type: string }
+
+    JudgmentAbstain:
+      type: object
+      required: [reason, note]
+      properties:
+        reason: { $ref: "#/components/schemas/AbstainReason" }
+        note: { type: [string, "null"] }
+
+    JudgmentAdjudication:
+      type: object
+      required: [id, judgment_id, point_id, prior_verdict, user_verdict, note, occurred_at_ms]
+      properties:
+        id: { type: string }
+        judgment_id: { type: string }
+        point_id: { type: string }
+        prior_verdict: { $ref: "#/components/schemas/PointVerdict" }
+        user_verdict: { $ref: "#/components/schemas/PointVerdict" }
+        note: { type: [string, "null"] }
+        occurred_at_ms: { type: integer, minimum: 0 }
+
+    L1RetellingTrigger:
+      enum: [user_requested, l2_failed, diagnosis]
+
+    PersonalExpressionExportBundle:
+      type: object
+      required: [schema, exported_at_ms, patterns]
+      properties:
+        schema: { const: llplayer.personal-expression.v1 }
+        exported_at_ms: { type: integer, minimum: 0 }
+        patterns: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionExportPattern" } }
+
+    PersonalExpressionExportPattern:
+      type: object
+      required: [asset, versions, attempts]
+      properties:
+        asset: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+        versions: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternVersion" } }
+        attempts: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionAttempt" } }
+
+    PointJudgment:
+      type: object
+      required: [point_id, verdict, supporting_spans]
+      properties:
+        point_id: { type: string }
+        verdict: { $ref: "#/components/schemas/PointVerdict" }
+        supporting_spans: { type: array, items: { $ref: "#/components/schemas/ResponseSpan" } }
+
+    PointVerdict:
+      enum: [covered, partial, missing, uncertain]
+
+    ProductionAssistance:
+      enum: [content_anchored, source_reconstruction, learner_revision]
+
+    ProductionChannel:
+      enum: [written, spoken]
+
+    ProductionCorpusDocument:
+      type: object
+      required: [id, language, channel, assistance, attempt_id, rubric_id, response_revision, activity_kind, start_ms, end_ms, response_text, produced_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        channel: { $ref: "#/components/schemas/ProductionChannel" }
+        assistance: { $ref: "#/components/schemas/ProductionAssistance" }
+        attempt_id: { type: string }
+        rubric_id: { type: string }
+        response_revision: { type: integer, minimum: 1 }
+        activity_kind: { type: string }
+        media_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        response_text: { type: string }
+        produced_at_ms: { type: integer, minimum: 0 }
+
+    ProductionCorpusEntry:
+      type: object
+      required: [id, document_id, normalized_key, display_text, start_char, end_char]
+      properties:
+        id: { type: string }
+        document_id: { type: string }
+        normalized_key: { type: string }
+        display_text: { type: string }
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 0 }
+
+    ProductionCorpusHit:
+      type: object
+      required: [document]
+      properties:
+        document: { $ref: "#/components/schemas/ProductionCorpusDocument" }
+        entry: { $ref: "#/components/schemas/ProductionCorpusEntry" }
+
+    ProductionCorpusReindexResult:
+      type: object
+      required: [indexed_rubrics]
+      properties:
+        indexed_rubrics: { type: integer, minimum: 0 }
+
+    RecordingAudioFacts:
+      type: object
+      required: [recording_id, duration_ms, pauses, waveform]
+      properties:
+        recording_id: { type: string }
+        duration_ms: { type: integer, minimum: 0 }
+        pauses: { type: array, items: { $ref: "#/components/schemas/AudioPauseInterval" } }
+        waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
+
+    RecordingTranscriptProvenance:
+      type: object
+      required: [provider_id, provider_version, runtime_id, runtime_version, model_id, model_revision, model_checksum_sha256, recording_content_sha256, requested_language, detected_language]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        runtime_id: { type: string }
+        runtime_version: { type: string }
+        model_id: { type: string }
+        model_revision: { type: string }
+        model_checksum_sha256: { type: string }
+        recording_content_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+        requested_language: { type: [string, "null"] }
+        detected_language: { type: [string, "null"] }
+
+    RecordingTranscriptSegment:
+      type: object
+      required: [start_ms, end_ms, text]
+      properties:
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        text: { type: string }
+
+    RecordingTranscriptionJob:
+      type: object
+      required: [id, recording_asset_id, status, raw_transcript, segments, provenance, error_code, error_message, created_at_ms, started_at_ms, completed_at_ms, latency_ms]
+      properties:
+        id: { type: string }
+        recording_asset_id: { type: string }
+        status: { type: string, enum: [queued, transcribing, completed, cancelled, failed] }
+        raw_transcript: { type: [string, "null"] }
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/RecordingTranscriptSegment" }
+        provenance: { $ref: "#/components/schemas/RecordingTranscriptProvenance" }
+        error_code: { type: [string, "null"] }
+        error_message: { type: [string, "null"] }
+        created_at_ms: { type: integer, minimum: 0 }
+        started_at_ms: { type: [integer, "null"], minimum: 0 }
+        completed_at_ms: { type: [integer, "null"], minimum: 0 }
+        latency_ms: { type: [integer, "null"], minimum: 0 }
+
+    TranscriptionProviderInfo:
+      type: object
+      required: [id, display_name, runtime_id, runtime_version, available, supports_translation, supported_languages, diagnostic]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        runtime_id: { type: string }
+        runtime_version: { type: string }
+        available: { type: boolean }
+        supports_translation: { type: boolean }
+        supported_languages: { type: array, items: { type: string } }
+        diagnostic: { type: [string, "null"] }
+
+    TranscriptionModelDescriptor:
+      type: object
+      required: [id, provider_id, display_name, family, revision, checksum_sha256, download_url, local_path, size_bytes, quality, english_only, supports_translation, state, installed_bytes, error, license, updated_at_ms]
+      properties:
+        id: { type: string }
+        provider_id: { type: string }
+        display_name: { type: string }
+        family: { type: string }
+        revision: { type: string }
+        checksum_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+        download_url: { type: [string, "null"], format: uri }
+        local_path:
+          type: [string, "null"]
+          description: Local path for the model, including a user-selected custom-model file when applicable.
+        size_bytes: { type: integer, minimum: 0 }
+        quality: { $ref: "#/components/schemas/TranscriptionModelQuality" }
+        english_only: { type: boolean }
+        supports_translation: { type: boolean }
+        state: { $ref: "#/components/schemas/TranscriptionModelState" }
+        installed_bytes: { type: integer, minimum: 0 }
+        error: { type: [string, "null"] }
+        license: { type: string }
+        updated_at_ms: { type: integer, minimum: 0 }
+
+    TranscriptionModelQuality:
+      type: string
+      enum: [fast, balanced, accurate]
+
+    TranscriptionModelState:
+      type: string
+      enum: [downloadable, installing, installed, custom, failed]
+
+    TranscriptionModelIdRequest:
+      type: object
+      required: [model_id]
+      properties:
+        model_id: { type: string }
+
+    TranscriptionModelInstallStarted:
+      type: object
+      required: [installation_started]
+      properties:
+        installation_started: { type: boolean }
+
+    RegisterCustomTranscriptionModelRequest:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+          description: Explicitly user-selected local model file path.
+
+    ResponseSpan:
+      type: object
+      required: [start_char, end_char]
+      properties:
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 0 }
+
+    ResponseTranscriptSource:
+      enum: [typed, asr]
+
+    RubricPoint:
+      type: object
+      required: [point_id, importance, statement, accepted_paraphrase_notes]
+      properties:
+        point_id: { type: string }
+        importance: { $ref: "#/components/schemas/RubricPointImportance" }
+        statement: { type: string }
+        accepted_paraphrase_notes: { type: [string, "null"] }
+
+    RubricPointImportance:
+      enum: [required, optional]
+
+    RubricRevisionNote:
+      type: object
+      required: [revised_from_version, note, revised_at_ms]
+      properties:
+        revised_from_version: { type: integer, minimum: 1 }
+        note: { type: string }
+        revised_at_ms: { type: integer, minimum: 0 }
+
+    RubricSource:
+      type: object
+      required: [media_id, track_id, start_ms, end_ms, language, transcript_snapshot]
+      properties:
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        language: { type: string }
+        transcript_snapshot: { type: string }
+
+    SemanticAttemptStatus:
+      enum: [completed, abandoned]
+
+    SemanticGeneratorKind:
+      enum: [fixture, manual, llm]
+
+    SemanticGeneratorProvenance:
+      type: object
+      required: [kind, detail, model_id, prompt_version, schema_version]
+      properties:
+        kind: { $ref: "#/components/schemas/SemanticGeneratorKind" }
+        detail: { type: [string, "null"] }
+        model_id: { type: [string, "null"] }
+        prompt_version: { type: [string, "null"] }
+        schema_version: { type: [string, "null"] }
+
+    SemanticJudgment:
+      type: object
+      required: [id, attempt_id, response_revision, rubric_id, rubric_version, rubric_source_sha256, response_transcript_sha256, points, abstain, provenance, raw_output, evidence_class, created_at_ms]
+      properties:
+        id: { type: string }
+        attempt_id: { type: string }
+        response_revision: { type: integer, minimum: 1 }
+        rubric_id: { type: string }
+        rubric_version: { type: integer, minimum: 1 }
+        rubric_source_sha256: { type: string }
+        response_transcript_sha256: { type: string }
+        points: { type: array, items: { $ref: "#/components/schemas/PointJudgment" } }
+        abstain: { $ref: "#/components/schemas/JudgmentAbstain" }
+        provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+        raw_output: {}
+        evidence_class: { type: string }
+        created_at_ms: { type: integer, minimum: 0 }
+
+    SemanticRubric:
+      type: object
+      required: [id, purpose, source, response_language, points, version, provenance, revision, created_at_ms]
+      properties:
+        id: { type: string }
+        purpose: { $ref: "#/components/schemas/SemanticTaskKind" }
+        source: { $ref: "#/components/schemas/RubricSource" }
+        response_language: { type: string }
+        points: { type: array, items: { $ref: "#/components/schemas/RubricPoint" } }
+        version: { type: integer, minimum: 1 }
+        provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+        revision: { $ref: "#/components/schemas/RubricRevisionNote" }
+        created_at_ms: { type: integer, minimum: 0 }
+
+    SemanticTaskAttempt:
+      type: object
+      required: [id, kind, target, anchors, rubric_id, rubric_version, conditions, responses, status, started_at_ms, ended_at_ms]
+      properties:
+        id: { type: string }
+        kind: { $ref: "#/components/schemas/SemanticTaskKind" }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+        rubric_id: { type: string }
+        rubric_version: { type: integer, minimum: 1 }
+        conditions: { $ref: "#/components/schemas/SemanticTaskConditions" }
+        responses: { type: array, items: { $ref: "#/components/schemas/AttemptResponse" } }
+        status: { $ref: "#/components/schemas/SemanticAttemptStatus" }
+        started_at_ms: { type: integer, minimum: 0 }
+        ended_at_ms: { type: [integer, "null"], minimum: 0 }
+
+    SemanticTaskConditions:
+      type: object
+      required: [source_text_visible, audio_play_count, notes_allowed, l1_trigger, speaking_assistance, speaking_recall, prompt_snapshot]
+      properties:
+        source_text_visible: { type: boolean }
+        audio_play_count: { type: [integer, "null"], minimum: 0 }
+        notes_allowed: { type: boolean }
+        l1_trigger: { $ref: "#/components/schemas/L1RetellingTrigger" }
+        speaking_assistance: { $ref: "#/components/schemas/SpeakingAssistanceLevel" }
+        speaking_recall: { $ref: "#/components/schemas/SpeakingRecallKind" }
+        prompt_snapshot: { type: [string, "null"] }
+
+    SemanticTaskKind:
+      enum: [reading_comprehension, l1_retelling, l2_retelling, dictogloss, one_sentence_summary, summary, opinion_response, pattern_production]
+
+    ShadowingAbstainReason:
+      type: string
+      enum: [low_audio_quality, low_confidence, mismatched_speech, audio_too_short, missing_reference_timeline, provider_unavailable, provider_failure]
+
+    ShadowingAnalysis:
+      type: object
+      required: [provider_id, provider_version, coverage, confidence, evidence_coverage, word_details]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        phone_provider: { $ref: "#/components/schemas/ShadowingProviderInfo" }
+        coverage: { type: number, minimum: 0, maximum: 1 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        evidence_coverage: { $ref: "#/components/schemas/ShadowingEvidenceCoverage" }
+        prosody: { $ref: "#/components/schemas/ShadowingProsodyComparison" }
+        audio_quality: { $ref: "#/components/schemas/AudioQualitySummary" }
+        abstain_reason: { $ref: "#/components/schemas/ShadowingAbstainReason" }
+        word_details:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingWordDetail" }
+        unassigned_phone_alignments:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingPhoneAlignmentDetail" }
+
+    ShadowingAnalysisRecord:
+      type: object
+      required: [id, recording_id, attempt_id, reference_audio_sha256, created_at_ms, analysis]
+      properties:
+        id: { type: string }
+        recording_id: { type: string }
+        attempt_id: { type: string }
+        reference_audio_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        created_at_ms: { type: integer, minimum: 0 }
+        analysis: { $ref: "#/components/schemas/ShadowingAnalysis" }
+
+    ShadowingComparison:
+      type: object
+      required: [attempt_id, reference_segment, recording_id, duration_delta_ms, pause_alignment, reference_waveform, recording_waveform]
+      properties:
+        attempt_id: { type: string }
+        reference_segment: { $ref: "#/components/schemas/PlayableSegment" }
+        recording_id: { type: string }
+        duration_delta_ms: { type: integer }
+        pause_alignment: { $ref: "#/components/schemas/ShadowingPauseAlignment" }
+        reference_waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
+        recording_waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
+        analysis_v2: { $ref: "#/components/schemas/ShadowingAnalysis" }
+
+    ShadowingEvidenceCoverage:
+      type: object
+      required: [word_alignment, phone_alignment, stress, rhythm, f0, energy]
+      properties:
+        word_alignment: { type: number, minimum: 0, maximum: 1 }
+        phone_alignment: { type: number, minimum: 0, maximum: 1 }
+        stress: { type: number, minimum: 0, maximum: 1 }
+        rhythm: { type: number, minimum: 0, maximum: 1 }
+        f0: { type: number, minimum: 0, maximum: 1 }
+        energy: { type: number, minimum: 0, maximum: 1 }
+        missing:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingMissingEvidence" }
+
+    ShadowingMissingEvidence:
+      type: object
+      required: [component, reason]
+      properties:
+        component:
+          type: string
+          enum: [reference_timeline, phone_recognition, word_alignment, stress, rhythm, f0, energy]
+        reason:
+          type: string
+          enum: [reference_timeline_unavailable, provider_unavailable, provider_failed, insufficient_coverage, acoustic_extraction_failed, no_voiced_frames]
+
+    ShadowingPauseAlignment:
+      type: object
+      required: [reference_pauses, recording_pauses, mean_absolute_offset_ms]
+      properties:
+        reference_pauses: { type: array, items: { $ref: "#/components/schemas/AudioPauseInterval" } }
+        recording_pauses: { type: array, items: { $ref: "#/components/schemas/AudioPauseInterval" } }
+        mean_absolute_offset_ms: { type: [integer, "null"], minimum: 0 }
+
+    ShadowingPhoneAlignmentDetail:
+      type: object
+      required: [status]
+      properties:
+        reference_phone: { type: string }
+        recording_phone: { type: string }
+        status: { type: string, enum: [match, substitution, insertion, deletion] }
+
+    ShadowingProsodyComparison:
+      type: object
+      required: [reference_pause_count, recording_pause_count]
+      properties:
+        reference_pause_count: { type: integer, minimum: 0 }
+        recording_pause_count: { type: integer, minimum: 0 }
+        pause_alignment_offset_ms: { type: integer, minimum: 0 }
+        mean_word_duration_ratio: { type: number, minimum: 0 }
+        rhythm_similarity: { type: number, minimum: 0, maximum: 1 }
+        f0_contour_similarity: { type: number, minimum: 0, maximum: 1 }
+        energy_prominence_similarity: { type: number, minimum: 0, maximum: 1 }
+
+    ShadowingProviderInfo:
+      type: object
+      required: [provider_id, provider_version, model_revision]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        model_revision: { type: string }
+
+    ShadowingWordDetail:
+      type: object
+      required: [token_index, text, status, reference_duration_ms, phone_alignments]
+      properties:
+        token_index: { type: integer, minimum: 0 }
+        text: { type: string }
+        status: { type: string, enum: [unassessed, match, substituted, deleted, inserted] }
+        reference_duration_ms: { type: integer, minimum: 0 }
+        recording_duration_ms: { type: integer, minimum: 0 }
+        reference_stress: { type: integer, minimum: 0 }
+        recording_stress: { type: integer, minimum: 0 }
+        reference_f0_hz: { type: number, minimum: 0 }
+        recording_f0_hz: { type: number, minimum: 0 }
+        reference_f0_range_semitones: { type: number, minimum: 0 }
+        recording_f0_range_semitones: { type: number, minimum: 0 }
+        reference_pitch_reset_after: { type: number }
+        recording_pitch_reset_after: { type: number }
+        reference_energy_prominence: { type: number }
+        recording_energy_prominence: { type: number }
+        phone_alignments:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingPhoneAlignmentDetail" }
+
+    SpeakingAssistanceLevel:
+      enum: [full_sentence, keywords, no_text]
+
+    SpeakingRecallKind:
+      enum: [immediate, delayed]

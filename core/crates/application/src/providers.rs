@@ -1,15 +1,55 @@
 use async_trait::async_trait;
 use domain::{
-    CapabilityClaim, DictionaryLookup, DictionaryProviderInfo, LanguageCode, LlmAdapterKind,
-    LlmProviderError, PhraseCandidate, PronunciationProviderInfo, ProviderCapability,
-    SYNTACTIC_CONTRACT_VERSION, SentencePronunciation, SubtitleSentence, SyntacticAnalysis,
-    SyntacticAnalysisId, SyntacticProviderDescriptor, SyntacticProviderError,
-    SyntacticSentenceAnalysis, SyntacticValidationReport, SyntacticValidationStatus,
-    WordPronunciation, syntactic_analysis_fingerprint, syntactic_source_fingerprint,
-    validate_syntactic_analysis,
+    AsrReliability, CapabilityClaim, DictionaryLookup, DictionaryProviderInfo, JudgmentAbstain,
+    LanguageCode, LlmAdapterKind, LlmProviderError, PhraseCandidate, PointJudgment,
+    PronunciationProviderInfo, ProviderCapability, RubricPointImportance,
+    SYNTACTIC_CONTRACT_VERSION, SemanticRubric, SemanticTaskKind, SentencePronunciation,
+    SubtitleSentence, SyntacticAnalysis, SyntacticAnalysisId, SyntacticProviderDescriptor,
+    SyntacticProviderError, SyntacticSentenceAnalysis, SyntacticValidationReport,
+    SyntacticValidationStatus, WordPronunciation, syntactic_analysis_fingerprint,
+    syntactic_source_fingerprint, validate_syntactic_analysis,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use thiserror::Error;
+
+/// Application-owned port for transcribing a learner's short recording and
+/// managing the local transcription-model catalog. The HTTP adapter depends
+/// on this interface; the process runner and artifact downloader stay in the
+/// local-runtime adapter.
+#[async_trait]
+pub trait RecordingTranscriptionService: Send + Sync {
+    fn providers(&self) -> Vec<domain::TranscriptionProviderInfo>;
+    fn models(&self) -> Result<Vec<domain::TranscriptionModelDescriptor>, crate::ApplicationError>;
+    fn request_model_install(
+        self: Arc<Self>,
+        id: domain::TranscriptionModelId,
+    ) -> Result<bool, crate::ApplicationError>;
+    fn register_custom_model(
+        &self,
+        path: String,
+    ) -> Result<domain::TranscriptionModelDescriptor, crate::ApplicationError>;
+    fn cancel_model_install(
+        &self,
+        id: &domain::TranscriptionModelId,
+    ) -> Result<domain::TranscriptionModelDescriptor, crate::ApplicationError>;
+    async fn delete_model(
+        &self,
+        id: &domain::TranscriptionModelId,
+    ) -> Result<(), crate::ApplicationError>;
+    fn create_recording_transcription(
+        self: Arc<Self>,
+        request: crate::CreateRecordingTranscriptionRequest,
+    ) -> Result<domain::RecordingTranscriptionJob, crate::ApplicationError>;
+    fn recording_transcription_job(
+        &self,
+        id: &domain::RecordingTranscriptionJobId,
+    ) -> Option<domain::RecordingTranscriptionJob>;
+    fn cancel_recording_transcription(
+        &self,
+        id: &domain::RecordingTranscriptionJobId,
+    ) -> Result<domain::RecordingTranscriptionJob, crate::ApplicationError>;
+}
 
 pub use speech_analysis::timing::AlignedWord as ForcedAlignedWord;
 
@@ -329,6 +369,90 @@ pub trait SenseGroupPartitionProvider: Send + Sync {
     ) -> Result<SenseGroupPartitionDraft, LlmProviderError>;
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RubricGenerationRequest {
+    pub purpose: SemanticTaskKind,
+    pub source_language: LanguageCode,
+    pub response_language: LanguageCode,
+    pub transcript_snapshot: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RubricPointDraft {
+    pub importance: RubricPointImportance,
+    pub statement: String,
+    pub accepted_paraphrase_notes: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RubricDraft {
+    pub points: Vec<RubricPointDraft>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+    pub raw_output: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JudgeRequest {
+    pub rubric: SemanticRubric,
+    pub response_transcript: String,
+    pub response_language: LanguageCode,
+    pub asr_reliability: Option<AsrReliability>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JudgmentDraft {
+    pub points: Vec<PointJudgment>,
+    pub abstain: Option<JudgmentAbstain>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+    pub raw_output: serde_json::Value,
+}
+
+#[async_trait]
+pub trait SemanticRubricProvider: Send + Sync {
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    async fn generate_rubric(
+        &self,
+        request: &RubricGenerationRequest,
+    ) -> Result<RubricDraft, LlmProviderError>;
+}
+
+#[async_trait]
+pub trait SemanticJudgeProvider: Send + Sync {
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    async fn judge(&self, request: &JudgeRequest) -> Result<JudgmentDraft, LlmProviderError>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputFeedbackRequest {
+    pub task_kind: SemanticTaskKind,
+    pub source_language: LanguageCode,
+    pub response_language: LanguageCode,
+    pub source_transcript: String,
+    pub prompt_snapshot: Option<String>,
+    pub learner_response: String,
+    pub asr_reliability: Option<AsrReliability>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputFeedbackDraft {
+    pub feedback: String,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+}
+
+#[async_trait]
+pub trait OutputFeedbackProvider: Send + Sync {
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    async fn give_feedback(
+        &self,
+        request: &OutputFeedbackRequest,
+    ) -> Result<OutputFeedbackDraft, LlmProviderError>;
+}
+
 /// A runtime view of a configured provider: which protocol, which model, and
 /// its (declared or probed) capabilities.
 #[derive(Debug, Clone, PartialEq)]
@@ -361,6 +485,9 @@ pub trait LlmChatAdapter: Send + Sync {
 /// seams remain the test surfaces for their individual use cases.
 #[async_trait]
 pub trait SemanticLlmRuntime: Send + Sync {
+    fn rubric(&self) -> &dyn SemanticRubricProvider;
+    fn judge(&self) -> &dyn SemanticJudgeProvider;
+    fn feedback(&self) -> &dyn OutputFeedbackProvider;
     fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider;
     async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError>;
 }

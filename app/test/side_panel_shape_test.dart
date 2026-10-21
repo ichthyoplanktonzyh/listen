@@ -3,8 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/content_channel.dart';
 import 'package:llplayer_next/models/workbench_study_mode.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
+import 'package:llplayer_next/widgets/layout/content_channel_availability.dart';
 import 'package:llplayer_next/widgets/layout/side_panel_tabs.dart';
 import 'package:llplayer_next/widgets/layout/study_menu.dart';
 
@@ -67,7 +69,7 @@ void main() {
   });
 
   group('StudyMenu', () {
-    testWidgets('offers two listening displays and sentence exercises', (
+    testWidgets('offers channel surfaces, listening displays and exercises', (
       tester,
     ) async {
       await tester.pumpWidget(_harness(width: 200, child: _menu()));
@@ -78,7 +80,7 @@ void main() {
         expect(find.text(label), findsOneWidget);
       }
       for (final label in const ['读', '说', '写', '跟读']) {
-        expect(find.text(label), findsNothing);
+        expect(find.text(label), findsOneWidget);
       }
     });
 
@@ -147,11 +149,18 @@ Widget _menu({
   WorkbenchStudyMode selectedMode = WorkbenchStudyMode.normal,
   ValueChanged<WorkbenchStudyMode>? onModeSelected,
 }) => StudyMenu(
+  selectedChannel: ContentChannel.listening,
+  channelAvailability: {
+    for (final channel in ContentChannel.values)
+      channel: const ContentChannelAvailability.available(),
+  },
+  onChannelSelected: (_) {},
   selectedMode: selectedMode,
   onModeSelected: onModeSelected ?? (_) {},
   hasCue: hasCue,
   canCloze: canCloze,
   canChunkDictation: canChunkDictation,
+  onShadow: () {},
   onCloze: () {},
   onChunkDictation: () {},
   onSentenceDictation: () {},

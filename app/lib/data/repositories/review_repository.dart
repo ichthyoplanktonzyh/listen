@@ -14,6 +14,15 @@ abstract interface class ReviewRepository implements OccurrenceMediaRepository {
 
   Future<ReviewDeckOverview> deckOverview();
 
+  Future<AnkiPackageImportSummary> importAnkiPackage({
+    required String packagePath,
+    required String mediaDirectory,
+  });
+
+  Future<AnkiPackageExportSummary> exportAnkiPackage(
+    AnkiPackageExportRequest request,
+  );
+
   Future<ReviewDailyLimits> dailyLimits();
 
   Future<ReviewDailyLimits> updateDailyLimits(ReviewDailyLimits limits);
@@ -43,6 +52,20 @@ class LocalReviewRepository implements ReviewRepository {
 
   @override
   Future<ReviewDeckOverview> deckOverview() => _api.reviewDeckOverview();
+
+  @override
+  Future<AnkiPackageImportSummary> importAnkiPackage({
+    required String packagePath,
+    required String mediaDirectory,
+  }) => _api.importAnkiPackage(
+    packagePath: packagePath,
+    mediaDirectory: mediaDirectory,
+  );
+
+  @override
+  Future<AnkiPackageExportSummary> exportAnkiPackage(
+    AnkiPackageExportRequest request,
+  ) => _api.exportAnkiPackage(request);
 
   @override
   Future<ReviewDailyLimits> dailyLimits() => _api.reviewDailyLimits();

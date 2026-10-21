@@ -1,4 +1,4 @@
-//! Adopted composition HTTP surface (contract `5.0.0`).
+//! Adopted composition HTTP surface (contract `5.1.0`).
 //!
 //! This module is the single Core-owned composition interface: it resolves
 //! the current adopted composition of a Material, lists the selected

@@ -18,6 +18,7 @@ class TokenLine extends StatefulWidget {
     required this.cue,
     required this.profiles,
     this.capabilityProfiles = const {},
+    this.capabilityDisplayChannel = 'listening',
     required this.showStyles,
     required this.onWord,
     this.onWordTap,
@@ -49,6 +50,7 @@ class TokenLine extends StatefulWidget {
   final Cue cue;
   final Map<String, LexicalEntry> profiles;
   final Map<String, LexicalCapabilityProfile> capabilityProfiles;
+  final String? capabilityDisplayChannel;
   final bool showStyles;
   final double fontSize;
   final String? fontFamily;
@@ -144,6 +146,7 @@ class _TokenLineState extends State<TokenLine> {
   Map<String, LexicalEntry> get profiles => widget.profiles;
   Map<String, LexicalCapabilityProfile> get capabilityProfiles =>
       widget.capabilityProfiles;
+  String? get capabilityDisplayChannel => widget.capabilityDisplayChannel;
   bool get showStyles => widget.showStyles;
   double get fontSize => widget.fontSize;
   String? get fontFamily => widget.fontFamily;
@@ -537,17 +540,10 @@ class _TokenLineState extends State<TokenLine> {
       }
       final canonical = candidate.canonicalForm;
       final phraseDetails = phraseEntries[canonical];
-      final listeningAssessment =
-          phraseDetails?.capabilityProfile?.listening.effectiveAssessment;
-      final legacyStatus = phraseDetails?.entry.status;
-      final status = listeningAssessment == 'acquired'
-          ? 'known_recognized'
-          : listeningAssessment == 'not_acquired'
-          ? 'known_not_recognized'
-          : legacyStatus == 'known_recognized' ||
-                legacyStatus == 'known_not_recognized'
-          ? legacyStatus
-          : null;
+      final status = _effectiveDisplayStatusFor(
+        phraseDetails?.capabilityProfile,
+        phraseDetails?.entry.status,
+      );
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
@@ -665,10 +661,26 @@ class _TokenLineState extends State<TokenLine> {
   String? _effectiveDisplayStatus(String? normalized) {
     if (normalized == null) return null;
     final cap = capabilityProfiles[normalized];
-    final assessment = cap?.listening.effectiveAssessment;
-    if (assessment == 'not_acquired') return 'known_not_recognized';
+    return _effectiveDisplayStatusFor(cap, profiles[normalized]?.status);
+  }
+
+  String? _effectiveDisplayStatusFor(
+    LexicalCapabilityProfile? cap,
+    String? legacy,
+  ) {
+    final assessment = switch (capabilityDisplayChannel) {
+      'reading' => cap?.reading.effectiveAssessment,
+      'listening' => cap?.listening.effectiveAssessment,
+      'speaking' => cap?.speaking.effectiveAssessment,
+      'writing' => cap?.writing.effectiveAssessment,
+      _ => null,
+    };
     if (assessment == 'acquired') return 'known_recognized';
-    final legacy = profiles[normalized]?.status;
+    if (assessment == 'not_acquired') {
+      return capabilityDisplayChannel == 'listening'
+          ? 'known_not_recognized'
+          : 'unknown_meaning';
+    }
     return legacy == 'known_not_recognized' || legacy == 'known_recognized'
         ? legacy
         : null;

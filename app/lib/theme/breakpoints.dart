@@ -54,6 +54,16 @@ abstract final class ListenBreakpoints {
   /// (roughly 800px) still fits comfortably.
   static const playbackControlsRoomy = 900.0;
 
+  /// Personal-expression entry cards retain all labels above this width;
+  /// narrower desktop windows reduce them to icon-first controls.
+  static const appBarLabels = 860.0;
+
+  /// Reading surfaces switch their header and task controls to compact layout.
+  static const readingCompact = 900.0;
+
+  /// Reading's word inspector moves below the transcript under this width.
+  static const readingInspectorSideBySide = 980.0;
+
   /// The vocabulary workbench (#79 / S3) keeps its list+lens column beside the
   /// activity pane; below it the two collapse to a single column (the narrow
   /// "B" form). Derived from the two panes' floors: the list needs ~320 to show

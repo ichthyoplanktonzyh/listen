@@ -1807,7 +1807,7 @@ fn wire_dtos_convert_exact_fields_and_enum_strings() {
 }
 
 // ---------------------------------------------------------------------
-// Adopted composition surface (contract 5.0.0): the single Core-owned
+// Adopted composition surface (contract 5.1.0): the single Core-owned
 // composition authority. The App never re-parses a `.listenpkg`; these
 // typed reads are the only composition interface.
 // ---------------------------------------------------------------------

@@ -12,10 +12,14 @@ import '../models/learning_material.dart';
 import '../models/listening.dart';
 import '../models/llm_provider.dart';
 import '../models/material_capability.dart';
+import '../models/personal_expression.dart';
 import '../models/practice.dart';
+import '../models/production_corpus.dart';
+import '../models/reading.dart';
 import '../models/review_deck.dart';
 import '../models/saved_vocabulary_count.dart';
 import '../models/runtime_resources.dart';
+import '../models/semantic_task.dart';
 import '../models/semantic_embedding.dart';
 import '../models/source_identity.dart';
 import '../models/speech_synthesis.dart';
@@ -32,6 +36,12 @@ part 'api/lexical.dart';
 part 'api/practice.dart';
 part 'api/listening_hunting.dart';
 part 'api/llm_corpus_resources.dart';
+part 'api/semantic_assistance.dart';
+part 'api/reading.dart';
+part 'api/semantic.dart';
+part 'api/transcription.dart';
+part 'api/personal_expression.dart';
+part 'api/production_corpus.dart';
 part 'api/semantic_embedding.dart';
 part 'api/materials.dart';
 part 'api/capability_attempts.dart';
@@ -336,12 +346,11 @@ class LocalApi {
 }
 
 const supportedApiVersion = 1;
-// The listening product consumes Core's media-only 5.0 material, capability,
-// package-lifecycle, and composition surfaces. API generation remains v1.
+// This branch also consumes Core 5.1 reading/writing/speaking, recording,
+// semantic-task, personal-expression, and Anki surfaces. API generation stays
+// v1; the contract floor prevents older media-only Core builds from starting.
 const supportedContractMajor = 5;
-// A sidecar must present at least 5.0.0 within the supported major. Older
-// contracts are rejected here instead of failing on the first material call.
-const supportedContractMinor = 0;
+const supportedContractMinor = 1;
 
 void validateSidecarHandshake(Map<String, dynamic> handshake) {
   if (handshake['event'] != 'api.started' ||

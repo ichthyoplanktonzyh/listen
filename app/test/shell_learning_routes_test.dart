@@ -16,6 +16,7 @@ import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/flows/shell_learning_routes.dart';
 
 import 'support/review_repository_fake.dart';
+import 'support/anki_package_file_service_fake.dart';
 
 /// The listening-language shell routes own their composition-root-built
 /// controller bundle for one visit and show an explicit state while Core is
@@ -30,6 +31,7 @@ class _FakeReviewRepository extends FakeReviewRepositoryBase {
   Future<ReviewDeckOverview> deckOverview() async {
     loadCalls++;
     return ReviewDeckOverview(
+      importedDecks: const [],
       channels: const [],
       limitStatus: fakeLimitStatus(),
     );
@@ -108,7 +110,10 @@ void main() {
             ReviewRouteHost(
               create: null,
               language: 'en',
+              fileService: const FakeAnkiPackageFileService(),
               pauseBackgroundPlayback: () async {},
+              onStartShadowing: (_) async {},
+              onStartDelayedRetelling: (_) async {},
             ),
           ],
         ),
@@ -135,7 +140,10 @@ void main() {
         ReviewRouteHost(
           create: () => _reviewBundle(repository),
           language: 'en',
+          fileService: const FakeAnkiPackageFileService(),
           pauseBackgroundPlayback: () async {},
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );
@@ -162,7 +170,10 @@ void main() {
             return ReviewRouteHost(
               create: connected ? () => _reviewBundle(repository) : null,
               language: 'en',
+              fileService: const FakeAnkiPackageFileService(),
               pauseBackgroundPlayback: () async {},
+              onStartShadowing: (_) async {},
+              onStartDelayedRetelling: (_) async {},
             );
           },
         ),

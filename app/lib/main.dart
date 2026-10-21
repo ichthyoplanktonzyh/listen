@@ -7,7 +7,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
+import 'controllers/content_channel_coordinator.dart';
 import 'controllers/discovery_view_model.dart';
+import 'controllers/personal_expression_view_model.dart';
 import 'controllers/core_session_controller.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/downloads_controller.dart';
@@ -31,6 +33,10 @@ import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
+import 'controllers/reading_channel_coordinator.dart';
+import 'controllers/reading_controller.dart';
+import 'controllers/reading_diff_controller.dart';
+import 'controllers/reading_task_controller.dart';
 import 'controllers/provider_settings_view_models.dart';
 import 'controllers/review_controller.dart';
 import 'controllers/review_deck_controller.dart';
@@ -38,12 +44,17 @@ import 'controllers/semantic_search_view_model.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/slice_player_controller.dart';
+import 'controllers/speaking_actions_coordinator.dart';
+import 'controllers/speaking_channel_coordinator.dart';
+import 'controllers/speaking_task_controller.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/transcript_readiness_view_model.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/vocabulary_view_model.dart';
+import 'controllers/writing_channel_coordinator.dart';
+import 'controllers/writing_task_controller.dart';
 import 'controllers/material_capability_coordinator.dart';
 import 'data/repositories/core_repositories.dart';
 import 'data/repositories/composite_discovery_repository.dart';
@@ -62,6 +73,9 @@ import 'data/repositories/core_session_repository.dart';
 import 'data/repositories/media_import_repository.dart';
 import 'localization.dart';
 import 'models/backend_event.dart';
+import 'models/content_activity.dart';
+import 'models/content_channel.dart';
+import 'models/personal_expression.dart';
 import 'models/workbench_study_mode.dart';
 import 'models/practice.dart';
 import 'models/learning_material.dart';
@@ -77,6 +91,7 @@ import 'services/desktop_playback_bootstrap.dart';
 import 'services/diagnostic_log_export_service.dart';
 import 'services/external_tools.dart';
 import 'services/file_transfer_service.dart';
+import 'services/anki_package_file_service.dart';
 import 'services/fullscreen_window.dart';
 import 'services/acquisition_ledger.dart';
 import 'services/subscription_store.dart';
@@ -92,9 +107,15 @@ import 'ui/core/app_controller_scope.dart';
 import 'utils/format_duration.dart';
 import 'widgets/app_bar/app_bar_capabilities.dart';
 import 'widgets/app_bar/macos_menu_bar.dart';
+import 'widgets/channels/reading_channel.dart';
+import 'widgets/channels/speaking_channel.dart';
+import 'widgets/channels/writing_channel.dart';
 import 'widgets/common/listen_loading.dart';
+import 'widgets/flows/content_speaking_activity_dialog.dart';
 import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/media_import_flows.dart';
+import 'widgets/flows/reading_flows.dart';
+import 'widgets/flows/speaking_flows.dart';
 import 'widgets/home/listening_home.dart';
 import 'widgets/layout/desktop_drop_surface.dart';
 import 'widgets/layout/material_workbench.dart';
@@ -106,9 +127,11 @@ import 'widgets/layout/side_panel.dart';
 import 'widgets/layout/listening_session_menu.dart';
 import 'widgets/layout/study_menu.dart';
 import 'widgets/layout/translation_mode_button.dart';
+import 'widgets/layout/content_channel_availability.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/learning_edition_panel.dart';
 import 'widgets/panels/listening_inbox_panel.dart';
+import 'widgets/flows/writing_flows.dart';
 import 'widgets/panels/sentence_analysis_window.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/player/player_global_shortcuts.dart';
@@ -263,6 +286,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     with TickerProviderStateMixin {
   // ── Service / infrastructure handles ──
   final adapter = DesktopPlayerAdapter();
+  final recordingAdapter = DesktopPlayerAdapter();
   final transcriptController = ScrollController();
   final subscriptions = <StreamSubscription<dynamic>>[];
   Timer? syntaxCapabilityTimer;
@@ -405,6 +429,22 @@ class _PlayerScreenState extends State<PlayerScreen>
   );
   final slicePlayerController = SlicePlayerController();
 
+  /// Reading is scoped to the current material transcript. Its position is a
+  /// resume cursor, while task and marking writes remain explicit activities.
+  final readingController = ReadingController();
+  late final readingTaskController = ReadingTaskController(
+    repository: coreRepositories.readingTask,
+  );
+  late final readingDiffController = ReadingDiffController(
+    repository: coreRepositories.readingTask,
+  );
+  late final writingTaskController = WritingTaskController(
+    repository: coreRepositories.writingTask,
+  );
+  late final speakingTaskController = SpeakingTaskController(
+    repository: coreRepositories.speakingTask,
+  );
+
   /// The sentence-analysis panel's own single-sentence player, so its
   /// sound-reference ribbons can play and highlight the current sentence
   /// independently of the main stage.
@@ -484,8 +524,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     player: playerController,
     subtitle: subtitleController,
     learning: learningController,
+    slicePlayer: slicePlayerController,
     playbackActions: playbackActions,
+    settings: settingsController,
     adapter: adapter,
+    recordingAdapter: recordingAdapter,
+    stopAuxiliaryAudio: auxiliaryAudioController.stop,
+  );
+  late final speakingActions = SpeakingActionsCoordinator(
+    task: speakingTaskController,
+    player: playerController,
+    subtitle: subtitleController,
+    settings: settingsController,
+    slicePlayer: slicePlayerController,
+    adapter: adapter,
+    recordingAdapter: recordingAdapter,
     stopAuxiliaryAudio: auxiliaryAudioController.stop,
   );
   late final vocabularyActions = VocabularyActionsCoordinator(
@@ -598,6 +651,40 @@ class _PlayerScreenState extends State<PlayerScreen>
     playerController: playerController,
     subtitleController: subtitleController,
     downloadController: downloadController,
+  );
+  late final readingChannel = ReadingChannelCoordinator(
+    adapter: adapter,
+    player: playerController,
+    subtitle: subtitleController,
+    settings: settingsController,
+    reading: readingController,
+    readingTask: readingTaskController,
+    readingDiff: readingDiffController,
+    repository: coreRepositories.readingSession,
+  );
+  late final writingChannel = WritingChannelCoordinator(
+    adapter: adapter,
+    recordingAdapter: recordingAdapter,
+    player: playerController,
+    subtitle: subtitleController,
+    settings: settingsController,
+    slicePlayer: slicePlayerController,
+    auxiliaryAudio: auxiliaryAudioController,
+    task: writingTaskController,
+  );
+  late final speakingChannel = SpeakingChannelCoordinator(
+    actions: speakingActions,
+    task: speakingTaskController,
+    readingTask: readingTaskController,
+    learning: learningController,
+    player: playerController,
+    repository: coreRepositories.speakingSession,
+  );
+  late final contentChannels = ContentChannelCoordinator(
+    reading: readingChannel,
+    speaking: speakingChannel,
+    speakingActions: speakingActions,
+    writing: writingChannel,
   );
   // #25-A: fullscreen immersive playback. A fullscreen window without media
   // on the stage is just a big window, so the gate follows the media.
@@ -742,6 +829,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _transcriptReadiness?.dispose();
         _transcriptReadiness = null;
         unawaited(slicePlayerController.close());
+        unawaited(contentChannels.select(ContentChannel.listening));
         huntingSessionController.stop();
         setState(() {
           taskStatuses.clear();
@@ -775,6 +863,38 @@ class _PlayerScreenState extends State<PlayerScreen>
       isMounted: () => mounted,
       text: (key) => l.text(key),
       refreshDiagnosis: _refreshDiagnosis,
+    );
+    readingChannel.bind(
+      isMounted: () => mounted,
+      openSlicePlayback: _openSlicePlayback,
+      openWord: vocabularyActions.openWord,
+    );
+    contentChannels.bind(
+      speakingAvailable: () =>
+          coreSessionController.state.isConnected &&
+          widget.platformCapabilities.isMacOS,
+      openSpeaking: _openContentSpeakingActivity,
+      openWriting: () => writingChannel.openTask(
+        writingChannel.kind,
+        promptSnapshot: writingPrompt(l, writingChannel.kind),
+        fixedRubricPoints: writingTaskTemplate(l),
+      ),
+    );
+    speakingChannel.text = (key) => l.text(key);
+    speakingChannel.bind(
+      isMounted: () => mounted,
+      askPersonalExpressionAssessment: _askPersonalExpressionAssessment,
+      onReturnToReview: _openReviewQueue,
+      onReturnToPersonalExpression: () => unawaited(_openPersonalExpression()),
+    );
+    writingChannel.bind(
+      isMounted: () => mounted,
+      openSlicePlayback: _openSlicePlayback,
+      closeOtherChannels: () async {
+        speakingChannel.closeL1Check();
+        if (speakingActions.isOpen) await speakingActions.close();
+        await readingChannel.close();
+      },
     );
     mediaLibraryActions.bind(
       isMounted: () => mounted,
@@ -1269,6 +1389,118 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _closeSlicePlayback() => slicePlayerController.close();
 
+  Future<void> _openContentSpeakingActivity() async {
+    final activity = await showContentSpeakingActivityDialog(context);
+    if (!mounted || activity == null) return;
+    switch (activity) {
+      case ContentSpeakingActivity.retelling:
+        await speakingActions.openRetelling(
+          fixedRubricPoints: listeningRetellTemplate(l),
+          closeReading: readingChannel.close,
+        );
+      case ContentSpeakingActivity.shadowing:
+        await practiceActions.startShadowingPractice();
+    }
+  }
+
+  Future<void> _playPersonalExpressionSource(
+    PersonalExpressionSourceView value,
+  ) async {
+    final mediaId = value.mediaId;
+    final startMs = value.startMs;
+    final endMs = value.endMs;
+    if (mediaId == null || startMs == null || endMs == null) return;
+    await _openSlicePlayback(
+      currentMediaSliceOccurrence(
+        mediaId: mediaId,
+        trackId: value.trackId,
+        sentenceId: value.sentenceId ?? value.candidateRef ?? mediaId,
+        textSnapshot: value.text,
+        startMs: startMs,
+        endMs: endMs,
+        mediaFingerprint: value.mediaFingerprint,
+      ),
+    );
+  }
+
+  Future<void> _startPersonalExpressionSpeaking(
+    SentencePatternAssetView pattern,
+  ) async {
+    if (!coreSessionController.state.isConnected ||
+        !widget.platformCapabilities.isMacOS) {
+      return;
+    }
+    speakingChannel.activePersonalPattern = pattern;
+    setState(() => _workbenchExpanded = true);
+    _workbenchAnimController.forward();
+    await speakingActions.openPersonalPattern(
+      patternId: pattern.id,
+      language: pattern.language,
+      sourceText: pattern.source.text,
+      promptText: pattern.currentVersion.patternText,
+      mediaId: pattern.source.mediaId,
+      trackId: pattern.source.trackId,
+      startMs: pattern.source.startMs,
+      endMs: pattern.source.endMs,
+      fixedRubricPoints: personalExpressionTemplate(l),
+      closeReading: readingChannel.close,
+    );
+  }
+
+  Future<void> _openPersonalExpression({PersonalExpressionSourceView? source}) {
+    if (source == null) {
+      currentRoute.value = AppRoute.expressions;
+      return Future<void>.value();
+    }
+    final available = coreSessionController.state.isConnected;
+    final language = settingsController.resolveLearningLanguage(
+      subtitleController.primaryTrack?.language,
+    );
+    final repository = available ? coreRepositories.personalExpression : null;
+    return openPersonalExpressionFlow(
+      context: context,
+      viewModel: repository == null
+          ? null
+          : PersonalExpressionViewModel(repository, language: language),
+      createDetailViewModel: repository == null
+          ? null
+          : (pattern) =>
+                PersonalExpressionDetailViewModel(repository, pattern: pattern),
+      playerController: playerController,
+      initialSource: source,
+      onPlaySource: _playPersonalExpressionSource,
+      onStartSpeaking: _startPersonalExpressionSpeaking,
+    );
+  }
+
+  Future<void> _recordReadingMark(bool understood) async {
+    final entry = learningController.selectedLexicalDetails?.entry;
+    final token = learningController.selectedToken;
+    final cue = learningController.selectedCue;
+    if (!coreSessionController.state.isConnected ||
+        entry == null ||
+        token == null) {
+      return;
+    }
+    try {
+      await learningWorkflowController.recordReadingMarking(
+        lexicalEntryId: entry.id,
+        sentenceId: cue?.id,
+        surfaceForm: token.text,
+        mediaId: subtitleController.primaryTrack?.mediaId,
+        translationVisible: readingController.state.translationVisible,
+        understood: understood,
+      );
+      playerController.setStatus(l.text('readingMarkSaved'));
+    } catch (error) {
+      playerController.setStatus(
+        l.text('statusReadingMarkFailed'),
+        error: true,
+        failure: learningWorkflowController.failureDetail(error),
+      );
+    }
+  }
+
   /// Opens the same-family clip aggregation for one L1 difficulty hint
   /// (Phase 3.9): listen goes through the slice playback window; practice is
   /// available for clips of the currently loaded track and seeds the
@@ -1419,6 +1651,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     currentRoute.value = AppRoute.language;
   }
 
+  Widget _expressionsPane() {
+    final connected = coreSessionController.state.isConnected;
+    final repository = connected ? coreRepositories.personalExpression : null;
+    return ExpressionRouteHost(
+      create: connected ? _createExpressionRouteControllers : null,
+      language: _routeLanguage,
+      createDetailViewModel: repository == null
+          ? null
+          : (pattern) =>
+                PersonalExpressionDetailViewModel(repository, pattern: pattern),
+      onPlaySource: _playPersonalExpressionSource,
+      onStartSpeaking: _startPersonalExpressionSpeaking,
+    );
+  }
+
   Future<void> _openListeningDictionaryEntry(String entryId) =>
       _showVocabulary(initialEntryId: entryId);
 
@@ -1485,6 +1732,101 @@ class _PlayerScreenState extends State<PlayerScreen>
       slicePlayer: SlicePlayerController(),
     );
   }
+
+  ExpressionRouteControllers? _createExpressionRouteControllers() {
+    if (!coreSessionController.state.isConnected) return null;
+    return ExpressionRouteControllers(
+      viewModel: PersonalExpressionViewModel(
+        coreRepositories.personalExpression,
+        language: _routeLanguage,
+      ),
+    );
+  }
+
+  Future<void> _startReviewShadowing(ReviewQueueEntry entry) async {
+    final mediaId = entry.item.source.mediaId;
+    final startMs = entry.playbackStartMs;
+    final endMs = entry.playbackEndMs;
+    if (!coreSessionController.state.isConnected ||
+        mediaId == null ||
+        startMs == null ||
+        endMs == null) {
+      return;
+    }
+    final resolution = await OccurrenceMediaResolver(
+      repository: coreRepositories.review,
+    ).resolveLinkedMedia(mediaId);
+    if (resolution is! ResolvedOccurrenceMedia) {
+      playerController.setStatus(
+        l.text('statusReviewMediaUnavailable'),
+        error: true,
+      );
+      return;
+    }
+    final sentenceId = entry.item.anchors
+        .where((anchor) => anchor.kind == 'sentence')
+        .map((anchor) => anchor.sentenceId)
+        .whereType<String>()
+        .firstOrNull;
+    await practiceActions.startExternalShadowing(resolution.path, {
+      'media_id': mediaId,
+      'track_id': entry.item.source.trackId,
+      'sentence_id': sentenceId,
+      'sentence_text_snapshot': entry.item.promptSnapshot,
+      'start_ms_snapshot': startMs,
+      'end_ms_snapshot': endMs,
+    });
+  }
+
+  Future<void> _startDelayedRetelling(ReviewQueueEntry entry) async {
+    final mediaId = entry.item.source.mediaId;
+    if (!coreSessionController.state.isConnected || mediaId == null) return;
+    final resolution = await OccurrenceMediaResolver(
+      repository: coreRepositories.review,
+    ).resolveLinkedMedia(mediaId);
+    if (resolution is! ResolvedOccurrenceMedia) {
+      playerController.setStatus(
+        l.text('statusRetellMediaUnavailable'),
+        error: true,
+      );
+      return;
+    }
+    final path = resolution.path;
+    if (playerController.mediaPath == null) {
+      await mediaSession.openMediaPath(path);
+      await adapter.pause();
+    }
+    if (!mounted) return;
+    setState(() => _workbenchExpanded = true);
+    _workbenchAnimController.forward();
+    await speakingActions.openDelayedRetelling(
+      entry: entry,
+      mediaPath: path,
+      fixedRubricPoints: listeningRetellTemplate(l),
+      closeReading: readingChannel.close,
+    );
+  }
+
+  Future<String?> _askPersonalExpressionAssessment() => showDialog<String>(
+    context: context,
+    builder: (context) {
+      final l = AppLocalizations.of(context);
+      return SimpleDialog(
+        title: Text(l.text('peAssessTitle')),
+        children: [
+          for (final (value, labelKey) in const [
+            ('needs_work', 'peAssessNeedsWork'),
+            ('partly_expressed', 'peAssessPartly'),
+            ('expressed', 'peAssessExpressed'),
+          ])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, value),
+              child: Text(l.text(labelKey)),
+            ),
+        ],
+      );
+    },
+  );
 
   /// Projects an adopted media composition's structured transcript and
   /// alignment into the workbench.
@@ -1612,9 +1954,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     transcriptController.dispose();
     syntaxCapabilityTimer?.cancel();
     unawaited(adapter.dispose());
+    unawaited(recordingAdapter.dispose());
     playerController.dispose();
     subtitleController.dispose();
     learningController.dispose();
+    readingChannel.dispose();
+    readingController.dispose();
+    readingTaskController.dispose();
+    readingDiffController.dispose();
+    writingChannel.dispose();
+    writingTaskController.dispose();
+    speakingChannel.dispose();
+    speakingTaskController.dispose();
+    speakingActions.dispose();
     practiceController.dispose();
     slicePlayerController.dispose();
     auxiliaryAudioController.dispose();
@@ -1755,6 +2107,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _studyMenu() {
     final cue = subtitleController.currentPrimaryCue;
     return StudyMenu(
+      selectedChannel: contentChannels.selected,
+      channelAvailability: _channelAvailability(),
+      onChannelSelected: (channel) =>
+          unawaited(contentChannels.select(channel)),
       selectedMode: _studyMode,
       onModeSelected: _selectStudyMode,
       hasCue: cue != null,
@@ -1768,6 +2124,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   ?.chunks
                   .isNotEmpty ??
               false),
+      onShadow: () => unawaited(practiceActions.startShadowingPractice()),
       onCloze: () => unawaited(practiceActions.startClozePractice()),
       onChunkDictation: () =>
           unawaited(practiceActions.startChunkDictationPractice()),
@@ -1778,8 +2135,63 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   /// Selects one listening display mode.
   void _selectStudyMode(WorkbenchStudyMode mode) {
+    unawaited(contentChannels.select(ContentChannel.listening));
     setState(() => _studyMode = mode);
   }
+
+  Map<ContentChannel, ContentChannelAvailability> _channelAvailability() {
+    final noTranscript = subtitleController.primaryTrack == null
+        ? ContentChannelAvailability.unavailable(
+            l.text('channelNeedsTranscript'),
+          )
+        : null;
+    return {
+      ContentChannel.listening: const ContentChannelAvailability.available(),
+      ContentChannel.reading:
+          noTranscript ?? const ContentChannelAvailability.available(),
+      ContentChannel.speaking:
+          noTranscript ??
+          (widget.platformCapabilities.isMacOS
+              ? const ContentChannelAvailability.available()
+              : ContentChannelAvailability.unavailable(
+                  l.text('channelUnavailable'),
+                )),
+      ContentChannel.writing:
+          noTranscript ?? const ContentChannelAvailability.available(),
+    };
+  }
+
+  Widget? _immersiveWorkbenchStage() => switch (contentChannels.selected) {
+    ContentChannel.writing => WritingChannelHost(
+      writingChannel: writingChannel,
+      writingTaskController: writingTaskController,
+    ),
+    ContentChannel.speaking => SpeakingChannelHost(
+      speakingChannel: speakingChannel,
+      speakingActions: speakingActions,
+      speakingTaskController: speakingTaskController,
+      readingTaskController: readingTaskController,
+    ),
+    ContentChannel.reading => ReadingChannelHost(
+      readingChannel: readingChannel,
+      readingController: readingController,
+      readingTaskController: readingTaskController,
+      readingDiffController: readingDiffController,
+      learningController: learningController,
+      settingsController: settingsController,
+      subtitleController: subtitleController,
+      playerController: playerController,
+      vocabularyActions: vocabularyActions,
+      onSaveSentencePattern: (source) =>
+          _openPersonalExpression(source: source),
+      onOpenSlicePlayback: _openSlicePlayback,
+      onRecordReadingMark: _recordReadingMark,
+      onOpenListeningDictionary: _openListeningDictionaryEntry,
+      onPlayPronunciationAudio: _playPronunciationAudio,
+      onCorrectLemma: () => unawaited(_correctCurrentLemma()),
+    ),
+    ContentChannel.listening => null,
+  };
 
   // ── Shell panes ──
   //
@@ -1792,6 +2204,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     AppRoute.home => _homePane(),
     AppRoute.library => _libraryPane(),
     AppRoute.language => _languagePane(),
+    AppRoute.expressions => _expressionsPane(),
   };
 
   Widget _homePane() => HomePane(
@@ -1909,6 +2322,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               huntingController: huntingController,
               auxiliaryAudio: auxiliaryAudioController,
               pauseBackgroundPlayback: _acquireAuxiliaryAudioFocus,
+              onStartShadowing: practiceActions.startExternalShadowing,
             ),
           ),
           PaneSegment(
@@ -1917,7 +2331,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             builder: (context) => ReviewRouteHost(
               create: connected ? _createReviewRouteControllers : null,
               language: _routeLanguage,
+              fileService: const LocalAnkiPackageFileService(),
               pauseBackgroundPlayback: _acquireAuxiliaryAudioFocus,
+              onStartShadowing: _startReviewShadowing,
+              onStartDelayedRetelling: _startDelayedRetelling,
             ),
           ),
         ],
@@ -1969,6 +2386,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         huntingSessionController,
         // The transport's Space indicator follows the practice draft (#25).
         practiceController,
+        contentChannels.selection,
         settingsController,
         downloadController,
         immersiveMode,
@@ -2092,6 +2510,19 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   position:
                                                       _workbenchSlideAnimation,
                                                   child: MaterialWorkbench(
+                                                    selectedChannel:
+                                                        contentChannels
+                                                            .selected,
+                                                    immersiveStage:
+                                                        _immersiveWorkbenchStage(),
+                                                    onShadow: () => unawaited(
+                                                      practiceActions
+                                                          .startShadowingPractice(),
+                                                    ),
+                                                    canShadow:
+                                                        subtitleController
+                                                            .currentPrimaryCue !=
+                                                        null,
                                                     learningEditionAction: switch (mediaSession
                                                         .currentMaterial) {
                                                       final material? =>
@@ -2275,7 +2706,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     onOpenWord: vocabularyActions.openWord,
     onSeekCue: _seekCue,
     onSeekWord: _seekWord,
-    onSetListeningOverride: vocabularyActions.setListeningOverride,
+    onSetWordStatus: vocabularyActions.markFirstWord,
+    onSetCapabilityOverride: vocabularyActions.setCapabilityOverride,
     onSaveSelectedLearningContent:
         vocabularyActions.saveSelectedLearningContent,
     onObserveSelected: vocabularyActions.observeSelected,

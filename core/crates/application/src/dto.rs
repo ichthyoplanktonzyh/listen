@@ -1,12 +1,12 @@
 use domain::{
-    CorpusOccurrence, CorpusOccurrenceId, HuntingCheckAnswer, HuntingTargetId,
-    HuntingTargetSourceKind, LearningEventId, LearningStatus, LexicalEntryId, LexicalEntryKind,
-    LexicalObservationId, ListeningComprehensionReport, ListeningInboxResolution, MediaId,
-    MediaItem, MediaKind, MediaTriageIntent, ObservationResult, PracticeAnchor, PracticeItemId,
-    PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, ReviewAttempt, ReviewCardState,
-    ReviewItem, ReviewItemId, ReviewRating, ReviewSchedule, ReviewSource, SubtitleSentenceId,
-    SubtitleTrackId, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
-    WordTimelineId, WordTiming,
+    AssistanceLevel, CorpusOccurrence, CorpusOccurrenceId, HuntingCheckAnswer, HuntingTargetId,
+    HuntingTargetSourceKind, LanguageCode, LearningEventId, LearningStatus, LexicalEntryId,
+    LexicalEntryKind, LexicalObservationId, ListeningComprehensionReport, ListeningInboxResolution,
+    MediaId, MediaItem, MediaKind, MediaTriageIntent, ObservationResult, PlayableSegment,
+    PracticeAnchor, PracticeItemId, PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget,
+    RecordingAssetId, RecordingAudioMetadata, ReviewAttempt, ReviewCardState, ReviewItem,
+    ReviewItemId, ReviewRating, ReviewSchedule, ReviewSource, SubtitleSentenceId, SubtitleTrackId,
+    TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, WordTimelineId, WordTiming,
 };
 use serde::{Deserialize, Serialize};
 
@@ -194,6 +194,18 @@ pub struct CreateLexicalObservation {
     pub source: Option<LexicalSourceContext>,
 }
 
+/// One learner-confirmed expression from a completed speaking response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordSpeakingProduction {
+    pub lexical_entry_id: LexicalEntryId,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub surface_form: String,
+    pub media_id: Option<MediaId>,
+    pub assistance: AssistanceLevel,
+    pub source_ref: String,
+    pub occurred_at_ms: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePracticeSession {
     pub mode: PracticeMode,
@@ -220,6 +232,36 @@ pub struct SubmitPracticeAttempt {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRecordingAsset {
+    pub file_path: String,
+    pub duration_ms: u64,
+    pub target: PracticeTarget,
+    pub source_segment: PlayableSegment,
+    pub language: LanguageCode,
+    pub audio: RecordingAudioMetadata,
+    pub recorder_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRecordingTranscriptionRequest {
+    pub recording_id: String,
+    pub model_id: String,
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompleteShadowingAttempt {
+    pub item_id: PracticeItemId,
+    pub recording_id: RecordingAssetId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateShadowingComparison {
+    pub recording_id: RecordingAssetId,
+    pub reference_wav_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateReviewItem {
     pub source: ReviewSource,
     pub anchors: Vec<PracticeAnchor>,
@@ -233,6 +275,7 @@ pub enum ReviewCardKind {
     ChunkCloze,
     PhrasePresence,
     SourceSentenceRecall,
+    DelayedRetelling,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,6 +292,35 @@ pub struct ReviewQueueEntry {
     pub schedule: ReviewSchedule,
     pub state: ReviewCardState,
     pub card: ReviewCard,
+    pub origin: ReviewItemOrigin,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewOriginKind {
+    Native,
+    ImportedAnki,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewItemOrigin {
+    pub kind: ReviewOriginKind,
+    pub anki_guid: Option<String>,
+    pub deck_id: Option<String>,
+    pub deck_name: Option<String>,
+    pub has_listening_enhancements: bool,
+}
+
+impl ReviewItemOrigin {
+    pub fn native() -> Self {
+        Self {
+            kind: ReviewOriginKind::Native,
+            anki_guid: None,
+            deck_id: None,
+            deck_name: None,
+            has_listening_enhancements: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,8 +391,42 @@ pub struct ReviewQueue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewDeckOverview {
-    pub counts: ReviewStateCounts,
+    pub channels: Vec<ReviewChannelCounts>,
+    pub imported_decks: Vec<ImportedDeckCounts>,
     pub limit_status: ReviewLimitStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewChannel {
+    Listening,
+    Speaking,
+    Reading,
+    Writing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewChannelCounts {
+    pub channel: ReviewChannel,
+    pub counts: ReviewStateCounts,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportedDeckCounts {
+    pub deck_id: String,
+    pub name: String,
+    pub parent_deck_id: Option<String>,
+    pub counts: ReviewStateCounts,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportedDeckSchedule {
+    pub item_id: ReviewItemId,
+    pub anki_guid: String,
+    pub deck_id: String,
+    pub name: String,
+    pub parent_deck_id: Option<String>,
+    pub schedule: ReviewSchedule,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,6 +434,7 @@ pub struct ReviewDeckOverview {
 pub enum CustomStudyKind {
     MoreNew,
     ReviewAhead,
+    Channel { channel: ReviewChannel },
     Forgotten { minimum_lapses: Option<u32> },
 }
 
@@ -345,6 +452,49 @@ pub struct CustomStudyQueue {
     /// Only "review ahead" intentionally advances the official schedule when
     /// its cards are submitted. Other custom queues are extra practice.
     pub advances_normal_schedule: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageImportRequest {
+    pub package_path: String,
+    pub media_directory: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageImportSummary {
+    pub imported_cards: u32,
+    pub updated_cards: u32,
+    pub skipped_cards: u32,
+    pub imported_decks: u32,
+    pub imported_revlog_entries: u32,
+    pub imported_media_files: u32,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageExportRequest {
+    pub package_path: String,
+    #[serde(default)]
+    pub deck_ids: Vec<String>,
+    #[serde(default)]
+    pub channels: Vec<ReviewChannel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiExportFidelity {
+    pub cards_with_media_slices: u32,
+    pub video_slices_rendered_as_audio: u32,
+    pub media_render_failures: u32,
+    pub omitted_capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageExportSummary {
+    pub exported_cards: u32,
+    pub exported_revlog_entries: u32,
+    pub exported_media_files: u32,
+    pub fidelity: AnkiExportFidelity,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

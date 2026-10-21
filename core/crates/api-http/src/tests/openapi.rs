@@ -29,10 +29,10 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 5.0.0 narrows material processing to audio/video and removes the
-    // document, conversation, production, and coaching surfaces.
+    // 5.1.0 keeps audio/video-only material intake and restores the parked
+    // independent learning activities and text-card review.
     assert!(
-        openapi.contains("version: 5.0.0"),
+        openapi.contains("version: 5.1.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -130,9 +130,7 @@ fn openapi_version_snapshot_and_path_count() {
     for removed in [
         "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob:",
         "/v1/realtime/providers:",
-        "/v1/reading/positions/{track_id}:",
-        "/v1/production-corpus/search:",
-        "/v1/review/anki/import:",
+        "/v1/production-gap/review:",
         "DocumentRendition:",
         "DocumentRenditionInput:",
     ] {
@@ -144,6 +142,62 @@ fn openapi_version_snapshot_and_path_count() {
 }
 
 #[test]
+fn transcription_model_and_provider_routes_have_typed_json_contracts() {
+    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
+    let providers = operation_path_block(openapi, "/v1/transcription/providers");
+    let models = operation_path_block(openapi, "/v1/transcription/models");
+    let install = operation_path_block(openapi, "/v1/transcription/models/install");
+    let register = operation_path_block(openapi, "/v1/transcription/models/register-custom");
+    let cancel = operation_path_block(
+        openapi,
+        "/v1/transcription/models/{model_id}/cancel-install",
+    );
+    let delete = operation_path_block(openapi, "/v1/transcription/models/{model_id}");
+
+    assert!(providers.contains("TranscriptionProviderInfo"));
+    assert!(models.contains("TranscriptionModelDescriptor"));
+    assert!(install.contains("TranscriptionModelIdRequest"));
+    assert!(install.contains("TranscriptionModelInstallStarted"));
+    assert!(register.contains("RegisterCustomTranscriptionModelRequest"));
+    assert!(register.contains("TranscriptionModelDescriptor"));
+    assert!(cancel.contains("TranscriptionModelDescriptor"));
+    assert!(delete.contains("\"204\": { description: Model removed }"));
+
+    let model = openapi_schema_block(openapi, "TranscriptionModelDescriptor");
+    assert!(model.contains("checksum_sha256: { type: string"));
+    assert!(model.contains("download_url: { type: [string, \"null\"]"));
+    assert!(model.contains("local_path:\n          type: [string, \"null\"]"));
+    assert!(
+        model.contains("quality: { $ref: \"#/components/schemas/TranscriptionModelQuality\" }")
+    );
+    assert!(model.contains("state: { $ref: \"#/components/schemas/TranscriptionModelState\" }"));
+    assert!(
+        openapi_schema_block(openapi, "TranscriptionModelQuality")
+            .contains("enum: [fast, balanced, accurate]")
+    );
+    assert!(
+        openapi_schema_block(openapi, "TranscriptionModelState")
+            .contains("enum: [downloadable, installing, installed, custom, failed]")
+    );
+    assert!(
+        openapi_schema_block(openapi, "TranscriptionModelIdRequest")
+            .contains("required: [model_id]")
+    );
+    assert!(
+        openapi_schema_block(openapi, "TranscriptionModelInstallStarted")
+            .contains("installation_started: { type: boolean }")
+    );
+    let custom_request = openapi_schema_block(openapi, "RegisterCustomTranscriptionModelRequest");
+    assert!(custom_request.contains("required: [path]"));
+    assert!(custom_request.contains("Explicitly user-selected local model file path."));
+
+    // Local paths are excluded from Core-managed media/material resources;
+    // the retained local recording and model descriptors are scoped exceptions.
+    assert!(openapi.contains("Core-managed media and material resource responses omit local"));
+    assert!(openapi.contains("local recording and transcription-model asset descriptors"));
+}
+
+#[test]
 fn openapi_learning_observation_task_values_match_domain() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
     let task_types = [
@@ -151,7 +205,10 @@ fn openapi_learning_observation_task_values_match_domain() {
         domain::ObservationTaskType::Cloze,
         domain::ObservationTaskType::Dictation,
         domain::ObservationTaskType::SubtitleFade,
+        domain::ObservationTaskType::Shadowing,
         domain::ObservationTaskType::ReviewRecall,
+        domain::ObservationTaskType::ReadingContextMarking,
+        domain::ObservationTaskType::SpeakingProduction,
     ];
     let values = task_types
         .iter()
@@ -166,7 +223,7 @@ fn openapi_learning_observation_task_values_match_domain() {
     let schema_enum = format!("task_type: {{ enum: [{}] }}", values.join(", "));
     assert!(
         openapi.contains(&schema_enum),
-        "LearningObservation.task_type must match the listening task enum: {schema_enum}"
+        "LearningObservation.task_type must match domain activity channels: {schema_enum}"
     );
 }
 
@@ -247,6 +304,40 @@ pub(crate) fn operation_response_block(openapi: &str, operation_id: &str) -> Str
         .map(|(index, _)| index)
         .unwrap_or(rest.lines().count());
     rest.lines().take(end).collect::<Vec<_>>().join("\n")
+}
+
+fn operation_path_block(openapi: &str, path: &str) -> String {
+    let marker = format!("  {path}:");
+    let start = openapi
+        .find(&marker)
+        .unwrap_or_else(|| panic!("OpenAPI path {path} missing"));
+    let rest = &openapi[start..];
+    let end = rest
+        .lines()
+        .enumerate()
+        .skip(1)
+        .find(|(_, line)| line.starts_with("  /v1/") || line.starts_with("components:"))
+        .map(|(index, _)| index)
+        .unwrap_or(rest.lines().count());
+    rest.lines().take(end).collect::<Vec<_>>().join("\n")
+}
+
+fn openapi_schema_block<'a>(openapi: &'a str, schema_name: &str) -> &'a str {
+    let marker = format!("    {schema_name}:\n");
+    let start = openapi
+        .find(&marker)
+        .unwrap_or_else(|| panic!("OpenAPI schema {schema_name} missing"));
+    let rest = &openapi[start + marker.len()..];
+    let mut end = rest.len();
+    let mut offset: usize = 0;
+    for line in rest.lines() {
+        if line.starts_with("    ") && !line.starts_with("      ") {
+            end = offset.saturating_sub(1);
+            break;
+        }
+        offset += line.len() + 1;
+    }
+    &rest[..end]
 }
 
 #[test]

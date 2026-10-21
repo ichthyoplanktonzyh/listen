@@ -7,6 +7,7 @@ import 'package:llplayer_next/models/review_deck.dart';
 import 'package:llplayer_next/screens/review_deck_home_screen.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 
+import 'support/anki_package_file_service_fake.dart';
 import 'support/review_repository_fake.dart';
 
 class _FakeDeckRepository extends FakeReviewRepositoryBase {
@@ -38,6 +39,7 @@ ReviewDeckOverview _overview({
   List<ReviewChannelDeck>? channels,
   ReviewLimitStatus? limitStatus,
 }) => ReviewDeckOverview(
+  importedDecks: const [],
   channels:
       channels ??
       [
@@ -70,6 +72,7 @@ Future<void> _pump(
       ],
       home: ReviewDeckHomeScreen(
         controller: controller,
+        fileService: const FakeAnkiPackageFileService(),
         onStartSession: onStartSession ?? () {},
         onStartCustomStudy: onStartCustomStudy ?? (_) {},
       ),

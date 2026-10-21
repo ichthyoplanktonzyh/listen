@@ -1,4 +1,4 @@
-//! Learning-material HTTP surface (contract `5.0.0`).
+//! Learning-material HTTP surface (contract `5.1.0`).
 //!
 //! This module contains wire adaptation only: typed request DTOs, explicit
 //! response DTOs, and handlers that parse path ids and optional language

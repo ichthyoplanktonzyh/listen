@@ -45,6 +45,11 @@ fn test_state_with_repository() -> (ApiState, Arc<SqliteRepository>) {
             repo.clone(),
         )
         .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+        .with_recording_repository(repo.clone())
+        .with_reading_position_repository(repo.clone())
+        .with_semantic_task_repository(repo.clone())
+        .with_production_corpus_repository(repo.clone())
+        .with_personal_expression_repository(repo.clone())
         .with_corpus_index_repository(repo.clone())
         .with_llm_provider_profile_repository(repo.clone())
         .with_material_repository(repo.clone())
@@ -136,7 +141,7 @@ async fn internal_repository_details_are_redacted_from_http_errors() {
         .finish();
     let response = tracing::subscriber::with_default(subscriber, || {
         ApiError::from(ApplicationError::Repository(
-            "database /private/user/listen.sqlite: secret_table failed".to_owned(),
+            "database /private/user/listen-channels.sqlite: secret_table failed".to_owned(),
         ))
         .into_response()
     });
@@ -150,7 +155,7 @@ async fn internal_repository_details_are_redacted_from_http_errors() {
     assert!(!body.contains("secret_table"));
 
     let diagnostics = String::from_utf8(logs.0.lock().unwrap().clone()).unwrap();
-    assert!(diagnostics.contains("/private/user/listen.sqlite"));
+    assert!(diagnostics.contains("/private/user/listen-channels.sqlite"));
     assert!(diagnostics.contains("secret_table"));
     let body: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert!(diagnostics.contains(body["correlation_id"].as_str().unwrap()));
@@ -263,6 +268,8 @@ mod openapi;
 mod package_lifecycle;
 mod phonetic_analysis;
 mod practice;
+mod reading;
+mod semantic;
 mod speech_language;
 mod syntax;
 mod timelines;

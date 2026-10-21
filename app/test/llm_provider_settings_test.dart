@@ -9,7 +9,7 @@ import 'package:llplayer_next/widgets/settings/llm_provider_settings.dart';
 
 void main() {
   testWidgets(
-    'provider setup is scoped to sense groups and submits only that use',
+    'provider setup selects only the semantic task uses the learner enables',
     (tester) async {
       final repository = _ProviderRepository();
       final viewModel = LlmProviderSettingsViewModel(repository);
@@ -33,32 +33,40 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.text(
-          'AI-generated sense groups are suggestions. Check them against the audio and transcript.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Rubric generation'), findsOneWidget);
+      expect(find.text('Semantic judgment'), findsOneWidget);
       expect(find.text('Sense-group analysis'), findsOneWidget);
-      expect(find.textContaining('rubric'), findsNothing);
-      expect(find.text('Judgment'), findsNothing);
 
       final fields = find.byType(TextField);
-      await tester.ensureVisible(fields.at(0));
-      await tester.enterText(fields.at(0), 'Local listening helper');
-      await tester.ensureVisible(fields.at(1));
-      await tester.enterText(fields.at(1), 'http://127.0.0.1:8000/v1');
-      await tester.ensureVisible(fields.at(2));
-      await tester.enterText(fields.at(2), 'model');
-      await tester.ensureVisible(fields.at(3));
-      await tester.enterText(fields.at(3), 'write-only-secret');
+      Future<void> fillProviderForm() async {
+        await tester.ensureVisible(fields.at(0));
+        await tester.enterText(fields.at(0), 'Local language helper');
+        await tester.ensureVisible(fields.at(1));
+        await tester.enterText(fields.at(1), 'http://127.0.0.1:8000/v1');
+        await tester.ensureVisible(fields.at(2));
+        await tester.enterText(fields.at(2), 'model');
+        await tester.ensureVisible(fields.at(3));
+        await tester.enterText(fields.at(3), 'write-only-secret');
+      }
+
+      await fillProviderForm();
 
       final senseGroupCheckbox = find.ancestor(
         of: find.text('Sense-group analysis'),
         matching: find.byType(CheckboxListTile),
       );
+      final rubricCheckbox = find.ancestor(
+        of: find.text('Rubric generation'),
+        matching: find.byType(CheckboxListTile),
+      );
+      final judgmentCheckbox = find.ancestor(
+        of: find.text('Semantic judgment'),
+        matching: find.byType(CheckboxListTile),
+      );
       await tester.ensureVisible(senseGroupCheckbox);
       expect(tester.widget<CheckboxListTile>(senseGroupCheckbox).value, isTrue);
+      expect(tester.widget<CheckboxListTile>(judgmentCheckbox).value, isTrue);
+      expect(tester.widget<CheckboxListTile>(rubricCheckbox).value, isFalse);
       await tester.tap(senseGroupCheckbox);
       await tester.pumpAndSettle();
       expect(
@@ -68,16 +76,20 @@ void main() {
       await tester.ensureVisible(find.text('Save provider'));
       await tester.tap(find.text('Save provider'));
       await tester.pumpAndSettle();
-      expect(repository.registered, isNull);
+      expect(repository.registered?.allowedUses, ['semantic_judgment']);
 
-      await tester.ensureVisible(senseGroupCheckbox);
-      await tester.tap(senseGroupCheckbox);
+      await fillProviderForm();
+      await tester.ensureVisible(rubricCheckbox);
+      await tester.tap(rubricCheckbox);
       await tester.pumpAndSettle();
-      expect(tester.widget<CheckboxListTile>(senseGroupCheckbox).value, isTrue);
+      expect(tester.widget<CheckboxListTile>(rubricCheckbox).value, isTrue);
       await tester.ensureVisible(find.text('Save provider'));
       await tester.tap(find.text('Save provider'));
       await tester.pumpAndSettle();
-      expect(repository.registered?.allowedUses, ['sense_group_partition']);
+      expect(repository.registered?.allowedUses, [
+        'rubric_generation',
+        'semantic_judgment',
+      ]);
       expect(repository.registered?.secret, 'write-only-secret');
     },
   );

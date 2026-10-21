@@ -38,6 +38,13 @@ ReviewQueueEntry _entry(String id) => ReviewQueueEntry.fromJson({
   },
   'state': 'new',
   'card': {'kind': 'word_recognition', 'answer': id},
+  'origin': {
+    'kind': 'native',
+    'anki_guid': null,
+    'deck_id': null,
+    'deck_name': null,
+    'has_listening_enhancements': true,
+  },
 });
 
 class _ControlledReviewRepository extends FakeReviewRepositoryBase {
@@ -144,6 +151,13 @@ void main() {
                       'cue': 'would have',
                       'answer': 'I would have gone',
                       'target': 'would have',
+                    },
+                    'origin': {
+                      'kind': 'native',
+                      'anki_guid': null,
+                      'deck_id': null,
+                      'deck_name': null,
+                      'has_listening_enhancements': true,
                     },
                   },
                 ],

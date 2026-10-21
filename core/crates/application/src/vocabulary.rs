@@ -7,9 +7,10 @@ use crate::{
     LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
     LexicalLearningUseCases, LexicalObservation, LexicalOccurrenceId, LexicalSenseFolder,
     LexicalSenseId, MediaAvailability, MediaId, MediaItem, ObservationOrigin, ObservationSpec,
-    SubtitleSentenceId, VocabularyAssetBundle, clean_optional, clean_required,
-    learning_observation_id, normalize_lemma, normalize_phrase, now_ms,
-    observation_spec_for_marking, require_text,
+    RecordSpeakingProduction, SubtitleSentenceId, VocabularyAssetBundle, clean_optional,
+    clean_required, learning_observation_id, normalize_lemma, normalize_phrase, now_ms,
+    observation_spec_for_marking, observation_spec_for_reading_marking,
+    observation_spec_for_speaking_production, require_text,
 };
 
 /// Marks capability projections inferred from a legacy linear status write,
@@ -308,6 +309,55 @@ impl LexicalLearningUseCases {
         self.learning_observations
             .append_learning_observation(&observation)?;
         Ok(())
+    }
+
+    pub fn record_reading_marking(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sentence_id: Option<&SubtitleSentenceId>,
+        surface_form: &str,
+        media_id: Option<MediaId>,
+        translation_visible: bool,
+        understood: bool,
+    ) -> Result<(), ApplicationError> {
+        require_text(surface_form, "surface_form")?;
+        self.lexical_entries
+            .lexical_details(lexical_entry_id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        self.append_channelized_observation(
+            lexical_entry_id,
+            observation_spec_for_reading_marking(understood, translation_visible),
+            ObservationContext {
+                surface_form: Some(surface_form.to_owned()),
+                sentence_id: sentence_id.cloned(),
+                media_id,
+            },
+            ObservationOrigin::UserMarking,
+            sentence_id.map(|id| format!("reading-marking:{}", id.as_str())),
+            now_ms(),
+        )
+    }
+
+    pub fn record_speaking_production(
+        &self,
+        input: RecordSpeakingProduction,
+    ) -> Result<(), ApplicationError> {
+        require_text(&input.surface_form, "surface_form")?;
+        self.lexical_entries
+            .lexical_details(&input.lexical_entry_id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        self.append_channelized_observation(
+            &input.lexical_entry_id,
+            observation_spec_for_speaking_production(input.assistance),
+            ObservationContext {
+                surface_form: Some(input.surface_form),
+                sentence_id: input.sentence_id,
+                media_id: input.media_id,
+            },
+            ObservationOrigin::PracticeTask,
+            Some(input.source_ref),
+            input.occurred_at_ms,
+        )
     }
 
     /// User-readable evidence trail for one entry (issue #2): the append-only

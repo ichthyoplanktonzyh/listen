@@ -11,6 +11,7 @@ mod phonetic_alignment;
 mod phonetic_findings;
 mod rich_acoustic_evidence;
 mod sense_group_partition;
+mod shadowing_comparison;
 mod sound_analysis;
 mod text_chunk_detection;
 mod word_acoustics;

@@ -18,6 +18,7 @@ mod speech_jobs;
 mod speech_synthesis;
 mod subtitle_search;
 mod syntax_capability;
+pub mod transcription;
 
 pub use download::{
     ArtifactDownloader, DownloadProgress, FakeArtifactDownloader, ReqwestArtifactDownloader,
@@ -47,3 +48,4 @@ pub use syntax_capability::{
     SyntaxCandidateFailure, SyntaxCandidateFailureStage, SyntaxCapabilityManager,
     SyntaxCapabilityStatus, SyntaxCapabilityView,
 };
+pub use transcription::{RecordingTranscriptionCoordinator, TranscriptionModelInstallStart};
