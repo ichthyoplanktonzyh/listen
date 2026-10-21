@@ -1,6 +1,9 @@
-/// Shared media-only material fixtures for App tests.
+/// Shared material fixtures for App tests.
 library;
 
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/models/types.dart';
@@ -26,11 +29,78 @@ MediaRendition mediaRendition({
   mediaByteSize: null,
 );
 
+SourceAsset sourceAsset({
+  String? id,
+  String mediaType = 'text/plain',
+  int byteLength = 4,
+  String? sha256Digest,
+  SourceAssetBinding binding = const SourceAssetBinding(
+    type: SourceAssetBindingType.managed,
+  ),
+  SourceAssetAvailability availability = const SourceAssetAvailability(
+    state: SourceAssetAvailabilityState.available,
+  ),
+  int createdAtMs = 1,
+}) {
+  final digest = sha256Digest ?? 'a' * 64;
+  return SourceAsset(
+    id: id ?? digest,
+    mediaType: mediaType,
+    byteLength: byteLength,
+    sha256Digest: digest,
+    binding: binding,
+    availability: availability,
+    createdAtMs: createdAtMs,
+  );
+}
+
+DocumentRendition documentRendition({
+  String id = 'document-rendition-1',
+  RenditionOrigin origin = RenditionOrigin.source,
+  String mediaType = 'text/plain',
+  String? language = 'en',
+  String digest =
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  int byteSize = 4,
+  String? sourceAssetId =
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+}) => DocumentRendition(
+  id: id,
+  origin: origin,
+  mediaType: mediaType,
+  language: language,
+  digest: digest,
+  byteSize: byteSize,
+  sourceAssetId: sourceAssetId,
+);
+
+DocumentRendition documentRenditionForText(
+  String text, {
+  String id = 'document-rendition-1',
+  String? language = 'en',
+  String mediaType = 'text/plain',
+  String? sourceAssetId,
+}) {
+  final bytes = utf8.encode(text);
+  final digest = sha256.convert(bytes).toString();
+  return DocumentRendition(
+    id: id,
+    origin: RenditionOrigin.source,
+    mediaType: mediaType,
+    language: language,
+    digest: digest,
+    byteSize: bytes.length,
+    sourceAssetId: sourceAssetId ?? digest,
+  );
+}
+
 MaterialDetails materialDetails({
   String materialId = 'material-1',
   String revisionId = 'revision-1',
   String title = 'Sample',
   List<MediaRendition>? mediaRenditions,
+  List<SourceAsset> sourceAssets = const [],
+  List<DocumentRendition> documentRenditions = const [],
   int? retainedAtMs = 42,
   MaterialShape shape = MaterialShape.audio,
   int createdAtMs = 1,
@@ -46,6 +116,8 @@ MaterialDetails materialDetails({
     id: revisionId,
     materialId: materialId,
     title: title,
+    sourceAssets: sourceAssets,
+    documentRenditions: documentRenditions,
     mediaRenditions: mediaRenditions ?? [mediaRendition()],
     createdAtMs: createdAtMs,
   ),

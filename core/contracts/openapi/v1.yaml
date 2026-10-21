@@ -1,15 +1,15 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 5.0.0
+  version: 5.1.0
   description: >
     Versioned loopback-only application-service adapter. Playback control is
-    excluded. Contract `5.0.0` narrows the active product to audio/video
-    learning: Media Materials, media-derived structured reading and alignment,
-    listening activities, learner-owned listening facts, and review. Standalone
-    document materials, conversation, production tasks, and coaching are not
-    part of this API contract. Responses stay path-free, and package adoption
-    binds generated listening resources to an exact media revision.
+    excluded. Contract `5.1.0` keeps audio/video listening as the active
+    product and restores a separate document-material path for text import,
+    extraction, OCR, display, and document-to-audio production. Conversation,
+    independent reading/writing/speaking activities, and coaching remain out
+    of scope. Responses stay path-free, and package adoption binds generated
+    resources to an exact material revision.
 servers:
   - url: http://127.0.0.1:{port}
     variables:
@@ -154,8 +154,8 @@ paths:
         Personal Library member; explicit `false` creates Temporary Material,
         which is readable by ID and resolvable from media but excluded from
         the material library until explicitly retained. Document renditions
-        carry inline text plus an optional nullable language and may bind a
-        Source Asset by index; media renditions reference an already-registered
+        carry exact byte facts, an optional nullable language, and the Source
+        Asset index that authorizes those bytes; media renditions reference an already-registered
         media source by `media_id` and snapshot its kind, fingerprint, and
         availability — never its path. Raw material is valid without
         enrichment, and idempotent/convergent application semantics remain
@@ -806,6 +806,46 @@ paths:
                     message: adopted composition content is missing or fails integrity verification
                     correlation_id: "00000000-0000-0000-0000-000000000000"
                     retryable: false
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/composition/renditions/{rendition_id}/blob:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+      - in: path
+        name: rendition_id
+        required: true
+        schema: { type: string }
+    get:
+      operationId: readCompositionRenditionBlob
+      description: >
+        Reads the exact durable bytes of one selected Document or Media
+        Rendition of the adopted composition, re-verified by Core. A missing
+        or tampered blob is an explicit `composition_integrity_failure`; an
+        unreachable referenced Source Asset is `source_unavailable`.
+      responses:
+        "200":
+          description: The exact rendition bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: >
+            Typed not-found or unavailable source. `code` is `not_found` or
+            `source_unavailable`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: >
+            Typed integrity failure for a missing or tampered selected blob.
+            `code` is `composition_integrity_failure`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         default:
           $ref: "#/components/responses/Error"
   /v1/source-identities/mappings:
@@ -5174,6 +5214,7 @@ components:
         - material_id
         - title
         - source_assets
+        - document_renditions
         - media_renditions
         - created_at_ms
       properties:
@@ -5183,6 +5224,9 @@ components:
         source_assets:
           type: array
           items: { $ref: "#/components/schemas/SourceAsset" }
+        document_renditions:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentRendition" }
         media_renditions:
           type: array
           items: { $ref: "#/components/schemas/MediaRendition" }
@@ -5231,6 +5275,24 @@ components:
       properties:
         availability:
           $ref: "#/components/schemas/SourceAssetAvailability"
+    DocumentRendition:
+      type: object
+      required: [id, origin, media_type, language, digest, byte_size, source_asset_id]
+      properties:
+        id: { type: string }
+        origin: { enum: [source, derived] }
+        media_type: { type: string }
+        language:
+          type: [string, "null"]
+          description: Required but nullable language tag.
+        digest:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: Lowercase hex SHA-256 of the exact rendition bytes.
+        byte_size: { type: integer, minimum: 0 }
+        source_asset_id:
+          type: [string, "null"]
+          description: The Source Asset whose exact bytes this rendition records.
     MediaRendition:
       type: object
       required: [id, origin, kind, media_type, fingerprint, availability, media_id, media_sha256, media_byte_size]
@@ -5260,9 +5322,9 @@ components:
         current_revision: { $ref: "#/components/schemas/MaterialRevision" }
         shape:
           type: string
-          enum: [audio, video, mixed]
+          enum: [text, audio, video, mixed]
           description: >
-            Composition shape of the current audio/video revision.
+            Composition shape of the current material revision.
     SourceAssetInput:
       type: object
       required: [media_type, byte_length, sha256_digest, binding]
@@ -5287,6 +5349,22 @@ components:
         media_id:
           type: string
           description: Media source id of an already-registered media item.
+    DocumentRenditionInput:
+      type: object
+      required: [media_type, digest, byte_size, source_asset_index]
+      properties:
+        media_type: { type: string, minLength: 1 }
+        language:
+          type: [string, "null"]
+          description: Optional nullable language tag.
+        digest:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        byte_size: { type: integer, minimum: 0 }
+        source_asset_index:
+          type: integer
+          minimum: 0
+          description: Index of the matching Source Asset in this request.
     CreateLearningMaterial:
       type: object
       required: [title, media_renditions]
@@ -5296,6 +5374,10 @@ components:
           type: array
           default: []
           items: { $ref: "#/components/schemas/SourceAssetInput" }
+        document_renditions:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/DocumentRenditionInput" }
         media_renditions:
           type: array
           items: { $ref: "#/components/schemas/MediaRenditionInput" }
@@ -5318,6 +5400,10 @@ components:
           type: array
           default: []
           items: { $ref: "#/components/schemas/SourceAssetInput" }
+        document_renditions:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/DocumentRenditionInput" }
         media_renditions:
           type: array
           items: { $ref: "#/components/schemas/MediaRenditionInput" }
@@ -5608,10 +5694,19 @@ components:
       type: object
       required: [type]
       properties:
-        type: { const: media }
+        type: { enum: [managed_source_asset, referenced_source_asset, media] }
+        source_asset_id:
+          type: [string, "null"]
+          description: Source Asset identity behind a document rendition.
+        reference:
+          type: [string, "null"]
+          description: Opaque app-owned Source Asset reference; never a path.
+        available:
+          type: [boolean, "null"]
+          description: Whether a referenced Source Asset is currently reachable.
         media_id:
-          type: string
+          type: [string, "null"]
           description: The bound media source for a Source media rendition.
       description: >
-        The media binding behind a rendition. A local path is never part of a
-        binding.
+        Source Asset or media binding behind a rendition. A local path is
+        never part of a binding.

@@ -5,11 +5,25 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/document_session_controller.dart';
 import 'package:llplayer_next/controllers/material_capability_coordinator.dart';
 import 'package:llplayer_next/data/repositories/capability_repository.dart';
+import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
+import 'package:llplayer_next/data/repositories/resource_repository.dart';
+import 'package:llplayer_next/models/document_format.dart';
+import 'package:llplayer_next/models/document_session.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
+import 'package:llplayer_next/models/personal_library.dart';
+import 'package:llplayer_next/services/composition_session_service.dart';
+import 'package:llplayer_next/services/document_intake_flow.dart';
+import 'package:llplayer_next/services/document_intake_service.dart';
+import 'package:llplayer_next/services/document_reference_store.dart';
+import 'package:llplayer_next/services/document_source_resolver.dart';
+import 'package:llplayer_next/services/managed_asset_store.dart';
+import 'package:llplayer_next/services/capability_file_resolver.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/listen_gen_release_service.dart';
@@ -249,6 +263,185 @@ void main() {
       } finally {
         coordinator?.dispose();
         await api.close();
+      }
+    },
+    skip: runE2e
+        ? false
+        : 'Set LISTEN_PACKAGE_E2E=1 for the real monorepo round trip',
+  );
+
+  test(
+    'local Gen document Listen binds the real Core source and App reads the adopted composition',
+    () async {
+      HttpOverrides.global = null;
+
+      final dbPath = scratchDatabasePath('document-listen');
+      final assetRoot = await Directory.systemTemp.createTemp(
+        'listen-document-roundtrip-assets-',
+      );
+      addTearDown(() async {
+        if (await assetRoot.exists()) await assetRoot.delete(recursive: true);
+      });
+      final referenceStore = DocumentReferenceStore(
+        file: File(p.join(assetRoot.path, 'document-references.json')),
+      );
+      final assetStore = LocalManagedAssetStoreService(
+        resolveRoot: () => assetRoot.path,
+      );
+      final api = await LocalApi.connect(databasePath: dbPath);
+      MaterialCapabilityCoordinator? coordinator;
+      DocumentSessionController? documentController;
+      String? derivedAudioPath;
+      try {
+        final repository = LocalLearningMaterialRepository(() => api);
+        const sourceText = 'Listen closely. Then listen once more.';
+        final intakeFlow = DocumentIntakeFlow(
+          materialRepository: repository,
+          codec: LocalDocumentIntakeCodec(),
+          store: assetStore,
+          referenceStore: referenceStore,
+        );
+
+        // Take in the exact document bytes through App's real intake, which
+        // creates the Core Source Asset and Document Rendition identities.
+        final sourceBytes = utf8.encode(sourceText);
+        final intake = await intakeFlow.takeInDocument(
+          title: 'Offline TTS fixture',
+          bytes: sourceBytes,
+          format: DocumentFormat.plainText,
+        );
+        final material = intake.details;
+        final sourceAsset = material.currentRevision.sourceAssets.single;
+        final documentRendition =
+            material.currentRevision.documentRenditions.single;
+        expect(sourceAsset.id, matches(RegExp(r'^[0-9a-f]{64}$')));
+        expect(documentRendition.sourceAssetId, sourceAsset.id);
+        expect(documentRendition.digest, intake.sha256Digest);
+        expect(documentRendition.byteSize, sourceBytes.length);
+
+        final release = await releaseForProbeManifest();
+        final verified = await release.verify();
+        final generator = LocalListenGenProcessService(
+          pythonExecutable: _python3Executable,
+          releaseService: release,
+        );
+        expect(generator.isConfigured, isTrue);
+
+        coordinator = MaterialCapabilityCoordinator(
+          repository: LocalCapabilityRepository(() => api),
+          generator: generator,
+          // The deterministic fake synthesizer is bundled with Gen and needs
+          // no model, network, or paid provider.
+          providerArguments: () => const ['--tts-provider', 'fake'],
+          fileResolver: LocalCapabilityFileResolver(
+            managedStoreRoot: () => assetRoot.path,
+          ),
+        );
+
+        final outcome = await coordinator.requestCapability(
+          material,
+          MaterialCapability.listen,
+        );
+        if (outcome is CapabilityFailed) {
+          final error = outcome.error;
+          if (error is ListenGenProcessFailure) {
+            fail('document coordinator failed: ${error.code} ${error.message}');
+          }
+          fail('document coordinator failed: $error');
+        }
+        expect(outcome, isA<CapabilityAvailable>());
+        final edition = (outcome as CapabilityAvailable).edition!;
+        expect(edition.materialId, material.material.id);
+        expect(edition.materialRevisionId, material.currentRevision.id);
+        expect(edition.adopted, isTrue);
+        expect(edition.availableCapabilities, contains('read'));
+        expect(edition.availableCapabilities, contains('listen'));
+        expect(
+          edition.resources.map((resource) => resource.kind),
+          contains('structured_reading'),
+        );
+        expect(
+          edition.renditions.any((rendition) => rendition.kind == 'media'),
+          isTrue,
+        );
+
+        // Source binding validation compares Gen's sha256:-prefixed package
+        // identity to the exact raw Core SourceAsset ID created above.
+        final adopted = await api.readAdoptedComposition(material.material.id);
+        expect(
+          adopted.renditions.where(
+            (rendition) =>
+                rendition.kind == 'document' && rendition.origin == 'source',
+          ),
+          hasLength(1),
+        );
+        final audio = adopted.derivedMediaRendition;
+        expect(audio, isNotNull);
+        final audioBytes = await api.readCompositionRenditionBlob(
+          material.material.id,
+          audio!.renditionId,
+        );
+        expect(audioBytes, isNotEmpty);
+
+        // Exercise the same App document-session and Core composition read
+        // that the workbench uses after generation completes.
+        final retained = await api.retainLearningMaterial(material.material.id);
+        final compositionService = CompositionSessionService(
+          repository: LocalCapabilityRepository(() => api),
+          resources: LocalResourceRepository(() => api),
+        );
+        documentController = DocumentSessionController(
+          materialRepository: repository,
+          fileService: const LocalDocumentIntakeFileService(),
+          intakeFlow: intakeFlow,
+          sourceResolver: LocalDocumentSourceResolver(
+            store: assetStore,
+            referenceStore: referenceStore,
+            resolveStoreRoot: () => assetRoot.path,
+          ),
+          resolveComposition: compositionService.resolveComposition,
+        );
+        documentController.openLibraryEntry(
+          PersonalLibraryEntry(details: retained, mediaEntries: const []),
+        );
+        expect(documentController.state, isA<DocumentSessionReady>());
+        final sourceRead = await documentController.resolveSourceBytes(
+          sourceAsset,
+        );
+        expect(sourceRead, isA<DocumentSourceAvailable>());
+        expect(
+          utf8.decode((sourceRead as DocumentSourceAvailable).bytes),
+          sourceText,
+        );
+
+        await documentController.refreshComposition();
+        final ready = documentController.state as DocumentSessionReady;
+        final composition = ready.composition;
+        expect(composition, isNotNull);
+        expect(composition!.logicalText, sourceText);
+        expect(composition.derivedMediaPath, isNotNull);
+        derivedAudioPath = composition.derivedMediaPath;
+        expect(await File(derivedAudioPath!).length(), audioBytes.length);
+
+        final listen =
+            (await api.listMaterialCapabilities(
+              material.material.id,
+            )).singleWhere(
+              (projection) =>
+                  projection.capability == MaterialCapability.listen,
+            );
+        expect(listen.status, MaterialCapabilityStatus.available);
+        expect(listen.latestAttempt?.status, 'succeeded');
+        expect(listen.latestAttempt?.producerToolVersion, verified.toolVersion);
+      } finally {
+        documentController?.dispose();
+        coordinator?.dispose();
+        await api.close();
+        final path = derivedAudioPath;
+        if (path != null) {
+          final directory = Directory(p.dirname(path));
+          if (await directory.exists()) await directory.delete(recursive: true);
+        }
       }
     },
     skip: runE2e

@@ -86,7 +86,7 @@ final class ItemAcquisitionSnapshot {
 ///
 /// The source family determines whether media uses its publisher enclosure or
 /// the user's configured external media tool.
-enum ContentSourceKind { youtube, podcast }
+enum ContentSourceKind { youtube, podcast, document }
 
 /// How this item's content may be obtained, if at all.
 ///
@@ -103,6 +103,9 @@ enum AcquisitionMode {
   /// responsibility. The YouTube path.
   externalTool,
 
+  /// The publisher's article page can be acquired as a Document Material.
+  article,
+
   /// Nothing to acquire.
   none,
 }
@@ -110,7 +113,7 @@ enum AcquisitionMode {
 /// What the acquired content is.
 ///
 /// The media bytes' playback kind.
-enum ItemContentKind { audio, video }
+enum ItemContentKind { audio, video, article }
 
 /// The typed evidence kinds a discovered item can carry.
 ///
@@ -170,9 +173,12 @@ class ContentSource {
 
 /// What acquiring an item's content lands on: registered media bytes.
 final class DiscoveryOpenTarget {
-  const DiscoveryOpenTarget.media(this.mediaPath);
+  const DiscoveryOpenTarget.media(this.mediaPath) : materialId = null;
 
-  final String mediaPath;
+  const DiscoveryOpenTarget.document(this.materialId) : mediaPath = null;
+
+  final String? mediaPath;
+  final String? materialId;
 }
 
 /// A discovered item of a [ContentSource].

@@ -59,6 +59,14 @@ readiness; synchronized text and media require the exact alignment anchors.
 App uses this projection when selecting an Edition instead of inferring
 readiness from resource-kind names.
 
+## Recovery branch boundary
+
+Document acquisition and production add typed document renditions to the
+material lifecycle. App passes the raw Core SourceAsset ID to Gen; Gen qualifies
+that identity as `sha256:<id>` only at the v3 package boundary. Document-to-audio
+production requires an explicitly selected TTS provider. OCR/TTS runtimes and
+models are separately prepared; fixture providers exercise ordinary tests.
+
 ## Persistence and boundaries
 
 Core owns durable domain storage and migrations. App also has local preferences,
@@ -69,7 +77,7 @@ the supported baseline is a fresh store. Implementation and tests use isolated
 stores and never reset a real learner's database. Published package identities
 and release artifacts remain immutable.
 
-The default listening store is named `listen-listening.sqlite`. The runtime
+The default store on this recovery branch is named `listen-documents.sqlite`. The runtime
 does not fall back to or move the old `listen.sqlite`; an explicit database
 override must select a compatible fresh store.
 

@@ -275,7 +275,27 @@ void main() {
       },
     );
 
-    test('rejects non-empty document rendition outputs', () {
+    test('accepts document rendition outputs from document production', () {
+      final event = decode(
+        _event(
+          4,
+          'completed',
+          extra:
+              ',"package_sha256":"$xDigest"'
+              ',"document_renditions":[{"rendition_id":"sha256:${'a' * 64}","origin":"source"}]'
+              ',"media_renditions":[],"resources":[],"warnings":[]',
+        ),
+      );
+
+      final parsed = parseListenGenMachineEventV2(
+        event,
+        expectedToolVersion: _toolVersion,
+      );
+      expect(parsed.producedDocumentRenditions, ['sha256:${'a' * 64}']);
+      expect(parsed.producedRenditions, isEmpty);
+    });
+
+    test('rejects document rendition outputs without origin facts', () {
       final event = decode(
         _event(
           4,

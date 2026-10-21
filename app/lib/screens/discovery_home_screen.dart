@@ -16,7 +16,7 @@ import '../widgets/discovery/source_display_name.dart';
 
 /// A material-first home surface.
 ///
-/// Sources are discovery aids; the learner browses audio and video items and
+/// Sources are discovery aids; the learner browses media and article items and
 /// opens details only when a specific item is chosen.
 class DiscoveryHome extends StatelessWidget {
   const DiscoveryHome({
@@ -24,6 +24,7 @@ class DiscoveryHome extends StatelessWidget {
     required this.viewModel,
     required this.onOpenMedia,
     this.onPlayMedia,
+    this.onOpenDocument,
   });
 
   final DiscoveryViewModel viewModel;
@@ -33,6 +34,7 @@ class DiscoveryHome extends StatelessWidget {
   final VoidCallback onOpenMedia;
 
   final ValueChanged<String>? onPlayMedia;
+  final ValueChanged<String>? onOpenDocument;
 
   /// The single "start learning" intent: acquires local content when needed
   /// (progress stays on this surface), then hands the acquired media path to
@@ -44,16 +46,23 @@ class DiscoveryHome extends StatelessWidget {
     VoidCallback? beforeOpen,
   }) async {
     final play = onPlayMedia;
-    if (play == null) return;
+    final openDocument = onOpenDocument;
+    if (play == null && openDocument == null) return;
     final target = await viewModel.acquireForLearning(entryId);
     if (target == null) return;
     beforeOpen?.call();
-    play(target.mediaPath);
+    final materialId = target.materialId;
+    if (materialId != null) {
+      openDocument?.call(materialId);
+      return;
+    }
+    final mediaPath = target.mediaPath;
+    if (mediaPath != null) play?.call(mediaPath);
   }
 
   @override
   Widget build(BuildContext context) {
-    final canStart = onPlayMedia != null;
+    final canStart = onPlayMedia != null || onOpenDocument != null;
     return ListenableBuilder(
       listenable: viewModel,
       builder: (context, _) {
@@ -75,6 +84,7 @@ class DiscoveryHome extends StatelessWidget {
               onRetryEntries: viewModel.retryEntries,
               onRefreshSource: viewModel.refreshSource,
               onOpenMedia: onOpenMedia,
+              onOpenDocument: onOpenDocument,
               isGrid: constraints.maxWidth >= ListenBreakpoints.discoveryGrid,
               canStart: canStart,
               onStartLearning: _startLearning,
@@ -86,7 +96,7 @@ class DiscoveryHome extends StatelessWidget {
   }
 
   void _showDetailBottomSheet(BuildContext context) {
-    final canStart = onPlayMedia != null;
+    final canStart = onPlayMedia != null || onOpenDocument != null;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -262,11 +272,13 @@ class _ContentKindPicker extends StatelessWidget {
 String _kindLabel(AppLocalizations l, ContentSourceKind kind) => switch (kind) {
   ContentSourceKind.youtube => l.text('homeContentVideo'),
   ContentSourceKind.podcast => l.text('homeContentAudio'),
+  ContentSourceKind.document => l.text('homeContentArticles'),
 };
 
 IconData _kindIcon(ContentSourceKind kind) => switch (kind) {
   ContentSourceKind.youtube => Icons.play_circle_outline,
   ContentSourceKind.podcast => Icons.podcasts_outlined,
+  ContentSourceKind.document => Icons.article_outlined,
 };
 
 class _DiscoveryShelf extends StatelessWidget {
@@ -282,6 +294,7 @@ class _DiscoveryShelf extends StatelessWidget {
     required this.onRetryEntries,
     required this.onRefreshSource,
     required this.onOpenMedia,
+    this.onOpenDocument,
     required this.isGrid,
     required this.canStart,
     required this.onStartLearning,
@@ -298,6 +311,7 @@ class _DiscoveryShelf extends StatelessWidget {
   final VoidCallback onRetryEntries;
   final VoidCallback onRefreshSource;
   final VoidCallback onOpenMedia;
+  final ValueChanged<String>? onOpenDocument;
   final bool isGrid;
   final bool canStart;
   final Future<void> Function(String entryId) onStartLearning;

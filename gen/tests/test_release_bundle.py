@@ -114,6 +114,56 @@ def _capability_request_path(directory: Path) -> Path:
     return request_path
 
 
+def _document_request_path(directory: Path) -> Path:
+    source = directory / "lesson.txt"
+    source_bytes = b"Listen to this text."
+    source.write_bytes(source_bytes)
+    digest = hashlib.sha256(source_bytes).hexdigest()
+
+    def core_id(namespace: str, fields: tuple[str, ...]) -> str:
+        identity = "".join(
+            f"{len(field.encode('utf-8'))}:{field}" for field in fields
+        )
+        return hashlib.sha256(f"{namespace}:{identity}".encode("utf-8")).hexdigest()
+
+    language = "en-US"
+    source_asset_id = core_id("source-asset", ("text/plain", str(len(source_bytes)), digest))
+    rendition_id = core_id("document-rendition", ("text/plain", language, digest))
+    request = {
+        "schema": "listen_gen.capability-request.v2",
+        "version": 2,
+        "created_at_ms": 1786000000000,
+        "attempt_id": "attempt-release-document",
+        "material": {
+            "material_id": "material-doc",
+            "material_revision_id": "revision-doc",
+            "title": "Release bundle document",
+        },
+        "edition": {
+            "edition_id": "edition-doc",
+            "title": "Edition",
+            "target_language": language,
+            "support_languages": [],
+        },
+        "requested_capability": "read",
+        "available_renditions": [{
+            "kind": "document",
+            "rendition_id": f"sha256:{rendition_id}",
+            "media_type": "text/plain",
+            "language": language,
+            "source_asset_id": source_asset_id,
+            "blob": {
+                "digest": f"sha256:{digest}",
+                "size_bytes": len(source_bytes),
+                "path": str(source.resolve()),
+            },
+        }],
+    }
+    request_path = directory / "document-request.json"
+    request_path.write_text(json.dumps(request), encoding="utf-8")
+    return request_path
+
+
 def fixture_argv(output: Path, *, machine: bool) -> list[str]:
     argv = [
         "package", "from-capability",
@@ -467,6 +517,55 @@ class SourceCollectionSafetyTests(unittest.TestCase):
 
 
 class ZipappRuntimeTests(ReleaseBundleTestBase):
+    def test_zipapp_contains_document_pipeline_and_external_dependencies_stay_external(self) -> None:
+        with zipfile.ZipFile(io.BytesIO(self.artifact.read_bytes())) as archive:
+            names = set(archive.namelist())
+        for module in (
+            "listen_gen/document.py",
+            "listen_gen/production_input_projection.py",
+            "listen_gen/tts.py",
+        ):
+            self.assertIn(module, names)
+        self.assertFalse(any(name.startswith(("pypdf/", "surya/", "kokoro/")) for name in names))
+
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(self.artifact)
+        completed = subprocess.run(
+            [sys.executable, "-c", "import json; from listen_gen.gui import check_toolchain; print(json.dumps(check_toolchain()))"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        tools = json.loads(completed.stdout)
+        self.assertIn("pypdf", tools)
+        self.assertIn("install pypdf", tools["pypdf"]["message"])
+        self.assertIn("ocr", tools["surya_ocr"]["message"])
+
+    def test_zipapp_document_read_produces_a_package_without_provider_models(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            request = _document_request_path(Path(tmp))
+            output = Path(tmp) / "document.listenpkg"
+            completed = subprocess.run(
+                [sys.executable, str(self.artifact), "package", "from-capability", str(request), "--output", str(output)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            with zipfile.ZipFile(output) as archive:
+                release = json.loads(archive.read("release.json"))
+                source = release["document_renditions"][0]
+                self.assertTrue(source["source_asset_id"].startswith("sha256:"))
+                self.assertTrue(source["text_blob"]["digest"].startswith("sha256:"))
+                content = b"".join(archive.read(name) for name in archive.namelist())
+            self.assertNotIn(str(request.parent / "lesson.txt").encode(), content)
+            self.assertEqual(
+                [resource["descriptor"]["kind"] for resource in release["resources"]],
+                ["structured_reading"],
+            )
+
     def test_zipapp_gui_asset_is_readable_as_package_resource(self) -> None:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(self.artifact)

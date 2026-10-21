@@ -36,11 +36,31 @@ void main() {
     expect(rendition.binding!.mediaId, 'media-1');
   });
 
-  test('non-media rendition kinds and bindings are rejected', () {
+  test('decodes document source renditions and rejects unknown bindings', () {
+    final rendition = decodeAdoptedCompositionRendition({
+      'rendition_id': 'document-1',
+      'kind': 'document',
+      'origin': 'source',
+      'media_type': 'text/plain',
+      'language': null,
+      'digest': 'a' * 64,
+      'byte_size': 12,
+      'blob_available': false,
+      'binding': {
+        'type': 'managed_source_asset',
+        'source_asset_id': 'source-1',
+      },
+      'producer_tool_id': null,
+    });
+    expect(rendition.kind, 'document');
+    expect(rendition.origin, 'source');
+    expect(rendition.binding, isA<AdoptedCompositionManagedSourceBinding>());
     expect(
-      () => decodeAdoptedCompositionRendition({'kind': 'document'}),
-      throwsFormatException,
+      (rendition.binding! as AdoptedCompositionManagedSourceBinding)
+          .sourceAssetId,
+      'source-1',
     );
+
     expect(
       () => decodeAdoptedCompositionBinding({
         'type': 'source_asset',

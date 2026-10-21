@@ -42,6 +42,7 @@ final class GenMachineEvent {
     this.warningCode,
     this.warningMessage,
     this.packageSha256,
+    this.producedDocumentRenditions = const [],
     this.producedRenditions = const [],
     this.producedResources = const [],
     this.completedWarnings = const [],
@@ -62,7 +63,10 @@ final class GenMachineEvent {
   /// plan.
   final String? packageSha256;
 
-  /// `completed` produced rendition ids (`sha256:` references).
+  /// `completed` produced document rendition ids (`sha256:` references).
+  final List<String> producedDocumentRenditions;
+
+  /// `completed` produced media rendition ids (`sha256:` references).
   final List<String> producedRenditions;
 
   /// `completed` produced resource ids (`sha256:` references).

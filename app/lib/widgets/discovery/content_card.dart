@@ -101,6 +101,9 @@ class DiscoveryContentCard extends StatelessWidget {
     AppLocalizations l,
     ColorScheme scheme,
   ) {
+    final metadata = item.contentKind == ItemContentKind.article
+        ? '${sourceDisplayName(l, source)} · ${item.publishedOn}'
+        : '${sourceDisplayName(l, source)} · ${_formatViews(l, item.viewCount)} · ${item.publishedOn}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -115,7 +118,7 @@ class DiscoveryContentCard extends StatelessWidget {
         ),
         const SizedBox(height: ListenSpacing.gap4),
         Text(
-          '${sourceDisplayName(l, source)} · ${_formatViews(l, item.viewCount)} · ${item.publishedOn}',
+          metadata,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(

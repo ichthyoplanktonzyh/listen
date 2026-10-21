@@ -10,7 +10,10 @@ Listen Gen, produced by `listen-gen package from-capability`. It is the supporte
 
 ## Request
 
-One request document names the media inputs and caller-owned identities of one
+This recovery branch also supports document inputs. The active listening
+baseline and other recovery branches retain their own supported input scope.
+
+One request document names the inputs and caller-owned identities of one
 Generation Run. An optional `--subtitle` file supplies a separate explicit
 SRT/VTT input, identified by its byte digest in the plan:
 
@@ -18,10 +21,15 @@ SRT/VTT input, identified by its byte digest in the plan:
 - `edition`: caller-owned edition identity and language declaration.
 - `requested_capability`: one of `read`, `listen`, `watch`,
   `synchronized_read_listen`.
-- `available_renditions`: the exact Media Renditions available
+- `available_renditions`: the exact Media or Document Renditions available
   to the run, each with its blob digest, size, and an absolute blob path.
   Source renditions declare their Source Asset binding (`source_asset_id`) or
   media source (`media_id`, `fingerprint`).
+- A document entry declares `kind: document`, `rendition_id`, `media_type`,
+  nullable `language`, `source_asset_id`, and the source `blob`. Supported types
+  are PDF, EPUB, Markdown, HTML, and plain text. The request carries the exact
+  raw lowercase 64-hex Core Source Asset id; the v3 package encodes that same id
+  as `sha256:<raw-id>` at the format boundary.
 - `available_resources` does not enable resource reuse in the current media
   producer. The run constructs its own Structured Reading from ASR or the
   declared subtitle input; it does not embed a caller's existing reading payload.
@@ -31,9 +39,9 @@ SRT/VTT input, identified by its byte digest in the plan:
   identical requests produce byte-identical packages.
 
 Provider selection and secrets stay outside the request: the caller selects
-ASR and alignment adapters with CLI flags. Document renditions are rejected;
-the presence of accompanying subtitles does not make standalone text a supported
-Source. When `--subtitle` is supplied, no ASR runs for the transcript: Gen hashes
+ASR, alignment, OCR, and TTS adapters with CLI flags. Document extraction and
+speech production use their own derivation path. When `--subtitle` is supplied
+for media, no ASR runs for the transcript: Gen hashes
 the file before planning and parses the matching byte snapshot. A change between
 planning and execution fails the run. The subtitle digest and assembly settings
 enter the resource's `config_sha256`; neither the plan nor package records the
@@ -58,13 +66,15 @@ exactly one terminal event.
 
 Failure codes: `invalid_request`, `invalid_arguments`,
 `unsupported_capability`, `abstained`, `subtitle_unavailable`,
-`asr_provider_failed`, `provider_not_configured`,
+`asr_provider_failed`, `tts_provider_failed`, `provider_not_configured`,
 `input_unavailable`, `input_changed`, `resource_invalid`,
 `package_validation_failed`, `internal_error`.
 
 ## Honesty rules
 
-- Unsupported document input is explicitly rejected before production.
+- Unsupported document media types and invalid source ids are rejected before
+  production. OCR requirements and missing provider dependencies are explicit
+  failures or abstentions; they do not produce empty successful text.
 - Exact anchor-to-time alignment is produced only from qualified timing
   evidence. Timing is never fabricated from text length or an assumed rate.
 - Provider failures are terminal and distinguishable from abstention.
@@ -85,7 +95,17 @@ unsupported. Video sound plays with `watch`; extracting a separate audio
 rendition is outside the current production scope.
 `synchronized_read_listen` requests media transcription and exact alignment,
 or subtitle-based text and alignment when `--subtitle` is supplied.
-Document-to-reading and document-to-listening derivations are unavailable.
+`read` on a document plans `document_to_structured_reading` with provider
+`extraction`. Document `listen` without an existing audio rendition additionally
+plans `document_to_listen` with provider `tts`; the caller must select TTS
+explicitly. Synchronized document use requires qualified alignment for that
+reading and generated or available media. Completed events may contain source
+`document_renditions` and derived audio; the other branches' empty-document
+placeholder restriction does not apply here.
+
+`pypdf` is an external base dependency for PDF extraction. OCR and provider-specific
+TTS extras or models require explicit preparation and are not embedded in the
+zipapp. Ordinary validation uses fixture/fake providers and downloads no models.
 
 ## CLI
 

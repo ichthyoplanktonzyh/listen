@@ -159,13 +159,13 @@ fn database_path() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
         let home = PathBuf::from(env::var_os("HOME").expect("HOME is required"));
-        home.join("Library/Application Support/listen/listen-listening.sqlite")
+        home.join("Library/Application Support/listen/listen-documents.sqlite")
     }
     #[cfg(target_os = "windows")]
     {
         let local_app_data =
             PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"));
-        local_app_data.join("listen/listen-listening.sqlite")
+        local_app_data.join("listen/listen-documents.sqlite")
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -174,7 +174,7 @@ fn database_path() -> PathBuf {
                 .join(".local/share")
                 .into_os_string()
         }));
-        data_home.join("listen/listen-listening.sqlite")
+        data_home.join("listen/listen-documents.sqlite")
     }
 }
 

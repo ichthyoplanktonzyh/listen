@@ -15,7 +15,7 @@ import 'personal_library_section.dart';
 enum LibraryView { all, recent, offline }
 
 /// Material kinds are filters on one library, never separate destinations.
-enum LibraryTypeFilter { all, audio, video }
+enum LibraryTypeFilter { all, audio, video, document }
 
 /// The learner's retained materials, regardless of whether their usable form
 /// is text, audio, video, or a mixture of them.
@@ -29,6 +29,7 @@ class ListeningHome extends StatefulWidget {
     super.key,
     required this.onOpenMedia,
     required this.onOpenOnline,
+    this.onOpenDocument,
     this.personalLibrary,
     this.personalLibraryFailure,
     this.onRetryLibrary,
@@ -50,6 +51,7 @@ class ListeningHome extends StatefulWidget {
 
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+  final VoidCallback? onOpenDocument;
 
   /// Acquired media that is on this machine but not in the Personal Library.
   /// Null while unknown; the section stays away rather than claiming an empty
@@ -107,13 +109,16 @@ class _ListeningHomeState extends State<ListeningHome> {
         ? widget.offlineEntries
         : widget.personalLibrary;
     if (source == null) return null;
-    final mediaEntries = source
-        .where((entry) => entry.primaryMedia != null)
+    final entries = source
+        .where((entry) => entry.canOpen)
         .toList(growable: false);
     final filtered = switch (_type) {
-      LibraryTypeFilter.all => mediaEntries,
-      LibraryTypeFilter.audio => mediaEntries.where((entry) => entry.canListen),
-      LibraryTypeFilter.video => mediaEntries.where((entry) => entry.canWatch),
+      LibraryTypeFilter.all => entries,
+      LibraryTypeFilter.audio => entries.where((entry) => entry.canListen),
+      LibraryTypeFilter.video => entries.where((entry) => entry.canWatch),
+      LibraryTypeFilter.document => entries.where(
+        (entry) => entry.hasDocuments,
+      ),
     }.toList(growable: false);
     if (_view == LibraryView.recent) {
       filtered.sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
@@ -131,6 +136,7 @@ class _ListeningHomeState extends State<ListeningHome> {
           compact: compact,
           onOpenMedia: widget.onOpenMedia,
           onOpenOnline: widget.onOpenOnline,
+          onOpenDocument: widget.onOpenDocument,
           view: _view,
           onViewChanged: (value) => setState(() => _view = value),
           type: _type,
@@ -162,6 +168,7 @@ class _HomeContent extends StatelessWidget {
     required this.compact,
     required this.onOpenMedia,
     required this.onOpenOnline,
+    this.onOpenDocument,
     required this.view,
     required this.onViewChanged,
     required this.type,
@@ -187,6 +194,7 @@ class _HomeContent extends StatelessWidget {
   final bool compact;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+  final VoidCallback? onOpenDocument;
 
   /// The library's offline filter: offline used to be a sidebar destination
   /// sharing one data source with this section, so it reads as a view on the
@@ -263,6 +271,7 @@ class _HomeContent extends StatelessWidget {
                   _UnifiedImportAction(
                     onOpenMedia: onOpenMedia,
                     onOpenOnline: onOpenOnline,
+                    onOpenDocument: onOpenDocument,
                   ),
                 ],
               ),
@@ -327,6 +336,12 @@ class _HomeContent extends StatelessWidget {
                       label: Text(l.text('libraryTypeVideo')),
                       selected: type == LibraryTypeFilter.video,
                       onSelected: (_) => onTypeChanged(LibraryTypeFilter.video),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('libraryTypeDocument')),
+                      selected: type == LibraryTypeFilter.document,
+                      onSelected: (_) =>
+                          onTypeChanged(LibraryTypeFilter.document),
                     ),
                   ],
                 ),
@@ -407,16 +422,24 @@ class _UnifiedImportAction extends StatelessWidget {
   const _UnifiedImportAction({
     required this.onOpenMedia,
     required this.onOpenOnline,
+    this.onOpenDocument,
   });
 
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+  final VoidCallback? onOpenDocument;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return MenuAnchor(
       menuChildren: [
+        if (onOpenDocument != null)
+          MenuItemButton(
+            onPressed: onOpenDocument,
+            leadingIcon: const Icon(Icons.article_outlined),
+            child: Text(l.text('openDocumentFile')),
+          ),
         MenuItemButton(
           onPressed: onOpenMedia,
           leadingIcon: const Icon(Icons.video_file_outlined),

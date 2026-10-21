@@ -25,6 +25,7 @@ from .asr import (
     PreprocessingAsrAdapter,
 )
 from .capability import CapabilityRequest
+from .document import FixtureOcrProvider, RapidOcrProvider, SuryaOcrProvider
 from .media import FfmpegAudioPreprocessor
 from .package import ConversionError
 from .plan import UnsupportedCapability
@@ -36,6 +37,7 @@ from .protocol_v2 import (
 )
 from .whisper_cpp import WhisperCppAsrAdapter
 from .subtitle import read_subtitle_source
+from .tts import FakeTtsAdapter, FixtureTtsAdapter, KokoroTtsAdapter, SayTtsAdapter
 
 
 class CancellationRequested(BaseException):
@@ -123,6 +125,34 @@ def parser(
     )
     produce.add_argument("request", type=Path, help="capability request JSON document")
     produce.add_argument("--output", required=True, type=Path)
+    produce.add_argument(
+        "--tts-provider",
+        default="none",
+        choices=["none", "fixture", "say", "fake", "kokoro", "edge-tts"],
+        help="TTS provider for document-to-listen derivations; edge-tts sends text to an online service",
+    )
+    produce.add_argument("--tts-fixture", type=Path)
+    produce.add_argument("--tts-alignment-fixture", type=Path)
+    produce.add_argument("--tts-voice")
+    produce.add_argument("--tts-say-executable", default="say")
+    produce.add_argument("--tts-afconvert-executable", default="afconvert")
+    produce.add_argument("--tts-timeout-seconds", type=float, default=600.0)
+    produce.add_argument("--tts-kokoro-voice", default="af_bella")
+    produce.add_argument("--tts-kokoro-speed", type=float, default=1.0)
+    produce.add_argument("--tts-kokoro-lang", default="a")
+    produce.add_argument("--tts-edge-voice", default="en-US-AvaNeural")
+    produce.add_argument("--tts-edge-rate", default="+0%")
+    produce.add_argument("--tts-edge-volume", default="+0%")
+    produce.add_argument("--tts-edge-pitch", default="+0Hz")
+    produce.add_argument(
+        "--ocr-provider",
+        default="none",
+        choices=["none", "fixture", "surya", "rapidocr"],
+        help="optional OCR provider for scanned PDFs",
+    )
+    produce.add_argument("--ocr-fixture", type=Path)
+    produce.add_argument("--ocr-langs", default="en,zh")
+    produce.add_argument("--ocr-device", default=None)
     produce.add_argument(
         "--provider",
         default="none",
@@ -405,6 +435,60 @@ def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any
     )
 
 
+def _build_tts(args: argparse.Namespace) -> Any | None:
+    selected = args.tts_provider
+    if selected == "none":
+        return None
+    if selected == "fake":
+        return FakeTtsAdapter()
+    if selected == "kokoro":
+        return KokoroTtsAdapter(
+            voice=args.tts_kokoro_voice,
+            speed=args.tts_kokoro_speed,
+            lang_code=args.tts_kokoro_lang,
+            afconvert_executable=args.tts_afconvert_executable,
+            timeout_seconds=args.tts_timeout_seconds,
+        )
+    if selected == "edge-tts":
+        from .tts import EdgeTtsAdapter
+
+        return EdgeTtsAdapter(
+            voice=args.tts_edge_voice,
+            rate=args.tts_edge_rate,
+            volume=args.tts_edge_volume,
+            pitch=args.tts_edge_pitch,
+            afconvert_executable=args.tts_afconvert_executable,
+            timeout_seconds=args.tts_timeout_seconds,
+        )
+    if selected == "say":
+        if sys.platform != "darwin":
+            raise ConversionError("macOS say TTS is only available on macOS")
+        return SayTtsAdapter(
+            voice=args.tts_voice,
+            say_executable=args.tts_say_executable,
+            afconvert_executable=args.tts_afconvert_executable,
+            timeout_seconds=args.tts_timeout_seconds,
+        )
+    if args.tts_fixture is None:
+        raise ConversionError("--tts-fixture is required for the fixture TTS provider")
+    return FixtureTtsAdapter(args.tts_fixture, args.tts_alignment_fixture)
+
+
+def _build_ocr(args: argparse.Namespace) -> Any | None:
+    if args.ocr_provider == "none":
+        return None
+    if args.ocr_provider == "surya":
+        langs = [item.strip() for item in args.ocr_langs.split(",") if item.strip()]
+        return SuryaOcrProvider(langs=langs, device=args.ocr_device)
+    if args.ocr_provider == "rapidocr":
+        return RapidOcrProvider()
+    if args.ocr_fixture is None:
+        raise ConversionError("--ocr-fixture is required for the fixture OCR provider")
+    if not args.ocr_fixture.is_file():
+        raise ConversionError("the OCR fixture must be a regular file")
+    return FixtureOcrProvider(args.ocr_fixture)
+
+
 def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
     """Resolve the optional rich stage adapters for capability derivations."""
     from .rich import (
@@ -642,6 +726,9 @@ def _run(
     subtitle_sha256 = None
     if args.subtitle is not None:
         subtitle_sha256 = sha256_of_bytes(read_subtitle_source(args.subtitle))
+    from .plan import plan as plan_request
+
+    production_plan = plan_request(request, subtitle_sha256=subtitle_sha256)
     if writer is not None:
         writer.accepted(request.attempt_id or _default_attempt_id(request))
 
@@ -653,18 +740,38 @@ def _run(
             check_cancelled()
             writer.running(stage)
 
-        from .plan import plan as plan_request
-
-        production_plan = plan_request(request, subtitle_sha256=subtitle_sha256)
         writer.planned(production_plan.describe())
     else:
         check_cancelled = None
         progress = None
-    asr_adapter, asr_preprocessor = _build_asr(args, progress=progress)
+    needs_asr = any(
+        derivation.provider == "asr"
+        for derivation in production_plan.derivations
+    )
+    asr_adapter, asr_preprocessor = (
+        _build_asr(args, progress=progress) if needs_asr else (None, None)
+    )
+    needs_document = any(
+        derivation.kind.value in {
+            "document_to_structured_reading",
+            "document_to_listen",
+        }
+        for derivation in production_plan.derivations
+    )
+    needs_tts = any(
+        derivation.provider == "tts"
+        for derivation in production_plan.derivations
+    )
+    needs_media_read = any(
+        derivation.provider in {"asr", "subtitle"}
+        for derivation in production_plan.derivations
+    )
     config = ProduceConfig(
+        tts=_build_tts(args) if needs_tts else None,
+        ocr=_build_ocr(args) if needs_document else None,
         asr=asr_adapter,
         asr_preprocessor=asr_preprocessor,
-        rich=_build_rich(args, progress=progress),
+        rich=_build_rich(args, progress=progress) if needs_media_read else None,
         subtitle=args.subtitle,
         subtitle_sha256=subtitle_sha256,
     )

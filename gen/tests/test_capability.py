@@ -31,6 +31,23 @@ def media_rendition(**overrides) -> dict[str, object]:
     return rendition
 
 
+def document_rendition(**overrides) -> dict[str, object]:
+    rendition: dict[str, object] = {
+        "kind": "document",
+        "rendition_id": "sha256:" + "3" * 64,
+        "media_type": "text/plain",
+        "language": "en-US",
+        "source_asset_id": "4" * 64,
+        "blob": {
+            "digest": "sha256:" + "5" * 64,
+            "size_bytes": 12,
+            "path": "/tmp/lesson.txt",
+        },
+    }
+    rendition.update(overrides)
+    return rendition
+
+
 def valid_request(**overrides) -> dict[str, object]:
     document: dict[str, object] = {
         "schema": "listen_gen.capability-request.v2",
@@ -65,13 +82,25 @@ class CapabilityRequestTests(unittest.TestCase):
         self.assertEqual(request.edition.target_language, "en-US")
         self.assertEqual(request.attempt_id, "attempt-1")
 
-    def test_document_material_is_rejected_with_actionable_error(self) -> None:
-        request = valid_request(available_renditions=[{"kind": "document"}])
-        with self.assertRaisesRegex(
-            ConversionError,
-            "document material input is not supported; provide audio or video media",
-        ):
-            CapabilityRequest.from_document(request)
+    def test_from_document_accepts_raw_core_source_asset_id(self) -> None:
+        entry = document_rendition()
+        request = CapabilityRequest.from_document(
+            valid_request(available_renditions=[entry])
+        )
+        self.assertEqual(request.document_renditions[0].source_asset_id, "4" * 64)
+        self.assertEqual(request.document_renditions[0].media_type, "text/plain")
+
+    def test_document_source_id_must_be_raw_bare_core_id(self) -> None:
+        with self.assertRaisesRegex(ConversionError, "without sha256"):
+            CapabilityRequest.from_document(valid_request(available_renditions=[
+                document_rendition(source_asset_id="sha256:" + "4" * 64)
+            ]))
+
+    def test_document_mime_must_be_a_supported_document_format(self) -> None:
+        with self.assertRaisesRegex(ConversionError, "unsupported document media type"):
+            CapabilityRequest.from_document(valid_request(available_renditions=[
+                document_rendition(media_type="application/msword")
+            ]))
 
     def test_invalid_schema_and_capability_are_rejected(self) -> None:
         with self.assertRaisesRegex(ConversionError, "unsupported capability request schema"):
@@ -104,6 +133,13 @@ class CapabilityRequestTests(unittest.TestCase):
             CapabilityRequest.from_document(
                 valid_request(available_renditions=[media_rendition(), media_rendition()])
             )
+
+    def test_document_and_media_ids_share_one_unique_namespace(self) -> None:
+        doc = document_rendition(rendition_id="sha256:" + "1" * 64)
+        with self.assertRaisesRegex(ConversionError, "rendition ids must be unique"):
+            CapabilityRequest.from_document(valid_request(
+                available_renditions=[doc, media_rendition()]
+            ))
 
     def test_from_json_file_reads_typed_media_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

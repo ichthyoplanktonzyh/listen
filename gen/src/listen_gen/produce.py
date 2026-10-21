@@ -36,6 +36,16 @@ from .asr import AsrAdapter, AsrTranscript, _tokens
 from .media import FfmpegAudioPreprocessor
 from .capability import (
     CapabilityRequest,
+    AvailableDocumentRendition,
+)
+from .document import (
+    DecodedDocument,
+    DocumentDecodeError,
+    MAX_DOCUMENT_BYTES,
+    NoTextLayer,
+    OcrProvider,
+    build_reading_structure as build_document_reading_structure,
+    decode_document,
 )
 from .package import ConversionError
 from .package_v3 import (
@@ -44,6 +54,8 @@ from .package_v3 import (
     V3Release,
     blob_declaration,
     canonical_json,
+    compatibility,
+    PackageDocumentRendition,
     PackageMediaRendition,
     PackageResource,
     producer_declaration,
@@ -53,6 +65,10 @@ from .package_v3 import (
     write_v3_package,
 )
 from .plan import Derivation, DerivationKind, ProductionPlan, plan
+from .production_input_projection import (
+    project_plain_text_for_speech,
+    sentences_from_structured_reading,
+)
 from .rich import RichContext
 from .rich_stages import (
     RichStages,
@@ -63,6 +79,7 @@ from .rich_stages import (
     run_rich_stages,
 )
 from .subtitle import parse_subtitle_bytes, read_subtitle_source
+from .tts import TtsAdapter, TtsProviderError
 from .sentence_assembly import (
     ASSEMBLY_CONFIG_SHA256,
     AssembledSentence,
@@ -115,6 +132,15 @@ class AnchorAlignment:
 
 
 @dataclass(frozen=True)
+class DerivedAudio:
+    bytes: bytes
+    media_type: str
+    alignment: tuple[AnchorAlignment, ...] | None
+    duration_ms: int | None
+    provider: dict[str, object]
+
+
+@dataclass(frozen=True)
 class ProduceOutcome:
     release: V3Release | None
     package_sha256: str | None
@@ -124,6 +150,8 @@ class ProduceOutcome:
 
 @dataclass(frozen=True)
 class ProduceConfig:
+    tts: TtsAdapter | None = None
+    ocr: OcrProvider | None = None
     asr: AsrAdapter | None = None
     asr_preprocessor: FfmpegAudioPreprocessor | None = None
     rich: "RichStages | None" = None
@@ -131,13 +159,19 @@ class ProduceConfig:
     subtitle_sha256: str | None = None
 
 
-def _blob_source_bytes(blob) -> bytes:
+def _blob_source_bytes(blob, *, max_bytes: int | None = None) -> bytes:
     if blob.path is None:
         raise ProductionFailure(
             "input_unavailable", "the declared input bytes are not available"
         )
     try:
+        if max_bytes is not None and blob.path.stat().st_size > max_bytes:
+            raise ProductionFailure(
+                "input_too_large", "document exceeds the 128 MiB safety limit"
+            )
         data = blob.path.read_bytes()
+    except ProductionFailure:
+        raise
     except OSError as error:
         raise ProductionFailure(
             "input_unavailable", "the declared input bytes could not be read"
@@ -145,6 +179,14 @@ def _blob_source_bytes(blob) -> bytes:
     if sha256_of_bytes(data) != blob.digest:
         raise ProductionFailure(
             "input_changed", "the declared input bytes changed during generation"
+        )
+    if len(data) != blob.size_bytes:
+        raise ProductionFailure(
+            "input_changed", "the declared input byte size changed during generation"
+        )
+    if max_bytes is not None and len(data) > max_bytes:
+        raise ProductionFailure(
+            "input_too_large", "document exceeds the 128 MiB safety limit"
         )
     return data
 
@@ -172,7 +214,12 @@ def _reading_resource(
     return DerivedStructuredReading(resource=resource, bytes=payload_bytes), payload_bytes
 
 
-def _language_for(request: CapabilityRequest) -> str:
+def _language_for(
+    request: CapabilityRequest,
+    rendition: AvailableDocumentRendition | None = None,
+) -> str:
+    if rendition is not None and rendition.language:
+        return rendition.language
     return request.edition.target_language
 
 
@@ -211,6 +258,106 @@ def _producer_facts(
         provider=provider,
         model=model,
         config_sha256=config_sha256,
+    )
+
+
+def _run_document_derivation(
+    request: CapabilityRequest,
+    derivation: Derivation,
+    *,
+    ocr: OcrProvider | None,
+    created_at_ms: int,
+    package_rendition_id: str,
+    progress: Progress | None,
+) -> tuple[DecodedDocument, DerivedStructuredReading]:
+    rendition = next(
+        entry
+        for entry in request.document_renditions
+        if entry.rendition_id == derivation.input_rendition_ids[0]
+    )
+    raw = _blob_source_bytes(rendition.blob, max_bytes=MAX_DOCUMENT_BYTES)
+    if progress:
+        progress(f"decoding {rendition.media_type}")
+    try:
+        decoded = decode_document(raw, rendition.media_type, ocr=ocr)
+    except NoTextLayer as error:
+        raise ProductionAbstained(
+            "document_text_unavailable",
+            str(error),
+        ) from error
+    except DocumentDecodeError as error:
+        raise ProductionAbstained("document_text_unavailable", str(error)) from error
+
+    language = _language_for(request, rendition)
+    structure = build_document_reading_structure(
+        decoded, language=language, rendition_id=package_rendition_id
+    )
+    derived, _ = _reading_resource(
+        language=language,
+        payload=structure.structured_reading,
+        subject=_subject(request, rendition_ids=(package_rendition_id,)),
+        provenance_document=provenance(
+            created_at_ms,
+            input_rendition_ids=[package_rendition_id],
+        ),
+    )
+    return decoded, derived
+
+
+def _run_tts_derivation(
+    structured_reading: dict[str, object],
+    *,
+    tts: TtsAdapter,
+    created_at_ms: int,
+    progress: Progress | None,
+) -> DerivedAudio:
+    projection = project_plain_text_for_speech(structured_reading)
+    sentence_anchors = sentences_from_structured_reading(structured_reading)
+    if progress:
+        progress(f"running the {tts.name} TTS provider")
+    try:
+        result = tts.synthesize(projection.text, sentence_anchors)
+    except TtsProviderError as error:
+        raise ProductionFailure("tts_provider_failed", str(error)) from error
+    combined_config = sha256_of_bytes(
+        canonical_json(
+            {
+                "projection": projection.config_sha256,
+                "tts": result.config_sha256,
+            }
+        )
+    )
+    provider = _producer_facts(
+        created_at_ms,
+        provider_id=result.provider_id,
+        provider_version=result.provider_version,
+        model_id=result.model_id,
+        model_version=result.model_version,
+        config_sha256=combined_config,
+    )
+    return DerivedAudio(
+        bytes=result.audio_bytes,
+        media_type=result.media_type,
+        alignment=result.alignment,
+        duration_ms=result.duration_ms,
+        provider=provider,
+    )
+
+
+def _source_document_renditions(
+    request: CapabilityRequest,
+) -> tuple[PackageDocumentRendition, ...]:
+    return tuple(
+        PackageDocumentRendition(
+            media_type=entry.media_type,
+            language=entry.language,
+            text_blob=blob_declaration(entry.blob.digest, entry.blob.size_bytes, False),
+            origin="source",
+            # Core capability requests carry their native bare SHA-256 id;
+            # Content Package v3 uses the canonical sha256:<hex> reference.
+            source_asset_id=f"sha256:{entry.source_asset_id}",
+        )
+        for entry in request.document_renditions
     )
 
 
@@ -755,7 +902,12 @@ def produce(
     package's own declarations.
     """
     created_at_ms = request.created_at_ms
+    source_document_renditions = _source_document_renditions(request)
     source_media_renditions = _source_media_renditions(request)
+    document_id_map = {
+        entry.rendition_id: package.rendition_id
+        for entry, package in zip(request.document_renditions, source_document_renditions)
+    }
     media_id_map = {
         entry.rendition_id: package.rendition_id
         for entry, package in zip(request.media_renditions, source_media_renditions)
@@ -785,15 +937,124 @@ def produce(
         check_cancelled()
     if production_plan.empty:
         return ProduceOutcome(release=None, package_sha256=None, warnings=())
+    if any(
+        derivation.kind == DerivationKind.DOCUMENT_LISTEN
+        for derivation in production_plan.derivations
+    ) and config.tts is None:
+        raise ProductionFailure(
+            "provider_not_configured",
+            "document listen requires a TTS provider; choose --tts-provider or configure TTS in the GUI",
+        )
 
     warnings: list[Warning] = []
     embedded_bytes: dict[str, bytes] = {}
+    derived_media_renditions: list[PackageMediaRendition] = []
     resources: list[PackageResource] = []
     resource_bytes: dict[str, bytes] = {}
+    generated_reading: dict[str, object] | None = None
+    generated_reading_resource: PackageResource | None = None
     for derivation in production_plan.derivations:
         if check_cancelled:
             check_cancelled()
-        if derivation.kind == DerivationKind.MEDIA_READ:
+        if derivation.kind == DerivationKind.DOCUMENT_READ:
+            package_rendition_id = document_id_map[derivation.input_rendition_ids[0]]
+            _, derived = _run_document_derivation(
+                request,
+                derivation,
+                ocr=config.ocr,
+                created_at_ms=created_at_ms,
+                package_rendition_id=package_rendition_id,
+                progress=progress,
+            )
+            resources.append(derived.resource)
+            resource_bytes[derived.resource.payload_blob["digest"]] = derived.bytes
+            generated_reading = json.loads(derived.bytes.decode("utf-8"))
+            generated_reading_resource = derived.resource
+        elif derivation.kind == DerivationKind.DOCUMENT_LISTEN:
+            if config.tts is None:
+                raise ProductionFailure(
+                    "provider_not_configured", "no TTS provider is configured"
+                )
+            package_rendition_id = document_id_map[derivation.input_rendition_ids[0]]
+            if generated_reading is None or generated_reading_resource is None:
+                _, derived = _run_document_derivation(
+                    request,
+                    derivation,
+                    ocr=config.ocr,
+                    created_at_ms=created_at_ms,
+                    package_rendition_id=package_rendition_id,
+                    progress=progress,
+                )
+                resources.append(derived.resource)
+                resource_bytes[derived.resource.payload_blob["digest"]] = derived.bytes
+                generated_reading = json.loads(derived.bytes.decode("utf-8"))
+                generated_reading_resource = derived.resource
+
+            reading_payload = generated_reading
+            anchor_resource_id = generated_reading_resource.resource_id
+            language = (
+                generated_reading_resource.content_language
+                or request.edition.target_language
+            )
+            subject = _subject(
+                request,
+                rendition_ids=(package_rendition_id,),
+                anchor_resource_ids=(anchor_resource_id,),
+            )
+            audio = _run_tts_derivation(
+                reading_payload,
+                tts=config.tts,
+                created_at_ms=created_at_ms,
+                progress=progress,
+            )
+            audio_blob = blob_declaration(
+                sha256_of_bytes(audio.bytes), len(audio.bytes), True
+            )
+            embedded_bytes[audio_blob["digest"]] = audio.bytes
+            audio_rendition = PackageMediaRendition(
+                kind="audio",
+                media_type=audio.media_type,
+                media_blob=audio_blob,
+                fingerprint=sha256_of_bytes(audio.bytes),
+                origin="derived",
+                producer=audio.provider,
+                compatibility=compatibility(
+                    [f"provider:{audio.provider.get('provider', {}).get('id', 'unknown')}"],
+                    [
+                        {
+                            "rendition_id": package_rendition_id,
+                            "resource_id": anchor_resource_id,
+                        }
+                    ],
+                ),
+            )
+            derived_media_renditions.append(audio_rendition)
+            if audio.alignment:
+                audio_subject = _subject(
+                    request,
+                    rendition_ids=(audio_rendition.rendition_id,),
+                    anchor_resource_ids=(anchor_resource_id,),
+                )
+                alignment_resource, alignment_bytes = _alignment_resource(
+                    anchor_resource_id=anchor_resource_id,
+                    rendition_id=audio_rendition.rendition_id,
+                    alignments=audio.alignment,
+                    created_at_ms=created_at_ms,
+                    language=language,
+                    subject=audio_subject,
+                    producer=audio.provider,
+                )
+                resources.append(alignment_resource)
+                resource_bytes[alignment_resource.payload_blob["digest"]] = alignment_bytes
+            else:
+                warnings.append(
+                    _warning(
+                        "alignment_abstained",
+                        "exact anchor timing could not be produced; audio is "
+                        "available but synchronized reading is not",
+                    )
+                )
+        elif derivation.kind == DerivationKind.MEDIA_READ:
             subtitle_blocks: tuple[AssembledSentence, ...] = ()
             if config.subtitle is not None:
                 derived, alignment, producer, subtitle_blocks, source_media_bytes = (
@@ -891,14 +1152,15 @@ def produce(
             "material_revision_id": request.material.material_revision_id,
             "title": request.material.title,
         },
-        document_renditions=(),
-        media_renditions=source_media_renditions,
+        document_renditions=source_document_renditions,
+        media_renditions=source_media_renditions + tuple(derived_media_renditions),
         resources=tuple(resources),
         payload_bytes=resource_bytes,
         embedded_bytes=embedded_bytes,
         referenced_digests=frozenset(
-            entry.blob.digest for entry in request.media_renditions
-        ),
+            entry.blob.digest for entry in request.document_renditions
+        )
+        | frozenset(entry.blob.digest for entry in request.media_renditions),
     )
     if check_cancelled:
         check_cancelled()

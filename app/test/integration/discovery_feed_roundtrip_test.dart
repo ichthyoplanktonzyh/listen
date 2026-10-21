@@ -131,9 +131,9 @@ void main() {
       // Let the availability reconciliation land before the intent.
       await Future<void>.delayed(const Duration(milliseconds: 300));
 
-      final localPath = await first.acquireForLearning('ep-001');
+      final localTarget = await first.acquireForLearning('ep-001');
       expect(
-        localPath?.mediaPath,
+        localTarget?.mediaPath,
         isNotNull,
         reason: 'the enclosure must land locally',
       );
@@ -141,6 +141,7 @@ void main() {
         first.state.acquisitionStateOf('ep-001'),
         DiscoveryItemState.available,
       );
+      final localPath = localTarget!.mediaPath!;
 
       // ── Before any Keep: the download is Temporary Material ────────────
       // Core registers an adopted download with `retain: false`, and its
@@ -171,16 +172,13 @@ void main() {
         DiscoveryItemState.available,
         reason: 'a downloaded-but-unkept episode is on this machine',
       );
-      expect(beforeKeep.localPathFor('ep-001'), localPath!.mediaPath);
+      expect(beforeKeep.localPathFor('ep-001'), localPath);
 
       // ── Keep: the learner keeps the media, the workbench creates the ────
       // ── material, and retention lands the row in the Personal Library. ──
       // Re-registering the same bytes is Core's fingerprint convergence: it
       // returns the very media row adoption registered, now retained.
-      final media = await mediaLibrary.registerMedia(
-        localPath.mediaPath,
-        retain: true,
-      );
+      final media = await mediaLibrary.registerMedia(localPath, retain: true);
       final mediaId = media.id;
       expect(
         (await mediaLibrary.listMediaLibrary()).single.media.id,
@@ -231,7 +229,7 @@ void main() {
         DiscoveryItemState.available,
         reason: 'the reopened session recognises the acquired item',
       );
-      expect(second.localPathFor('ep-001'), localPath.mediaPath);
+      expect(second.localPathFor('ep-001'), localPath);
       expect(await materials.listLearningMaterials(), hasLength(1));
 
       // The canonical key now resolves through Core Source Identity: the

@@ -193,6 +193,25 @@ fn revision_has_media_kind(revision: &MaterialRevision, kind: MediaKind) -> bool
     })
 }
 
+/// A source Document Rendition is an input from which reading and audio can
+/// be produced. It must still point at an available Source Asset in this
+/// revision; a derived or detached document is not a new source.
+fn revision_has_document(revision: &MaterialRevision) -> bool {
+    revision.renditions.iter().any(|rendition| {
+        matches!(
+            rendition,
+            Rendition::Document(document)
+                if document.origin == RenditionOrigin::Source
+                    && document.source_asset_id.as_ref().is_some_and(|asset_id| {
+                        revision.source_assets.iter().any(|asset| {
+                            asset.id == *asset_id
+                                && asset.availability == crate::SourceAssetAvailability::Available
+                        })
+                    })
+        )
+    })
+}
+
 /// A selected, available media rendition of the adopted composition.
 fn adopted_has_media_kind(adopted: Option<&AdoptedComposition>, kind: MediaKind) -> bool {
     adopted.is_some_and(|adopted| {
@@ -255,8 +274,8 @@ fn adopted_has_matching_alignment(adopted: &AdoptedComposition) -> bool {
 
 /// Structural derivation rules for listening capabilities, independent of
 /// provider configuration. Read and synchronized Read-and-Listen can be
-/// produced from available audio or video media; Listen and Watch use an
-/// existing audio or video rendition directly and are never derived from text.
+/// produced from audio/video or a source document. Listen can also be
+/// synthesized from a source document; Watch requires existing video.
 fn derivation_prerequisite(
     capability: MaterialCapability,
     revision: &MaterialRevision,
@@ -264,16 +283,18 @@ fn derivation_prerequisite(
 ) -> bool {
     match capability {
         MaterialCapability::Read | MaterialCapability::SynchronizedReadListen => {
-            has_media(revision, adopted)
+            has_media(revision, adopted) || revision_has_document(revision)
         }
-        MaterialCapability::Listen | MaterialCapability::Watch => false,
+        MaterialCapability::Listen => revision_has_document(revision),
+        MaterialCapability::Watch => false,
     }
 }
 
-/// Whether the current media source or selected package composition already
-/// provides a capability. Structured-reading capabilities require media and
-/// exact, available package resources; media playback itself needs no package
-/// adoption when the current revision already binds the source rendition.
+/// Whether the current source or selected package composition already
+/// provides a capability. Structured-reading capabilities require an exact,
+/// available package resource and either a source document or media input.
+/// Media playback itself needs no package adoption when the current revision
+/// already binds the source rendition.
 fn current_source_or_adoption_provides(
     capability: MaterialCapability,
     revision: &MaterialRevision,
@@ -291,13 +312,25 @@ fn current_source_or_adoption_provides(
         };
     };
     let media_available = has_audio || has_video;
+    let document_available = revision_has_document(revision)
+        || adopted.renditions.iter().any(|rendition| {
+            rendition.kind == "document"
+                && rendition.available
+                && adopted
+                    .selected_rendition_ids
+                    .contains(&rendition.rendition_id)
+        });
     let has_structured_reading = adopted_has_structured_reading(adopted);
     match capability {
-        MaterialCapability::Read => media_available && has_structured_reading,
+        MaterialCapability::Read => {
+            (media_available || document_available) && has_structured_reading
+        }
         MaterialCapability::Listen => has_audio,
         MaterialCapability::Watch => has_video,
         MaterialCapability::SynchronizedReadListen => {
-            media_available && has_structured_reading && adopted_has_matching_alignment(adopted)
+            (media_available || document_available)
+                && has_structured_reading
+                && adopted_has_matching_alignment(adopted)
         }
     }
 }
@@ -365,7 +398,8 @@ mod tests {
     use super::*;
     use crate::{
         AdoptedComposition, AdoptionCommitPlan, DocumentRendition, LearningMaterialId,
-        PackageInstallation, PackageReleaseId, PackageResourceFact, RenditionOrigin, SourceAssetId,
+        PackageInstallation, PackageReleaseId, PackageResourceFact, RenditionOrigin, SourceAsset,
+        SourceAssetAvailability, SourceAssetBinding,
     };
 
     fn language(code: &str) -> crate::LanguageCode {
@@ -379,10 +413,20 @@ mod tests {
 
     fn document_revision() -> MaterialRevision {
         let material_id = LearningMaterialId::parse("material-doc").expect("valid material id");
+        let bytes = b"hello world";
+        let source_asset = SourceAsset::new(
+            "text/plain",
+            bytes.len() as u64,
+            text_digest("hello world"),
+            SourceAssetBinding::Managed,
+            SourceAssetAvailability::Available,
+            1,
+        )
+        .expect("valid source asset");
         MaterialRevision::new(
             material_id,
             "Doc",
-            vec![],
+            vec![source_asset.clone()],
             vec![Rendition::Document(
                 DocumentRendition::new(
                     RenditionOrigin::Source,
@@ -390,7 +434,7 @@ mod tests {
                     Some(language("en")),
                     text_digest("hello world"),
                     11,
-                    Some(SourceAssetId::parse("asset-doc").expect("valid asset id")),
+                    Some(source_asset.id),
                     None,
                     None,
                 )
@@ -479,21 +523,23 @@ mod tests {
     }
 
     #[test]
-    fn document_only_facts_do_not_enable_listening_capabilities() {
+    fn document_sources_can_be_read_or_synthesized_but_not_watched() {
         let revision = document_revision();
         for capability in [
             MaterialCapability::Read,
             MaterialCapability::Listen,
-            MaterialCapability::Watch,
             MaterialCapability::SynchronizedReadListen,
         ] {
-            let projection = project_capability(capability, &revision, None, &[]);
             assert_eq!(
-                projection.status,
-                CapabilityStatus::Unavailable,
-                "document facts do not provide {capability:?}"
+                project_capability(capability, &revision, None, &[]).status,
+                CapabilityStatus::Derivable,
+                "a source document can derive {capability:?}"
             );
         }
+        assert_eq!(
+            project_capability(MaterialCapability::Watch, &revision, None, &[]).status,
+            CapabilityStatus::Unavailable
+        );
 
         let mut adopted_document = adopted(false, false, false, Vec::new());
         adopted_document
@@ -516,17 +562,24 @@ mod tests {
         for capability in [
             MaterialCapability::Read,
             MaterialCapability::Listen,
-            MaterialCapability::Watch,
             MaterialCapability::SynchronizedReadListen,
         ] {
-            let projection =
-                project_capability(capability, &revision, Some(&adopted_document), &[]);
             assert_eq!(
-                projection.status,
-                CapabilityStatus::Unavailable,
-                "adopted document facts do not provide {capability:?}"
+                project_capability(capability, &revision, Some(&adopted_document), &[]).status,
+                CapabilityStatus::Derivable,
+                "structured reading has not yet been selected for {capability:?}"
             );
         }
+        assert_eq!(
+            project_capability(
+                MaterialCapability::Watch,
+                &revision,
+                Some(&adopted_document),
+                &[]
+            )
+            .status,
+            CapabilityStatus::Unavailable
+        );
     }
 
     #[test]

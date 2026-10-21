@@ -34,6 +34,12 @@ PROVIDER_REQUIREMENTS = {
     "fixture": [],
     "command": ["ffprobe", "ffmpeg", "asr-wrapper"],
     "whisper-cpp": ["ffprobe", "ffmpeg", "whisper-cli", "whisper-model"],
+    "document-read": ["pypdf"],
+    "surya-ocr": ["pypdfium2", "pillow", "surya-ocr"],
+    "rapidocr": ["pypdfium2", "pillow", "rapidocr-onnxruntime"],
+    "say-tts": ["say", "afconvert"],
+    "kokoro-tts": ["kokoro", "soundfile"],
+    "edge-tts": ["edge-tts", "ffmpeg", "afconvert"],
 }
 # These wrappers live under the source checkout's external ``tools/`` tree,
 # while the released zipapp intentionally packages only ``src/``. They are not
@@ -86,11 +92,24 @@ TOOLCHAIN_IDENTITY_VERSION = 1
 RUNTIME_ROLE_NAMES = (
     "media",
     "asr",
+    "document",
+    "ocr",
+    "tts",
 )
 TOOLCHAIN_ROLES: dict[str, tuple[str, ...]] = {
     "asr-wrapper": ("asr",),
-    "ffmpeg": ("media", "asr"),
+    "afconvert": ("tts",),
+    "edge-tts": ("tts",),
+    "ffmpeg": ("media", "asr", "tts"),
     "ffprobe": ("media", "asr"),
+    "kokoro": ("tts",),
+    "pillow": ("ocr",),
+    "pypdf": ("document",),
+    "pypdfium2": ("ocr",),
+    "rapidocr-onnxruntime": ("ocr",),
+    "say": ("tts",),
+    "soundfile": ("tts",),
+    "surya-ocr": ("ocr",),
     "whisper-cli": ("asr",),
     "whisper-model": ("asr",),
 }

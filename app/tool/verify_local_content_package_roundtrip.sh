@@ -4,6 +4,7 @@
 set -euo pipefail
 
 readonly EXPECTED_MEDIA_TEST="local Gen bundle to local Core round trips through capability production, installation, and adoption"
+readonly EXPECTED_DOCUMENT_TEST="local Gen document Listen binds the real Core source and App reads the adopted composition"
 readonly EXPECTED_MATRIX_TEST="audio and video ASR/subtitle inputs produce adopted media packages through Gen, Core, and App"
 readonly EXPECTED_RICH_TEST="fragmented video subtitles produce one time-aligned transcript with rich speech analysis"
 readonly EXPECTED_MALFORMED_TEST="a malformed package fails installation cleanly and pollutes no state"
@@ -206,6 +207,7 @@ report="$tmp/flutter-report.jsonl"
 
 for expected in \
   "$EXPECTED_MEDIA_TEST" \
+  "$EXPECTED_DOCUMENT_TEST" \
   "$EXPECTED_MATRIX_TEST" \
   "$EXPECTED_RICH_TEST" \
   "$EXPECTED_MALFORMED_TEST" \

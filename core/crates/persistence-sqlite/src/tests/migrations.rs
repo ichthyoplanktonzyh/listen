@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 #[test]
-fn fresh_database_bootstraps_listening_schema_and_review_budget() {
+fn fresh_database_bootstraps_document_materials_and_listening_schema() {
     let repo = SqliteRepository::in_memory().unwrap();
     assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
 
@@ -14,6 +14,7 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
         "subtitle_sentences",
         "learning_materials",
         "material_revisions",
+        "material_document_renditions",
         "material_media_renditions",
         "package_installations",
         "package_adoptions",
@@ -46,7 +47,6 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
         "hunting_candidates",
         "anki_review_items",
         "anki_review_history",
-        "material_document_renditions",
         "transcription_jobs",
     ] {
         assert!(
@@ -76,10 +76,10 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
 #[test]
 fn fresh_file_store_reopens_without_reapplying_defaults() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("listen-listening.sqlite");
+    let path = temp.path().join("listen-documents.sqlite");
     {
         let repo = SqliteRepository::open(&path).unwrap();
-        assert_eq!(repo.schema_version().unwrap(), 64);
+        assert_eq!(repo.schema_version().unwrap(), 67);
         repo.connection
             .lock()
             .execute(
@@ -90,7 +90,7 @@ fn fresh_file_store_reopens_without_reapplying_defaults() {
     }
     {
         let repo = SqliteRepository::open(&path).unwrap();
-        assert_eq!(repo.schema_version().unwrap(), 64);
+        assert_eq!(repo.schema_version().unwrap(), 67);
         let budget: (u32, u32) = repo
             .connection
             .lock()
@@ -127,7 +127,7 @@ fn rejects_old_store_read_only_without_backup_or_lock_sidecar() {
         error,
         PersistenceError::UnsupportedSchemaVersion {
             found: 63,
-            expected: 64
+            expected: 67
         }
     ));
     assert_eq!(fs::read(&path).unwrap(), original);

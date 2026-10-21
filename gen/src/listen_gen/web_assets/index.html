@@ -1077,7 +1077,7 @@
       <section id="tab-workbench" class="tab-pane">
         <div class="section-header">
           <h2 class="section-title">🚀 内容生成流水线工作台</h2>
-          <p class="section-desc">选择音视频与可选字幕，生成符合 Content Package v3 规范的结构化听力材料。</p>
+          <p class="section-desc">选择文档或音视频材料，按目标能力生成符合 Content Package v3 规范的内容。</p>
         </div>
 
         <!-- Material Metadata -->
@@ -1101,10 +1101,37 @@
           </div>
         </div>
 
+        <!-- Document Input -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">2. 文档材料 (Document Material)</h3>
+          </div>
+          <div class="form-group">
+            <label class="form-label">可选文档来源 (PDF、EPUB、Markdown、HTML、纯文本；单文件不超过 128 MiB)</label>
+            <div class="dropzone" id="doc-dropzone" onclick="document.getElementById('doc-file-input').click()">
+              <div class="dropzone-icon">📄</div>
+              <div class="dropzone-title">点击选择或拖拽文档</div>
+              <div class="dropzone-desc">Read 提取结构化文本；Listen 可用显式选择的 TTS 合成音频。扫描版 PDF 需要额外 OCR。</div>
+              <input type="file" id="doc-file-input" style="display: none;" accept=".pdf,.epub,.md,.markdown,.txt,.html,.htm">
+            </div>
+            <div class="upload-progress"><div class="upload-progress-bar" id="doc-upload-bar"></div></div>
+            <div id="doc-file-card" class="file-card" style="display: none;">
+              <div class="file-card-left">
+                <span class="file-card-icon">📄</span>
+                <div>
+                  <div class="file-card-title" id="doc-file-name">document.pdf</div>
+                  <div class="file-card-meta" id="doc-file-meta">—</div>
+                </div>
+              </div>
+              <button class="btn-danger-link" onclick="removeDocFile()">✕ 移除</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Media & Subtitle Input -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">2. 音视频与字幕素材 (Media & Subtitles)</h3>
+            <h3 class="card-title">3. 音视频与字幕素材 (Media & Subtitles)</h3>
           </div>
 
           <div class="form-group">
@@ -1151,15 +1178,36 @@
         <!-- Capability & Stages -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">3. 目标能力与分析阶段 (Capability & Stages)</h3>
+            <h3 class="card-title">4. 目标能力与处理器 (Capability & Providers)</h3>
           </div>
+
+          <div class="form-row" style="margin-top: 1rem;">
+            <div class="form-group">
+              <label class="form-label">文档 Listen 的 TTS</label>
+              <select class="form-select" id="tts-provider">
+                <option value="none">未配置</option>
+                <option value="say">macOS say（本地）</option>
+                <option value="kokoro">Kokoro（需安装可选依赖/模型）</option>
+                <option value="edge-tts">Edge TTS（在线服务）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">扫描版 PDF OCR</label>
+              <select class="form-select" id="ocr-provider">
+                <option value="none">关闭（无文本层时停止）</option>
+                <option value="surya">Surya（需安装 [ocr] 可选依赖）</option>
+                <option value="rapidocr">RapidOCR（需安装 [ocr] 可选依赖）</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-hint" style="margin-top: 0.25rem;">Gen 不会自动安装 Python 依赖或预下载模型。选择 Kokoro/Surya 会调用相应模型运行时；Edge TTS 会将文档文本发送到在线服务。</div>
 
           <div class="form-group">
             <label class="form-label">请求能力 (Requested Material Capability)</label>
             <select class="form-select" id="work-capability">
-              <option value="read">read — 转写媒体并生成结构化文本</option>
+              <option value="read">read — 提取文档或转写媒体，生成结构化文本</option>
               <option value="listen">listen — 使用已有 audio rendition；video-only 不会转换音轨</option>
-              <option value="synchronized_read_listen">synchronized_read_listen — 生成转写与时间对齐</option>
+              <option value="synchronized_read_listen">synchronized_read_listen — 文档合成朗读或媒体转写并对齐</option>
             </select>
           </div>
 
@@ -1275,6 +1323,7 @@
       config: null,
       currentLlmTab: 'deepseek',
       activeTab: 'providers',
+      selectedDoc: null, // { path, filename, size_bytes, media_type, digest }
       selectedMedia: null, // { path, filename, size_bytes, media_type }
       selectedSubtitle: null, // { path, filename }
       tasks: [],
@@ -1360,6 +1409,7 @@
       const warnings = events.filter(e => e.event === 'warning').length;
       const completed = events.find(e => e.event === 'completed');
       const resources = completed?.resources || [];
+      const documentRenditions = completed?.document_renditions || [];
       const mediaRenditions = completed?.media_renditions || [];
 
       let html = `
@@ -1383,11 +1433,13 @@
           </div>`;
       }
 
-      if (mediaRenditions.length || resources.length) {
+      if (documentRenditions.length || mediaRenditions.length || resources.length) {
         html += `
           <div class="stat-card" style="grid-column: 1 / -1;">
             <div class="stat-label">清单</div>
             <div>
+              ${documentRenditions.map(r =>
+                `<span class="resource-chip">📄 ${escapeHtml(r.rendition_id || '')} · ${escapeHtml(r.origin || '')}</span>`).join('')}
               ${mediaRenditions.map(r =>
                 `<span class="resource-chip">🎵 ${escapeHtml(r.rendition_id || '')} · ${escapeHtml(r.origin || '')}</span>`).join('')}
               ${resources.map(r =>
@@ -1418,7 +1470,7 @@
         case 'warning':
           return { cls: 'warning', text: `[警告:${event.code}] ${event.message}` };
         case 'completed':
-          return { cls: 'success', text: `[完成] ${(event.resources || []).length} 个资源 · ${(event.media_renditions || []).length} 条媒体音轨 · sha256=${event.package_sha256 || 'n/a'}` };
+          return { cls: 'success', text: `[完成] ${(event.resources || []).length} 个资源 · ${(event.document_renditions || []).length} 份文档 · ${(event.media_renditions || []).length} 条媒体音轨 · sha256=${event.package_sha256 || 'n/a'}` };
         case 'cancelled':
           return { cls: 'warning', text: '[已取消] 用户中止了本次生成' };
         case 'failed':
@@ -1703,6 +1755,48 @@
       }
     });
 
+    // Document File Handling
+    document.getElementById('doc-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        showToast(`正在载入文档: ${file.name}...`);
+        const info = await uploadFile(file, document.getElementById('doc-upload-bar'));
+        state.selectedDoc = info;
+        renderDocCard();
+        const titleInput = document.getElementById('work-title');
+        const idInput = document.getElementById('work-material-id');
+        if (titleInput.value === 'Climate Scientists Predictions' || !titleInput.value) {
+          const baseName = file.name.replace(/\.[^/.]+$/, '');
+          titleInput.value = baseName;
+          idInput.value = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        }
+        showToast(`✅ 文档 ${file.name} 就绪`);
+      } catch (err) {
+        showToast('❌ 加载文档失败: ' + err.message);
+      }
+    });
+
+    function renderDocCard() {
+      const card = document.getElementById('doc-file-card');
+      const dropzone = document.getElementById('doc-dropzone');
+      if (state.selectedDoc) {
+        document.getElementById('doc-file-name').textContent = state.selectedDoc.filename;
+        document.getElementById('doc-file-meta').textContent = `${formatBytes(state.selectedDoc.size_bytes)} · ${state.selectedDoc.media_type}`;
+        card.style.display = 'flex';
+        dropzone.style.display = 'none';
+      } else {
+        card.style.display = 'none';
+        dropzone.style.display = 'block';
+      }
+    }
+
+    function removeDocFile() {
+      state.selectedDoc = null;
+      document.getElementById('doc-file-input').value = '';
+      renderDocCard();
+    }
+
     // Media File Handling
     document.getElementById('media-file-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -1772,7 +1866,25 @@
       document.getElementById('btn-remove-sub').style.display = 'none';
     }
 
-    // Drag & drop listener for the media drop zone.
+    // Drag & drop listeners for document and media sources.
+    const docDropzone = document.getElementById('doc-dropzone');
+    docDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      docDropzone.classList.add('dragover');
+    });
+    docDropzone.addEventListener('dragleave', () => docDropzone.classList.remove('dragover'));
+    docDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      docDropzone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const input = document.getElementById('doc-file-input');
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change'));
+    });
+
     const mediaDropzone = document.getElementById('media-dropzone');
     mediaDropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -1846,6 +1958,10 @@
       const aligner = state.config.aligner || {};
       document.getElementById('aligner-provider').value = aligner.provider || 'none';
       document.getElementById('aligner-device').value = aligner.device || 'auto';
+      const tts = state.config.tts || {};
+      document.getElementById('tts-provider').value = tts.provider || 'none';
+      const ocr = state.config.ocr || {};
+      document.getElementById('ocr-provider').value = ocr.provider || 'none';
 
     }
 
@@ -2121,13 +2237,23 @@
       const lang = document.getElementById('work-target-lang').value.trim();
       const cap = document.getElementById('work-capability').value;
       const mediaPath = document.getElementById('work-media-path').value.trim();
+      const ttsProvider = document.getElementById('tts-provider').value;
+      const hasDocument = !!state.selectedDoc;
+      const hasMedia = !!state.selectedMedia || !!mediaPath;
 
       if (!id) errors.push({ field: 'work-material-id', msg: '素材唯一 ID 不能为空' });
       if (!title) errors.push({ field: 'work-title', msg: '素材标题不能为空' });
       if (!lang) errors.push({ field: 'work-target-lang', msg: '目标语言不能为空' });
       if (!SUPPORTED_CAPS.includes(cap)) errors.push({ field: 'work-capability', msg: '不支持的能力: ' + cap });
-      if (!state.selectedMedia && !mediaPath) {
-        errors.push({ field: 'work-media-path', msg: '请选择音频或视频素材' });
+      if (!hasDocument && !hasMedia) {
+        errors.push({ field: 'work-media-path', msg: '请选择文档或音频/视频素材' });
+      }
+      const hasAudio = state.selectedMedia?.media_type?.startsWith('audio/');
+      if (cap === 'listen' && hasDocument && !hasAudio && ttsProvider === 'none') {
+        errors.push({ field: 'tts-provider', msg: '文档 Listen 需要选择 TTS provider' });
+      }
+      if (cap === 'listen' && !hasDocument && state.selectedMedia && !hasAudio) {
+        errors.push({ field: 'work-capability', msg: 'listen 需要已有 audio；video-only 不会转换为独立音频' });
       }
 
       if (errors.length) {
@@ -2163,6 +2289,8 @@
       const targetLang = document.getElementById('work-target-lang').value.trim() || 'en-US';
       const mediaPath = document.getElementById('work-media-path').value.trim();
       const capability = document.getElementById('work-capability').value;
+      const ttsProvider = document.getElementById('tts-provider').value;
+      const ocrProvider = document.getElementById('ocr-provider').value;
 
       const enableSenseGroups = document.getElementById('stage-sense-groups').checked;
       const enablePhones = document.getElementById('stage-phones').checked;
@@ -2197,10 +2325,15 @@
 
       const payload = {
         request: requestDoc,
+        document_path: state.selectedDoc ? state.selectedDoc.path : null,
+        document_media_type: state.selectedDoc ? state.selectedDoc.media_type : null,
+        document_language: state.selectedDoc ? targetLang : null,
         media_path: state.selectedMedia ? state.selectedMedia.path : (mediaPath || null),
         subtitle_path: state.selectedSubtitle ? state.selectedSubtitle.path : null,
         config: {
           ...state.config,
+          tts: { ...(state.config.tts || {}), provider: ttsProvider },
+          ocr: { ...(state.config.ocr || {}), provider: ocrProvider },
           enable_sense_groups: enableSenseGroups,
           enable_phones: enablePhones,
         }

@@ -13,9 +13,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use domain::{
-    DomainError, LearningMaterial, LearningMaterialId, MaterialRevision, MaterialRevisionId,
-    MaterialShape, MediaId, MediaKind, MediaRendition, Rendition, RenditionOrigin, SourceAsset,
-    SourceAssetBinding, initial_material_id,
+    DocumentRendition, DomainError, LanguageCode, LearningMaterial, LearningMaterialId,
+    MaterialRevision, MaterialRevisionId, MaterialShape, MediaId, MediaKind, MediaRendition,
+    Rendition, RenditionOrigin, SourceAsset, SourceAssetBinding, initial_material_id,
 };
 
 use crate::{ApplicationError, MediaRepository, now_ms};
@@ -29,6 +29,18 @@ pub struct SourceAssetInput {
     pub byte_length: u64,
     pub sha256_digest: String,
     pub binding: SourceAssetBinding,
+}
+
+/// Input for a source Document Rendition. Its exact byte facts must match the
+/// Source Asset named by `source_asset_index`; Core never accepts extracted
+/// text as an inline material input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentRenditionInput {
+    pub media_type: String,
+    pub language: Option<LanguageCode>,
+    pub digest: String,
+    pub byte_size: u64,
+    pub source_asset_index: usize,
 }
 
 /// Input for one Media Rendition, resolving authoritative media facts from
@@ -47,6 +59,7 @@ pub struct MediaRenditionInput {
 pub struct CreateLearningMaterial {
     pub title: String,
     pub source_assets: Vec<SourceAssetInput>,
+    pub document_renditions: Vec<DocumentRenditionInput>,
     pub media_renditions: Vec<MediaRenditionInput>,
     pub retain: Option<bool>,
 }
@@ -56,6 +69,7 @@ pub struct CreateLearningMaterial {
 pub struct AppendMaterialRevision {
     pub title: String,
     pub source_assets: Vec<SourceAssetInput>,
+    pub document_renditions: Vec<DocumentRenditionInput>,
     pub media_renditions: Vec<MediaRenditionInput>,
 }
 
@@ -255,8 +269,11 @@ impl MaterialUseCases {
         input: CreateLearningMaterial,
     ) -> Result<MaterialDetails, ApplicationError> {
         let now = now_ms();
-        let (source_assets, renditions) =
-            self.components_from_inputs(&input.source_assets, &input.media_renditions)?;
+        let (source_assets, renditions) = self.components_from_inputs(
+            &input.source_assets,
+            &input.document_renditions,
+            &input.media_renditions,
+        )?;
         let bound_materials = self.bound_materials_for_inputs(&input.media_renditions)?;
         let material = match bound_materials.len() {
             0 => {
@@ -329,8 +346,11 @@ impl MaterialUseCases {
         self.materials
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
-        let (source_assets, renditions) =
-            self.components_from_inputs(&input.source_assets, &input.media_renditions)?;
+        let (source_assets, renditions) = self.components_from_inputs(
+            &input.source_assets,
+            &input.document_renditions,
+            &input.media_renditions,
+        )?;
         for media_input in &input.media_renditions {
             if let Some(bound) = self.materials.material_for_media(&media_input.media_id)?
                 && bound.id != *material_id
@@ -521,16 +541,12 @@ impl MaterialUseCases {
     fn components_from_inputs(
         &self,
         source_asset_inputs: &[SourceAssetInput],
+        document_inputs: &[DocumentRenditionInput],
         media_inputs: &[MediaRenditionInput],
     ) -> Result<(Vec<SourceAsset>, Vec<Rendition>), ApplicationError> {
         let now = now_ms();
         let mut source_assets = Vec::with_capacity(source_asset_inputs.len());
         for input in source_asset_inputs {
-            if domain::media_type_kind(&input.media_type).is_none() {
-                return Err(ApplicationError::Invalid(
-                    "source asset must be audio or video media".into(),
-                ));
-            }
             source_assets.push(SourceAsset::new(
                 input.media_type.clone(),
                 input.byte_length,
@@ -540,7 +556,48 @@ impl MaterialUseCases {
                 now,
             )?);
         }
-        let mut renditions = Vec::with_capacity(media_inputs.len());
+        let mut renditions = Vec::with_capacity(document_inputs.len() + media_inputs.len());
+        let mut bound_document_assets = HashSet::new();
+        for input in document_inputs {
+            let source_asset = source_assets.get(input.source_asset_index).ok_or_else(|| {
+                ApplicationError::Invalid(format!(
+                    "document rendition references missing source asset index {}",
+                    input.source_asset_index
+                ))
+            })?;
+            if source_asset.sha256_digest != input.digest
+                || source_asset.byte_length != input.byte_size
+            {
+                return Err(ApplicationError::Invalid(
+                    "document rendition byte facts do not match its bound source asset".into(),
+                ));
+            }
+            if source_asset.media_type != input.media_type {
+                return Err(ApplicationError::Invalid(
+                    "document rendition media type does not match its bound source asset".into(),
+                ));
+            }
+            bound_document_assets.insert(source_asset.id.clone());
+            renditions.push(Rendition::Document(DocumentRendition::new(
+                RenditionOrigin::Source,
+                input.media_type.clone(),
+                input.language.clone(),
+                input.digest.clone(),
+                input.byte_size,
+                Some(source_asset.id.clone()),
+                None,
+                None,
+            )?));
+        }
+        for source_asset in &source_assets {
+            if domain::media_type_kind(&source_asset.media_type).is_none()
+                && !bound_document_assets.contains(&source_asset.id)
+            {
+                return Err(ApplicationError::Invalid(
+                    "non-media source assets require a bound document rendition".into(),
+                ));
+            }
+        }
         for input in media_inputs {
             let media = self
                 .media

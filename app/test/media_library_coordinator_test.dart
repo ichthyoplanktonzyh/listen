@@ -64,6 +64,8 @@ Map<String, dynamic> _materialDetailsJson({
     'id': revisionId,
     'material_id': materialId,
     'title': title,
+    'source_assets': <Map<String, dynamic>>[],
+    'document_renditions': <Map<String, dynamic>>[],
     'media_renditions': mediaRenditions,
     'created_at_ms': 0,
   },

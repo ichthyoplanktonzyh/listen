@@ -225,6 +225,7 @@ AdoptedCompositionRendition _sourceMediaRendition() =>
       kind: 'media',
       origin: 'source',
       mediaType: 'audio/mpeg',
+      language: null,
       digest: 'd' * 64,
       byteSize: 1,
       blobAvailable: false,
@@ -328,6 +329,12 @@ final class _CompositionRepository implements CapabilityRepository {
     };
     return utf8.encode(jsonEncode(payload));
   }
+
+  @override
+  Future<List<int>> readCompositionRenditionBlob(
+    String materialId,
+    String renditionId,
+  ) async => throw StateError('unexpected rendition blob $renditionId');
 
   @override
   ApiFailure failureDetail(Object error) =>

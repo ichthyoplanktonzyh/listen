@@ -164,6 +164,12 @@ class TestMediaImportRepository implements MediaImportRepository {
   }
 
   @override
+  Future<MediaDownloadHandle> downloadArticle(
+    String articleUrl,
+    String directory,
+  ) async => TestFailingDownloadHandle();
+
+  @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) async {
     resolvedUrls.add(pageUrl);
     await resolveGate?.future;

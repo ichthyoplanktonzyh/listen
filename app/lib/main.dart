@@ -8,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
 import 'controllers/discovery_view_model.dart';
+import 'controllers/document_session_controller.dart';
 import 'controllers/core_session_controller.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/downloads_controller.dart';
@@ -62,9 +63,12 @@ import 'data/repositories/core_session_repository.dart';
 import 'data/repositories/media_import_repository.dart';
 import 'localization.dart';
 import 'models/backend_event.dart';
+import 'models/composition.dart';
 import 'models/workbench_study_mode.dart';
+import 'models/document_session.dart';
 import 'models/practice.dart';
 import 'models/learning_material.dart';
+import 'models/personal_library.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
@@ -72,6 +76,12 @@ import 'player_adapter.dart';
 import 'player_shortcuts.dart';
 import 'services/core_transport_service.dart';
 import 'services/content_generator_setup.dart';
+import 'services/capability_file_resolver.dart';
+import 'services/document_intake_flow.dart';
+import 'services/document_intake_service.dart';
+import 'services/document_reference_store.dart';
+import 'services/document_source_resolver.dart';
+import 'services/pdf_text_extractor.dart';
 import 'services/cover_art_cache.dart';
 import 'services/desktop_playback_bootstrap.dart';
 import 'services/diagnostic_log_export_service.dart';
@@ -97,6 +107,7 @@ import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/home/listening_home.dart';
 import 'widgets/layout/desktop_drop_surface.dart';
+import 'widgets/layout/document_material_surface.dart';
 import 'widgets/layout/material_workbench.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/player_overlays.dart';
@@ -356,6 +367,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     // second download.
     sourceIdentity: coreRepositories.sourceIdentity,
     learningMaterial: coreRepositories.learningMaterial,
+    documentFileService: const LocalDocumentIntakeFileService(),
+    documentIntake: DocumentIntakeFlow(
+      materialRepository: coreRepositories.learningMaterial,
+      codec: LocalDocumentIntakeCodec(
+        pdfTextExtractor: PdfRxPdfTextExtractor(),
+      ),
+      store: managedAssetStore,
+      referenceStore: documentReferenceStore,
+    ),
     // One persisted downloads location instead of a folder chooser that
     // reopened on the first acquisition of every launch.
     downloadsDirectory: () => settingsController.resolveDownloadsDirectory(
@@ -394,6 +414,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         settingsController.managedStoreLocation.path,
       StorageLocationState.missing => null,
     },
+  );
+  late final documentReferenceStore = DocumentReferenceStore(
+    file: DocumentReferenceStore.fileFor(
+      settingsController.settings.supportDirectory,
+    ),
   );
 
   // ── Controllers ──
@@ -533,6 +558,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       releaseService: LocalListenGenReleaseService(),
     ),
     mediaPathResolver: _mediaFilePathForRendition,
+    fileResolver: LocalCapabilityFileResolver(
+      mediaFilePath: _mediaFilePathForRendition,
+      managedStoreRoot: managedAssetStore.resolveRoot,
+      referenceStore: documentReferenceStore,
+    ),
     subtitleTrackForMedia: (rendition) {
       final selected = subtitleController.primaryTrack;
       if (selected == null ||
@@ -547,6 +577,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     // and the run reads the latest resolved setup each time it starts.
     providerArguments: () => [
       ...contentGeneratorProviderArguments(_generatorSetup),
+      if (Platform.isMacOS) ...['--tts-provider', 'say'],
     ],
   );
   late final learningEditionController = LearningEditionController(
@@ -610,6 +641,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   String get status => playerController.status;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool _workbenchExpanded = false;
+  DocumentSessionController? _documentSession;
+  VoidCallback? _documentSessionListener;
+  String? _projectedDocumentReleaseId;
+  String? _openedDocumentAudioReleaseId;
+  String? _openingDocumentAudioReleaseId;
   TranscriptReadinessViewModel? _transcriptReadiness;
 
   /// How the listening transcript presents itself. A workbench-level display
@@ -743,10 +779,21 @@ class _PlayerScreenState extends State<PlayerScreen>
         _transcriptReadiness = null;
         unawaited(slicePlayerController.close());
         huntingSessionController.stop();
+        final document = _documentSession;
+        final documentListener = _documentSessionListener;
+        if (document != null && documentListener != null) {
+          document.removeListener(documentListener);
+        }
         setState(() {
+          _documentSession = null;
+          _documentSessionListener = null;
+          _projectedDocumentReleaseId = null;
+          _openedDocumentAudioReleaseId = null;
+          _openingDocumentAudioReleaseId = null;
           taskStatuses.clear();
           _workbenchExpanded = true;
         });
+        document?.dispose();
         _workbenchAnimController.forward();
       },
       reloadLearningEntries: () async {
@@ -955,6 +1002,254 @@ class _PlayerScreenState extends State<PlayerScreen>
     _expandWorkbench();
   }
 
+  /// Opens the Document Material acquired from an article item.
+  Future<void> _openMaterialFromDiscovery(String materialId) async {
+    final details = await coreRepositories.learningMaterial
+        .readLearningMaterial(materialId);
+    await _openDocumentSession(
+      PersonalLibraryEntry(details: details, mediaEntries: const []),
+    );
+  }
+
+  /// Opens a source document through the same workbench layer as audio/video.
+  /// The controller owns exact-byte viewing and document retention; Gen's
+  /// adopted composition is resolved on that same material session.
+  Future<void> _openDocumentSession([PersonalLibraryEntry? entry]) async {
+    final controller = DocumentSessionController(
+      materialRepository: coreRepositories.learningMaterial,
+      fileService: const LocalDocumentIntakeFileService(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: coreRepositories.learningMaterial,
+        codec: LocalDocumentIntakeCodec(
+          pdfTextExtractor: PdfRxPdfTextExtractor(),
+        ),
+        store: managedAssetStore,
+        referenceStore: documentReferenceStore,
+      ),
+      sourceResolver: LocalDocumentSourceResolver(
+        store: managedAssetStore,
+        referenceStore: documentReferenceStore,
+        resolveStoreRoot: managedAssetStore.resolveRoot,
+      ),
+      resolveComposition: compositionSessionService.resolveComposition,
+      refreshLibrary: mediaLibraryActions.reconcileMembership,
+    );
+    if (entry != null) controller.openLibraryEntry(entry);
+    await mediaSession.deactivateForMaterialSwitch();
+    if (!mounted) {
+      controller.dispose();
+      return;
+    }
+    final previous = _documentSession;
+    final previousListener = _documentSessionListener;
+    if (previous != null && previousListener != null) {
+      previous.removeListener(previousListener);
+    }
+    void documentListener() => _syncDocumentComposition(controller);
+    controller.addListener(documentListener);
+    setState(() {
+      _documentSession = controller;
+      _documentSessionListener = documentListener;
+      _projectedDocumentReleaseId = null;
+      _openedDocumentAudioReleaseId = null;
+      _openingDocumentAudioReleaseId = null;
+      _workbenchExpanded = true;
+    });
+    previous?.dispose();
+    _workbenchAnimController.forward();
+    _syncDocumentComposition(controller);
+  }
+
+  Future<void> _openMaterialEntry(PersonalLibraryEntry entry) =>
+      entry.canListenOrWatch
+      ? mediaLibraryActions.openLibraryEntry(entry)
+      : _openDocumentSession(entry);
+
+  void _closeDocumentMaterialSurface() {
+    final closing = _documentSession;
+    if (closing == null) return;
+    learningController.setDiagnosisExpanded(false);
+    _workbenchAnimController.reverse().then((_) {
+      if (!mounted || !identical(_documentSession, closing)) return;
+      final listener = _documentSessionListener;
+      if (listener != null) closing.removeListener(listener);
+      unawaited(mediaSession.deactivateForMaterialSwitch());
+      setState(() {
+        _documentSession = null;
+        _documentSessionListener = null;
+        _projectedDocumentReleaseId = null;
+        _openedDocumentAudioReleaseId = null;
+        _openingDocumentAudioReleaseId = null;
+        _workbenchExpanded = false;
+      });
+      closing.dispose();
+    });
+  }
+
+  Widget _documentMaterialSurface(DocumentSessionController controller) =>
+      ListenableBuilder(
+        listenable: Listenable.merge([controller, capabilityCoordinator]),
+        builder: (context, _) {
+          final material = switch (controller.state) {
+            DocumentSessionReady(:final details) => details,
+            _ => null,
+          };
+          return DocumentMaterialSurface(
+            controller: controller,
+            mediaFraction: settingsController.workbenchMediaFraction,
+            onMediaFractionChanged: _setWorkbenchMediaFraction,
+            onCollapse: _closeDocumentMaterialSurface,
+            onOpenSettings: () => unawaited(_openSettings()),
+            timedLearningPanel: _sidePanel(),
+            studyMenu: _studyMenu(),
+            translationMenu: _translationMenu(),
+            listeningMenu: _listeningMenu(),
+            listenRun: material == null
+                ? null
+                : capabilityCoordinator.runViewFor(
+                    material.material.id,
+                    MaterialCapability.listen,
+                  ),
+            onRequestListen: material == null
+                ? null
+                : () => unawaited(
+                    _generateListenForDocument(controller, material),
+                  ),
+            onCancelListen: material == null
+                ? null
+                : () => unawaited(
+                    capabilityCoordinator.cancel(
+                      material.material.id,
+                      MaterialCapability.listen,
+                    ),
+                  ),
+            learningEditionAction: material == null
+                ? null
+                : _learningEditionAction(
+                    materialId: material.material.id,
+                    capability: MaterialCapability.listen,
+                    onGenerate: () =>
+                        _generateListenForDocument(controller, material),
+                    onRegenerate: () => _generateListenForDocument(
+                      controller,
+                      material,
+                      forceRegenerate: true,
+                    ),
+                  ),
+          );
+        },
+      );
+
+  /// Loads an adopted document composition into the existing subtitle/player
+  /// state. The source document stays the same material and the generated
+  /// audio is consumed directly from Core's verified rendition blob.
+  void _syncDocumentComposition(DocumentSessionController controller) {
+    if (!mounted || !identical(_documentSession, controller)) return;
+    final ready = controller.state;
+    if (ready is! DocumentSessionReady) return;
+    final composition = ready.composition;
+    if (composition == null) return;
+
+    if (_projectedDocumentReleaseId != composition.releaseId) {
+      _projectedDocumentReleaseId = composition.releaseId;
+      final track = composition.transcript;
+      if (track != null) {
+        subtitleController.setPrimaryTrack(track);
+        subtitleController.setSubtitleResources([track]);
+        final enhancements = composition.enhancements;
+        subtitleController.setSpeechEnhancements(
+          pronunciationBySentence: const {},
+          timingsBySentence: enhancements.timingsBySentence,
+          pronunciationProviders: const [],
+          chunkPartitionsBySentence: enhancements.chunkPartitionsBySentence,
+          senseGroupsBySentence: enhancements.senseGroupsBySentence,
+          acousticsBySentence: enhancements.acousticsBySentence,
+          prosodyAnchorsBySentence: enhancements.prosodyAnchorsBySentence,
+          phonesBySentence: enhancements.phonesBySentence,
+        );
+        subtitleController.setTimelineResource(
+          summaries: const [],
+          phoneSummaries: const [],
+          document: composition.llTimelineDocument,
+        );
+        subtitleController.setSubtitleResourceCapabilities({
+          track.id: SubtitleResourceCapabilities.fromCounts(
+            sentenceCount: track.cues.length,
+            wordTimingCount: enhancements.timingsBySentence.values.fold(
+              0,
+              (total, values) => total + values.length,
+            ),
+            chunkCount: enhancements.chunkPartitionsBySentence.values.fold(
+              0,
+              (total, value) => total + value.chunks.length,
+            ),
+            phoneCount: enhancements.phonesBySentence.values.fold(
+              0,
+              (total, values) => total + values.length,
+            ),
+          ),
+        });
+        subtitleController.updatePosition(playerController.position);
+      }
+    }
+
+    final path = composition.derivedMediaPath;
+    if (path == null ||
+        _openedDocumentAudioReleaseId == composition.releaseId ||
+        _openingDocumentAudioReleaseId == composition.releaseId) {
+      return;
+    }
+    _openingDocumentAudioReleaseId = composition.releaseId;
+    unawaited(_openDocumentCompositionAudio(controller, composition));
+  }
+
+  Future<void> _openDocumentCompositionAudio(
+    DocumentSessionController controller,
+    ResolvedComposition composition,
+  ) async {
+    final path = composition.derivedMediaPath;
+    if (path == null) return;
+    try {
+      await adapter.open(path, play: false);
+      final current = controller.state;
+      if (!mounted ||
+          !identical(_documentSession, controller) ||
+          current is! DocumentSessionReady ||
+          current.composition?.releaseId != composition.releaseId) {
+        return;
+      }
+      playerController.setMediaPath(path, kind: 'audio');
+      playerController.setPosition(Duration.zero);
+      _openedDocumentAudioReleaseId = composition.releaseId;
+    } on Object catch (error) {
+      if (mounted && identical(_documentSession, controller)) {
+        playerController.setStatus(
+          l.text('statusPlaybackFailed'),
+          error: true,
+          failure: coreRepositories.capability.failureDetail(error),
+        );
+      }
+    } finally {
+      if (_openingDocumentAudioReleaseId == composition.releaseId) {
+        _openingDocumentAudioReleaseId = null;
+      }
+    }
+  }
+
+  Future<void> _generateListenForDocument(
+    DocumentSessionController controller,
+    MaterialDetails material, {
+    bool forceRegenerate = false,
+  }) async {
+    await capabilityCoordinator.requestCapability(
+      material,
+      MaterialCapability.listen,
+      forceProduce: forceRegenerate,
+    );
+    if (!mounted || !identical(_documentSession, controller)) return;
+    await controller.refreshComposition();
+  }
+
   Future<void> _runSmokeIfConfigured() async {
     final configuration = widget.smokeLaunchConfiguration.read();
     if (configuration == null) return;
@@ -1080,6 +1375,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _refreshAdoptedLearningEdition() async {
+    final document = _documentSession;
+    if (document != null) {
+      await document.refreshComposition();
+      return;
+    }
     await _readinessViewModel.refreshAdoptedComposition();
   }
 
@@ -1593,6 +1893,12 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void dispose() {
     unawaited(coreSessionController.shutdown());
+    final documentSession = _documentSession;
+    final documentListener = _documentSessionListener;
+    if (documentSession != null && documentListener != null) {
+      documentSession.removeListener(documentListener);
+    }
+    documentSession?.dispose();
     _transcriptReadiness?.dispose();
     learningEditionController.dispose();
     coreSessionController.removeListener(_onCoreSessionStateChanged);
@@ -1812,6 +2118,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     onContinue: _continueRecentMedia,
     onOpenMedia: mediaSession.openMedia,
     onPlayMedia: _startLearningFromDiscovery,
+    onOpenDocument: (materialId) =>
+        unawaited(_openMaterialFromDiscovery(materialId)),
   );
 
   void _continueRecentMedia() {
@@ -1825,9 +2133,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _libraryPane() => ListeningHome(
     onOpenMedia: mediaSession.openMedia,
     onOpenOnline: _openOnline,
-    personalLibrary: mediaLibraryActions.personalLibrary
-        ?.where((entry) => entry.canListenOrWatch)
-        .toList(growable: false),
+    onOpenDocument: () => unawaited(_openDocumentSession()),
+    personalLibrary: mediaLibraryActions.personalLibrary,
     personalLibraryFailure: mediaLibraryActions.personalLibraryFailure,
     onRetryLibrary: () => unawaited(mediaLibraryActions.loadMediaLibrary()),
     offlineEntries: mediaLibraryActions.offlineLibrary
@@ -1840,8 +2147,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         unawaited(mediaLibraryScan.retryFailedRegistrations()),
     onChooseManagedStoreLocation: () =>
         unawaited(_chooseManagedStoreLocation()),
-    onOpenLibraryEntry: (entry) =>
-        unawaited(mediaLibraryActions.openLibraryEntry(entry)),
+    onOpenLibraryEntry: (entry) => unawaited(_openMaterialEntry(entry)),
     onStartExtensiveEntry: (entry) =>
         unawaited(mediaLibraryActions.startExtensiveFromLibrary(entry)),
     onStartIntensiveEntry: (entry) =>
@@ -2086,7 +2392,18 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   ),
                                                 ],
                                               ),
-                                              if (playerController.mediaPath !=
+                                              if (_documentSession
+                                                  case final document?)
+                                                SlideTransition(
+                                                  position:
+                                                      _workbenchSlideAnimation,
+                                                  child:
+                                                      _documentMaterialSurface(
+                                                        document,
+                                                      ),
+                                                )
+                                              else if (playerController
+                                                      .mediaPath !=
                                                   null)
                                                 SlideTransition(
                                                   position:
@@ -2152,20 +2469,26 @@ class _PlayerScreenState extends State<PlayerScreen>
                                           );
                                         },
                                       ),
-                                      PlayerOverlays(
-                                        practiceController: practiceController,
-                                        slicePlayerController:
-                                            slicePlayerController,
-                                        huntingSessionController:
-                                            huntingSessionController,
-                                        subtitleController: subtitleController,
-                                        playerController: playerController,
-                                        practiceActions: practiceActions,
-                                        huntingActions: huntingActions,
-                                        onCloseSlicePlayback:
-                                            _closeSlicePlayback,
-                                      ),
-                                      _analysisWindow(),
+                                      if (_documentSession == null ||
+                                          _documentSession?.state
+                                              is DocumentSessionReady) ...[
+                                        PlayerOverlays(
+                                          practiceController:
+                                              practiceController,
+                                          slicePlayerController:
+                                              slicePlayerController,
+                                          huntingSessionController:
+                                              huntingSessionController,
+                                          subtitleController:
+                                              subtitleController,
+                                          playerController: playerController,
+                                          practiceActions: practiceActions,
+                                          huntingActions: huntingActions,
+                                          onCloseSlicePlayback:
+                                              _closeSlicePlayback,
+                                        ),
+                                        _analysisWindow(),
+                                      ],
                                     ],
                                   ),
                                 ),

@@ -305,7 +305,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     final stoppedAfterAttempt = await _finishIfStopped(run);
     if (stoppedAfterAttempt != null) return stoppedAfterAttempt;
 
-    // Core 5.0 media renditions carry no byte digest; when the rendition's
+    // Core media renditions carry no byte digest; when the rendition's
     // file is on this machine the file resolver computes the authoritative
     // blob facts the request must declare. The path map feeds the Gen run;
     // snapshot misses fall through to the authoritative resolver (a freshly
@@ -323,6 +323,30 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       if (facts != null) mediaBlobFacts[rendition.id] = facts;
     }
 
+    // Documents are fed to Gen as the exact bytes of their Source Asset, not
+    // as extracted text or a path returned by Core. Resolve only locally
+    // available exact assets and leave unavailable sources out of the input
+    // set, so the producer cannot accidentally read a stale path.
+    final sourceAssets = {
+      for (final asset in material.currentRevision.sourceAssets)
+        asset.id: asset,
+    };
+    final documentPaths = <String, String>{};
+    final documentRenditions = <DocumentRendition>[];
+    for (final rendition in material.currentRevision.documentRenditions) {
+      final path = await _fileResolver.documentSourcePath(
+        rendition,
+        rendition.sourceAssetId == null
+            ? null
+            : sourceAssets[rendition.sourceAssetId],
+      );
+      final stoppedAfterDocumentPath = await _finishIfStopped(run);
+      if (stoppedAfterDocumentPath != null) return stoppedAfterDocumentPath;
+      if (path == null) continue;
+      documentPaths[rendition.id] = path;
+      documentRenditions.add(rendition);
+    }
+
     final subtitleSrt = _selectedSubtitleSrt(
       material.currentRevision.mediaRenditions,
     );
@@ -338,6 +362,8 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       requestedCapability: _capabilityName(capability),
       createdAtMs: attempt.startedAtMs,
       attemptId: attempt.attemptId,
+      documentRenditions: documentRenditions,
+      documentFilePath: (rendition) => documentPaths[rendition.id],
       mediaRenditions: material.currentRevision.mediaRenditions,
       mediaFilePath: (rendition) => mediaPaths[rendition.id],
       mediaBlobFacts: mediaBlobFacts,
@@ -615,6 +641,10 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       final language = subtitleTrackForMedia?.call(rendition)?.language;
       if (language != null && language.isNotEmpty) return language;
     }
+    for (final rendition in material.currentRevision.documentRenditions) {
+      final language = rendition.language;
+      if (language != null && language.isNotEmpty) return language;
+    }
     return 'und';
   }
 
@@ -866,6 +896,12 @@ final class _CoordinatorUnavailable implements Exception {
 final class _UnresolvingCapabilityFileResolver
     implements CapabilityFileResolver {
   const _UnresolvingCapabilityFileResolver();
+
+  @override
+  Future<String?> documentSourcePath(
+    DocumentRendition rendition,
+    SourceAsset? sourceAsset,
+  ) async => null;
 
   @override
   Future<String?> mediaPath(MediaRendition rendition) async => null;

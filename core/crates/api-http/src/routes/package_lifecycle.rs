@@ -1,4 +1,4 @@
-//! Package lifecycle HTTP surface (contract `5.0.0`): Package Installation,
+//! Package lifecycle HTTP surface (contract `5.1.0`): Package Installation,
 //! Edition Listing, and Learning Edition Adoption.
 //!
 //! This module contains wire adaptation only: explicit request/response DTOs

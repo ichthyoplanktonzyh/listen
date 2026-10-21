@@ -26,6 +26,13 @@ abstract interface class MediaImportRepository {
     int? expectedBytes,
   });
 
+  /// Fetches an article page into [directory], giving it an HTML extension so
+  /// the shared document intake can validate and bind its exact bytes.
+  Future<MediaDownloadHandle> downloadArticle(
+    String articleUrl,
+    String directory,
+  );
+
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl);
   Future<ResolvedChannelDetails> resolveChannelDetails(String channelUrl);
   Future<List<EmbeddedSubtitle>> probeSubtitles(String mediaPath);
@@ -75,6 +82,13 @@ final class LocalMediaImportRepository implements MediaImportRepository {
     int? expectedBytes,
   }) async =>
       _enclosures.start(mediaUrl, directory, expectedBytes: expectedBytes);
+
+  @override
+  Future<MediaDownloadHandle> downloadArticle(
+    String articleUrl,
+    String directory,
+  ) async =>
+      _enclosures.start(articleUrl, directory, fileExtensionOverride: '.html');
 
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>

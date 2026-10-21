@@ -33,6 +33,7 @@ class MaterialWorkbench extends StatefulWidget {
     this.learningEditionAction,
     this.onOpenSettings,
     this.retentionMenu,
+    this.supplementalHeaderActions = const [],
   });
 
   final String materialTitle;
@@ -77,6 +78,10 @@ class MaterialWorkbench extends StatefulWidget {
   /// The retention affordance (Keep / reference in place / unretain) for the
   /// current media. Null on surfaces that have none wired.
   final Widget? retentionMenu;
+
+  /// Document-specific actions that still belong to this material's shared
+  /// header, such as viewing its exact source bytes.
+  final List<Widget> supplementalHeaderActions;
 
   @override
   State<MaterialWorkbench> createState() => _MaterialWorkbenchState();
@@ -133,6 +138,7 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
             learningEditionAction: widget.learningEditionAction,
             onOpenSettings: widget.onOpenSettings,
             retentionMenu: widget.retentionMenu,
+            supplementalHeaderActions: widget.supplementalHeaderActions,
           ),
           Expanded(
             child: videoPane == null
@@ -254,6 +260,7 @@ class _SessionHeader extends StatelessWidget {
     required this.learningEditionAction,
     required this.onOpenSettings,
     required this.retentionMenu,
+    required this.supplementalHeaderActions,
   });
 
   final String materialTitle;
@@ -265,6 +272,7 @@ class _SessionHeader extends StatelessWidget {
   final Widget? learningEditionAction;
   final VoidCallback? onOpenSettings;
   final Widget? retentionMenu;
+  final List<Widget> supplementalHeaderActions;
 
   @override
   Widget build(BuildContext context) {
@@ -293,6 +301,7 @@ class _SessionHeader extends StatelessWidget {
             if (studyMenu != null) ...[_gap, studyMenu!],
             if (subtitleMenu != null) ...[_gap, subtitleMenu!],
             if (retentionMenu != null) ...[_gap, retentionMenu!],
+            for (final action in supplementalHeaderActions) ...[_gap, action],
             _gap,
             IconButton(
               key: const Key('workbench-export'),

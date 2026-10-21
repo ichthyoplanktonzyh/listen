@@ -1,4 +1,4 @@
-//! Adopted composition HTTP surface (contract `5.0.0`).
+//! Adopted composition HTTP surface (contract `5.1.0`).
 //!
 //! This module is the single Core-owned composition interface: it resolves
 //! the current adopted composition of a Material, lists the selected
@@ -68,7 +68,17 @@ pub(crate) struct CompositionRenditionResponse {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum CompositionBindingResponse {
-    Media { media_id: String },
+    ManagedSourceAsset {
+        source_asset_id: String,
+    },
+    ReferencedSourceAsset {
+        source_asset_id: String,
+        reference: String,
+        available: bool,
+    },
+    Media {
+        media_id: String,
+    },
 }
 
 impl From<AdoptedCompositionView> for AdoptedCompositionResponse {
@@ -143,6 +153,18 @@ impl From<CompositionRenditionView> for CompositionRenditionResponse {
 impl From<CompositionBinding> for CompositionBindingResponse {
     fn from(value: CompositionBinding) -> Self {
         match value {
+            CompositionBinding::ManagedSourceAsset { source_asset_id } => {
+                Self::ManagedSourceAsset { source_asset_id }
+            }
+            CompositionBinding::ReferencedSourceAsset {
+                source_asset_id,
+                reference,
+                available,
+            } => Self::ReferencedSourceAsset {
+                source_asset_id,
+                reference,
+                available,
+            },
             CompositionBinding::Media { media_id } => Self::Media {
                 media_id: media_id.as_str().to_owned(),
             },
@@ -229,6 +251,26 @@ pub(crate) async fn read_composition_resource_payload(
         .map_err(composition_error)
 }
 
+/// GET /v1/materials/{material_id}/composition/renditions/{rendition_id}/blob
+/// — exact bytes for one selected Document or Media Rendition.
+pub(crate) async fn read_composition_rendition_blob(
+    State(state): State<ApiState>,
+    Path((material_id, rendition_id)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let material_id = LearningMaterialId::parse(material_id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("composition.read_rendition_blob", move |services| {
+            services
+                .composition()
+                .read_rendition_blob(&material_id, &rendition_id)
+                .map_err(ApplicationError::from)
+        })
+        .await
+        .map(payload_response)
+        .map_err(composition_error)
+}
+
 /// The raw typed content body. Resource payloads are JSON documents;
 /// Document/Media rendition blobs are raw bytes.
 fn payload_response(payload: CompositionPayload) -> Response {
@@ -249,6 +291,12 @@ fn composition_error(error: ApplicationError) -> ApiError {
             StatusCode::INTERNAL_SERVER_ERROR,
             "composition_integrity_failure",
             "adopted composition content is missing or fails integrity verification",
+            false,
+        ),
+        ApplicationError::SourceUnavailable => ApiError::new(
+            StatusCode::NOT_FOUND,
+            "source_unavailable",
+            "referenced source asset is unavailable",
             false,
         ),
         other => ApiError::internal(

@@ -1500,6 +1500,13 @@ class _FakeMaterialRepository implements LearningMaterialRepository {
   }
 
   @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => throw UnimplementedError();
+
+  @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
   ) async => throw UnimplementedError();
@@ -1559,6 +1566,13 @@ class _GatedMaterialRepository implements LearningMaterialRepository {
   }
 
   @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => throw UnimplementedError();
+
+  @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
   ) async => throw UnimplementedError();
@@ -1591,6 +1605,12 @@ class _FakeImportRepository implements MediaImportRepository {
     String directory, {
     int? expectedBytes,
   }) => throw UnimplementedError();
+
+  @override
+  Future<MediaDownloadHandle> downloadArticle(
+    String articleUrl,
+    String directory,
+  ) => throw UnimplementedError();
 
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
@@ -1636,6 +1656,21 @@ class _FakeManagedStore implements ManagedAssetStoreService {
   final deleted = <String>[];
 
   @override
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  }) async {
+    if (unavailable) throw const ManagedStoreUnavailable();
+    if (copyFails) throw const ManagedStoreCopyFailed();
+    copies.add('bytes:${bytes.length}');
+    return ManagedAssetCopy(
+      path: copyPath,
+      createdNew: createdNew,
+      mediaKind: mediaKind,
+    );
+  }
+
+  @override
   Future<ManagedAssetCopy> copyIntoStore({
     required String sourcePath,
     String? mediaKind,
@@ -1654,6 +1689,9 @@ class _FakeManagedStore implements ManagedAssetStoreService {
 
   @override
   bool contains(String path) => path.startsWith('$root/');
+
+  @override
+  Future<List<int>?> readBytes(String path) async => null;
 
   @override
   Future<void> deleteStoreCopy(String path) async {

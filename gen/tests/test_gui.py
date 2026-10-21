@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import threading
 import time
@@ -9,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 from listen_gen.capability import CapabilityRequest
 from listen_gen.cli import CancellationRequested
+from listen_gen.package_v3 import sha256_of_bytes
 from listen_gen.gui import (
     GuiRequestHandler,
     RunScheduler,
@@ -16,6 +18,7 @@ from listen_gen.gui import (
     _deep_merge,
     _merge_config,
     _parse_multipart,
+    _local_document_ids,
     _run_produce_worker,
     _commit_upload,
     _validate_produce_payload,
@@ -37,15 +40,17 @@ class TestGui(unittest.TestCase):
         self.assertEqual(content_type, "text/html")
         self.assertIn(b"listen-gen", content)
 
-    def test_workbench_offers_media_and_subtitles_without_document_providers(self):
+    def test_workbench_offers_document_media_tts_and_ocr_inputs(self):
         _, content = _read_static_asset("/")
         self.assertIn(b"media-dropzone", content)
+        self.assertIn(b"doc-dropzone", content)
         self.assertIn(b"sub-file-input", content)
+        self.assertIn(b"tts-provider", content)
+        self.assertIn(b"ocr-provider", content)
         self.assertIn("Qwen3 与 SenseVoice 仅在完整源码仓库中可用".encode(), content)
         self.assertIn("发行版不可用".encode(), content)
         self.assertIn("video-only 不会转换音轨".encode(), content)
-        for removed in (b"doc-file-input", b"work-doc-text", b"tts-provider", b"ocr-provider"):
-            self.assertNotIn(removed, content)
+        self.assertIn("Gen 不会自动安装 Python 依赖或预下载模型".encode(), content)
 
     def test_missing_static_asset_falls_back_to_index(self):
         content_type, content = _read_static_asset("/does-not-exist.js")
@@ -67,8 +72,8 @@ class TestGui(unittest.TestCase):
         self.assertIn("deepseek", cfg["llm_profiles"])
         self.assertIn("asr", cfg)
         self.assertIn("phones", cfg)
-        self.assertNotIn("tts", cfg)
-        self.assertNotIn("ocr", cfg)
+        self.assertEqual(cfg["tts"]["provider"], "none")
+        self.assertEqual(cfg["ocr"]["provider"], "none")
 
     def test_load_and_save_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -94,6 +99,8 @@ class TestGui(unittest.TestCase):
         self.assertTrue(tools["python"]["available"])
         for provider in ("qwen3", "sensevoice"):
             self.assertIn(f"{provider}_asr_sidecar", tools)
+        for provider in ("pypdf", "surya_ocr", "rapidocr", "kokoro_tts", "edge_tts"):
+            self.assertIn(provider, tools)
 
     def test_task_manager(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -294,15 +301,31 @@ class TestMultipartAndValidation(unittest.TestCase):
             "requested_capability": "read",
             "available_renditions": [{"kind": "document"}],
         }
-        document_problems = _validate_produce_payload(document_input, {})
-        self.assertTrue(any("独立文档材料输入已移除" in p["message"] for p in document_problems))
+        self.assertEqual(_validate_produce_payload(document_input, {}), [])
         nested_document_problems = _validate_produce_payload(
             {**ok, "available_renditions": []},
             {"request": {"available_renditions": [{"kind": "document"}]}},
         )
-        self.assertTrue(
-            any("独立文档材料输入已移除" in p["message"] for p in nested_document_problems)
+        self.assertEqual(nested_document_problems, [])
+
+        document_listen = {**document_input, "requested_capability": "listen"}
+        tts_problems = _validate_produce_payload(document_listen, {})
+        self.assertTrue(any(p["field"] == "tts" for p in tts_problems))
+        self.assertEqual(
+            _validate_produce_payload(
+                document_listen,
+                {"config": {"tts": {"provider": "say"}}},
+            ),
+            [],
         )
+        audio_document_listen = {
+            **document_listen,
+            "available_renditions": [
+                {"kind": "document"},
+                {"kind": "media", "media_kind": "audio"},
+            ],
+        }
+        self.assertEqual(_validate_produce_payload(audio_document_listen, {}), [])
 
         listen_no_doc = {
             "material": {"material_id": "m1", "material_revision_id": "rev-1", "title": "T"},
@@ -330,13 +353,61 @@ class TestMultipartAndValidation(unittest.TestCase):
             for p in video_problems
         ))
 
-    def test_document_upload_is_rejected_before_it_is_saved(self):
+    def test_document_upload_is_saved_and_invalid_mime_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmpdir, patch("listen_gen.gui.UPLOAD_DIR", Path(tmpdir)):
-            with self.assertRaisesRegex(ValueError, "document material input is not supported"):
-                _commit_upload("lesson.pdf", b"pdf", "application/pdf")
-            with self.assertRaisesRegex(ValueError, "document material input is not supported"):
-                _commit_upload("lesson.pdf", b"pdf", "audio/wav")
-            self.assertEqual(list(Path(tmpdir).iterdir()), [])
+            uploaded = _commit_upload("lesson.pdf", b"pdf", "application/pdf")
+            self.assertEqual(uploaded["media_type"], "application/pdf")
+            self.assertTrue(Path(uploaded["path"]).is_file())
+            with self.assertRaisesRegex(ValueError, "only PDF, EPUB"):
+                _commit_upload("bad.pdf", b"pdf", "audio/wav")
+
+    def test_local_document_ids_match_core_identity_rules(self):
+        raw = "文档内容".encode("utf-8")
+        media_type = "text/plain"
+        language = "zh-Hans"
+        digest, source_asset_id, rendition_id = _local_document_ids(media_type, language, raw)
+        def core_id(namespace, fields):
+            encoded = "".join(f"{len(value.encode('utf-8'))}:{value}" for value in fields)
+            return hashlib.sha256(f"{namespace}:{encoded}".encode("utf-8")).hexdigest()
+        self.assertEqual(
+            source_asset_id,
+            core_id("source-asset", (media_type, str(len(raw)), digest)),
+        )
+        self.assertEqual(
+            rendition_id,
+            core_id("document-rendition", (media_type, language, digest)),
+        )
+
+    def test_document_request_builder_uses_raw_core_ids(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            document = Path(tmpdir) / "lesson.txt"
+            document.write_text("Text source.", encoding="utf-8")
+            fake = _FakeHandler()
+            manager = TaskManager(store_path=Path(tmpdir) / "tasks.json")
+            scheduler = MagicMock()
+            with patch("listen_gen.gui.ARTIFACTS_DIR", Path(tmpdir) / "artifacts"), \
+                 patch("listen_gen.gui._GLOBAL_TASK_MANAGER", manager), \
+                 patch("listen_gen.gui._RUN_SCHEDULER", scheduler):
+                GuiRequestHandler._handle_produce(fake, {
+                    "request": {
+                        "material_id": "material-1",
+                        "title": "Lesson",
+                        "target_language": "en-US",
+                        "requested_capability": "read",
+                    },
+                    "document_path": str(document),
+                    "document_media_type": "text/plain",
+                    "config": get_default_config(),
+                })
+            kind, status, response = fake.calls[0]
+            self.assertEqual((kind, status), ("json", 200))
+            request = manager.get_task(response["task_id"]).request_doc
+            rendition = request["available_renditions"][0]
+            self.assertEqual(rendition["kind"], "document")
+            self.assertRegex(rendition["source_asset_id"], r"^[0-9a-f]{64}$")
+            self.assertTrue(rendition["rendition_id"].startswith("sha256:"))
+            self.assertEqual(rendition["blob"]["size_bytes"], len(b"Text source."))
+            scheduler.submit.assert_called_once()
 
 
 class TestProduceWorkerEvents(unittest.TestCase):
@@ -376,6 +447,31 @@ class TestProduceWorkerEvents(unittest.TestCase):
                     "path": "/tmp/media.wav",
                 },
             }],
+            })
+
+    def _make_document_request(self) -> CapabilityRequest:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "lesson.txt"
+            path.write_text("A sentence.", encoding="utf-8")
+            raw = path.read_bytes()
+            digest, source_asset_id, rendition_id = _local_document_ids(
+                "text/plain", "en-US", raw
+            )
+            return CapabilityRequest.from_document({
+                "schema": "listen_gen.capability-request.v2",
+                "version": 2,
+                "created_at_ms": 1,
+                "material": {"material_id": "m1", "material_revision_id": "rev-1", "title": "T"},
+                "edition": {"edition_id": "ed-1", "title": "T", "target_language": "en-US", "support_languages": []},
+                "requested_capability": "listen",
+                "available_renditions": [{
+                    "kind": "document",
+                    "rendition_id": f"sha256:{rendition_id}",
+                    "media_type": "text/plain",
+                    "language": "en-US",
+                    "source_asset_id": source_asset_id,
+                    "blob": {"digest": f"sha256:{digest}", "size_bytes": len(raw), "path": str(path)},
+                }],
             })
 
     def _run(self, task_id: str, store: Path, output: Path) -> TaskManager:
@@ -498,6 +594,43 @@ class TestProduceWorkerEvents(unittest.TestCase):
             self.assertIn("source-checkout-only", failed["message"])
             self.assertIn("does not include", failed["message"])
             self.assertFalse(output.exists())
+
+    @patch("listen_gen.gui.plan_request")
+    @patch("listen_gen.gui.produce")
+    def test_document_completion_emits_v3_rendition_ids(self, mock_produce, mock_plan):
+        from listen_gen.plan import DerivationKind
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = Path(tmpdir) / "tasks.json"
+            output = Path(tmpdir) / "out.zip"
+            mock_plan.return_value = SimpleNamespace(
+                derivations=[SimpleNamespace(kind=DerivationKind.DOCUMENT_LISTEN, provider="tts")],
+                describe=lambda: {"derivations": ["document_to_listen"]},
+            )
+            release = SimpleNamespace(
+                document_renditions=[SimpleNamespace(rendition_id="sha256:" + "1" * 64, origin="source")],
+                media_renditions=[SimpleNamespace(rendition_id="sha256:" + "2" * 64, origin="derived")],
+                resources=[SimpleNamespace(resource_id="sha256:" + "3" * 64, kind="structured_reading")],
+            )
+            mock_produce.return_value = ProduceOutcome(
+                release=release, package_sha256="deadbeef", warnings=(), package_path=output
+            )
+            mgr = TaskManager(store_path=store)
+            mgr.create_task("document-listen", {}, output)
+            config = {
+                **self.FAKE_CONFIG,
+                "tts": {"provider": "kokoro"},
+            }
+            with patch("listen_gen.gui._GLOBAL_TASK_MANAGER", mgr):
+                _run_produce_worker("document-listen", self._make_document_request(), config, output)
+            task = mgr.get_task("document-listen")
+            completed = next(e for e in task.events if e.get("event") == "completed")
+            self.assertEqual(completed["document_renditions"], [
+                {"rendition_id": "sha256:" + "1" * 64, "origin": "source"}
+            ])
+            self.assertEqual(completed["media_renditions"], [
+                {"rendition_id": "sha256:" + "2" * 64, "origin": "derived"}
+            ])
 
 
 class _FakeHandler:
@@ -635,6 +768,33 @@ class TestRerun(unittest.TestCase):
     def _snapshot_request(self, media_path: Path, *, kind: str = "media") -> dict:
         raw = media_path.read_bytes() if media_path.is_file() else b"missing"
         digest = "sha256:" + "0" * 64
+        if kind == "document":
+            media_type = detect_media_type(media_path.name)
+            language = "en-US"
+            digest_hex, source_asset_id, rendition_id = _local_document_ids(
+                media_type, language, raw
+            )
+            rendition = {
+                "kind": "document",
+                "rendition_id": f"sha256:{rendition_id}",
+                "media_type": media_type,
+                "language": language,
+                "source_asset_id": source_asset_id,
+                "blob": {
+                    "digest": f"sha256:{digest_hex}",
+                    "size_bytes": len(raw),
+                    "path": str(media_path),
+                },
+            }
+        else:
+            rendition = {
+                "kind": kind,
+                "rendition_id": digest,
+                "media_kind": "audio",
+                "media_type": "audio/wav",
+                "fingerprint": digest,
+                "blob": {"digest": digest, "size_bytes": len(raw), "path": str(media_path)},
+            }
         return {
             "schema": "listen_gen.capability-request.v2",
             "version": 2,
@@ -642,14 +802,7 @@ class TestRerun(unittest.TestCase):
             "material": {"material_id": "m1", "material_revision_id": "rev-1", "title": "T"},
             "edition": {"edition_id": "ed-1", "title": "T", "target_language": "en-US", "support_languages": []},
             "requested_capability": "read",
-            "available_renditions": [{
-                "kind": kind,
-                "rendition_id": digest,
-                "media_kind": "audio",
-                "media_type": "audio/wav",
-                "fingerprint": digest,
-                "blob": {"digest": digest, "size_bytes": len(raw), "path": str(media_path)},
-            }],
+            "available_renditions": [rendition],
             }
 
     def test_rerun_rebuilds_snapshot(self):
@@ -701,22 +854,30 @@ class TestRerun(unittest.TestCase):
             self.assertEqual(status, 409)
             self.assertIn("已不在磁盘", message)
 
-    def test_rerun_of_document_task_is_rejected(self):
+    def test_rerun_rebuilds_document_and_source_asset_identity(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             document = Path(tmpdir) / "old.md"
             document.write_text("old document", encoding="utf-8")
+            original_source_asset_id = self._snapshot_request(
+                document, kind="document"
+            )["available_renditions"][0]["source_asset_id"]
             mgr = TaskManager(store_path=Path(tmpdir) / "tasks.json")
             mgr.create_task(
                 "old-1", self._snapshot_request(document, kind="document"),
                 Path(tmpdir) / "out.zip", status="failed",
             )
+            document.write_text("updated document", encoding="utf-8")
             fake = _FakeHandler()
-            with patch("listen_gen.gui._GLOBAL_TASK_MANAGER", mgr):
+            with patch("listen_gen.gui._GLOBAL_TASK_MANAGER", mgr), \
+                 patch("listen_gen.gui._RUN_SCHEDULER", RunScheduler(max_concurrent_runs=4)), \
+                 patch("listen_gen.gui._run_produce_worker", lambda *a, **k: None):
                 GuiRequestHandler._handle_rerun(fake, "old-1")
-            kind, status, message = fake.calls[0]
-            self.assertEqual(kind, "error")
-            self.assertEqual(status, 400)
-            self.assertIn("document material input is not supported", message)
+            kind, status, data = fake.calls[0]
+            self.assertEqual((kind, status), ("json", 200))
+            rerun = mgr.get_task(data["task_id"])
+            rendition = rerun.request_doc["available_renditions"][0]
+            self.assertEqual(rendition["blob"]["digest"], sha256_of_bytes(b"updated document"))
+            self.assertNotEqual(rendition["source_asset_id"], original_source_asset_id)
 
 
 if __name__ == "__main__":

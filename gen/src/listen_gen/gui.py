@@ -7,7 +7,9 @@ and Server-Sent Events (SSE) for streaming machine events to the GUI.
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib.resources
+import importlib.util
 import json
 import mimetypes
 import os
@@ -31,6 +33,7 @@ from . import __version__ as TOOL_VERSION
 from .capability import (
     CAPABILITY_REQUEST_SCHEMA,
     REQUEST_VERSION,
+    SUPPORTED_DOCUMENT_MEDIA_TYPES,
     AvailableMediaRendition,
     CapabilityRequest,
     EditionIdentity,
@@ -44,6 +47,7 @@ from .llm_client import (
     create_llm_client,
 )
 from .package_v3 import sha256_of_bytes
+from .document import MAX_DOCUMENT_BYTES
 from .package import ConversionError
 from .plan import plan as plan_request
 from .produce import ProduceConfig, produce
@@ -221,6 +225,19 @@ def get_default_config() -> dict[str, Any]:
             "device": "mps" if sys.platform == "darwin" else "auto",
             "padding_ms": 400,
         },
+        "tts": {
+            "provider": "none",
+            "voice": "",
+            "speed": 1.0,
+            "lang_code": "a",
+            "timeout_seconds": 600.0,
+            "afconvert_executable": "afconvert",
+        },
+        "ocr": {
+            "provider": "none",
+            "langs": "en,zh",
+            "device": "",
+        },
         "syntax": {
             "backend": "spacy",
             "model": "en_core_web_sm",
@@ -287,17 +304,43 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
             problems.append(f"llm_profiles.{key}.timeout_seconds must be a positive number")
 
-    asr_provider = config.get("asr", {}).get("provider")
+    asr_config = config.get("asr", {})
+    if not isinstance(asr_config, dict):
+        problems.append("asr must be an object")
+        asr_config = {}
+    asr_provider = asr_config.get("provider")
     if asr_provider not in ("qwen3", "sensevoice", "whisper-cpp", "none"):
         problems.append(
             f"asr.provider must be qwen3/sensevoice/whisper-cpp/none, got {asr_provider!r}"
         )
-    phones_provider = config.get("phones", {}).get("provider")
+    phones_config = config.get("phones", {})
+    if not isinstance(phones_config, dict):
+        problems.append("phones must be an object")
+        phones_config = {}
+    phones_provider = phones_config.get("provider")
     if phones_provider not in ("baseline", "wav2vec2", "none"):
         problems.append(f"phones.provider must be baseline/wav2vec2/none, got {phones_provider!r}")
-    aligner_provider = config.get("aligner", {}).get("provider")
+    aligner_config = config.get("aligner", {})
+    if not isinstance(aligner_config, dict):
+        problems.append("aligner must be an object")
+        aligner_config = {}
+    aligner_provider = aligner_config.get("provider")
     if aligner_provider not in ("none", "qwen"):
         problems.append(f"aligner.provider must be none or qwen, got {aligner_provider!r}")
+    tts_config = config.get("tts", {})
+    if not isinstance(tts_config, dict):
+        problems.append("tts must be an object")
+        tts_config = {}
+    tts_provider = tts_config.get("provider")
+    if tts_provider not in ("none", "say", "kokoro", "edge-tts"):
+        problems.append(f"tts.provider must be none/say/kokoro/edge-tts, got {tts_provider!r}")
+    ocr_config = config.get("ocr", {})
+    if not isinstance(ocr_config, dict):
+        problems.append("ocr must be an object")
+        ocr_config = {}
+    ocr_provider = ocr_config.get("provider")
+    if ocr_provider not in ("none", "surya", "rapidocr"):
+        problems.append(f"ocr.provider must be none/surya/rapidocr, got {ocr_provider!r}")
     return problems
 
 
@@ -737,6 +780,29 @@ def check_toolchain() -> dict[str, Any]:
         "version": f"Python {sys.version.split()[0]}",
     }
 
+    for module_name, key, message in (
+        ("pypdf", "pypdf", "Required to extract text from PDF documents; install pypdf in this Python environment."),
+        ("pypdfium2", "pypdfium2", "Optional PDF renderer for scanned-document OCR; not bundled in the zipapp."),
+        ("PIL", "pillow", "Optional image support for scanned-document OCR; not bundled in the zipapp."),
+        ("surya", "surya_ocr", "Optional OCR provider; install the Gen source package with the [ocr] extra."),
+        ("rapidocr_onnxruntime", "rapidocr", "Optional OCR provider; install the Gen source package with the [ocr] extra."),
+        ("kokoro", "kokoro_tts", "Optional local TTS provider; no model is bundled."),
+        ("edge_tts", "edge_tts", "Optional online TTS provider; selecting it sends text to the Edge TTS service."),
+    ):
+        try:
+            available = importlib.util.find_spec(module_name) is not None
+        except (ImportError, ValueError):
+            available = False
+        tools[key] = {"available": available, "message": message}
+
+    for executable in ("say", "afconvert"):
+        path = shutil.which(executable)
+        tools[executable] = {
+            "available": path is not None,
+            "path": path,
+            "message": "macOS local TTS tool; unavailable on other platforms." if not path else None,
+        }
+
     for provider, filename in (
         ("qwen3", "qwen3_asr_wrapper.py"),
         ("sensevoice", "sensevoice_asr_wrapper.py"),
@@ -846,13 +912,19 @@ def _commit_upload(
     Shared by the JSON/base64 and multipart upload paths.
     """
     safe_name = os.path.basename(filename or "upload.bin")
-    resolved_type = media_type or detect_media_type(safe_name)
+    detected_type = detect_media_type(safe_name)
+    resolved_type = media_type or detected_type
+    if resolved_type == "application/octet-stream" and _is_document_material(safe_name, detected_type):
+        resolved_type = detected_type
     if _is_document_material(safe_name, resolved_type):
-        raise ValueError(
-            "document material input is not supported; upload audio or video media"
-        )
+        if resolved_type not in SUPPORTED_DOCUMENT_MEDIA_TYPES:
+            raise ValueError("only PDF, EPUB, Markdown, HTML, and plain text documents are supported")
+        if len(raw_bytes) > MAX_DOCUMENT_BYTES:
+            raise ValueError("document exceeds the 128 MiB safety limit")
+        if detected_type in SUPPORTED_DOCUMENT_MEDIA_TYPES and resolved_type != detected_type:
+            raise ValueError("document file extension and media type do not match")
     if not _is_supported_upload(safe_name, resolved_type):
-        raise ValueError("only audio/video media or SRT/VTT subtitle files are supported")
+        raise ValueError("only audio/video media, supported documents, or SRT/VTT subtitle files are supported")
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     target_path = UPLOAD_DIR / safe_name
     target_path.write_bytes(raw_bytes)
@@ -878,18 +950,37 @@ def _commit_upload(
 
 def _is_document_material(filename: str, media_type: str) -> bool:
     suffix = Path(filename).suffix.lower()
-    return suffix in {".pdf", ".epub", ".md", ".markdown", ".txt", ".html", ".htm"} or media_type in {
-        "application/pdf",
-        "application/epub+zip",
-        "text/plain",
-        "text/markdown",
-        "text/html",
-    }
+    return suffix in {".pdf", ".epub", ".md", ".markdown", ".txt", ".html", ".htm"} or media_type in SUPPORTED_DOCUMENT_MEDIA_TYPES
 
 
 def _is_supported_upload(filename: str, media_type: str) -> bool:
     suffix = Path(filename).suffix.lower()
-    return media_type.startswith(("audio/", "video/")) or suffix in {".srt", ".vtt"}
+    return (
+        media_type.startswith(("audio/", "video/"))
+        or suffix in {".srt", ".vtt"}
+        or (media_type in SUPPORTED_DOCUMENT_MEDIA_TYPES and _is_document_material(filename, media_type))
+    )
+
+
+def _core_length_prefixed(fields: tuple[str, ...]) -> str:
+    return "".join(f"{len(field.encode('utf-8'))}:{field}" for field in fields)
+
+
+def _core_fingerprint(namespace: str, fields: tuple[str, ...]) -> str:
+    identity = _core_length_prefixed(fields)
+    return hashlib.sha256(f"{namespace}:{identity}".encode("utf-8")).hexdigest()
+
+
+def _local_document_ids(media_type: str, language: str | None, raw: bytes) -> tuple[str, str, str]:
+    """Build Core-compatible IDs for a standalone local GUI document source."""
+    digest = hashlib.sha256(raw).hexdigest()
+    source_asset_id = _core_fingerprint(
+        "source-asset", (media_type, str(len(raw)), digest)
+    )
+    rendition_id = _core_fingerprint(
+        "document-rendition", (media_type, language or "", digest)
+    )
+    return digest, source_asset_id, rendition_id
 
 
 def _prune_uploads(max_age_seconds: int = UPLOAD_MAX_AGE_SECONDS) -> int:
@@ -941,34 +1032,37 @@ def _validate_produce_payload(req_data: dict[str, Any], payload: dict[str, Any])
         else []
     )
     legacy_renditions = payload.get("available_renditions", [])
-    has_document = any(
-        isinstance(r, dict) and r.get("kind") == "document"
+    all_renditions = [
+        rendition
         for group in (renditions, supplied_renditions, legacy_renditions)
         if isinstance(group, list)
-        for r in group
+        for rendition in group
+        if isinstance(rendition, dict)
+    ]
+    has_document = any(r.get("kind") == "document" for r in all_renditions)
+    has_media = any(r.get("kind") == "media" for r in all_renditions)
+    has_audio = any(
+        r.get("kind") == "media" and r.get("media_kind") == "audio"
+        for r in all_renditions
     )
-    has_media = any(isinstance(r, dict) and r.get("kind") == "media" for r in renditions)
-    if (
-        has_document
-        or payload.get("document_path")
-        or payload.get("document_text")
-    ):
-        problems.append({
-            "field": "input",
-            "message": "独立文档材料输入已移除，请提供音频或视频素材",
-        })
-    if not has_media:
-        problems.append({"field": "input", "message": "需要音频或视频素材"})
-    elif capability == "listen" and not any(
-        isinstance(r, dict)
-        and r.get("kind") == "media"
-        and r.get("media_kind") == "audio"
-        for r in renditions
-    ):
+    has_video = any(
+        r.get("kind") == "media" and r.get("media_kind") == "video"
+        for r in all_renditions
+    )
+    if not has_document and not has_media:
+        problems.append({"field": "input", "message": "需要至少一份文档或音视频素材"})
+    if capability == "listen" and not has_document and not has_audio:
         problems.append({
             "field": "requested_capability",
-            "message": "listen 需要已有的 audio rendition；video-only 素材不会转换为独立音频",
+            "message": "listen 需要已有 audio rendition 或文档输入；video-only 素材不会转换为独立音频",
         })
+    if capability == "watch" and not has_video:
+        problems.append({"field": "requested_capability", "message": "watch 需要 video rendition"})
+    config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+    tts_value = config.get("tts")
+    tts_config = tts_value if isinstance(tts_value, dict) else {}
+    if capability == "listen" and has_document and not has_audio and tts_config.get("provider", "none") == "none":
+        problems.append({"field": "tts", "message": "文档 listen 需要选择 TTS provider"})
     return problems
 
 
@@ -1298,8 +1392,11 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            raw_bytes = p.read_bytes()
             media_type = detect_media_type(p.name)
+            if _is_document_material(p.name, media_type) and p.stat().st_size > MAX_DOCUMENT_BYTES:
+                self._send_error_json("document exceeds the 128 MiB safety limit", 413)
+                return
+            raw_bytes = p.read_bytes()
             if not _is_supported_upload(p.name, media_type):
                 if _is_document_material(p.name, media_type):
                     self._send_error_json(
@@ -1351,28 +1448,37 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
         for entry in req_data.get("available_renditions", []):
             if not isinstance(entry, dict):
                 continue
-            if entry.get("kind") == "document":
-                self._send_error_json(
-                    "document material input is not supported; provide audio or video media",
-                    400,
-                )
-                return
-            if entry.get("kind") != "media":
+            kind = entry.get("kind")
+            if kind not in ("document", "media"):
                 continue
             blob = entry.get("blob") or {}
             path = blob.get("path")
             if not path or not Path(path).is_file():
                 self._send_error_json(
-                    f"原始素材已不在磁盘（{entry.get('kind')} {path}），请回到生成工作台重新选择",
+                    "原始素材已不在磁盘，请回到生成工作台重新选择",
                     409,
                 )
                 return
             raw = Path(path).read_bytes()
-            digest = sha256_of_bytes(raw)
             new_entry = dict(entry)
-            new_entry["blob"] = {"digest": digest, "size_bytes": len(raw), "path": path}
-            new_entry["rendition_id"] = digest
-            new_entry["fingerprint"] = digest
+            if kind == "document":
+                media_type = str(entry.get("media_type") or detect_media_type(Path(path).name))
+                language = entry.get("language")
+                digest_hex, source_asset_id, rendition_id = _local_document_ids(
+                    media_type, language, raw
+                )
+                new_entry["rendition_id"] = f"sha256:{rendition_id}"
+                new_entry["source_asset_id"] = source_asset_id
+                new_entry["blob"] = {
+                    "digest": f"sha256:{digest_hex}",
+                    "size_bytes": len(raw),
+                    "path": str(Path(path).resolve()),
+                }
+            else:
+                digest = sha256_of_bytes(raw)
+                new_entry["blob"] = {"digest": digest, "size_bytes": len(raw), "path": str(Path(path).resolve())}
+                new_entry["rendition_id"] = digest
+                new_entry["fingerprint"] = digest
             renditions.append(new_entry)
         if not renditions:
             self._send_error_json("请求快照中没有可用的输入素材", 400)
@@ -1396,7 +1502,9 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
             "extensions": {},
         }
 
-        problems = _validate_produce_payload(new_req_data, {})
+        cfg_data = task.config if isinstance(task.config, dict) else load_config()
+        cfg_data = _merge_config(get_default_config(), cfg_data)
+        problems = _validate_produce_payload(new_req_data, {"config": cfg_data})
         if problems:
             self._send_json({"error": "请求校验未通过", "errors": problems}, status=400)
             return
@@ -1409,8 +1517,6 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
         new_task_id = f"task-{int(time.time() * 1000)}"
         ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
         output_zip = ARTIFACTS_DIR / f"package-{new_task_id}.zip"
-        cfg_data = task.config if isinstance(task.config, dict) else load_config()
-
         _GLOBAL_TASK_MANAGER.create_task(
             new_task_id, new_req_data, output_zip, status="queued", config=cfg_data
         )
@@ -1443,17 +1549,51 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
             if not req_meta:
                 self._send_error_json("Missing request document", 400)
                 return
-            if payload.get("document_path") or payload.get("document_text"):
-                self._send_error_json(
-                    "document material input is not supported; provide audio or video media",
-                    400,
-                )
-                return
-
             created_at_ms = int(time.time() * 1000)
 
-            # Audio/video is the only supported source for production.
+            # Document and audio/video inputs remain distinct source renditions.
             available_renditions: list[dict[str, Any]] = []
+            if payload.get("document_path"):
+                document_path = Path(payload["document_path"])
+                if not document_path.is_file():
+                    self._send_error_json("document file was not found", 400)
+                    return
+                if document_path.stat().st_size > MAX_DOCUMENT_BYTES:
+                    self._send_error_json("document exceeds the 128 MiB safety limit", 413)
+                    return
+                document_bytes = document_path.read_bytes()
+                document_type = str(
+                    payload.get("document_media_type") or detect_media_type(document_path.name)
+                )
+                if document_type not in SUPPORTED_DOCUMENT_MEDIA_TYPES:
+                    self._send_error_json(
+                        "only PDF, EPUB, Markdown, HTML, and plain text documents are supported",
+                        400,
+                    )
+                    return
+                detected_type = detect_media_type(document_path.name)
+                if detected_type in SUPPORTED_DOCUMENT_MEDIA_TYPES and detected_type != document_type:
+                    self._send_error_json(
+                        "document file extension and media type do not match",
+                        400,
+                    )
+                    return
+                language = str(payload.get("document_language") or req_meta.get("target_language") or "") or None
+                digest_hex, source_asset_id, rendition_id = _local_document_ids(
+                    document_type, language, document_bytes
+                )
+                available_renditions.append({
+                    "kind": "document",
+                    "rendition_id": f"sha256:{rendition_id}",
+                    "media_type": document_type,
+                    "language": language,
+                    "source_asset_id": source_asset_id,
+                    "blob": {
+                        "digest": f"sha256:{digest_hex}",
+                        "size_bytes": len(document_bytes),
+                        "path": str(document_path.resolve()),
+                    },
+                })
             if payload.get("media_path"):
                 media_path = Path(payload["media_path"])
                 if not media_path.is_file():
@@ -1461,12 +1601,6 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
                     return
                 media_bytes = media_path.read_bytes()
                 media_type = payload.get("media_type") or detect_media_type(media_path.name)
-                if _is_document_material(media_path.name, str(media_type)):
-                    self._send_error_json(
-                        "document material input is not supported; provide audio or video media",
-                        400,
-                    )
-                    return
                 if not str(media_type).startswith(("audio/", "video/")):
                     self._send_error_json(
                         "only audio/video media is supported as a production source", 400
@@ -1514,6 +1648,15 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
             }
 
             # Structured pre-flight validation with per-field feedback.
+            cfg_data = _merge_config(
+                get_default_config(),
+                payload.get("config") if isinstance(payload.get("config"), dict) else load_config(),
+            )
+            config_problems = validate_config(cfg_data)
+            if config_problems:
+                self._send_json({"error": "生成器配置无效", "errors": config_problems}, status=400)
+                return
+            payload = {**payload, "config": cfg_data}
             problems = _validate_produce_payload(req_data, payload)
             if problems:
                 self._send_json(
@@ -1530,7 +1673,7 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
             self._send_error_json(f"Invalid capability request: {exc}", 400)
             return
 
-        cfg_data = payload.get("config", load_config())
+        cfg_data = payload["config"]
         subtitle_path = Path(payload["subtitle_path"]) if payload.get("subtitle_path") and Path(payload["subtitle_path"]).is_file() else None
 
         task = _GLOBAL_TASK_MANAGER.create_task(
@@ -1609,6 +1752,82 @@ def _run_produce_worker(
         production_plan = plan_request(request, subtitle_sha256=subtitle_sha256)
         emitter.planned(production_plan.describe())
 
+        needs_document = any(
+            derivation.kind.value in {
+                "document_to_structured_reading",
+                "document_to_listen",
+            }
+            for derivation in production_plan.derivations
+        )
+        needs_tts = any(derivation.provider == "tts" for derivation in production_plan.derivations)
+        needs_media_read = any(
+            derivation.provider in {"asr", "subtitle"}
+            for derivation in production_plan.derivations
+        )
+        if not needs_media_read:
+            # Document extraction and document TTS are deterministic content
+            # derivations; they never invoke optional learner-analysis stages.
+            config_dict = {
+                **config_dict,
+                "enable_sense_groups": False,
+                "enable_phones": False,
+                "phones": {"provider": "none"},
+                "aligner": {"provider": "none"},
+                "acoustics": {"provider": "none"},
+            }
+
+        tts_adapter = None
+        if needs_tts:
+            tts_cfg = config_dict.get("tts", {})
+            tts_provider = tts_cfg.get("provider", "none")
+            timeout = float(tts_cfg.get("timeout_seconds", 600.0))
+            if tts_provider == "say":
+                if sys.platform != "darwin":
+                    raise ConversionError("macOS say TTS is only available on macOS")
+                from .tts import SayTtsAdapter
+
+                tts_adapter = SayTtsAdapter(
+                    voice=tts_cfg.get("voice") or None,
+                    say_executable=tts_cfg.get("say_executable", "say"),
+                    afconvert_executable=tts_cfg.get("afconvert_executable", "afconvert"),
+                    timeout_seconds=timeout,
+                )
+            elif tts_provider == "kokoro":
+                from .tts import KokoroTtsAdapter
+
+                tts_adapter = KokoroTtsAdapter(
+                    voice=tts_cfg.get("voice", "af_bella"),
+                    speed=float(tts_cfg.get("speed", 1.0)),
+                    lang_code=tts_cfg.get("lang_code", "a"),
+                    afconvert_executable=tts_cfg.get("afconvert_executable", "afconvert"),
+                    timeout_seconds=timeout,
+                )
+            elif tts_provider == "edge-tts":
+                from .tts import EdgeTtsAdapter
+
+                tts_adapter = EdgeTtsAdapter(
+                    voice=tts_cfg.get("voice", "en-US-AvaNeural"),
+                    rate=tts_cfg.get("rate", "+0%"),
+                    volume=tts_cfg.get("volume", "+0%"),
+                    pitch=tts_cfg.get("pitch", "+0Hz"),
+                    afconvert_executable=tts_cfg.get("afconvert_executable", "afconvert"),
+                    timeout_seconds=timeout,
+                )
+
+        ocr_adapter = None
+        if needs_document:
+            ocr_cfg = config_dict.get("ocr", {})
+            ocr_provider = ocr_cfg.get("provider", "none")
+            if ocr_provider == "surya":
+                from .document import SuryaOcrProvider
+
+                langs = [item.strip() for item in ocr_cfg.get("langs", "en,zh").split(",") if item.strip()]
+                ocr_adapter = SuryaOcrProvider(langs=langs, device=ocr_cfg.get("device") or None)
+            elif ocr_provider == "rapidocr":
+                from .document import RapidOcrProvider
+
+                ocr_adapter = RapidOcrProvider()
+
         # ASR runs for media derivations only. Each provider runs
         # behind the shared ffmpeg normalization; the underlying adapter no-ops
         # gracefully when its sidecar / model path is not configured.
@@ -1634,7 +1853,7 @@ def _run_produce_worker(
                 preproc,
             )
 
-        if asr_provider == "qwen3":
+        if asr_required and asr_provider == "qwen3":
             q = asr_cfg.get("qwen3", {})
             sidecar = q.get("sidecar")
             if asr_required and not (sidecar and Path(sidecar).is_file()):
@@ -1661,7 +1880,7 @@ def _run_produce_worker(
                         progress=progress,
                     )
                 )
-        elif asr_provider == "sensevoice":
+        elif asr_required and asr_provider == "sensevoice":
             s = asr_cfg.get("sensevoice", {})
             sidecar = s.get("sidecar")
             if asr_required and not (sidecar and Path(sidecar).is_file()):
@@ -1685,7 +1904,7 @@ def _run_produce_worker(
                         progress=progress,
                     )
                 )
-        elif asr_provider == "whisper-cpp":
+        elif asr_required and asr_provider == "whisper-cpp":
             w = asr_cfg.get("whisper_cpp", {})
             model = w.get("model")
             if model and Path(model).is_file():
@@ -1770,9 +1989,11 @@ def _run_produce_worker(
         )
 
         produce_cfg = ProduceConfig(
+            tts=tts_adapter,
+            ocr=ocr_adapter,
             asr=asr_adapter,
             asr_preprocessor=asr_preprocessor,
-            rich=rich,
+            rich=rich if needs_media_read else None,
             subtitle=subtitle_path,
             subtitle_sha256=subtitle_sha256,
         )

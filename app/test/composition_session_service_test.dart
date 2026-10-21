@@ -274,6 +274,7 @@ AdoptedComposition _adoptedComposition({
         kind: 'media',
         origin: 'source',
         mediaType: 'audio/wav',
+        language: null,
         digest: 'digest',
         byteSize: 1,
         blobAvailable: false,

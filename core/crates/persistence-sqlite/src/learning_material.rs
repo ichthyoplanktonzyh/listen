@@ -47,9 +47,10 @@
 
 use application::{ApplicationError, MaterialRepository};
 use domain::{
-    DomainError, LearningMaterial, LearningMaterialId, MaterialRevision, MaterialRevisionId,
-    MediaAvailability, MediaId, MediaItem, MediaKind, MediaRendition, Rendition, RenditionOrigin,
-    SourceAsset, SourceAssetAvailability, SourceAssetBinding, initial_material_id,
+    DocumentRendition, DomainError, LearningMaterial, LearningMaterialId, MaterialRevision,
+    MaterialRevisionId, MediaAvailability, MediaId, MediaItem, MediaKind, MediaRendition,
+    Rendition, RenditionOrigin, SourceAsset, SourceAssetAvailability, SourceAssetBinding,
+    initial_material_id,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
@@ -373,6 +374,101 @@ fn load_source_assets(
     Ok(assets)
 }
 
+/// Loads a revision's Document Renditions in canonical id order and validates
+/// each stored row through the domain constructor.
+fn load_document_renditions(
+    connection: &Connection,
+    revision_id: &str,
+) -> Result<Vec<DocumentRendition>, ApplicationError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT rendition_id, origin, media_type, language, digest,
+                    byte_size, source_asset_id, producer_json, compatibility_json
+             FROM material_document_renditions WHERE revision_id=?1 ORDER BY rendition_id",
+        )
+        .map_err(repo)?;
+    let rows = statement
+        .query_map([revision_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, u64>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
+            ))
+        })
+        .map_err(repo)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(repo)?;
+    let mut renditions = Vec::with_capacity(rows.len());
+    for (
+        rendition_id,
+        origin,
+        media_type,
+        language,
+        digest,
+        byte_size,
+        source_asset_id,
+        producer_json,
+        compatibility_json,
+    ) in rows
+    {
+        let origin = match origin.as_str() {
+            "source" => RenditionOrigin::Source,
+            "derived" => RenditionOrigin::Derived,
+            other => {
+                return Err(ApplicationError::Repository(format!(
+                    "revision {revision_id} stored document rendition has unknown origin {other}"
+                )));
+            }
+        };
+        let language = language
+            .map(|code| {
+                domain::LanguageCode::parse(code)
+                    .map_err(|error| ApplicationError::Repository(error.to_string()))
+            })
+            .transpose()?;
+        let producer = producer_json
+            .map(|json| from_json::<domain::ProducerFact>(&json).map_err(repo))
+            .transpose()?;
+        let compatibility = compatibility_json
+            .map(|json| from_json::<domain::CompatibilityEvidence>(&json).map_err(repo))
+            .transpose()?;
+        let source_asset_id = source_asset_id
+            .map(|id| {
+                domain::SourceAssetId::parse(id)
+                    .map_err(|error| ApplicationError::Repository(error.to_string()))
+            })
+            .transpose()?;
+        let rebuilt = DocumentRendition::new(
+            origin,
+            media_type,
+            language,
+            digest,
+            byte_size,
+            source_asset_id,
+            producer,
+            compatibility,
+        )
+        .map_err(|error| {
+            ApplicationError::Repository(format!(
+                "revision {revision_id} stored document rendition is corrupt: {error}"
+            ))
+        })?;
+        if rebuilt.id.as_str() != rendition_id {
+            return Err(ApplicationError::Repository(format!(
+                "revision {revision_id} stored document rendition id does not match its content"
+            )));
+        }
+        renditions.push(rebuilt);
+    }
+    Ok(renditions)
+}
+
 /// Loads a revision's Media Renditions in canonical id order, validating each
 /// stored row through the domain constructor.
 fn load_media_renditions(
@@ -513,8 +609,13 @@ fn query_revision(
         return Ok(None);
     };
     let source_assets = load_source_assets(connection, revision_id)?;
+    let document_renditions = load_document_renditions(connection, revision_id)?;
     let media_renditions = load_media_renditions(connection, revision_id)?;
-    let renditions: Vec<Rendition> = media_renditions.into_iter().map(Rendition::Media).collect();
+    let renditions: Vec<Rendition> = document_renditions
+        .into_iter()
+        .map(Rendition::Document)
+        .chain(media_renditions.into_iter().map(Rendition::Media))
+        .collect();
     let rehydrated =
         MaterialRevision::new(material_id, title, source_assets, renditions, created_at_ms)
             .map_err(|error| {
@@ -613,21 +714,12 @@ fn insert_revision(
     Ok(())
 }
 
-/// Persists audio/video Source Assets and Media Renditions. Document inputs
-/// are rejected before any row is written.
+/// Persists Source Assets and their Document/Media Renditions in canonical
+/// order.
 fn insert_components(
     connection: &Connection,
     revision: &MaterialRevision,
 ) -> Result<(), ApplicationError> {
-    if revision
-        .renditions
-        .iter()
-        .any(|component| matches!(component, Rendition::Document(_)))
-    {
-        return Err(ApplicationError::Invalid(
-            "document material inputs are not supported; provide audio or video media".into(),
-        ));
-    }
     let mut source_assets = revision.source_assets.clone();
     source_assets.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
     for asset in &source_assets {
@@ -646,6 +738,52 @@ fn insert_components(
                     json(&asset.binding)?,
                     json(&asset.availability)?,
                     asset.created_at_ms as i64,
+                ],
+            )
+            .map_err(repo)?;
+    }
+    let mut document_renditions: Vec<&DocumentRendition> = revision
+        .renditions
+        .iter()
+        .filter_map(|component| match component {
+            Rendition::Document(rendition) => Some(rendition),
+            Rendition::Media(_) => None,
+        })
+        .collect();
+    document_renditions.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+    for rendition in document_renditions {
+        connection
+            .execute(
+                "INSERT INTO material_document_renditions
+                   (revision_id, rendition_id, origin, media_type, language, digest,
+                    byte_size, source_asset_id, producer_json, compatibility_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                params![
+                    revision.id.as_str(),
+                    rendition.id.as_str(),
+                    match rendition.origin {
+                        RenditionOrigin::Source => "source",
+                        RenditionOrigin::Derived => "derived",
+                    },
+                    rendition.media_type,
+                    rendition
+                        .language
+                        .as_ref()
+                        .map(domain::LanguageCode::as_str),
+                    rendition.digest,
+                    rendition.byte_size as i64,
+                    rendition
+                        .source_asset_id
+                        .as_ref()
+                        .map(domain::SourceAssetId::as_str),
+                    rendition
+                        .producer
+                        .as_ref()
+                        .and_then(|fact| serde_json::to_string(fact).ok()),
+                    rendition
+                        .compatibility
+                        .as_ref()
+                        .and_then(|evidence| serde_json::to_string(evidence).ok()),
                 ],
             )
             .map_err(repo)?;
@@ -721,9 +859,29 @@ fn is_primary_key_violation(error: &rusqlite::Error) -> bool {
 /// rejects anything that is not the exact canonical form.
 fn validate_component(component: &Rendition) -> Result<Rendition, ApplicationError> {
     match component {
-        Rendition::Document(_) => Err(ApplicationError::Invalid(
-            "document material inputs are not supported; provide audio or video media".into(),
-        )),
+        Rendition::Document(rendition) => {
+            let rebuilt = DocumentRendition::new(
+                rendition.origin,
+                rendition.media_type.clone(),
+                rendition.language.clone(),
+                rendition.digest.clone(),
+                rendition.byte_size,
+                rendition.source_asset_id.clone(),
+                rendition.producer.clone(),
+                rendition.compatibility.clone(),
+            )
+            .map_err(|error| {
+                ApplicationError::Repository(format!(
+                    "typed document rendition is invalid: {error}"
+                ))
+            })?;
+            if &rebuilt != rendition {
+                return Err(ApplicationError::Repository(
+                    "typed document rendition is not canonical".into(),
+                ));
+            }
+            Ok(Rendition::Document(rebuilt))
+        }
         Rendition::Media(rendition) => {
             let rebuilt = MediaRendition::new(
                 rendition.origin,
@@ -762,11 +920,6 @@ fn validate_component(component: &Rendition) -> Result<Rendition, ApplicationErr
 fn validate_revision(revision: &MaterialRevision) -> Result<MaterialRevision, ApplicationError> {
     let mut source_assets = Vec::with_capacity(revision.source_assets.len());
     for asset in &revision.source_assets {
-        if domain::media_type_kind(&asset.media_type).is_none() {
-            return Err(ApplicationError::Invalid(
-                "source asset must be audio or video media".into(),
-            ));
-        }
         let rebuilt = SourceAsset::new(
             asset.media_type.clone(),
             asset.byte_length,
@@ -788,6 +941,27 @@ fn validate_revision(revision: &MaterialRevision) -> Result<MaterialRevision, Ap
     let mut renditions = Vec::with_capacity(revision.renditions.len());
     for component in &revision.renditions {
         renditions.push(validate_component(component)?);
+    }
+    for asset in &source_assets {
+        if domain::media_type_kind(&asset.media_type).is_some() {
+            continue;
+        }
+        let bound = renditions.iter().any(|component| {
+            matches!(
+                component,
+                Rendition::Document(document)
+                    if document.origin == RenditionOrigin::Source
+                        && document.source_asset_id.as_ref() == Some(&asset.id)
+                        && document.digest == asset.sha256_digest
+                        && document.byte_size == asset.byte_length
+                        && document.media_type == asset.media_type
+            )
+        });
+        if !bound {
+            return Err(ApplicationError::Invalid(
+                "non-media source assets require a matching source document rendition".into(),
+            ));
+        }
     }
     let rebuilt = MaterialRevision::new(
         revision.material_id.clone(),

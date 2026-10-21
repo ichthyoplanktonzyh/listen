@@ -2,8 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/services/capability_request_encoder.dart';
 
-/// Media-only AV generation declares registered source media and its exact
-/// local bytes, including when the requested capability is ASR/read.
+/// Capability generation declares exact locally available source renditions.
 void main() {
   test('encodes media rendition identity and verified byte facts', () {
     final rendition = MediaRendition(
@@ -68,5 +67,44 @@ void main() {
     );
 
     expect(request['available_renditions'], isEmpty);
+  });
+
+  test('encodes a document using Core raw source-asset identity', () {
+    final rendition = DocumentRendition(
+      id: 'a' * 64,
+      origin: RenditionOrigin.source,
+      mediaType: 'text/plain',
+      language: 'en',
+      digest: 'b' * 64,
+      byteSize: 18,
+      sourceAssetId: 'c' * 64,
+    );
+    final request = CapabilityRequestEncoder.encode(
+      materialId: 'material-document',
+      materialRevisionId: 'revision-document',
+      materialTitle: 'Article',
+      editionId: 'edition:material-document',
+      editionTitle: 'Article',
+      targetLanguage: 'en',
+      supportLanguages: const [],
+      requestedCapability: 'listen',
+      createdAtMs: 1,
+      documentRenditions: [rendition],
+      documentFilePath: (_) => '/managed/c',
+    );
+
+    final entry =
+        (request['available_renditions'] as List<dynamic>).single
+            as Map<String, dynamic>;
+    expect(entry['kind'], 'document');
+    expect(entry['rendition_id'], 'sha256:${'a' * 64}');
+    expect(entry['source_asset_id'], 'c' * 64);
+    expect(entry['media_type'], 'text/plain');
+    expect(entry['language'], 'en');
+    expect(entry['blob'], {
+      'digest': 'sha256:${'b' * 64}',
+      'size_bytes': 18,
+      'path': '/managed/c',
+    });
   });
 }

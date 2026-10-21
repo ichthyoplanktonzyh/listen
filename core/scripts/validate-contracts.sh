@@ -232,7 +232,7 @@ if (!Array.isArray(examples) || examples.length === 0) throw new Error("player e
 if (events.properties.version.const !== 1) throw new Error("event schema version missing");
 
 const version = openapi.match(/^  version: ([0-9]+\.[0-9]+\.[0-9]+)$/m)?.[1];
-if (version !== "5.0.0") throw new Error(`OpenAPI contract version is ${version}, expected 5.0.0`);
+if (version !== "5.1.0") throw new Error(`OpenAPI contract version is ${version}, expected 5.1.0`);
 if (!openapi.includes("openapi: 3.1.0")) throw new Error("OpenAPI specification version must remain 3.1.0");
 if (!client.includes(`localApiV1ContractVersion = "${version}"`)) throw new Error("generated contract version differs from OpenAPI");
 
@@ -263,6 +263,7 @@ for (const required of [
   "/v1/materials/{material_id}/edition-adoption",
   "/v1/materials/{material_id}/composition",
   "/v1/materials/{material_id}/composition/resources/{resource_id}/payload",
+  "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob",
   "/v1/source-identities/mappings",
   "/v1/speech-synthesis",
   "/v1/semantic-search",
@@ -290,8 +291,6 @@ for (const prefix of [
   }
 }
 for (const retired of [
-  "DocumentRendition",
-  "DocumentRenditionInput",
   "HuntingCandidate",
   "UpgradeSuggestion",
   "RecordingAsset",
@@ -326,8 +325,8 @@ assertEqual(taskTypeEnum, ["context_marking", "cloze", "dictation", "subtitle_fa
 if (!openapi.includes("Content Package v3 carrier") || openapi.includes("Content Package v2 carrier")) {
   throw new Error("package installation must describe the active Content Package v3 carrier");
 }
-if (/^\s+(document_renditions|familiar_material|fit):/m.test(openapi)) {
-  throw new Error("retired document or derived-coaching fields remain in the wire contract");
+if (/^\s+(familiar_material|fit):/m.test(openapi)) {
+  throw new Error("retired derived-coaching fields remain in the wire contract");
 }
 for (const active of ["/v1/speech-synthesis/capability", "/v1/speech-synthesis/cache", "/v1/semantic-embedding/capability", "/v1/corpus/search"]) {
   if (!paths.includes(active)) throw new Error(`retained listening foundation missing: ${active}`);
@@ -339,6 +338,9 @@ for (const operation of ["installMaterialPackage", "listLearningEditions", "dele
 }
 for (const component of ["InstallMaterialPackageRequest", "AdoptLearningEditionRequest", "LearningEditionDetails", "LearningEditionResource", "LearningEditionRendition"]) {
   if (!schemas.includes(component)) throw new Error(`package lifecycle schema missing: ${component}`);
+}
+for (const component of ["DocumentRendition", "DocumentRenditionInput"]) {
+  if (!schemas.includes(component)) throw new Error(`document material schema missing: ${component}`);
 }
 if (!schemas.includes("MaterialCapability")) throw new Error("MaterialCapability enum schema missing");
 const componentSchemaBlock = name => {

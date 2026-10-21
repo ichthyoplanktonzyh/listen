@@ -393,6 +393,13 @@ class _TestMaterialRepository implements LearningMaterialRepository {
   }
 
   @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => throw UnimplementedError();
+
+  @override
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
   ) async => throw UnimplementedError();

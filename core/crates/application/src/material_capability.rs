@@ -125,7 +125,8 @@ impl MaterialCapabilityUseCases {
             project_capability(capability, &revision, adopted.as_ref(), &[]);
         if structural_projection.status == domain::CapabilityStatus::Unavailable {
             return Err(ApplicationError::Invalid(
-                "material capability is not producible from current audio/video media".into(),
+                "material capability is not producible from the current source media or document"
+                    .into(),
             ));
         }
         self.attempts
@@ -526,6 +527,14 @@ mod tests {
             _material_id: &LearningMaterialId,
             _release_id: &domain::PackageReleaseId,
             _resource_id: &str,
+        ) -> Result<Option<Vec<u8>>, ApplicationError> {
+            unreachable!("not used in these tests")
+        }
+        fn read_rendition_blob(
+            &self,
+            _material_id: &LearningMaterialId,
+            _release_id: &domain::PackageReleaseId,
+            _rendition_id: &str,
         ) -> Result<Option<Vec<u8>>, ApplicationError> {
             unreachable!("not used in these tests")
         }

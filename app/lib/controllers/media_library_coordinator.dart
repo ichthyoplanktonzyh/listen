@@ -165,7 +165,8 @@ class MediaLibraryCoordinator {
           : null;
       final List<PersonalLibraryEntry> nextPersonalLibrary = List.unmodifiable([
         for (final details in materials)
-          if (details.currentRevision.mediaRenditions.isNotEmpty)
+          if (details.currentRevision.mediaRenditions.isNotEmpty ||
+              details.currentRevision.documentRenditions.isNotEmpty)
           PersonalLibraryEntry(
             details: details,
             mediaEntries: snapshot ?? const [],
@@ -195,7 +196,8 @@ class MediaLibraryCoordinator {
       for (final entry in current)
         if (entry.materialId != details.material.id) entry,
       if (details.material.retainedAtMs != null &&
-          details.currentRevision.mediaRenditions.isNotEmpty)
+          (details.currentRevision.mediaRenditions.isNotEmpty ||
+              details.currentRevision.documentRenditions.isNotEmpty))
         PersonalLibraryEntry(
           details: details,
           mediaEntries: mediaLibrary ?? const <MediaLibraryEntry>[],

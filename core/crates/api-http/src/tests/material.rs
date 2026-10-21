@@ -1,15 +1,18 @@
-//! Focused media-only learning-material wire tests (contract `5.0.0`).
+//! Focused learning-material wire tests (contract `5.1.0`).
 //!
 //! These tests pin the explicit response/input DTO shapes used by the active
 //! audio/video material path. Components remain typed and path-free.
 
 use crate::routes::material::{
-    MaterialDetailsResponse, MediaRenditionInputRequest, SourceAssetInputRequest,
+    DocumentRenditionInputRequest, MaterialDetailsResponse, MediaRenditionInputRequest,
+    SourceAssetInputRequest,
 };
 use domain::{
-    LearningMaterial, MaterialRevision, MediaId, MediaKind, MediaRendition, Rendition,
-    RenditionOrigin, initial_material_id,
+    DocumentRendition, LanguageCode, LearningMaterial, MaterialRevision, MediaId, MediaKind,
+    MediaRendition, Rendition, RenditionOrigin, SourceAsset, SourceAssetAvailability,
+    SourceAssetBinding, initial_material_id,
 };
+use sha2::Digest as _;
 
 fn media_rendition() -> Rendition {
     Rendition::Media(
@@ -62,7 +65,7 @@ fn assert_no_path_key(value: &serde_json::Value) {
 }
 
 #[test]
-fn material_wire_dtos_are_media_typed_and_path_free() {
+fn material_wire_dtos_are_typed_and_path_free() {
     let wire = serde_json::to_value(details()).expect("serialize details response");
     assert_eq!(wire["shape"], "video");
 
@@ -88,6 +91,7 @@ fn material_wire_dtos_are_media_typed_and_path_free() {
         revision_keys,
         vec![
             "created_at_ms",
+            "document_renditions",
             "id",
             "material_id",
             "media_renditions",
@@ -104,6 +108,59 @@ fn material_wire_dtos_are_media_typed_and_path_free() {
     assert_eq!(renditions[0]["kind"], "video");
     assert_eq!(renditions[0]["availability"], "available");
     assert_eq!(renditions[0]["fingerprint"], "fp-media-1");
+    assert_no_path_key(&wire);
+}
+
+#[test]
+fn document_material_wire_shape_exposes_bound_source_facts() {
+    let bytes = b"article body";
+    let digest = hex::encode(sha2::Sha256::digest(bytes));
+    let asset = SourceAsset::new(
+        "text/plain",
+        bytes.len() as u64,
+        digest.clone(),
+        SourceAssetBinding::Managed,
+        SourceAssetAvailability::Available,
+        7,
+    )
+    .expect("valid source asset");
+    let rendition = Rendition::Document(
+        DocumentRendition::new(
+            RenditionOrigin::Source,
+            "text/plain",
+            Some(LanguageCode::parse("en").unwrap()),
+            digest,
+            bytes.len() as u64,
+            Some(asset.id.clone()),
+            None,
+            None,
+        )
+        .expect("valid document rendition"),
+    );
+    let material_id = initial_material_id(
+        std::slice::from_ref(&asset),
+        std::slice::from_ref(&rendition),
+    )
+    .expect("deterministic document material id");
+    let revision = MaterialRevision::new(material_id, "Article", vec![asset], vec![rendition], 7)
+        .expect("valid revision");
+    let material = LearningMaterial::new(&revision, Some(7), 7, 7).expect("valid material");
+    let wire = serde_json::to_value(MaterialDetailsResponse::from(
+        application::MaterialDetails {
+            material,
+            current_revision: revision,
+        },
+    ))
+    .expect("serialize details response");
+    assert_eq!(wire["shape"], "text");
+    let rendition = &wire["current_revision"]["document_renditions"][0];
+    assert_eq!(rendition["media_type"], "text/plain");
+    assert_eq!(rendition["language"], "en");
+    assert_eq!(rendition["byte_size"], bytes.len());
+    assert_eq!(
+        rendition["source_asset_id"],
+        wire["current_revision"]["source_assets"][0]["id"]
+    );
     assert_no_path_key(&wire);
 }
 
@@ -126,4 +183,16 @@ fn material_input_dtos_deserialize_media_components() {
     let _: MediaRenditionInputRequest =
         serde_json::from_value(rendition.clone()).expect("typed media rendition input");
     assert_eq!(rendition["media_id"], "media-1");
+
+    let document: serde_json::Value = serde_json::from_value(serde_json::json!({
+        "media_type": "text/plain",
+        "language": "en",
+        "digest": "ab12",
+        "byte_size": 12,
+        "source_asset_index": 0,
+    }))
+    .expect("document rendition input");
+    let _: DocumentRenditionInputRequest =
+        serde_json::from_value(document.clone()).expect("typed document rendition input");
+    assert_eq!(document["source_asset_index"], 0);
 }

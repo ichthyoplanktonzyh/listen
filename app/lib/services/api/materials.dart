@@ -1,6 +1,6 @@
 part of '../api_service.dart';
 
-// Learning-material lifecycle (Core 5.0). All JSON decode/encode for the
+// Learning-material lifecycle (Core 4.0). All JSON decode/encode for the
 // material models lives here — the models themselves stay pure.
 
 extension LearningMaterialApi on LocalApi {
@@ -14,8 +14,8 @@ extension LearningMaterialApi on LocalApi {
           )
           .toList(growable: false);
 
-  /// Creates (or converges on) a media learning material from registered
-  /// Media Renditions.
+  /// Creates (or converges on) a learning material from Source Assets and
+  /// typed Document/Media Renditions.
   ///
   /// [retain] is a typed [MaterialRetainDirective] and is transmitted honestly:
   /// [MaterialRetainOmitted] (the default) leaves the key absent and an
@@ -31,6 +31,13 @@ extension LearningMaterialApi on LocalApi {
   }) async {
     final body = <String, dynamic>{
       'title': input.title,
+      'source_assets': [
+        for (final asset in input.sourceAssets) encodeSourceAssetInput(asset),
+      ],
+      'document_renditions': [
+        for (final rendition in input.documentRenditions)
+          encodeDocumentRenditionInput(rendition),
+      ],
       'media_renditions': [
         for (final rendition in input.mediaRenditions)
           encodeMediaRenditionInput(rendition),
@@ -63,22 +70,28 @@ extension LearningMaterialApi on LocalApi {
   Future<MaterialDetails> appendMaterialRevision(
     String materialId,
     AppendMaterialRevisionInput input,
-  ) async {
-    return decodeMaterialDetails(
-      (await _request(
-            'POST',
-            '/v1/materials/${Uri.encodeComponent(materialId)}/revisions',
-            {
-              'title': input.title,
-              'media_renditions': [
-                for (final rendition in input.mediaRenditions)
-                  encodeMediaRenditionInput(rendition),
-              ],
-            },
-          ))
-          as Map<String, dynamic>,
-    );
-  }
+  ) async => decodeMaterialDetails(
+    (await _request(
+          'POST',
+          '/v1/materials/${Uri.encodeComponent(materialId)}/revisions',
+          {
+            'title': input.title,
+            'source_assets': [
+              for (final asset in input.sourceAssets)
+                encodeSourceAssetInput(asset),
+            ],
+            'document_renditions': [
+              for (final rendition in input.documentRenditions)
+                encodeDocumentRenditionInput(rendition),
+            ],
+            'media_renditions': [
+              for (final rendition in input.mediaRenditions)
+                encodeMediaRenditionInput(rendition),
+            ],
+          },
+        ))
+        as Map<String, dynamic>,
+  );
 
   /// Reads one historical or current revision, only when it belongs to the
   /// requested material.
@@ -120,23 +133,38 @@ extension LearningMaterialApi on LocalApi {
             as Map<String, dynamic>,
       );
 
+  /// Updates the local availability fact of one Source Asset of the Material's
+  /// current revision. Availability is a runtime fact about the exact bytes,
+  /// never a change to identity or membership.
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => decodeMaterialRevision(
+    (await _request(
+          'PUT',
+          '/v1/materials/${Uri.encodeComponent(materialId)}/source-assets/'
+              '${Uri.encodeComponent(sourceAssetId)}/availability',
+          {'availability': encodeSourceAssetAvailability(availability)},
+        ))
+        as Map<String, dynamic>,
+  );
+
   /// Projects the Material's capability state for every capability:
   /// `available`, `derivable`, `generating`, `unavailable`, or
   /// `failed_attempt`, each with the latest durable attempt (when any).
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
-  ) async =>
-      ((await _request(
-                'GET',
-                '/v1/materials/${Uri.encodeComponent(materialId)}/capabilities',
-              ))
-              as List<dynamic>)
-          .map(
-            (value) => decodeMaterialCapabilityProjection(
-              Map<String, dynamic>.from(value as Map),
-            ),
-          )
-          .toList(growable: false);
+  ) async => ((await _request(
+          'GET',
+          '/v1/materials/${Uri.encodeComponent(materialId)}/capabilities',
+        )) as List<dynamic>)
+      .map(
+        (value) => decodeMaterialCapabilityProjection(
+          Map<String, dynamic>.from(value as Map),
+        ),
+      )
+      .toList(growable: false);
 
   /// Resolves the learning material bound to a media source, with the
   /// material's actual current revision and shape. Registered media resolve
@@ -151,7 +179,7 @@ extension LearningMaterialApi on LocalApi {
       );
 }
 
-/// Decodes a Core 5.0 [MaterialDetails] response. Transport knowledge stays in
+/// Decodes a Core 4.0 [MaterialDetails] response. Transport knowledge stays in
 /// the service layer; [MaterialDetails] itself is a pure model.
 MaterialDetails decodeMaterialDetails(Map<String, dynamic> json) =>
     MaterialDetails(
@@ -180,13 +208,90 @@ MaterialRevision decodeMaterialRevision(Map<String, dynamic> json) =>
       id: json['id'] as String,
       materialId: json['material_id'] as String,
       title: json['title'] as String,
-      mediaRenditions: (json['media_renditions'] as List<dynamic>)
+      sourceAssets: (json['source_assets'] as List<dynamic>)
           .map(
             (value) =>
-                decodeMediaRendition(Map<String, dynamic>.from(value as Map)),
+                decodeSourceAsset(Map<String, dynamic>.from(value as Map)),
+          )
+          .toList(growable: false),
+      documentRenditions: (json['document_renditions'] as List<dynamic>)
+          .map(
+            (value) => decodeDocumentRendition(
+              Map<String, dynamic>.from(value as Map),
+            ),
+          )
+          .toList(growable: false),
+      mediaRenditions: (json['media_renditions'] as List<dynamic>)
+          .map(
+            (value) => decodeMediaRendition(
+              Map<String, dynamic>.from(value as Map),
+            ),
           )
           .toList(growable: false),
       createdAtMs: json['created_at_ms'] as int,
+    );
+
+SourceAsset decodeSourceAsset(Map<String, dynamic> json) => SourceAsset(
+  id: json['id'] as String,
+  mediaType: json['media_type'] as String,
+  byteLength: json['byte_length'] as int,
+  sha256Digest: json['sha256_digest'] as String,
+  binding: decodeSourceAssetBinding(
+    Map<String, dynamic>.from(json['binding'] as Map),
+  ),
+  availability: decodeSourceAssetAvailability(
+    Map<String, dynamic>.from(json['availability'] as Map),
+  ),
+  createdAtMs: json['created_at_ms'] as int,
+);
+
+SourceAssetBinding decodeSourceAssetBinding(Map<String, dynamic> json) =>
+    SourceAssetBinding(
+      type: decodeSourceAssetBindingType(json['type'] as String),
+      reference: json['reference'] as String?,
+    );
+
+SourceAssetBindingType decodeSourceAssetBindingType(String value) =>
+    switch (value) {
+      'managed' => SourceAssetBindingType.managed,
+      'referenced' => SourceAssetBindingType.referenced,
+      final other => throw FormatException(
+        'unknown source asset binding type: $other',
+      ),
+    };
+
+SourceAssetAvailability decodeSourceAssetAvailability(
+  Map<String, dynamic> json,
+) => SourceAssetAvailability(
+  state: decodeSourceAssetAvailabilityState(json['state'] as String),
+  reason: switch (json['reason']) {
+    'file_missing' => SourceAssetUnavailableReason.fileMissing,
+    'integrity_mismatch' => SourceAssetUnavailableReason.integrityMismatch,
+    null => null,
+    final other => throw FormatException(
+      'unknown source asset availability reason: $other',
+    ),
+  },
+);
+
+SourceAssetAvailabilityState decodeSourceAssetAvailabilityState(String value) =>
+    switch (value) {
+      'available' => SourceAssetAvailabilityState.available,
+      'unavailable' => SourceAssetAvailabilityState.unavailable,
+      final other => throw FormatException(
+        'unknown source asset availability state: $other',
+      ),
+    };
+
+DocumentRendition decodeDocumentRendition(Map<String, dynamic> json) =>
+    DocumentRendition(
+      id: json['id'] as String,
+      origin: decodeRenditionOrigin(json['origin'] as String),
+      mediaType: json['media_type'] as String,
+      language: json['language'] as String?,
+      digest: json['digest'] as String,
+      byteSize: json['byte_size'] as int,
+      sourceAssetId: json['source_asset_id'] as String?,
     );
 
 MediaRendition decodeMediaRendition(Map<String, dynamic> json) =>
@@ -211,6 +316,7 @@ RenditionOrigin decodeRenditionOrigin(String value) => switch (value) {
 };
 
 MaterialShape decodeMaterialShape(String value) => switch (value) {
+  'text' => MaterialShape.text,
   'audio' => MaterialShape.audio,
   'video' => MaterialShape.video,
   'mixed' => MaterialShape.mixed,
@@ -232,6 +338,48 @@ MediaRenditionAvailability decodeMediaRenditionAvailability(String value) =>
         'unknown media rendition availability: $other',
       ),
     };
+
+Map<String, dynamic> encodeSourceAssetInput(SourceAssetInput input) => {
+  'media_type': input.mediaType,
+  'byte_length': input.byteLength,
+  'sha256_digest': input.sha256Digest,
+  'binding': {
+    'type': encodeSourceAssetBindingType(input.binding.type),
+    // Null means no app-owned reference; sent as an explicit null, never
+    // coerced.
+    'reference': input.binding.reference,
+  },
+};
+
+String encodeSourceAssetBindingType(SourceAssetBindingType type) =>
+    switch (type) {
+      SourceAssetBindingType.managed => 'managed',
+      SourceAssetBindingType.referenced => 'referenced',
+    };
+
+Map<String, dynamic> encodeSourceAssetAvailability(
+  SourceAssetAvailability availability,
+) => {
+  'state': switch (availability.state) {
+    SourceAssetAvailabilityState.available => 'available',
+    SourceAssetAvailabilityState.unavailable => 'unavailable',
+  },
+  'reason': switch (availability.reason) {
+    SourceAssetUnavailableReason.fileMissing => 'file_missing',
+    SourceAssetUnavailableReason.integrityMismatch => 'integrity_mismatch',
+    null => null,
+  },
+};
+
+Map<String, dynamic> encodeDocumentRenditionInput(
+  DocumentRenditionInput input,
+) => {
+  'media_type': input.mediaType,
+  'language': input.language,
+  'digest': input.digest,
+  'byte_size': input.byteSize,
+  'source_asset_index': input.sourceAssetIndex,
+};
 
 Map<String, dynamic> encodeMediaRenditionInput(MediaRenditionInput input) => {
   'media_id': input.mediaId,

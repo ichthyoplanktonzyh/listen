@@ -21,6 +21,7 @@ class HomePane extends StatelessWidget {
     required this.onContinue,
     required this.onOpenMedia,
     required this.onPlayMedia,
+    this.onOpenDocument,
   });
 
   final DiscoveryViewModel discovery;
@@ -32,6 +33,7 @@ class HomePane extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onOpenMedia;
   final ValueChanged<String> onPlayMedia;
+  final ValueChanged<String>? onOpenDocument;
 
   bool get _hasRecentMedia =>
       (recentMediaTitle?.isNotEmpty ?? false) ||
@@ -83,6 +85,7 @@ class HomePane extends StatelessWidget {
               viewModel: discovery,
               onOpenMedia: onOpenMedia,
               onPlayMedia: onPlayMedia,
+              onOpenDocument: onOpenDocument,
             ),
           ),
         ],

@@ -6,10 +6,50 @@
 /// `lib/services/api/composition.dart`.
 library;
 
+/// The binding behind one selected rendition of the adopted composition.
+sealed class AdoptedCompositionBinding {
+  const AdoptedCompositionBinding();
+
+  /// The bound media id for media renditions; null for Source Assets.
+  String? get mediaId => switch (this) {
+    AdoptedCompositionMediaBinding(:final mediaId) => mediaId,
+    _ => null,
+  };
+}
+
+/// A Source document rendition bound to the managed store copy of its Source
+/// Asset.
+final class AdoptedCompositionManagedSourceBinding
+    extends AdoptedCompositionBinding {
+  const AdoptedCompositionManagedSourceBinding({required this.sourceAssetId});
+
+  final String sourceAssetId;
+}
+
+/// A Source document rendition bound to the learner-chosen original location
+/// of its Source Asset, through the App-owned reference map.
+final class AdoptedCompositionReferencedSourceBinding
+    extends AdoptedCompositionBinding {
+  const AdoptedCompositionReferencedSourceBinding({
+    required this.sourceAssetId,
+    required this.reference,
+    required this.available,
+  });
+
+  final String sourceAssetId;
+
+  /// Opaque App-owned reference key.
+  final String reference;
+
+  /// Whether the referenced bytes are currently reachable.
+  final bool available;
+}
+
 /// A Source media rendition bound to its registered media source.
-final class AdoptedCompositionMediaBinding {
+final class AdoptedCompositionMediaBinding extends AdoptedCompositionBinding {
   const AdoptedCompositionMediaBinding({required this.mediaId});
 
+  @override
   final String mediaId;
 }
 
@@ -21,6 +61,7 @@ class AdoptedCompositionRendition {
     required this.kind,
     required this.origin,
     required this.mediaType,
+    required this.language,
     required this.digest,
     required this.byteSize,
     required this.blobAvailable,
@@ -30,20 +71,23 @@ class AdoptedCompositionRendition {
 
   final String renditionId;
 
-  /// The rendition family. This application accepts media renditions only.
+  /// The package's own kind: `document` or `media`.
   final String kind;
 
   /// 'source' | 'derived'.
   final String origin;
   final String mediaType;
+  final String? language;
 
   /// Lowercase hex SHA-256 of the exact rendition bytes.
   final String digest;
   final int byteSize;
 
-  /// Whether the exact bytes are embedded in the adopted composition.
+  /// Whether the exact bytes are embedded in the adopted composition (a
+  /// Source document rendition bound to its Source Asset has no embedded
+  /// blob; its bytes resolve through the binding).
   final bool blobAvailable;
-  final AdoptedCompositionMediaBinding? binding;
+  final AdoptedCompositionBinding? binding;
   final String? producerToolId;
 }
 
@@ -124,17 +168,40 @@ class AdoptedComposition {
     return null;
   }
 
+  /// The playable derived media rendition of the composition, when the
+  /// composition carries one with embedded bytes.
+  AdoptedCompositionRendition? get derivedMediaRendition {
+    for (final rendition in _renditions) {
+      if (rendition.kind == 'media' &&
+          rendition.origin == 'derived' &&
+          rendition.blobAvailable) {
+        return rendition;
+      }
+    }
+    return null;
+  }
+
   /// The media id Core uses for the composition workbench transcript.
   ///
-  /// A missing source binding means there is no legal transcript projection —
-  /// callers must not manufacture a detached track.
+  /// Source media wins for audio/video materials. Document compositions have
+  /// no source media, so Core may bind their derived TTS audio to a registered
+  /// media id; that id is the same formal Core track namespace and is the one
+  /// the App must query. A missing binding means there is no legal transcript
+  /// projection — callers must not manufacture a detached track.
   String? get workbenchMediaId {
+    String? derivedMediaId;
     for (final rendition in _renditions) {
       if (rendition.kind == 'media' && rendition.origin == 'source') {
         final binding = rendition.binding;
         if (binding is AdoptedCompositionMediaBinding) return binding.mediaId;
       }
+      if (rendition.kind == 'media' && rendition.origin == 'derived') {
+        final binding = rendition.binding;
+        if (binding is AdoptedCompositionMediaBinding) {
+          derivedMediaId ??= binding.mediaId;
+        }
+      }
     }
-    return null;
+    return derivedMediaId;
   }
 }

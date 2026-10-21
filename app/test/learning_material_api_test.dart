@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
-/// Core 5.0 media-material API behavior: exact routes, media-only rendition payloads,
+/// Core 5.1 material API behavior: exact routes, typed rendition payloads,
 /// honest retain transmission, and the pure-model boundary.
 void main() {
   test('learning material models stay pure and location-free', () {
@@ -25,50 +25,53 @@ void main() {
     expect(source, isNot(RegExp(r'\b(?:fromJson|toJson)\b')));
   });
 
-  test('decodes media renditions without document material fields', () async {
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'token',
-      transport: (method, path, body) async {
-        expect(method, 'GET');
-        expect(path, '/v1/materials/material-1');
-        return (
-          statusCode: 200,
-          body: jsonEncode(
-            _details(
-              mediaRenditions: [
-                {
-                  'id': 'media-1',
-                  'origin': 'source',
-                  'kind': 'audio',
-                  'media_type': 'audio/mpeg',
-                  'fingerprint': 'fp',
-                  'availability': 'archived',
-                  'media_id': 'media-1',
-                  'media_sha256': null,
-                  'media_byte_size': null,
-                },
-              ],
+  test(
+    'decodes media renditions with empty document component lists',
+    () async {
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'token',
+        transport: (method, path, body) async {
+          expect(method, 'GET');
+          expect(path, '/v1/materials/material-1');
+          return (
+            statusCode: 200,
+            body: jsonEncode(
+              _details(
+                mediaRenditions: [
+                  {
+                    'id': 'media-1',
+                    'origin': 'source',
+                    'kind': 'audio',
+                    'media_type': 'audio/mpeg',
+                    'fingerprint': 'fp',
+                    'availability': 'archived',
+                    'media_id': 'media-1',
+                    'media_sha256': null,
+                    'media_byte_size': null,
+                  },
+                ],
+              ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
 
-    final details = await api.readLearningMaterial('material-1');
+      final details = await api.readLearningMaterial('material-1');
 
-    expect(details.material.id, 'material-1');
-    expect(details.material.retainedAtMs, 42);
-    expect(details.material.currentRevisionId, 'revision-1');
-    expect(details.shape, MaterialShape.audio);
-    final revision = details.currentRevision;
-    expect(revision.title, 'A podcast episode');
-    expect(revision.mediaRenditions, hasLength(1));
-    final media = revision.mediaRenditions.single;
-    expect(media.mediaId, 'media-1');
-    expect(media.kind, MediaRenditionKind.audio);
-    expect(media.availability, MediaRenditionAvailability.archived);
-  });
+      expect(details.material.id, 'material-1');
+      expect(details.material.retainedAtMs, 42);
+      expect(details.material.currentRevisionId, 'revision-1');
+      expect(details.shape, MaterialShape.audio);
+      final revision = details.currentRevision;
+      expect(revision.title, 'A podcast episode');
+      expect(revision.mediaRenditions, hasLength(1));
+      final media = revision.mediaRenditions.single;
+      expect(media.mediaId, 'media-1');
+      expect(media.kind, MediaRenditionKind.audio);
+      expect(media.availability, MediaRenditionAvailability.archived);
+    },
+  );
 
   test('resolves temporary media as nullable library membership', () async {
     final api = LocalApi.withTransport(
@@ -139,7 +142,7 @@ void main() {
   );
 
   test(
-    'create sends media renditions and no document rendition field',
+    'create sends media renditions and empty document component lists',
     () async {
       Map<String, dynamic>? request;
       final api = LocalApi.withTransport(
@@ -161,8 +164,8 @@ void main() {
       );
 
       expect(request!['title'], 'A podcast episode');
-      expect(request!.containsKey('source_assets'), isFalse);
-      expect(request!.containsKey('document_renditions'), isFalse);
+      expect(request!['source_assets'], isEmpty);
+      expect(request!['document_renditions'], isEmpty);
       expect(request!['media_renditions'], [
         {'media_id': 'media-1'},
       ]);
@@ -209,7 +212,7 @@ void main() {
     },
   );
 
-  test('append revision posts only media rendition inputs', () async {
+  test('append revision posts media inputs and empty document lists', () async {
     String? seenPath;
     Map<String, dynamic>? request;
     final api = LocalApi.withTransport(
@@ -233,8 +236,8 @@ void main() {
 
     expect(seenPath, '/v1/materials/material%2F1/revisions');
     expect(request!['title'], 'Revised');
-    expect(request!.containsKey('source_assets'), isFalse);
-    expect(request!.containsKey('document_renditions'), isFalse);
+    expect(request!['source_assets'], isEmpty);
+    expect(request!['document_renditions'], isEmpty);
     expect(request!['media_renditions'], [
       {'media_id': 'media-2'},
     ]);
@@ -255,6 +258,8 @@ void main() {
               'id': 'revision/2',
               'material_id': 'material-1',
               'title': 'A podcast episode',
+              'source_assets': <Map<String, dynamic>>[],
+              'document_renditions': <Map<String, dynamic>>[],
               'media_renditions': <Map<String, dynamic>>[],
               'created_at_ms': 1,
             }),
@@ -361,6 +366,8 @@ Map<String, dynamic> _details({
     'id': 'revision-1',
     'material_id': 'material-1',
     'title': 'A podcast episode',
+    'source_assets': <Map<String, dynamic>>[],
+    'document_renditions': <Map<String, dynamic>>[],
     'media_renditions': mediaRenditions,
     'created_at_ms': 1,
   },

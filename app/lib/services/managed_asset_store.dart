@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
 /// The managed asset store cannot be reached right now — a remembered custom
 /// location is not on disk (unmounted drive, renamed folder). Typed so the UI
@@ -57,6 +58,11 @@ final class ManagedAssetCopy {
 ///   bytes deduplicate instead of duplicating;
 /// * a staged copy is removed whether the copy or the rename fails.
 abstract interface class ManagedAssetStoreService {
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  });
+
   Future<ManagedAssetCopy> copyIntoStore({
     required String sourcePath,
     String? mediaKind,
@@ -68,6 +74,10 @@ abstract interface class ManagedAssetStoreService {
   /// reassembled the root from settings would be re-deriving a fact the
   /// service already holds — and would need the file system to do it.
   bool contains(String path);
+
+  /// Reads one verified content-addressed store entry, or null if [path]
+  /// does not resolve to a valid managed asset.
+  Future<List<int>?> readBytes(String path);
 
   Future<void> deleteStoreCopy(String path);
 }
@@ -110,6 +120,38 @@ final class LocalManagedAssetStoreService implements ManagedAssetStoreService {
   String? get _root {
     final root = resolveRoot();
     return (root == null || root.isEmpty) ? null : root;
+  }
+
+  @override
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  }) async {
+    Directory? temporary;
+    try {
+      temporary = await Directory.systemTemp.createTemp(
+        'listen-managed-source-',
+      );
+      final source = File(p.join(temporary.path, 'source.document'));
+      await source.writeAsBytes(bytes, flush: true);
+      return await copyIntoStore(sourcePath: source.path, mediaKind: mediaKind);
+    } on ManagedStoreUnavailable {
+      rethrow;
+    } on ManagedStoreCopyFailed {
+      rethrow;
+    } on FileSystemException {
+      throw const ManagedStoreCopyFailed();
+    } finally {
+      if (temporary != null) {
+        try {
+          if (await temporary.exists()) {
+            await temporary.delete(recursive: true);
+          }
+        } on FileSystemException {
+          // Best effort: temporary cleanup does not change the copy verdict.
+        }
+      }
+    }
   }
 
   @override
@@ -259,6 +301,19 @@ final class LocalManagedAssetStoreService implements ManagedAssetStoreService {
         ? root
         : '$root${Platform.pathSeparator}';
     return path.startsWith(prefix);
+  }
+
+  @override
+  Future<List<int>?> readBytes(String path) async {
+    final root = _root;
+    if (root == null) return null;
+    try {
+      final resolvedRoot = await Directory(root).resolveSymbolicLinks();
+      if (!await _isManagedCopyAt(path, resolvedRoot)) return null;
+      return await File(path).readAsBytes();
+    } on FileSystemException {
+      return null;
+    }
   }
 
   @override

@@ -1013,6 +1013,12 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     String materialId,
     String resourceId,
   ) async => throw const ApiFailure(raw: 'payload not found');
+
+  @override
+  Future<List<int>> readCompositionRenditionBlob(
+    String materialId,
+    String renditionId,
+  ) async => throw const ApiFailure(raw: 'rendition blob not found');
 }
 
 LearningEdition _editionCopy({required bool adopted}) => LearningEdition(

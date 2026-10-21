@@ -5,13 +5,10 @@ graph: which exact input Renditions feed which derivations, and which
 provider kinds each derivation needs. Planning is deterministic and pure; no
 processes run and no bytes are read here.
 
-The plan is honest by construction: an already-satisfied capability yields an
-empty plan (a minimal package still documents the available source), and a
-capability that no supported derivation can produce raises
-:class:`UnsupportedCapability` before anything runs.
-
-The only derivation is media-to-structured-reading. Listen requires an audio
-rendition; watch requires a video rendition.
+Audio/video Read keeps the subtitle-backed or ASR transcript path. Document
+Read extracts structured text; document Listen extracts that text and then
+synthesizes aligned audio. Listen on media requires an existing audio
+rendition, and Watch requires video.
 """
 
 from __future__ import annotations
@@ -20,20 +17,21 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
-from .capability import AvailableMediaRendition, CapabilityRequest
+from .capability import (
+    AvailableDocumentRendition,
+    AvailableMediaRendition,
+    CapabilityRequest,
+)
 from .package import ConversionError
 
 
 class UnsupportedCapability(ConversionError):
-    """The requested capability cannot be derived from the available inputs.
-
-    This is a request-shape fact decided during planning, before any provider
-    runs: no supported derivation can reach the capability from the declared
-    media renditions.
-    """
+    """The requested capability cannot be derived from the available inputs."""
 
 
 class DerivationKind(str, Enum):
+    DOCUMENT_READ = "document_to_structured_reading"
+    DOCUMENT_LISTEN = "document_to_listen"
     MEDIA_READ = "media_to_structured_reading"
 
 
@@ -42,10 +40,7 @@ _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 @dataclass(frozen=True)
 class Derivation:
-    """One planned step: exact inputs, one provider-kind requirement.
-
-    The derivation consumes the exact source media rendition.
-    """
+    """One planned step: exact inputs and one provider-kind requirement."""
 
     kind: DerivationKind
     input_rendition_ids: tuple[str, ...]
@@ -81,16 +76,51 @@ class ProductionPlan:
         }
 
 
-def _media_input(request: CapabilityRequest) -> AvailableMediaRendition:
-    """Select the exact Media Rendition the derivation must consume."""
+def _document_input(request: CapabilityRequest) -> AvailableDocumentRendition:
+    """Choose the best exact source document rendition for extraction."""
+    text_families = (
+        "text/plain",
+        "text/markdown",
+        "text/html",
+        "application/epub+zip",
+    )
+    for family in text_families:
+        matches = request.documents_with_media_type(family)
+        if matches:
+            return matches[0]
+    if len(request.document_renditions) == 1:
+        return request.document_renditions[0]
+    if request.document_renditions:
+        return request.document_renditions[0]
+    raise UnsupportedCapability("no usable Document Rendition is available")
 
+
+def _media_input(request: CapabilityRequest) -> AvailableMediaRendition:
     if len(request.media_renditions) == 1:
         return request.media_renditions[0]
     if request.media_renditions:
         return request.media_renditions[0]
-    raise UnsupportedCapability(
-        "no usable Media Rendition is available for the requested derivation"
-    )
+    raise UnsupportedCapability("no usable Media Rendition is available")
+
+
+def _document_listen_derivations(
+    request: CapabilityRequest,
+) -> list[Derivation]:
+    rendition = _document_input(request)
+    return [
+        Derivation(
+            kind=DerivationKind.DOCUMENT_READ,
+            input_rendition_ids=(rendition.rendition_id,),
+            provider="extraction",
+            label="extract the structured reading from the document",
+        ),
+        Derivation(
+            kind=DerivationKind.DOCUMENT_LISTEN,
+            input_rendition_ids=(rendition.rendition_id,),
+            provider="tts",
+            label="synthesize speech audio and align reading anchors",
+        ),
+    ]
 
 
 def plan(
@@ -98,14 +128,7 @@ def plan(
     *,
     subtitle_sha256: str | None = None,
 ) -> ProductionPlan:
-    """Plan the smallest derivation graph for one capability request.
-
-    Deterministic and side-effect free. Raises :class:`UnsupportedCapability`
-    when no supported derivation can produce the requested capability.
-    Listen requires an audio rendition; watch requires a video rendition.
-    Both capabilities are already satisfied when their required media is
-    present.
-    """
+    """Build the smallest deterministic derivation graph for one request."""
     capability = request.requested_capability
     derivations: list[Derivation] = []
 
@@ -128,14 +151,26 @@ def plan(
                     subtitle_sha256=subtitle_sha256,
                 )
             )
+        elif request.document_renditions:
+            rendition = _document_input(request)
+            derivations.append(
+                Derivation(
+                    kind=DerivationKind.DOCUMENT_READ,
+                    input_rendition_ids=(rendition.rendition_id,),
+                    provider="extraction",
+                    label="extract the structured reading from the document",
+                )
+            )
         else:
-            raise UnsupportedCapability("read requires audio or video media")
+            raise UnsupportedCapability("read requires a Document or Media Rendition")
         return ProductionPlan(tuple(derivations), capability)
 
     if capability == "listen":
         if any(entry.media_kind == "audio" for entry in request.media_renditions):
             return ProductionPlan((), capability)
-        raise UnsupportedCapability("listen requires an audio rendition")
+        if request.document_renditions:
+            return ProductionPlan(tuple(_document_listen_derivations(request)), capability)
+        raise UnsupportedCapability("listen requires an audio rendition or source document")
 
     if capability == "watch":
         if not any(entry.media_kind == "video" for entry in request.media_renditions):
@@ -162,8 +197,10 @@ def plan(
                 )
             )
             return ProductionPlan(tuple(derivations), capability)
+        if request.document_renditions:
+            return ProductionPlan(tuple(_document_listen_derivations(request)), capability)
         raise UnsupportedCapability(
-            "synchronized read-and-listen requires audio or video media"
+            "synchronized read-and-listen requires a Document or Media Rendition"
         )
 
     raise UnsupportedCapability(f"unsupported capability: {capability!r}")

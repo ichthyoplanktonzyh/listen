@@ -7,9 +7,26 @@ name = "listen-gen"
 version = "0.5.2"
 description = "Heavy resource generation and content packaging for Listen"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pypdf>=5.0,<7",
+]
 
 [project.optional-dependencies]
+# Document extraction requires pypdf (listed as a base dependency).
+# OCR and neural TTS remain opt-in; no model weights are bundled by Gen.
+tts = [
+    "kokoro>=0.8",
+    "soundfile>=0.12",
+]
+tts-edge = [
+    "edge-tts>=6.1",
+]
+ocr = [
+    "pypdfium2>=4.0",
+    "pillow>=10.0",
+    "surya-ocr>=0.6.0",
+    "rapidocr-onnxruntime>=1.3.0",
+]
 # Forced alignment via Qwen3-ForcedAligner-0.6B. The aligner needs a
 # Transformers build that ships the Qwen3 forced-aligner classes; until it is
 # in a tagged release, install Transformers from source alongside these.
@@ -38,7 +55,13 @@ asr-sensevoice = [
     "soundfile>=0.12",
 ]
 all = [
+    "kokoro>=0.8",
+    "edge-tts>=6.1",
     "soundfile>=0.12",
+    "pypdfium2>=4.0",
+    "pillow>=10.0",
+    "surya-ocr>=0.6.0",
+    "rapidocr-onnxruntime>=1.3.0",
     "qwen-asr>=0.1",
     "funasr>=1.1",
     "librosa>=0.10",

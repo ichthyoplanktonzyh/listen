@@ -56,12 +56,10 @@ pub fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// Contract 5.0.0 is the breaking listening-focused HTTP surface. It accepts
-/// audio/video materials, removes document-only and non-listening workflows,
-/// and retains media package installation/adoption. API generation remains 1,
-/// the workspace version remains 0.7.0, the fresh SQLite schema is v64, and
-/// the Content Package v3 format is unchanged.
-pub const CONTRACT_VERSION: &str = "5.0.0";
+/// Contract 5.1.0 keeps the listening-focused product scope and restores the
+/// standalone document-material input, processing, and composition surface.
+/// Independent output activities, conversation, and coaching remain excluded.
+pub const CONTRACT_VERSION: &str = "5.1.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))
@@ -436,6 +434,12 @@ impl From<ApplicationError> for ApiError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "composition_integrity_failure",
                 "adopted composition content is missing or fails integrity verification",
+                false,
+            ),
+            ApplicationError::SourceUnavailable => Self::new(
+                StatusCode::NOT_FOUND,
+                "source_unavailable",
+                "referenced source asset is unavailable",
                 false,
             ),
             ApplicationError::Subtitle(error) => Self::new(

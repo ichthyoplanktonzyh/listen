@@ -1160,8 +1160,8 @@ async fn material_membership_delete_preserves_material_and_is_idempotent() {
     assert!(again["material"]["retained_at_ms"].is_null());
 }
 
-// D. Media-only material revision lifecycle, including omission of the optional
-// Source Asset collection and path-free media rendition responses.
+// D. Media-only material revision lifecycle, including empty document/source
+// collections and path-free media rendition responses.
 #[tokio::test]
 async fn media_material_revisions_preserve_media_identity_and_ownership() {
     let app = build_app();
@@ -1180,9 +1180,10 @@ async fn media_material_revisions_preserve_media_identity_and_ownership() {
         .to_owned();
     assert_eq!(created["shape"], "video");
     assert!(
-        created["current_revision"]
-            .get("document_renditions")
-            .is_none()
+        created["current_revision"]["document_renditions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
     );
     assert!(
         created["current_revision"]["source_assets"]
@@ -1214,9 +1215,10 @@ async fn media_material_revisions_preserve_media_identity_and_ownership() {
         media_id
     );
     assert!(
-        appended["current_revision"]
-            .get("document_renditions")
-            .is_none()
+        appended["current_revision"]["document_renditions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
     );
     assert!(appended["current_revision"].get("path").is_none());
 
@@ -1231,7 +1233,12 @@ async fn media_material_revisions_preserve_media_identity_and_ownership() {
     assert_eq!(status, StatusCode::OK, "{historical}");
     assert_eq!(historical["id"], first_revision_id);
     assert_eq!(historical["media_renditions"][0]["media_id"], media_id);
-    assert!(historical.get("document_renditions").is_none());
+    assert!(
+        historical["document_renditions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 // D-null. Explicit JSON `retain: null` defaults to retained membership for a

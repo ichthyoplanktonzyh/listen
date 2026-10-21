@@ -29,10 +29,10 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 5.0.0 narrows material processing to audio/video and removes the
-    // document, conversation, production, and coaching surfaces.
+    // 5.1.0 restores document materials while keeping the reduced listening
+    // product free of conversation, independent output activities, and coaching.
     assert!(
-        openapi.contains("version: 5.0.0"),
+        openapi.contains("version: 5.1.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -100,6 +100,7 @@ fn openapi_version_snapshot_and_path_count() {
         "UpdateLexicalLearningContent:",
         "LearningMaterial:",
         "SourceAsset:",
+        "DocumentRendition:",
         "MediaRendition:",
         "MaterialRevision:",
         "MaterialDetails:",
@@ -107,6 +108,7 @@ fn openapi_version_snapshot_and_path_count() {
         "CreateLearningMaterial:",
         "AppendMaterialRevision:",
         "SourceAssetInput:",
+        "DocumentRenditionInput:",
         "MediaRenditionInput:",
         "MaterialCapabilityProjection:",
         "CapabilityAttempt:",
@@ -128,13 +130,10 @@ fn openapi_version_snapshot_and_path_count() {
     }
 
     for removed in [
-        "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob:",
         "/v1/realtime/providers:",
         "/v1/reading/positions/{track_id}:",
         "/v1/production-corpus/search:",
         "/v1/review/anki/import:",
-        "DocumentRendition:",
-        "DocumentRenditionInput:",
     ] {
         assert!(
             !openapi.contains(removed),

@@ -19,6 +19,9 @@ import '../services/acquisition_ledger.dart';
 import '../services/media_file_service.dart';
 import '../models/embedded_subtitle.dart';
 import '../models/saved_vocabulary_count.dart';
+import '../services/document_decoding/document_format.dart';
+import '../services/document_intake_flow.dart';
+import '../services/document_intake_service.dart';
 
 /// Immutable snapshot of the discovery home.
 @immutable
@@ -182,6 +185,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
     AcquisitionLedger? ledger,
     SourceIdentityRepository? sourceIdentity,
     LearningMaterialRepository? learningMaterial,
+    DocumentIntakeFileService? documentFileService,
+    DocumentIntakeFlow? documentIntake,
     MediaFileService fileService = const LocalMediaFileService(),
     Future<String?> Function()? downloadsDirectory,
   }) : _ledger = ledger ?? AcquisitionLedger.inMemory(),
@@ -195,6 +200,10 @@ final class DiscoveryViewModel extends ChangeNotifier {
        _sourceIdentity = sourceIdentity,
        // ignore: prefer_initializing_formals
        _learningMaterial = learningMaterial,
+       // ignore: prefer_initializing_formals
+       _documentFileService = documentFileService,
+       // ignore: prefer_initializing_formals
+       _documentIntake = documentIntake,
        // ignore: prefer_initializing_formals
        _fileService = fileService;
 
@@ -229,6 +238,11 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// widget previews.
   final LearningMaterialRepository? _learningMaterial;
 
+  /// Reads a downloaded HTML article before it enters the shared document
+  /// intake flow. Absent in previews that do not acquire article items.
+  final DocumentIntakeFileService? _documentFileService;
+  final DocumentIntakeFlow? _documentIntake;
+
   /// What earlier sessions acquired, so a restart does not offer a download
   /// that already happened.
   final AcquisitionLedger _ledger;
@@ -249,6 +263,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
   final Map<String, String> _localPaths = {};
   final Map<String, String> _mediaIds = {};
   final Map<String, String> _fingerprints = {};
+  final Map<String, String> _documentMaterialIds = {};
 
   final Map<String, int?> _mediaDurations = {};
   final Map<String, DownloadController> _downloadControllers = {};
@@ -496,14 +511,15 @@ final class DiscoveryViewModel extends ChangeNotifier {
     final inFlight = _availabilityChecks[entryId];
     if (inFlight != null) return inFlight;
     late final Future<void> future;
-    future = _refreshMediaAvailability(
-      entryId,
-      announceChecking: announceChecking,
-    ).whenComplete(() {
-      if (identical(_availabilityChecks[entryId], future)) {
-        _availabilityChecks.remove(entryId);
-      }
-    });
+    future =
+        _refreshMediaAvailability(
+          entryId,
+          announceChecking: announceChecking,
+        ).whenComplete(() {
+          if (identical(_availabilityChecks[entryId], future)) {
+            _availabilityChecks.remove(entryId);
+          }
+        });
     _availabilityChecks[entryId] = future;
     return future;
   }
@@ -528,6 +544,12 @@ final class DiscoveryViewModel extends ChangeNotifier {
     }
     if (announceChecking) {
       _setSnapshot(entryId, ItemAcquisitionSnapshot.checking);
+    }
+
+    final entry = _state.entryById(entryId);
+    if (entry?.acquisition == AcquisitionMode.article) {
+      await _refreshArticleAvailability(entryId, entry!);
+      return;
     }
 
     final LocalMediaMatch? local;
@@ -558,8 +580,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
         _state.acquisitionSnapshots,
       );
       final current = snapshots[entryId];
-      if (current == null ||
-          current.phase != ItemAcquisitionPhase.download) {
+      if (current == null || current.phase != ItemAcquisitionPhase.download) {
         snapshots.remove(entryId);
       }
       // A row that had nothing and still has nothing changed nothing. The
@@ -576,12 +597,12 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
     // Content already on disk reads as an acquisition that is done, whether
     // this session downloaded it or a previous one did.
-    final finished = Map<String, ItemAcquisitionSnapshot>.of(
-      _state.acquisitionSnapshots,
-    )..[entryId] = const ItemAcquisitionSnapshot(
-      DiscoveryItemState.available,
-      progress: 1,
-    );
+    final finished =
+        Map<String, ItemAcquisitionSnapshot>.of(_state.acquisitionSnapshots)
+          ..[entryId] = const ItemAcquisitionSnapshot(
+            DiscoveryItemState.available,
+            progress: 1,
+          );
     _localPaths[entryId] = local.media.path;
     _mediaIds[entryId] = local.media.id;
     _fingerprints[entryId] = local.media.fingerprint;
@@ -609,13 +630,65 @@ final class DiscoveryViewModel extends ChangeNotifier {
     }
   }
 
+  /// Resolves an acquired article through Source Identity to the Document
+  /// Material the learner previously opened. A mapping without a current
+  /// source Document Rendition is not treated as local content.
+  Future<void> _refreshArticleAvailability(
+    String entryId,
+    DiscoveryItem item,
+  ) async {
+    final materialId = await _resolveArticleMaterial(item);
+    if (_disposed) return;
+    if (materialId == null) {
+      _documentMaterialIds.remove(entryId);
+      final snapshots = Map<String, ItemAcquisitionSnapshot>.of(
+        _state.acquisitionSnapshots,
+      );
+      final current = snapshots[entryId];
+      if (current == null || current.phase != ItemAcquisitionPhase.download) {
+        snapshots.remove(entryId);
+      }
+      _state = _state.copyWith(acquisitionSnapshots: snapshots);
+      notifyListeners();
+      return;
+    }
+    _documentMaterialIds[entryId] = materialId;
+    _setSnapshot(
+      entryId,
+      const ItemAcquisitionSnapshot(DiscoveryItemState.available, progress: 1),
+    );
+  }
+
+  Future<String?> _resolveArticleMaterial(DiscoveryItem item) async {
+    final sourceIdentity = _sourceIdentity;
+    final learningMaterial = _learningMaterial;
+    if (sourceIdentity == null || learningMaterial == null) return null;
+    if (!sourceIdentity.isAvailable) return null;
+    try {
+      final mapping = await sourceIdentity.resolveMapping(
+        sourceId: item.sourceId,
+        itemId: item.id,
+      );
+      if (mapping == null) return null;
+      final details = await learningMaterial.readLearningMaterial(
+        mapping.materialId,
+      );
+      final hasSourceDocument = details.currentRevision.documentRenditions.any(
+        (rendition) => rendition.origin == RenditionOrigin.source,
+      );
+      return hasSourceDocument ? mapping.materialId : null;
+    } catch (error) {
+      // A failed lookup is unknown, not proof that this item was never
+      // acquired. The caller leaves the row on its source-derived state.
+      debugPrint('Error resolving article material: $error');
+      return null;
+    }
+  }
+
   void _setSnapshot(String entryId, ItemAcquisitionSnapshot snapshot) {
     if (_disposed) return;
     _state = _state.copyWith(
-      acquisitionSnapshots: {
-        ..._state.acquisitionSnapshots,
-        entryId: snapshot,
-      },
+      acquisitionSnapshots: {..._state.acquisitionSnapshots, entryId: snapshot},
     );
     notifyListeners();
   }
@@ -675,8 +748,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
     // the Personal Library, which is all this fallback ever saw: it exists for
     // media acquired before either record was written, and such media is only
     // still findable if the learner kept it.
-    for (final libraryEntry in await _mediaLibraryRepository
-        .listMediaLibrary()) {
+    for (final libraryEntry
+        in await _mediaLibraryRepository.listMediaLibrary()) {
       if (libraryEntry.media.path.contains('[$entryId]') &&
           _fileService.exists(libraryEntry.media.path)) {
         return (media: libraryEntry.media, fromMapping: false);
@@ -725,9 +798,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
     // (a reset core) is not the item's content — the other records answer.
     final MaterialDetails details;
     try {
-      details = await learningMaterial.readLearningMaterial(
-        mapping.materialId,
-      );
+      details = await learningMaterial.readLearningMaterial(mapping.materialId);
     } catch (error) {
       debugPrint('Error reading mapped material: $error');
       return null;
@@ -767,10 +838,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
         return controller;
       });
 
-  void _publishDownloadSnapshot(
-    String entryId,
-    DownloadStatusSnapshot? value,
-  ) {
+  void _publishDownloadSnapshot(String entryId, DownloadStatusSnapshot? value) {
     if (_disposed) return;
     final snapshots = Map<String, ItemAcquisitionSnapshot>.of(
       _state.acquisitionSnapshots,
@@ -792,7 +860,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
           failure: value.failure,
         ),
       };
-      if (value.kind == DownloadStatusKind.failed) {        // A failed attempt ends the "start learning" intent without a path;
+      if (value.kind == DownloadStatusKind.failed) {
+        // A failed attempt ends the "start learning" intent without a path;
         // Workbench must not open for an acquisition that never landed. The
         // typed failure stays in the download state for the retry surface.
         _completeAcquisition(entryId, null);
@@ -841,6 +910,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
         await _launchMediaDownload(entry);
       case AcquisitionMode.externalTool:
         await _launchMediaDownload(entry);
+      case AcquisitionMode.article:
+        await _launchArticleAcquisition(entry);
       case AcquisitionMode.none:
         _completeAcquisition(entryId, null);
     }
@@ -872,14 +943,13 @@ final class DiscoveryViewModel extends ChangeNotifier {
       }
 
       final handle = switch (entry.acquisition) {
-        AcquisitionMode.enclosure => await _importRepository
-            .downloadEnclosure(
-              mediaUrl,
-              directory,
-              expectedBytes: entry.mediaByteLength,
-            ),
-        AcquisitionMode.externalTool => await _importRepository
-            .downloadOnlineMedia(mediaUrl, directory),
+        AcquisitionMode.enclosure => await _importRepository.downloadEnclosure(
+          mediaUrl,
+          directory,
+          expectedBytes: entry.mediaByteLength,
+        ),
+        AcquisitionMode.externalTool =>
+          await _importRepository.downloadOnlineMedia(mediaUrl, directory),
         _ => throw StateError('guarded above'),
       };
       if (_disposed) {
@@ -899,8 +969,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
         progress: handle.progress,
         completed: handle.completed,
         cancel: handle.cancel,
-        onCompleted: (path) =>
-            unawaited(_adoptDownloadedMedia(entry.id, path)),
+        onCompleted: (path) => unawaited(_adoptDownloadedMedia(entry.id, path)),
       );
     } catch (error) {
       debugPrint('Error starting download: $error');
@@ -917,6 +986,146 @@ final class DiscoveryViewModel extends ChangeNotifier {
       if (_launchesInFlight[entry.id] == token) {
         _launchesInFlight.remove(entry.id);
       }
+    }
+  }
+
+  /// Downloads a feed-linked article, validates it through the shared
+  /// document intake, and records its canonical Material identity. Article
+  /// bytes never pass through media probing or media registration.
+  Future<void> _launchArticleAcquisition(DiscoveryItem entry) async {
+    final entryUrl = entry.entryUrl;
+    final intake = _documentIntake;
+    final files = _documentFileService;
+    if (entryUrl == null || intake == null || files == null) {
+      _completeAcquisition(entry.id, null);
+      return;
+    }
+    final controller = _downloadControllerFor(entry.id);
+    controller.starting();
+    final token = (_launchTokens[entry.id] ?? 0) + 1;
+    _launchTokens[entry.id] = token;
+    _launchesInFlight[entry.id] = token;
+    var attached = false;
+
+    try {
+      final directory = await _resolveDownloadsDirectory();
+      if (_disposed || !_isCurrentLaunch(entry.id, token)) {
+        _completeAcquisition(entry.id, null);
+        return;
+      }
+      if (directory == null) {
+        _completeAcquisition(entry.id, null);
+        return;
+      }
+      final handle = await _importRepository.downloadArticle(
+        entryUrl,
+        directory,
+      );
+      if (_disposed || !_isCurrentLaunch(entry.id, token)) {
+        handle.cancel();
+        _completeAcquisition(entry.id, null);
+        return;
+      }
+      controller.attach(
+        progress: handle.progress,
+        completed: handle.completed,
+        cancel: handle.cancel,
+        onCompleted: (path) =>
+            unawaited(_adoptDownloadedArticle(entry, path, token)),
+      );
+      attached = true;
+    } catch (error) {
+      debugPrint('Error starting article acquisition: $error');
+      if (!_disposed && _isCurrentLaunch(entry.id, token)) {
+        controller.fail(_importRepository.failureDetail(error));
+        _completeAcquisition(entry.id, null);
+      }
+    } finally {
+      // Unlike media registration, an article's completion callback includes
+      // the Core document create. Keep the launch token alive through that
+      // phase so cancel/retry still wins over a late callback.
+      if (!attached && _launchesInFlight[entry.id] == token) {
+        _launchesInFlight.remove(entry.id);
+      }
+    }
+  }
+
+  Future<void> _adoptDownloadedArticle(
+    DiscoveryItem entry,
+    String path,
+    int token,
+  ) async {
+    final files = _documentFileService;
+    final intake = _documentIntake;
+    try {
+      if (_disposed || !_isCurrentLaunch(entry.id, token)) return;
+      if (files == null || intake == null) return;
+      final read = await files.readDocumentFile(path);
+      if (_disposed || !_isCurrentLaunch(entry.id, token)) return;
+      switch (read) {
+        case DocumentFileCancelled():
+          _completeAcquisition(entry.id, null);
+        case DocumentFileFailure(:final failure):
+          _downloadControllers[entry.id]?.fail(
+            _importRepository.failureDetail(failure),
+          );
+          _completeAcquisition(entry.id, null);
+        case DocumentFileData(:final bytes):
+          final format = formatForPath(path);
+          if (format == null) {
+            _downloadControllers[entry.id]?.fail(
+              _importRepository.failureDetail(
+                const DocumentIntakeFailure(
+                  DocumentIntakeFailureKind.unsupported,
+                ),
+              ),
+            );
+            _completeAcquisition(entry.id, null);
+            return;
+          }
+          final outcome = await intake.takeInDocument(
+            title: entry.title,
+            bytes: bytes,
+            format: format,
+          );
+          if (_disposed || !_isCurrentLaunch(entry.id, token)) return;
+          final materialId = outcome.details.material.id;
+          _documentMaterialIds[entry.id] = materialId;
+          _setSnapshot(
+            entry.id,
+            const ItemAcquisitionSnapshot(
+              DiscoveryItemState.available,
+              progress: 1,
+            ),
+          );
+          _completeAcquisition(
+            entry.id,
+            DiscoveryOpenTarget.document(materialId),
+          );
+          unawaited(
+            _recordIdentity(
+              entry.id,
+              materialId: materialId,
+              materialRevisionId: outcome.details.material.currentRevisionId,
+              fileSha256: outcome.sha256Digest,
+            ),
+          );
+      }
+    } catch (error) {
+      debugPrint('Error importing article document: $error');
+      if (!_disposed && _isCurrentLaunch(entry.id, token)) {
+        _downloadControllers[entry.id]?.fail(
+          _importRepository.failureDetail(error),
+        );
+        _completeAcquisition(entry.id, null);
+      }
+    } finally {
+      if (_launchesInFlight[entry.id] == token) {
+        _launchesInFlight.remove(entry.id);
+      }
+      // The source is already copied into the content-addressed asset store.
+      // Avoid leaving a second, untracked copy beside downloaded media.
+      await _fileService.delete(path);
     }
   }
 
@@ -954,8 +1163,16 @@ final class DiscoveryViewModel extends ChangeNotifier {
     final inFlightCheck = _availabilityChecks[entryId];
     if (inFlightCheck != null) await inFlightCheck;
 
-    final localPath = _localPaths[entryId];
-    if (localPath != null) return DiscoveryOpenTarget.media(localPath);
+    final item = _state.entryById(entryId);
+    if (item?.acquisition == AcquisitionMode.article) {
+      final materialId = _documentMaterialIds[entryId];
+      if (materialId != null) {
+        return DiscoveryOpenTarget.document(materialId);
+      }
+    } else {
+      final localPath = _localPaths[entryId];
+      if (localPath != null) return DiscoveryOpenTarget.media(localPath);
+    }
 
     final existing = _acquisitionCompleters[entryId];
     if (existing != null) return existing.future;
@@ -1034,7 +1251,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
       _localPaths[entryId] = path;
       _mediaIds[entryId] = media.id;
       _fingerprints[entryId] = media.fingerprint;
-      unawaited(_ledger.record(_rowKey(entryId), mediaId: media.id, path: path));
+      unawaited(
+        _ledger.record(_rowKey(entryId), mediaId: media.id, path: path),
+      );
       _mediaDurations[entryId] = media.durationMs ?? probedDurationMs;
       _setSnapshot(
         entryId,
@@ -1066,6 +1285,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// recognition falls back to the ledger until the mapping lands.
   Future<void> _recordIdentity(
     String entryId, {
+    String? materialId,
+    String? materialRevisionId,
     String? fileSha256,
   }) async {
     final sourceIdentity = _sourceIdentity;
@@ -1076,22 +1297,31 @@ final class DiscoveryViewModel extends ChangeNotifier {
     if (item == null) return;
 
     final effectiveSha = fileSha256 ?? _fingerprints[entryId];
-    final mediaId = _mediaIds[entryId];
-    if (mediaId == null) return;
-    final MaterialDetails details;
-    try {
-      details = await learningMaterial.resolveMaterialForMedia(mediaId);
-    } catch (_) {
-      // Not converged on a Material yet; a later refresh records the mapping.
-      return;
+    final String resolvedMaterialId;
+    final String resolvedRevisionId;
+    if (materialId != null && materialRevisionId != null) {
+      resolvedMaterialId = materialId;
+      resolvedRevisionId = materialRevisionId;
+    } else {
+      final mediaId = _mediaIds[entryId];
+      if (mediaId == null) return;
+      final MaterialDetails details;
+      try {
+        details = await learningMaterial.resolveMaterialForMedia(mediaId);
+      } catch (_) {
+        // Not converged on a Material yet; a later refresh records the mapping.
+        return;
+      }
+      resolvedMaterialId = details.material.id;
+      resolvedRevisionId = details.material.currentRevisionId;
     }
     try {
       await sourceIdentity.recordMapping(
         sourceId: item.sourceId,
         itemId: item.id,
         evidence: item.evidence(fileSha256: effectiveSha),
-        materialId: details.material.id,
-        materialRevisionId: details.material.currentRevisionId,
+        materialId: resolvedMaterialId,
+        materialRevisionId: resolvedRevisionId,
       );
     } catch (error) {
       debugPrint('Error recording source identity mapping: $error');
@@ -1294,6 +1524,11 @@ class _FakeMediaImportRepository implements MediaImportRepository {
     String directory, {
     int? expectedBytes,
   }) async => const _FakeMediaDownloadHandle();
+  @override
+  Future<MediaDownloadHandle> downloadArticle(
+    String articleUrl,
+    String directory,
+  ) async => const _FakeMediaDownloadHandle();
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) async =>
       const ResolvedVideoDetails(

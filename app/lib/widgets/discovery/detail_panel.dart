@@ -263,11 +263,9 @@ class _MediaAccessCard extends StatelessWidget {
   bool get isChecking =>
       acquisitionState == DiscoveryItemState.acquiring &&
       acquisitionPhase == ItemAcquisitionPhase.check;
-  bool get downloadFailed =>
-      acquisitionState == DiscoveryItemState.failed;
+  bool get downloadFailed => acquisitionState == DiscoveryItemState.failed;
   bool get isLocal => acquisitionState == DiscoveryItemState.available;
-  bool get isUndetermined =>
-      acquisitionState == DiscoveryItemState.unavailable;
+  bool get isUndetermined => acquisitionState == DiscoveryItemState.unavailable;
   bool get isDiscoverable =>
       acquisitionState == DiscoveryItemState.discoverable;
   bool get canAcquire => item.acquisition != AcquisitionMode.none;
@@ -335,6 +333,16 @@ class _MediaAccessCard extends StatelessWidget {
   }
 
   String _statusText(AppLocalizations l) {
+    final isArticle = item.contentKind == ItemContentKind.article;
+    if (isArticle) {
+      if (isDownloading) return l.text('discoveryGettingArticle');
+      if (isChecking) return l.text('discoveryCheckingArticle');
+      if (downloadFailed) return l.text('discoveryDownloadFailed');
+      if (isLocal) return l.text('discoveryArticleAvailable');
+      if (isUndetermined) return l.text('discoveryCannotCheckArticle');
+      if (isDiscoverable) return l.text('discoveryCannotAcquire');
+      return l.text('discoveryRemoteArticle');
+    }
     if (isDownloading) return l.text('discoveryGettingMedia');
     if (isChecking) return l.text('discoveryCheckingLocalMedia');
     if (downloadFailed) return l.text('discoveryDownloadFailed');
@@ -420,9 +428,9 @@ class _MediaAccessCard extends StatelessWidget {
       return [
         Text(
           l.text('discoveryCannotCheckMedia'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: ListenSpacing.gap8),
         OutlinedButton.icon(
@@ -487,7 +495,11 @@ Widget discoveryDetailPanelLocalPreview() => discoveryPreviewShell(
   height: 720,
 );
 
-@Preview(name: 'Detail panel · remote', group: 'Discovery', size: Size(380, 720))
+@Preview(
+  name: 'Detail panel · remote',
+  group: 'Discovery',
+  size: Size(380, 720),
+)
 Widget discoveryDetailPanelRemotePreview() => discoveryPreviewShell(
   DiscoveryDetailPanel(
     item: const DiscoveryItem(
@@ -524,7 +536,11 @@ Widget discoveryDetailPanelRemotePreview() => discoveryPreviewShell(
   height: 720,
 );
 
-@Preview(name: 'Detail panel · acquiring', group: 'Discovery', size: Size(380, 720))
+@Preview(
+  name: 'Detail panel · acquiring',
+  group: 'Discovery',
+  size: Size(380, 720),
+)
 Widget discoveryDetailPanelAcquiringPreview() => discoveryPreviewShell(
   DiscoveryDetailPanel(
     item: const DiscoveryItem(

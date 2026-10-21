@@ -1,8 +1,6 @@
 import '../models/learning_material.dart';
 
-/// Encodes one `listen_gen.capability-request.v2` document. The source and
-/// derived renditions are media-only; document acquisition and production are
-/// outside this app's listening flow.
+/// Encodes one `listen_gen.capability-request.v2` document.
 abstract final class CapabilityRequestEncoder {
   static const schema = 'listen_gen.capability-request.v2';
   static const version = 2;
@@ -18,17 +16,38 @@ abstract final class CapabilityRequestEncoder {
     required String requestedCapability,
     required int createdAtMs,
     String? attemptId,
+    List<DocumentRendition> documentRenditions = const [],
+    String? Function(DocumentRendition rendition)? documentFilePath,
     List<MediaRendition> mediaRenditions = const [],
     String? Function(MediaRendition rendition)? mediaFilePath,
     Map<String, MediaBlobFacts>? mediaBlobFacts,
   }) {
-    final mediaEntries = <Map<String, dynamic>>[];
+    final availableEntries = <Map<String, dynamic>>[];
+    for (final rendition in documentRenditions) {
+      // Gen v2 uses SHA-256 references for rendition/source IDs, matching the
+      // package protocol. Core's canonical IDs are lowercase hex strings.
+      availableEntries.add({
+        'kind': 'document',
+        'rendition_id': _sha256Reference(rendition.id),
+        'media_type': rendition.mediaType,
+        'language': rendition.language,
+        // Source Asset IDs are Core-owned identifiers and remain raw in the
+        // request. Gen adds the `sha256:` package-reference prefix only at
+        // the Content Package v3 boundary.
+        'source_asset_id': rendition.sourceAssetId,
+        'blob': {
+          'digest': _sha256Reference(rendition.digest),
+          'size_bytes': rendition.byteSize,
+          'path': documentFilePath?.call(rendition),
+        },
+      });
+    }
     for (final rendition in mediaRenditions) {
       final path = mediaFilePath?.call(rendition);
       final facts = mediaBlobFacts?[rendition.id];
       final digest = facts?.sha256Hex ?? rendition.mediaSha256;
       final sizeBytes = facts?.sizeBytes ?? rendition.mediaByteSize;
-      mediaEntries.add({
+      availableEntries.add({
         'kind': 'media',
         'rendition_id': _sha256Reference(rendition.id),
         'media_kind': rendition.kind.name,
@@ -58,7 +77,7 @@ abstract final class CapabilityRequestEncoder {
         'support_languages': supportLanguages,
       },
       'requested_capability': requestedCapability,
-      'available_renditions': mediaEntries,
+      'available_renditions': availableEntries,
       'attempt_id': ?attemptId,
     };
   }

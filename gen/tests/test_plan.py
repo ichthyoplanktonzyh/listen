@@ -55,6 +55,38 @@ def media_request(
     })
 
 
+def document_request(capability: str = "read") -> CapabilityRequest:
+    return CapabilityRequest.from_document({
+        "schema": "listen_gen.capability-request.v2",
+        "version": 2,
+        "created_at_ms": 1,
+        "material": {
+            "material_id": "material-1",
+            "material_revision_id": "revision-1",
+            "title": "Test",
+        },
+        "edition": {
+            "edition_id": "edition-1",
+            "title": "Test",
+            "target_language": "en-US",
+            "support_languages": [],
+        },
+        "requested_capability": capability,
+        "available_renditions": [{
+            "kind": "document",
+            "rendition_id": "sha256:" + "7" * 64,
+            "media_type": "text/plain",
+            "language": "en-US",
+            "source_asset_id": "8" * 64,
+            "blob": {
+                "digest": "sha256:" + "9" * 64,
+                "size_bytes": 12,
+                "path": "/tmp/lesson.txt",
+            },
+        }],
+    })
+
+
 class PlanTests(unittest.TestCase):
     def test_read_from_media_plans_transcription(self) -> None:
         production_plan = plan(media_request())
@@ -108,6 +140,31 @@ class PlanTests(unittest.TestCase):
             with self.subTest(capability=capability):
                 with self.assertRaises(UnsupportedCapability):
                     plan(media_request(capability, media=False))
+
+    def test_document_read_and_listen_plan_document_derivations(self) -> None:
+        reading = plan(document_request("read"))
+        self.assertEqual(
+            [entry.kind for entry in reading.derivations],
+            [DerivationKind.DOCUMENT_READ],
+        )
+        self.assertEqual(reading.derivations[0].provider, "extraction")
+
+        listening = plan(document_request("listen"))
+        self.assertEqual(
+            [entry.kind for entry in listening.derivations],
+            [DerivationKind.DOCUMENT_READ, DerivationKind.DOCUMENT_LISTEN],
+        )
+        self.assertEqual(listening.derivations[1].provider, "tts")
+
+        synchronized = plan(document_request("synchronized_read_listen"))
+        self.assertEqual(
+            [entry.kind for entry in synchronized.derivations],
+            [DerivationKind.DOCUMENT_READ, DerivationKind.DOCUMENT_LISTEN],
+        )
+
+    def test_watch_does_not_accept_document_only_input(self) -> None:
+        with self.assertRaisesRegex(UnsupportedCapability, "watch requires video"):
+            plan(document_request("watch"))
 
     def test_plan_description_is_stable(self) -> None:
         request = media_request()

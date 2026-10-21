@@ -140,6 +140,8 @@ class _UnifiedLibraryRow extends StatelessWidget {
         ? (Icons.movie_outlined, l.text('libraryTypeVideo'))
         : entry.canListen
         ? (Icons.audiotrack_outlined, l.text('libraryTypeAudio'))
+        : entry.hasDocuments
+        ? (Icons.article_outlined, l.text('libraryTypeDocument'))
         : (Icons.movie_outlined, l.text('libraryTypeVideo'));
 
     return Material(
@@ -305,7 +307,9 @@ class _LibraryRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                primaryMedia?.media.kind == 'audio'
+                primaryMedia == null
+                    ? Icons.article_outlined
+                    : primaryMedia.media.kind == 'audio'
                     ? Icons.audiotrack_outlined
                     : Icons.movie_outlined,
                 size: ListenIconSize.control,

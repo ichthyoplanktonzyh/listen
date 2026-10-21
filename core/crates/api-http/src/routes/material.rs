@@ -1,4 +1,4 @@
-//! Learning-material HTTP surface (contract `5.0.0`).
+//! Learning-material HTTP surface (contract `5.1.0`).
 //!
 //! This module contains wire adaptation only: typed request DTOs, explicit
 //! response DTOs, and handlers that parse path ids and optional language
@@ -11,12 +11,13 @@
 //! deliberately absent here.
 
 use application::{
-    AppendMaterialRevision, CreateLearningMaterial, MediaRenditionInput, SourceAssetInput,
+    AppendMaterialRevision, CreateLearningMaterial, DocumentRenditionInput, MediaRenditionInput,
+    SourceAssetInput,
 };
 use axum::Json;
 use axum::extract::{Path, State};
 use domain::{
-    LearningMaterialId, MaterialRevisionId, MediaId, Rendition, RenditionOrigin,
+    LanguageCode, LearningMaterialId, MaterialRevisionId, MediaId, Rendition, RenditionOrigin,
     SourceAssetAvailability, SourceAssetBinding,
 };
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,7 @@ pub(crate) struct MaterialRevisionResponse {
     material_id: String,
     title: String,
     source_assets: Vec<SourceAssetResponse>,
+    document_renditions: Vec<DocumentRenditionResponse>,
     media_renditions: Vec<MediaRenditionResponse>,
     created_at_ms: u64,
 }
@@ -88,6 +90,17 @@ pub(crate) struct MediaRenditionResponse {
     media_byte_size: Option<u64>,
 }
 
+#[derive(Debug, Serialize)]
+pub(crate) struct DocumentRenditionResponse {
+    id: String,
+    origin: &'static str,
+    media_type: String,
+    language: Option<String>,
+    digest: String,
+    byte_size: u64,
+    source_asset_id: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum BindingInputRequest {
@@ -104,6 +117,15 @@ pub(crate) struct SourceAssetInputRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct DocumentRenditionInputRequest {
+    media_type: String,
+    language: Option<String>,
+    digest: String,
+    byte_size: u64,
+    source_asset_index: usize,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct MediaRenditionInputRequest {
     media_id: String,
 }
@@ -114,6 +136,8 @@ pub(crate) struct CreateMaterialRequest {
     title: String,
     #[serde(default)]
     source_assets: Vec<SourceAssetInputRequest>,
+    #[serde(default)]
+    document_renditions: Vec<DocumentRenditionInputRequest>,
     media_renditions: Vec<MediaRenditionInputRequest>,
     /// Personal Library membership choice. Omitted (or null) means retained;
     /// explicit false creates Temporary Material.
@@ -126,6 +150,8 @@ pub(crate) struct AppendMaterialRevisionRequest {
     title: String,
     #[serde(default)]
     source_assets: Vec<SourceAssetInputRequest>,
+    #[serde(default)]
+    document_renditions: Vec<DocumentRenditionInputRequest>,
     media_renditions: Vec<MediaRenditionInputRequest>,
 }
 
@@ -167,10 +193,13 @@ impl From<domain::LearningMaterial> for LearningMaterialResponse {
 
 impl From<domain::MaterialRevision> for MaterialRevisionResponse {
     fn from(value: domain::MaterialRevision) -> Self {
+        let mut document_renditions: Vec<DocumentRenditionResponse> = Vec::new();
         let mut media_renditions: Vec<MediaRenditionResponse> = Vec::new();
         for component in &value.renditions {
             match component {
-                Rendition::Document(_) => {}
+                Rendition::Document(rendition) => {
+                    document_renditions.push(DocumentRenditionResponse::from(rendition))
+                }
                 Rendition::Media(rendition) => {
                     media_renditions.push(MediaRenditionResponse::from(rendition))
                 }
@@ -185,6 +214,7 @@ impl From<domain::MaterialRevision> for MaterialRevisionResponse {
                 .iter()
                 .map(SourceAssetResponse::from)
                 .collect(),
+            document_renditions,
             media_renditions,
             created_at_ms: value.created_at_ms,
         }
@@ -254,6 +284,27 @@ impl From<&domain::MediaRendition> for MediaRenditionResponse {
     }
 }
 
+impl From<&domain::DocumentRendition> for DocumentRenditionResponse {
+    fn from(value: &domain::DocumentRendition) -> Self {
+        Self {
+            id: value.id.as_str().to_owned(),
+            origin: origin_string(value.origin),
+            media_type: value.media_type.clone(),
+            language: value
+                .language
+                .as_ref()
+                .map(|language| language.as_str().to_owned()),
+            digest: value.digest.clone(),
+            byte_size: value.byte_size,
+            source_asset_id: value
+                .source_asset_id
+                .as_ref()
+                .map(domain::SourceAssetId::as_str)
+                .map(str::to_owned),
+        }
+    }
+}
+
 fn origin_string(origin: RenditionOrigin) -> &'static str {
     match origin {
         RenditionOrigin::Source => "source",
@@ -291,10 +342,17 @@ fn media_availability_string(availability: domain::MediaAvailability) -> &'stati
 /// Converts audio/video source and media inputs into typed application
 /// values, parsing media ids and bindings before use-case validation.
 /// Validation and all policy stay in the application layer.
+struct MaterialComponentInputs {
+    source_assets: Vec<SourceAssetInput>,
+    document_renditions: Vec<DocumentRenditionInput>,
+    media_renditions: Vec<MediaRenditionInput>,
+}
+
 fn component_inputs(
     source_assets: Vec<SourceAssetInputRequest>,
+    document_renditions: Vec<DocumentRenditionInputRequest>,
     media_renditions: Vec<MediaRenditionInputRequest>,
-) -> Result<(Vec<SourceAssetInput>, Vec<MediaRenditionInput>), ApiError> {
+) -> Result<MaterialComponentInputs, ApiError> {
     let source_assets = source_assets
         .into_iter()
         .map(|asset| {
@@ -320,6 +378,22 @@ fn component_inputs(
             })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
+    let document_renditions = document_renditions
+        .into_iter()
+        .map(|rendition| {
+            Ok(DocumentRenditionInput {
+                media_type: rendition.media_type,
+                language: rendition
+                    .language
+                    .map(LanguageCode::parse)
+                    .transpose()
+                    .map_err(ApplicationError::from)?,
+                digest: rendition.digest,
+                byte_size: rendition.byte_size,
+                source_asset_index: rendition.source_asset_index,
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
     let media_renditions = media_renditions
         .into_iter()
         .map(|rendition| {
@@ -328,7 +402,11 @@ fn component_inputs(
             })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
-    Ok((source_assets, media_renditions))
+    Ok(MaterialComponentInputs {
+        source_assets,
+        document_renditions,
+        media_renditions,
+    })
 }
 
 fn source_asset_availability(
@@ -379,12 +457,16 @@ pub(crate) async fn create_learning_material(
     State(state): State<ApiState>,
     Json(request): Json<CreateMaterialRequest>,
 ) -> Result<Json<MaterialDetailsResponse>, ApiError> {
-    let (source_assets, media_renditions) =
-        component_inputs(request.source_assets, request.media_renditions)?;
+    let components = component_inputs(
+        request.source_assets,
+        request.document_renditions,
+        request.media_renditions,
+    )?;
     let input = CreateLearningMaterial {
         title: request.title,
-        source_assets,
-        media_renditions,
+        source_assets: components.source_assets,
+        document_renditions: components.document_renditions,
+        media_renditions: components.media_renditions,
         retain: request.retain,
     };
     state
@@ -423,12 +505,16 @@ pub(crate) async fn append_learning_material_revision(
     Json(request): Json<AppendMaterialRevisionRequest>,
 ) -> Result<Json<MaterialDetailsResponse>, ApiError> {
     let id = LearningMaterialId::parse(material_id).map_err(ApplicationError::from)?;
-    let (source_assets, media_renditions) =
-        component_inputs(request.source_assets, request.media_renditions)?;
+    let components = component_inputs(
+        request.source_assets,
+        request.document_renditions,
+        request.media_renditions,
+    )?;
     let input = AppendMaterialRevision {
         title: request.title,
-        source_assets,
-        media_renditions,
+        source_assets: components.source_assets,
+        document_renditions: components.document_renditions,
+        media_renditions: components.media_renditions,
     };
     state
         .application

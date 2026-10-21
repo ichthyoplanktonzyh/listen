@@ -41,7 +41,11 @@ def protocol_capabilities_v2() -> dict[str, object]:
         "machine_protocol_version": MACHINE_PROTOCOL_VERSION,
         "events": list(EVENT_TYPES),
         "capabilities": ["read", "listen", "watch", "synchronized_read_listen"],
-        "derivations": ["media_to_structured_reading"],
+        "derivations": [
+            "document_to_structured_reading",
+            "document_to_listen",
+            "media_to_structured_reading",
+        ],
     }
 
 

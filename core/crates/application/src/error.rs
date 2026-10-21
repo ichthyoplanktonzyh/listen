@@ -32,6 +32,9 @@ pub enum ApplicationError {
     /// the honest failure instead of re-reading a carrier.
     #[error("adopted composition content is missing or fails integrity verification")]
     CompositionIntegrity,
+    /// A referenced source file is unavailable at its recorded location.
+    #[error("referenced source asset is unavailable")]
+    SourceUnavailable,
     /// A vendor LLM provider failed. Carries the standardized, secret-free
     /// taxonomy so HTTP/UI can degrade honestly without ever echoing a
     /// credential (Phase 3.12).

@@ -46,6 +46,12 @@ abstract interface class CapabilityRepository {
     String materialId,
     String resourceId,
   );
+
+  /// The exact embedded bytes of one selected rendition, re-verified by Core.
+  Future<List<int>> readCompositionRenditionBlob(
+    String materialId,
+    String renditionId,
+  );
 }
 
 final class LocalCapabilityRepository implements CapabilityRepository {
@@ -154,5 +160,15 @@ final class LocalCapabilityRepository implements CapabilityRepository {
     final api = _api;
     if (api == null) throw const ApiFailure(raw: 'core unavailable');
     return api.readCompositionResourcePayload(materialId, resourceId);
+  }
+
+  @override
+  Future<List<int>> readCompositionRenditionBlob(
+    String materialId,
+    String renditionId,
+  ) async {
+    final api = _api;
+    if (api == null) throw const ApiFailure(raw: 'core unavailable');
+    return api.readCompositionRenditionBlob(materialId, renditionId);
   }
 }

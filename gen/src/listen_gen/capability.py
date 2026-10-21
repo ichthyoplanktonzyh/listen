@@ -1,9 +1,9 @@
 """Capability production request model for the Slice 3 machine protocol.
 
 The request is the caller-owned, typed boundary of one generation operation:
-an exact Material Revision, its audio/video Renditions, and one requested
-Material Capability. Provider selection and secrets never enter the request;
-they are CLI/environment configuration.
+an exact Material Revision, its document/audio/video Renditions, and one
+requested Material Capability. Provider selection and secrets never enter the
+request; they are CLI/environment configuration.
 
 Request documents are not canonical identity documents; payload and rendition
 bytes are addressed by their declared digests.
@@ -25,8 +25,18 @@ REQUEST_VERSION = 2
 CAPABILITIES = ("read", "listen", "watch", "synchronized_read_listen")
 
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_BARE_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
 _MIME_RE = re.compile(r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$")
+SUPPORTED_DOCUMENT_MEDIA_TYPES = frozenset(
+    {
+        "application/epub+zip",
+        "application/pdf",
+        "text/html",
+        "text/markdown",
+        "text/plain",
+    }
+)
 
 
 def _required(document: dict[str, Any], name: str, kind: str = "str") -> Any:
@@ -133,10 +143,53 @@ class BlobSource:
             raise ConversionError(
                 "capability request blob path must be absolute"
             )
+        size_bytes = _required(document, "size_bytes", "int")
+        if size_bytes <= 0:
+            raise ConversionError("capability request blob size_bytes must be positive")
         return cls(
             digest=_sha256_id(document, "digest"),
-            size_bytes=_required(document, "size_bytes", "int"),
+            size_bytes=size_bytes,
             path=Path(path) if path is not None else None,
+        )
+
+
+@dataclass(frozen=True)
+class AvailableDocumentRendition:
+    rendition_id: str
+    media_type: str
+    language: str | None
+    source_asset_id: str
+    blob: BlobSource
+
+    @classmethod
+    def from_document(cls, document: dict[str, Any]) -> "AvailableDocumentRendition":
+        rendition_id = _sha256_id(document, "rendition_id")
+        media_type = _required(document, "media_type")
+        if not _MIME_RE.match(media_type):
+            raise ConversionError(
+                f"capability request rendition media_type is invalid: {media_type!r}"
+            )
+        if media_type not in SUPPORTED_DOCUMENT_MEDIA_TYPES:
+            raise ConversionError(
+                f"unsupported document media type: {media_type!r}"
+            )
+        language = _optional_string(document, "language")
+        if language:
+            language = _language_tag(language)
+        else:
+            language = None
+        source_asset_id = _required(document, "source_asset_id")
+        if not _BARE_SHA256_RE.fullmatch(source_asset_id):
+            raise ConversionError(
+                "capability request source_asset_id must be a raw lowercase 64-character Core id (without sha256:)"
+            )
+        blob = BlobSource.from_document(_required(document, "blob", "dict"))
+        return cls(
+            rendition_id=rendition_id,
+            media_type=media_type,
+            language=language,
+            source_asset_id=source_asset_id,
+            blob=blob,
         )
 
 
@@ -189,6 +242,7 @@ class CapabilityRequest:
     material: MaterialIdentity
     edition: EditionIdentity
     requested_capability: str
+    document_renditions: tuple[AvailableDocumentRendition, ...]
     media_renditions: tuple[AvailableMediaRendition, ...]
     attempt_id: str | None = None
     extensions: dict[str, Any] = field(default_factory=dict)
@@ -215,6 +269,7 @@ class CapabilityRequest:
             raise ConversionError(
                 "capability request available_renditions must be a list"
             )
+        document_renditions: list[AvailableDocumentRendition] = []
         media_renditions: list[AvailableMediaRendition] = []
         for entry in renditions:
             if not isinstance(entry, dict):
@@ -223,8 +278,8 @@ class CapabilityRequest:
                 )
             kind = entry.get("kind")
             if kind == "document":
-                raise ConversionError(
-                    "document material input is not supported; provide audio or video media"
+                document_renditions.append(
+                    AvailableDocumentRendition.from_document(entry)
                 )
             elif kind == "media":
                 media_renditions.append(AvailableMediaRendition.from_document(entry))
@@ -232,8 +287,9 @@ class CapabilityRequest:
                 raise ConversionError(
                     f"capability request rendition kind is invalid: {kind!r}"
                 )
-        seen_ids = {entry.rendition_id for entry in media_renditions}
-        if len(seen_ids) != len(media_renditions):
+        seen_ids = {entry.rendition_id for entry in document_renditions}
+        seen_ids.update(entry.rendition_id for entry in media_renditions)
+        if len(seen_ids) != len(document_renditions) + len(media_renditions):
             raise ConversionError(
                 "capability request rendition ids must be unique"
             )
@@ -250,6 +306,7 @@ class CapabilityRequest:
             ),
             edition=EditionIdentity.from_document(_required(document, "edition", "dict")),
             requested_capability=requested,
+            document_renditions=tuple(document_renditions),
             media_renditions=tuple(media_renditions),
             attempt_id=attempt_id,
             extensions=dict(extensions),
@@ -268,3 +325,12 @@ class CapabilityRequest:
         if not isinstance(document, dict):
             raise ConversionError("capability request must be a JSON object")
         return cls.from_document(document)
+
+    def documents_with_media_type(
+        self, media_type: str
+    ) -> tuple[AvailableDocumentRendition, ...]:
+        return tuple(
+            rendition
+            for rendition in self.document_renditions
+            if rendition.media_type == media_type
+        )

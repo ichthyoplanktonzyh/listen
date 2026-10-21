@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../models/media_download.dart';
 
 /// Fetches a podcast enclosure over plain HTTP.
@@ -27,8 +29,18 @@ class EnclosureDownloadService {
   /// progress fraction, never a check on what arrived: hosts that assemble
   /// audio per request routinely send a different number of bytes than the
   /// feed advertises.
-  EnclosureDownload start(String url, String directory, {int? expectedBytes}) =>
-      EnclosureDownload._(_clientFactory(), url, directory, expectedBytes);
+  EnclosureDownload start(
+    String url,
+    String directory, {
+    int? expectedBytes,
+    String? fileExtensionOverride,
+  }) => EnclosureDownload._(
+    _clientFactory(),
+    url,
+    directory,
+    expectedBytes,
+    fileExtensionOverride,
+  );
 }
 
 class EnclosureDownload implements MediaDownloadHandle {
@@ -37,6 +49,7 @@ class EnclosureDownload implements MediaDownloadHandle {
     this._url,
     this._directory,
     this._expectedBytes,
+    this._fileExtensionOverride,
   ) {
     unawaited(_run());
   }
@@ -45,6 +58,7 @@ class EnclosureDownload implements MediaDownloadHandle {
   final String _url;
   final String _directory;
   final int? _expectedBytes;
+  final String? _fileExtensionOverride;
 
   final _progress = StreamController<double?>.broadcast();
   final _result = Completer<String?>();
@@ -170,14 +184,17 @@ class EnclosureDownload implements MediaDownloadHandle {
   /// truncate the first one's bytes while it is still being read.
   Future<File> _reserveTarget(String? mimeType) async {
     final base = _fileNameFor(Uri.parse(_url), mimeType);
-    final dot = base.lastIndexOf('.');
-    final stem = dot <= 0 ? base : base.substring(0, dot);
-    final extension = dot <= 0 ? '' : base.substring(dot);
+    final extensionOverride = _fileExtensionOverride;
+    final name = extensionOverride == null
+        ? base
+        : '${p.withoutExtension(base)}$extensionOverride';
+    final extension = p.extension(name);
+    final stem = p.withoutExtension(name);
 
-    var candidate = File('$_directory/$base');
+    var candidate = File(p.join(_directory, name));
     var index = 2;
     while (await candidate.exists()) {
-      candidate = File('$_directory/$stem ($index)$extension');
+      candidate = File(p.join(_directory, '$stem ($index)$extension'));
       index++;
     }
     return candidate;

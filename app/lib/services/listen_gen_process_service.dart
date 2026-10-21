@@ -61,12 +61,20 @@ GenMachineEvent parseListenGenMachineEventV2(
     case GenEventKind.completed:
       final documentRenditions = json['document_renditions'];
       if (documentRenditions is! List<dynamic> ||
-          documentRenditions.isNotEmpty ||
+          documentRenditions.any((value) {
+            if (value is! Map) return true;
+            try {
+              _validatedSha256(value['rendition_id']);
+            } on FormatException {
+              return true;
+            }
+            return value['origin'] != 'source' && value['origin'] != 'derived';
+          }) ||
           json['media_renditions'] is! List<dynamic> ||
           json['resources'] is! List<dynamic> ||
           json['warnings'] is! List<dynamic>) {
         throw const FormatException(
-          'listen-gen completion must contain media-only renditions',
+          'listen-gen completion must contain valid document/media renditions',
         );
       }
       final packageSha256 = json['package_sha256'];
@@ -90,6 +98,10 @@ GenMachineEvent parseListenGenMachineEventV2(
     warningCode: json['code'] as String?,
     warningMessage: json['message'] as String?,
     packageSha256: json['package_sha256'] as String?,
+    producedDocumentRenditions:
+        (json['document_renditions'] as List<dynamic>? ?? const [])
+            .map((value) => _validatedSha256((value as Map)['rendition_id']))
+            .toList(growable: false),
     producedRenditions: [
       ...(json['media_renditions'] as List<dynamic>? ?? const []).map(
         (value) => _validatedSha256((value as Map)['rendition_id']),

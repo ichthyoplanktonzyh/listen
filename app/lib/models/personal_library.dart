@@ -34,6 +34,15 @@ class PersonalLibraryEntry {
   List<MediaRendition> get mediaRenditions =>
       List.unmodifiable(details.currentRevision.mediaRenditions);
 
+  List<DocumentRendition> get documentRenditions =>
+      List.unmodifiable(details.currentRevision.documentRenditions);
+
+  bool get hasDocuments => documentRenditions.isNotEmpty;
+
+  /// A material is openable when it has either a usable media row or a
+  /// source document rendition that the document session can resolve.
+  bool get canOpen => primaryMedia != null || hasDocuments;
+
   /// The deterministic primary media: the first usable media rendition in
   /// revision order, resolved to its joined registered-media row. Usable
   /// means the rendition and its joined [MediaItem] are both available.

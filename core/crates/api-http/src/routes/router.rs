@@ -2,7 +2,9 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 
-use super::composition::{read_composition_resource_payload, read_material_composition};
+use super::composition::{
+    read_composition_rendition_blob, read_composition_resource_payload, read_material_composition,
+};
 use super::corpus::{reindex_corpus, search_corpus};
 use super::dictionary::{diagnose_sentence, dictionary_lookup};
 use super::language::{language_profile, list_languages};
@@ -107,7 +109,7 @@ pub(crate) fn protected_router(state: &ApiState) -> Router<ApiState> {
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize))
 }
 
-/// Learning-material routes (contract `5.0.0`). The router only wires
+/// Learning-material routes (contract `5.1.0`). The router only wires
 /// handlers; every policy decision stays in the application layer.
 fn material_routes() -> Router<ApiState> {
     Router::new()
@@ -167,6 +169,10 @@ fn material_routes() -> Router<ApiState> {
         .route(
             "/v1/materials/{material_id}/composition/resources/{resource_id}/payload",
             get(read_composition_resource_payload),
+        )
+        .route(
+            "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob",
+            get(read_composition_rendition_blob),
         )
         .route(
             "/v1/media/{media_id}/material",
