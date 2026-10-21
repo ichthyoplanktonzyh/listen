@@ -2,8 +2,9 @@
 
 Run shared setup from the root with `./dev setup`. The independent Python CLI
 and its deterministic fixture providers remain available inside `gen/`.
-Python 3.11+ is required; `pypdf` is a base dependency for PDF text extraction.
-Heavy ASR, alignment, OCR, and TTS providers are optional extras.
+Python 3.11+ is required. Input is audio/video; standalone documents, OCR, and
+document-to-speech production are outside the active implementation. Heavy ASR
+and alignment providers are optional extras.
 
 ## CLI and tests
 
@@ -19,10 +20,11 @@ requested capability. The CLI emits a deterministic Content Package v3:
 
 ```sh
 .venv/bin/python -m listen_gen package from-capability request.json \
-  --output /tmp/generated.zip --tts-provider fake --machine-events
+  --output /tmp/generated.zip --provider fixture --fixture /path/to/asr.json \
+  --machine-events
 ```
 
-Use a fixture request compatible with the selected fake/fixture provider;
+Use a media request compatible with the selected fixture provider;
 see [tests](../../gen/tests/). Ordinary tests and root `./dev test integration`
 use deterministic inputs and no live model credentials. Inspect
 [cli.py](../../gen/src/listen_gen/cli.py) for current provider and option names.

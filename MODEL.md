@@ -3,6 +3,11 @@
 This document describes product direction. Current scope and execution priority
 are defined in [STATE.md](STATE.md) and [ROADMAP.md](ROADMAP.md).
 
+The current implementation follows only the audio/video listening journey in
+[JOURNEYS.md](JOURNEYS.md). The model's other Source modalities and capability
+dimensions describe possible future scope, not runtime requirements for this
+stage.
+
 > Status: owner-approved theoretical baseline, revision 3, 2026-09-08.
 
 This document is the project-level authority for Listen's theoretical model.

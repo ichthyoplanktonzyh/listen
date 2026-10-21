@@ -27,8 +27,7 @@ Scenes live in `test/golden_*_test.dart`, committed images in `test/goldens/`,
 and failure images in ignored `test/failures/`.
 
 ```sh
-flutter test test/golden_tokens_test.dart test/golden_states_test.dart \
-  test/golden_coach_test.dart test/golden_conversation_test.dart
+flutter test test/golden_tokens_test.dart test/golden_states_test.dart
 ```
 
 Golden images depend on the OS, Flutter/rendering toolchain, fonts, locale,
@@ -41,8 +40,8 @@ For an intentional visual change, review the generated master/test/diff images
 before updating only the affected baselines:
 
 ```sh
-flutter test --update-goldens test/golden_coach_test.dart
-flutter test test/golden_coach_test.dart
+flutter test --update-goldens test/golden_states_test.dart
+flutter test test/golden_states_test.dart
 ```
 
 Run new scenes through the existing `goldenScene` helper and deterministic

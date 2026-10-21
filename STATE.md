@@ -4,34 +4,61 @@
 
 ## Current focus
 
-The owner has selected **scope reduction and consolidation** as the next stage.
-The aim is a smaller, reliable product with greater depth in its core learner
-journey. Existing implementation breadth does not establish current priority.
+Listen is reducing its active implementation to one audio/video listening
+journey: acquire a Source, process and adopt a Learning Material, learn in the
+MaterialWorkbench with contextual help, explicitly retain useful language,
+and return through the Personal Corpus and listening review.
 
-The first step is resetting the documentation system:
+The owner has selected four implementations to move to separate branches:
 
-- root documents provide the single product, architecture, development, and
-  project-coordination entry point;
-- old planning, handoffs, phase reports, retired proposals, and release logs
-  are removed rather than archived or converted into new requirements;
-- necessary current contracts, fixture instructions, and third-party notices
-  remain with the files they describe;
-- product definitions remain direction, not a claim of implementation or a
-  commitment to deliver all capabilities during this stage.
+- AI conversation, including standalone and material-anchored voice sessions;
+- independent reading, writing, and speaking activities, output assessment,
+  shadowing recording/comparison, personal-expression training, and the
+  production corpus;
+- document/text material import, extraction, OCR, display, and document-to-audio
+  production;
+- learner coaching, cross-channel dashboards, material-fit policies, automatic
+  capability-upgrade suggestions, and learning recommendations.
 
-## Implementation baseline
+Timed text, transcription, Structured Reading, translation, lookup, sound
+analysis, and perceptual help remain foundations of listening. Removing a
+reading activity does not remove the text representation of audio. Explicit
+collection, source replay, learning facts, and listening review remain in scope.
 
-App, Core, and Gen share one repository and ship as one macOS application.
-The published [v0.7.0-dev.1 preview](https://github.com/ichthyoplanktonzyh/listen/releases/tag/v0.7.0-dev.1)
-targets macOS 26+ on Apple Silicon. Runtime requirements are documented in the
-[distribution guide](docs/development/dev-preview-distribution.md).
+Listening review retains the Core FSRS schedule, due queue, and explicit learner
+ratings. Scheduling a saved listening item is distinct from coach dashboards,
+cross-channel recommendations, or automatic capability-upgrade suggestions.
 
-This documentation reset changes no feature behavior, schema, migration,
-learner data, or published release.
+## Working baseline
 
-## Next work
+The full implementation is preserved at `f01ba17e` on
+`codex/preserve-before-listening-focus`. The scope reduction is developed on
+`codex/listening-focus`; deferred implementations will have dedicated
+`codex/park-*` branches. They are frozen recovery points, not separately
+maintained products.
 
-Inventory current features and their maturity, dependencies, and contribution
-to the core learner journey. Agree the main-branch scope with the owner, then
-move deferred implementations out of that scope while preserving user data.
-No feature is selected for removal by this documentation change.
+The owner has explicitly waived data compatibility for this stage. Development
+and validation target fresh isolated stores; no in-place upgrade of the earlier
+broad implementation is required. This does not authorize scripts or tests to
+reset the owner's actual local data.
+
+The listening baseline uses `listen-listening.sqlite` as its default database
+filename and does not probe or move the earlier `listen.sqlite`. An explicit
+database override is still supported, but incompatible stores are rejected
+instead of reset.
+
+App, Core, and Gen remain one repository and one macOS application. The
+published [v0.7.0-dev.1 preview](https://github.com/ichthyoplanktonzyh/listen/releases/tag/v0.7.0-dev.1)
+predates this reduction and remains immutable. Its source and artifact behavior
+are separate from the current branch.
+
+## Acceptance
+
+Removing an entry point alone is insufficient: its exclusive runtime,
+configuration, contracts, dependencies, and tests leave the active product too.
+Shared listening foundations remain exercised by deterministic fixtures.
+
+The smaller baseline must pass module checks and the Gen → Core → App integration
+gate, and run from an extracted application outside the checkout. This scope
+reduction does not claim that the Personal Corpus journey is already complete;
+remaining depth gaps must be described against the listening journey.

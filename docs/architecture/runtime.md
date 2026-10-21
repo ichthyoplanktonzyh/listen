@@ -53,15 +53,19 @@ installation, and explicit Learning Edition adoption. App consumes the adopted
 material through Core; it does not interpret raw provider payloads as canonical
 learning material. See the [v3 contract](../../core/contracts/content-package/v3/README.md).
 
-Optional realtime voice services run separately from Gen. Their setup and
-lifecycle are described in the [local speech guide](../development/local-speech.md).
-
 ## Persistence and boundaries
 
 Core owns durable domain storage and migrations. App also has local preferences,
 asset bindings, and support files. Keep learner facts distinct from replaceable
-media, generated resources, caches, and projections. UI scope reduction must
-not silently erase durable facts or rewrite published package identities.
+media, generated resources, caches, and projections. The owner has waived
+compatibility with earlier development databases for this scope reduction;
+the supported baseline is a fresh store. Implementation and tests use isolated
+stores and never reset a real learner's database. Published package identities
+and release artifacts remain immutable.
+
+The default listening store is named `listen-listening.sqlite`. The runtime
+does not fall back to or move the old `listen.sqlite`; an explicit database
+override must select a compatible fresh store.
 
 Managed files use platform application-support locations, with explicit
 isolated paths for tests. User-selected source assets may remain external;

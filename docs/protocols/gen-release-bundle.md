@@ -57,10 +57,7 @@ the runtime/toolchain it may bind to:
   wrapper.
 - The `whisper-cpp` ASR provider needs `ffprobe`, `ffmpeg`, `whisper-cli`,
   and a whisper model.
-- The `fake` and `fixture` TTS providers need no external commands; the `say`
-  TTS provider binds to the macOS `say` and `afconvert` executables.
-- The `fixture` OCR provider needs no external commands; the absence of a
-  real OCR adapter is an honest capability result, not a hidden pipeline.
+- Document extraction, OCR, and document-to-speech adapters are not included.
 - These native tools and models are never placed inside the zipapp.
 
 ## Content package contract identity
