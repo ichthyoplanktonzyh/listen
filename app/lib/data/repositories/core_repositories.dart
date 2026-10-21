@@ -15,19 +15,24 @@ import 'playback_repository.dart';
 import 'practice_repository.dart';
 import 'resource_repository.dart';
 import 'review_repository.dart';
+import 'realtime_conversation_repository.dart';
 import 'semantic_search_repository.dart';
 import 'settings_repository.dart';
 import 'source_identity_repository.dart';
 import 'speech_enhancement_repository.dart';
 import 'speech_synthesis_repository.dart';
 import 'subtitle_analysis_repository.dart';
+import 'transcription_repository.dart';
 
 /// Composition provider that keeps the raw LocalApi handle out of the UI.
 /// Long-lived repositories receive a deferred API lookup; route-scoped ones
 /// are created only while the core is connected.
 final class LocalCoreRepositories {
   LocalCoreRepositories(this._transport)
-    : hunting = LocalHuntingRepository(() => _transport.currentApi),
+    : realtimeConversation = LocalRealtimeConversationRepository(
+        () => _transport.currentApi!,
+      ),
+      hunting = LocalHuntingRepository(() => _transport.currentApi),
       learning = LocalLearningRepository(() => _transport.currentApi),
       listening = LocalListeningRepository(() => _transport.currentApi),
       mediaLibrary = LocalMediaLibraryRepository(() => _transport.currentApi),
@@ -49,6 +54,8 @@ final class LocalCoreRepositories {
       );
 
   final LocalCoreTransportService _transport;
+
+  final RealtimeConversationRepository realtimeConversation;
 
   bool get isAvailable => _transport.isConnected;
 
@@ -84,6 +91,10 @@ final class LocalCoreRepositories {
   LearnerSettingsRepository get learnerSettings =>
       LocalLearnerSettingsRepository(_api);
   LlmProviderRepository get llmProvider => LocalLlmProviderRepository(_api);
+  RealtimeProviderRepository get realtimeProvider =>
+      LocalRealtimeProviderRepository(_api);
+  TranscriptionRepository get transcription =>
+      LocalTranscriptionRepository(_api);
   SyntaxCapabilityRepository get syntaxCapability =>
       LocalSyntaxCapabilityRepository(_api);
 }

@@ -232,7 +232,7 @@ if (!Array.isArray(examples) || examples.length === 0) throw new Error("player e
 if (events.properties.version.const !== 1) throw new Error("event schema version missing");
 
 const version = openapi.match(/^  version: ([0-9]+\.[0-9]+\.[0-9]+)$/m)?.[1];
-if (version !== "5.0.0") throw new Error(`OpenAPI contract version is ${version}, expected 5.0.0`);
+if (version !== "5.1.0") throw new Error(`OpenAPI contract version is ${version}, expected 5.1.0`);
 if (!openapi.includes("openapi: 3.1.0")) throw new Error("OpenAPI specification version must remain 3.1.0");
 if (!client.includes(`localApiV1ContractVersion = "${version}"`)) throw new Error("generated contract version differs from OpenAPI");
 
@@ -268,20 +268,24 @@ for (const required of [
   "/v1/semantic-search",
   "/v1/review/items",
   "/v1/listening-inbox/items",
+  "/v1/realtime/providers",
+  "/v1/realtime/conversations/ws",
+  "/v1/realtime/sessions",
+  "/v1/realtime/sessions/{id}/turns",
+  "/v1/realtime/turns",
+  "/v1/recordings",
+  "/v1/recording-transcriptions",
 ]) {
   if (!paths.includes(required)) throw new Error(`active listening path missing: ${required}`);
 }
 for (const prefix of [
   "/v1/coach",
-  "/v1/realtime",
   "/v1/production-corpus",
   "/v1/production-gap",
   "/v1/personal-expression",
   "/v1/reading",
   "/v1/speaking",
   "/v1/writing",
-  "/v1/recordings",
-  "/v1/recording-transcriptions",
   "/v1/shadowing",
   "/v1/anki",
 ]) {
@@ -294,16 +298,17 @@ for (const retired of [
   "DocumentRenditionInput",
   "HuntingCandidate",
   "UpgradeSuggestion",
-  "RecordingAsset",
   "ShadowingComparison",
   "SemanticTask",
   "CoachDashboard",
   "ContentDifficultyProfile",
   "ProductionCorpus",
   "PersonalExpression",
-  "RealtimeConversation",
 ]) {
   if (schemas.includes(retired)) throw new Error(`retired schema remains in OpenAPI: ${retired}`);
+}
+for (const schema of ["RecordingAsset", "RealtimeConversationSession", "RealtimeConversationTurn"]) {
+  if (!schemas.includes(schema)) throw new Error(`retained AI conversation schema missing: ${schema}`);
 }
 const lines = openapi.split("\n");
 const llmUseStart = lines.indexOf("    LlmUse:");

@@ -32,6 +32,8 @@ import 'controllers/player_controller.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
 import 'controllers/provider_settings_view_models.dart';
+import 'controllers/realtime_conversation_controller.dart';
+import 'controllers/realtime_transcription_model_controller.dart';
 import 'controllers/review_controller.dart';
 import 'controllers/review_deck_controller.dart';
 import 'controllers/semantic_search_view_model.dart';
@@ -52,6 +54,7 @@ import 'data/repositories/feed_discovery_repository.dart';
 import 'services/listen_gen_process_service.dart';
 import 'services/composition_session_service.dart';
 import 'services/listen_gen_release_service.dart';
+import 'services/local_realtime_speech_service.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/pane_segments.dart';
 import 'widgets/navigation/shell_tools_menu.dart';
@@ -83,6 +86,7 @@ import 'services/subscription_store.dart';
 import 'services/media_import_file_service.dart';
 import 'services/media_library_scanner.dart';
 import 'services/managed_asset_store.dart';
+import 'theme/breakpoints.dart';
 import 'services/platform_capabilities.dart';
 import 'services/smoke_launch_configuration_service.dart';
 import 'settings.dart';
@@ -95,6 +99,7 @@ import 'widgets/app_bar/macos_menu_bar.dart';
 import 'widgets/common/listen_loading.dart';
 import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/media_import_flows.dart';
+import 'widgets/flows/realtime_transcription_model_dialog.dart';
 import 'widgets/home/listening_home.dart';
 import 'widgets/layout/desktop_drop_surface.dart';
 import 'widgets/layout/material_workbench.dart';
@@ -110,11 +115,14 @@ import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/learning_edition_panel.dart';
 import 'widgets/panels/listening_inbox_panel.dart';
 import 'widgets/panels/sentence_analysis_window.dart';
+import 'widgets/panels/realtime_conversation_panel.dart';
+import 'widgets/panels/conversation_stage_shell.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/player/player_global_shortcuts.dart';
 import 'widgets/player/retention_menu.dart';
 import 'widgets/player/shortcut_cheat_sheet.dart';
 import 'widgets/settings/settings_flow.dart';
+import 'widgets/settings/realtime_provider_settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -364,6 +372,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   )..load();
   late final coreSessionRepository = LocalCoreSessionRepository(coreTransport);
   late final coreRepositories = LocalCoreRepositories(coreTransport);
+  late final localRealtimeSpeechService = DefaultLocalRealtimeSpeechService();
+  late final realtimeConversationController = RealtimeConversationController(
+    repository: coreRepositories.realtimeConversation,
+    localSpeechService: localRealtimeSpeechService,
+  );
 
   /// Resolves adopted composition content for the composition session surface.
   late final compositionSessionService = CompositionSessionService(
@@ -610,6 +623,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   String get status => playerController.status;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool _workbenchExpanded = false;
+  bool _openingRealtimeConversation = false;
   TranscriptReadinessViewModel? _transcriptReadiness;
 
   /// How the listening transcript presents itself. A workbench-level display
@@ -1133,6 +1147,167 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _openFreeConversation() => _openRealtimeConversation();
+
+  Future<void> _openMaterialConversation() async {
+    final cue = subtitleController.currentPrimaryCue;
+    final mediaId = playerController.mediaId;
+    if (cue == null || mediaId == null) return;
+    final language = settingsController.resolveLearningLanguage(
+      subtitleController.primaryTrack?.language,
+    );
+    await _openRealtimeConversation(
+      anchor: RealtimeConversationAnchor(
+        language: language,
+        text: cue.text,
+        mediaId: mediaId,
+        startMs: cue.start.inMilliseconds,
+        endMs: cue.end.inMilliseconds,
+      ),
+    );
+  }
+
+  Widget? _conversationAction() {
+    if (subtitleController.currentPrimaryCue == null ||
+        playerController.mediaId == null) {
+      return null;
+    }
+    return IconButton(
+      key: const ValueKey('workbench-conversation'),
+      tooltip: l.text('startConversationWithThisLine'),
+      onPressed: () => unawaited(_openMaterialConversation()),
+      icon: const Icon(Icons.forum_outlined),
+    );
+  }
+
+  Future<void> _openRealtimeConversation({
+    RealtimeConversationAnchor? anchor,
+  }) async {
+    if (_openingRealtimeConversation) return;
+    _openingRealtimeConversation = true;
+    try {
+      if (!widget.platformCapabilities.isMacOS) {
+        playerController.setStatus(l.text('conversationMacOsOnly'));
+        return;
+      }
+      if (!coreSessionController.state.isConnected) {
+        playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+        return;
+      }
+
+      final language =
+          anchor?.language ??
+          settingsController.resolveLearningLanguage(
+            subtitleController.primaryTrack?.language,
+          );
+      final modelController = RealtimeTranscriptionModelController(
+        coreRepositories.transcription,
+      );
+      try {
+        RealtimeTranscriptionModelOutcome outcome = await modelController
+            .selectForLanguage(language);
+        if (!mounted) return;
+        if (outcome case RealtimeTranscriptionModelNeedsDownload(
+          :final model,
+        )) {
+          outcome =
+              await showRealtimeTranscriptionModelDialog(
+                context: context,
+                controller: modelController,
+                model: model,
+              ) ??
+              const RealtimeTranscriptionModelUnavailable();
+        } else if (outcome is RealtimeTranscriptionModelUnavailable) {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(l.text('modelRequired')),
+              content: Text(l.text('installModelFirst')),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(l.text('close')),
+                ),
+              ],
+            ),
+          );
+        }
+        if (!mounted) return;
+        if (outcome is RealtimeTranscriptionModelFailure) {
+          playerController.setStatus(
+            l.text('statusCoreUnavailable'),
+            error: true,
+            failure: outcome.failure,
+          );
+          return;
+        }
+        final selectedOutcome = outcome;
+        if (selectedOutcome is! RealtimeTranscriptionModelSelected) return;
+
+        realtimeConversationController.resetToIdle();
+        await Navigator.push<void>(
+          context,
+          conversationStageRoute<void>(
+            reduceMotion: MediaQuery.disableAnimationsOf(context),
+            builder: (routeContext) => RealtimeConversationPanel(
+              controller: realtimeConversationController,
+              launch: anchor == null
+                  ? RealtimeConversationLaunch.free(
+                      language: language,
+                      modelId: selectedOutcome.modelId,
+                    )
+                  : RealtimeConversationLaunch.topic(
+                      anchor: anchor,
+                      modelId: selectedOutcome.modelId,
+                    ),
+              acquireAudioFocus: _acquireConversationAudioFocus,
+              onClose: () => Navigator.pop(routeContext),
+              onManageVoices: _openRealtimeProviderSettings,
+              captionEnabled: false,
+            ),
+          ),
+        );
+      } finally {
+        modelController.dispose();
+      }
+    } finally {
+      _openingRealtimeConversation = false;
+    }
+  }
+
+  Future<void> _acquireConversationAudioFocus() async {
+    await auxiliaryAudioController.stop();
+    await adapter.pause();
+    await voiceClipPlayer.pause();
+    await slicePlayerController.pause();
+  }
+
+  Future<void> _openRealtimeProviderSettings() async {
+    if (!coreSessionController.state.isConnected) {
+      playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+      return;
+    }
+    final viewModel = RealtimeProviderSettingsViewModel(
+      coreRepositories.realtimeProvider,
+    );
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: ListenBreakpoints.formColumnMax,
+              maxHeight: 680,
+            ),
+            child: RealtimeProviderSettings(viewModel: viewModel),
+          ),
+        ),
+      );
+    } finally {
+      viewModel.dispose();
+    }
+  }
+
   Future<void> _openLearningAssets() {
     final available = coreSessionController.state.isConnected;
     final language = settingsController.resolveLearningLanguage(
@@ -1593,6 +1768,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void dispose() {
     unawaited(coreSessionController.shutdown());
+    realtimeConversationController.dispose();
     _transcriptReadiness?.dispose();
     learningEditionController.dispose();
     coreSessionController.removeListener(_onCoreSessionStateChanged);
@@ -2075,6 +2251,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     onRouteSelected: (route) =>
                                                         currentRoute.value =
                                                             route,
+                                                    onOpenConversation: () =>
+                                                        unawaited(
+                                                          _openFreeConversation(),
+                                                        ),
                                                     onOpenSettings: () =>
                                                         unawaited(
                                                           _openSettings(),
@@ -2117,6 +2297,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     studyMenu: _studyMenu(),
                                                     listeningMenu:
                                                         _listeningMenu(),
+                                                    conversationAction:
+                                                        _conversationAction(),
                                                     onOpenSettings: () =>
                                                         unawaited(
                                                           _openSettings(),

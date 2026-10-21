@@ -32,6 +32,7 @@ class MaterialWorkbench extends StatefulWidget {
     this.listeningMenu,
     this.learningEditionAction,
     this.onOpenSettings,
+    this.conversationAction,
     this.retentionMenu,
   });
 
@@ -73,6 +74,9 @@ class MaterialWorkbench extends StatefulWidget {
   /// left the native macOS menu as the only way in and nothing at all on
   /// Windows. It belongs on the surface that is actually on screen.
   final VoidCallback? onOpenSettings;
+
+  /// Starts a voice conversation anchored to the current transcript cue.
+  final Widget? conversationAction;
 
   /// The retention affordance (Keep / reference in place / unretain) for the
   /// current media. Null on surfaces that have none wired.
@@ -132,6 +136,7 @@ class _MaterialWorkbenchState extends State<MaterialWorkbench> {
             listeningMenu: widget.listeningMenu,
             learningEditionAction: widget.learningEditionAction,
             onOpenSettings: widget.onOpenSettings,
+            conversationAction: widget.conversationAction,
             retentionMenu: widget.retentionMenu,
           ),
           Expanded(
@@ -253,6 +258,7 @@ class _SessionHeader extends StatelessWidget {
     required this.listeningMenu,
     required this.learningEditionAction,
     required this.onOpenSettings,
+    required this.conversationAction,
     required this.retentionMenu,
   });
 
@@ -264,6 +270,7 @@ class _SessionHeader extends StatelessWidget {
   final Widget? listeningMenu;
   final Widget? learningEditionAction;
   final VoidCallback? onOpenSettings;
+  final Widget? conversationAction;
   final Widget? retentionMenu;
 
   @override
@@ -291,6 +298,7 @@ class _SessionHeader extends StatelessWidget {
             ?listeningMenu,
             if (translationMenu != null) ...[_gap, translationMenu!],
             if (studyMenu != null) ...[_gap, studyMenu!],
+            if (conversationAction != null) ...[_gap, conversationAction!],
             if (subtitleMenu != null) ...[_gap, subtitleMenu!],
             if (retentionMenu != null) ...[_gap, retentionMenu!],
             _gap,

@@ -9,7 +9,45 @@ use domain::{
     validate_syntactic_analysis,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use thiserror::Error;
+
+/// Application-owned port for managing transcription models and transcribing
+/// short learner recordings. HTTP routes depend on this interface while the
+/// runtime adapter owns model installation, subprocesses, and job execution.
+#[async_trait]
+pub trait RecordingTranscriptionService: Send + Sync {
+    fn providers(&self) -> Vec<domain::TranscriptionProviderInfo>;
+    fn models(&self) -> Result<Vec<domain::TranscriptionModelDescriptor>, crate::ApplicationError>;
+    fn request_model_install(
+        self: Arc<Self>,
+        id: domain::TranscriptionModelId,
+    ) -> Result<bool, crate::ApplicationError>;
+    fn register_custom_model(
+        &self,
+        path: String,
+    ) -> Result<domain::TranscriptionModelDescriptor, crate::ApplicationError>;
+    fn cancel_model_install(
+        &self,
+        id: &domain::TranscriptionModelId,
+    ) -> Result<domain::TranscriptionModelDescriptor, crate::ApplicationError>;
+    async fn delete_model(
+        &self,
+        id: &domain::TranscriptionModelId,
+    ) -> Result<(), crate::ApplicationError>;
+    fn create_recording_transcription(
+        self: Arc<Self>,
+        request: crate::CreateRecordingTranscriptionRequest,
+    ) -> Result<domain::RecordingTranscriptionJob, crate::ApplicationError>;
+    fn recording_transcription_job(
+        &self,
+        id: &domain::RecordingTranscriptionJobId,
+    ) -> Option<domain::RecordingTranscriptionJob>;
+    fn cancel_recording_transcription(
+        &self,
+        id: &domain::RecordingTranscriptionJobId,
+    ) -> Result<domain::RecordingTranscriptionJob, crate::ApplicationError>;
+}
 
 pub use speech_analysis::timing::AlignedWord as ForcedAlignedWord;
 
@@ -376,6 +414,15 @@ pub trait SemanticLlmRuntimeFactory: Send + Sync {
         profile: &domain::LlmProviderProfile,
         secret: Option<String>,
     ) -> Result<Box<dyn SemanticLlmRuntime>, LlmProviderError>;
+}
+
+/// Adapter seam for provider-specific realtime voice protocols.
+pub trait RealtimeConversationAdapterFactory: Send + Sync {
+    fn build(
+        &self,
+        profile: &domain::RealtimeProviderProfile,
+        credential: Option<String>,
+    ) -> Result<Box<dyn crate::RealtimeConversationAdapter>, domain::RealtimeProviderError>;
 }
 
 #[cfg(test)]

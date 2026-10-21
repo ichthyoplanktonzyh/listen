@@ -305,6 +305,7 @@ mod media_library;
 mod migrations;
 mod package_lifecycle;
 mod phonetic_analysis;
+mod realtime_conversation;
 mod semantic_embedding;
 mod subtitles_dictionary;
 mod timelines;

@@ -97,6 +97,15 @@ pub use vocabulary::*;
 mod diagnosis;
 pub use diagnosis::*;
 
+mod realtime_conversation;
+pub use realtime_conversation::*;
+
+mod recording;
+pub use recording::*;
+
+mod transcription;
+pub use transcription::*;
+
 macro_rules! string_id {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -180,6 +189,12 @@ string_id!(RenditionId);
 string_id!(ResourceId);
 string_id!(ReadingAnchorId);
 string_id!(CapabilityAttemptId);
+string_id!(RecordingAssetId);
+string_id!(RecordingTranscriptionJobId);
+string_id!(TranscriptionModelId);
+string_id!(RealtimeProviderProfileId);
+string_id!(RealtimeConversationSessionId);
+string_id!(RealtimeConversationTurnId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]

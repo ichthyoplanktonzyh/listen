@@ -2,7 +2,14 @@
 
 > Updated: 2026-10-22 (Asia/Shanghai).
 
-## Current focus
+## Recovery branch
+
+`codex/park-ai-conversation` retains free and material-anchored AI conversation,
+its provider settings, recording, and necessary local speech runtime on the
+reduced baseline `f865d676`. It is a frozen recovery point for later evaluation.
+Independent learning channels, document materials, and coaching remain deferred.
+
+## Main product scope
 
 Listen limits its active implementation to one audio/video listening
 journey: acquire a Source, process and adopt a Learning Material, learn in the
@@ -52,7 +59,7 @@ and validation target fresh isolated stores; no in-place upgrade of the earlier
 broad implementation is required. This does not authorize scripts or tests to
 reset the owner's actual local data.
 
-The listening baseline uses `listen-listening.sqlite` as its default database
+This recovery branch uses `listen-ai.sqlite` (schema 65) as its default database
 filename and does not probe or move the earlier `listen.sqlite`. An explicit
 database override is still supported, but incompatible stores are rejected
 instead of reset.

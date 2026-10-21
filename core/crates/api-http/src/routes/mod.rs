@@ -13,6 +13,8 @@ pub(crate) mod package_lifecycle;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;
 pub(crate) mod pronunciation;
+pub(crate) mod realtime_conversation;
+pub(crate) mod realtime_recording;
 pub(crate) mod router;
 pub(crate) mod semantic_embedding;
 pub(crate) mod sound_line;

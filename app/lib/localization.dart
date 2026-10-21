@@ -1498,6 +1498,172 @@ class AppLocalizations {
 
       // Named failure states (#62). Each replaces a sentence that had a caught
       // exception interpolated into it.
+      'conversationMacOsOnly': 'Conversation is currently macOS-only',
+      'transcriptionModelDownloadTitle': 'Download a Whisper model?',
+      'transcriptionModelDownloadExplainer':
+          'Realtime conversation needs a speech-to-text model to transcribe '
+          'your voice. This is separate from the AI conversation provider, '
+          'which may need its own setup.',
+      'transcriptionModelDownloadOffer': 'Whisper {name} · {size} MB',
+      'transcriptionModelDownloadAction': 'Download',
+      'transcriptionModelDownloadVerify':
+          'The download will be checked for integrity before the model is used.',
+      'transcriptionModelDownloading':
+          'Downloading Whisper {name} · {downloaded} / {total} MB',
+      'realtimeActivityListening': 'Listening',
+      'realtimeActivityOtherSpeaking': 'The other voice is speaking',
+      'realtimeActivityPreparing': 'Preparing',
+      'realtimeActivityThinking': 'Thinking',
+      'realtimeActivityThinkingElapsed': 'Thinking · {seconds}s',
+      'realtimeActivityYouSpeaking': 'You are speaking',
+      'realtimeAddProvider': 'Add a realtime voice',
+      'realtimeApiKey': 'API key (write-only)',
+      'realtimeApiKeyHint':
+          'Stored in the system keychain by the backend. Not shown again.',
+      // ── Local Speech-to-Speech (local_cascade_realtime) ──
+      'realtimeApiKeyOptionalHint':
+          'Optional for local services; the backend skips the keychain.',
+      'realtimeCancelAndDiscard': 'Cancel and discard',
+      'realtimeCaptionDesc':
+          'Show fading captions when the other person speaks',
+      'realtimeCaptionLabel': 'Afterglow Captions',
+      'realtimeCloudBillingHint':
+          'Cloud voices process audio on the provider side and bill by usage.',
+      'realtimeDebriefBack': 'Back to conversations',
+      'realtimeDebriefTitle': 'Conversation summary',
+      'realtimeDiscardAndClose': 'Discard and close',
+      // ── Conversation turns and their failures ──
+      'realtimeDiscardBody':
+          'The active conversation and unfinished local transcription will be '
+          'discarded.',
+      'realtimeDiscardTitle': 'Discard this conversation?',
+      'realtimeDisplayName': 'Display name',
+      'realtimeEndpoint': 'WebSocket endpoint',
+      'realtimeFailureAudioCapture':
+          'The recording for this turn was not captured.',
+      'realtimeFailureBargeIn': 'You cut in, so this turn stopped here.',
+      'realtimeFailureCancelled': 'You left before this turn finished.',
+      'realtimeFailureDetailsHide': 'Hide details',
+      'realtimeFailureDetailsShow': 'Details',
+      'realtimeFailureDrainTimeout':
+          'The provider did not finish this turn in time.',
+      'realtimeFailureHistoryNotSaved':
+          'This turn was not written to your conversation history.',
+      'realtimeFailureLocalTranscription':
+          'The local transcript did not come back.',
+      'realtimeFailurePostProcessing':
+          'This turn could not be processed after you stopped speaking.',
+      'realtimeFailureResponseIncomplete':
+          'The other voice stopped before finishing this turn.',
+      'realtimeFailureSurfaceDisposed':
+          'The conversation closed before this turn finished.',
+      'realtimeFailureUnknown': 'This turn did not finish.',
+      // ── Conversation-level notices ──
+      'realtimeFinishAndTranscribe': 'Finish and transcribe locally',
+      'realtimeHistoryBack': 'Back to all conversations',
+      'realtimeHistoryEmpty': 'Conversations you finish will appear here.',
+      'realtimeHistoryEndedWithError': 'ended with an error',
+      'realtimeHistoryLeftPartway': 'left partway',
+      'realtimeHistoryMinutes': '{count} min',
+      'realtimeHistoryNeverFinished': 'never finished',
+      // ── Conversation stage (舞台) ──
+      'realtimeHistoryNothingCaptured': 'nothing was captured',
+      'realtimeHistoryShowAll': 'All conversations',
+      'realtimeHistoryTurns': '{count} turns',
+      'realtimeHistoryUnderAMinute': 'under a minute',
+      'realtimeHistoryWhen': '{month}/{day} {time}',
+      'realtimeHonestLayering':
+          'Provider captions during a conversation are live guidance. Only the local Whisper transcript becomes learner output.',
+      'realtimeInterruptHint': 'Just speak to cut in',
+      'realtimeKeepTalking': 'Keep talking',
+      'realtimeKeyStored': 'Key stored',
+      'realtimeLeaveConversation': 'Leave conversation',
+      'realtimeLobbyLiveSubtitle': 'Immersive realtime voice conversation',
+      'realtimeLobbyLiveTitle': 'Listen Live',
+      'realtimeLobbyReady': 'Ready when you are',
+      'realtimeLobbyTopic': 'About: {topic}',
+      'realtimeLobbyVoiceLine': 'In the voice of {voice}',
+      'realtimeLocalEndpointHint':
+          'A local Speech-to-Speech service on this machine (loopback only). '
+          'Start the service before conversing.',
+      'realtimeLocalModelHint':
+          'The engine model is configured on the service side; this is only '
+          'an identifier.',
+      'realtimeLocalPrivacyHint':
+          'Local voice stays on this machine — no key, no cloud, fully offline.',
+      'realtimeManageVoices': 'Manage voices in settings',
+      'realtimeModel': 'Model',
+      'realtimeNoProviders': 'No realtime voice configured yet.',
+      'realtimeNoVoiceInLobby':
+          'No realtime voice configured yet. Add one in Settings › Realtime voice.',
+      // ── Conversation lobby (门厅) ──
+      'realtimeNoticeConnectionFailed':
+          'The connection to the voice service failed.',
+      'realtimeNoticeConnectionFailedLocal':
+          'The local voice service on this machine is not reachable. Start it, '
+          'then try again.',
+      'realtimeNoticeFinishFailed':
+          'This conversation could not be finished cleanly.',
+      'realtimeNoticeHistoryNotLoaded':
+          'Your past conversations could not be loaded.',
+      'realtimeNoticeIdleClosed':
+          'This conversation ended after a quiet pause. The recording and '
+          'transcript were saved.',
+      'realtimeNoticeLocalSpeechNotInstalled':
+          'The local speech service is not installed. Run tool/run_local_speech_to_speech.py --install first.',
+      'realtimeNoticeNoTopicSelected': 'Choose a topic before starting.',
+      'realtimeNoticeNoVoiceSelected': 'Pick a voice before starting.',
+      'realtimeNoticeProviderDisconnected': 'The voice service disconnected.',
+      'realtimeNoticeProviderError':
+          'The voice service reported a problem with this conversation.',
+      'realtimeNoticeProviderEventInvalid':
+          'The voice service sent something this app could not read.',
+      'realtimeNoticeProvidersNotLoaded':
+          'The realtime voices could not be loaded.',
+      'realtimeNoticeStartFailed': 'The conversation could not be started.',
+      'realtimeNoticeTurnsNotLoaded': 'This conversation could not be opened.',
+      'realtimeNoticeUnknown': 'Something went wrong in this conversation.',
+      // ── Conversation debrief (结束页) ──
+      'realtimeProtocol': 'Protocol',
+      'realtimeProtocolLocalCascade': 'Local voice (Speech-to-Speech)',
+      'realtimeProviderCloudTag': 'cloud',
+      'realtimeProviderLocalTag': 'local',
+      'realtimeProviderRemoveFailed': 'Could not remove this provider',
+      'realtimeProviderSaveFailed': 'Could not save this provider',
+      'realtimeProviders': 'Realtime voice',
+      'realtimeProvidersDescription':
+          'Speech providers for realtime conversation. Configure the endpoint and key once here; the conversation itself only asks which voice speaks with you.',
+      'realtimeProvidersLoadFailed': 'Could not load the speech providers',
+      'realtimeRecentConversations': 'Recent conversations',
+      'realtimeRegion': 'Region',
+      'realtimeRemove': 'Remove',
+      'realtimeRemoveBody':
+          'The stored API key is removed with it. Past conversations are kept.',
+      'realtimeRemoveTitle': 'Remove this realtime voice?',
+      'realtimeRetryTranscription': 'Retry transcription',
+      'realtimeSaveProvider': 'Save securely',
+      'realtimeStartConversation': 'Start conversation',
+      'realtimeTurnGuidanceOnly': 'Live provider caption · guidance only',
+      'realtimeTurnLearnerOutput': 'Local Whisper transcript · learner output',
+      'realtimeTurnListening': 'Listening…',
+      'realtimeTurnNotTranscribed': 'This turn was not transcribed',
+      'realtimeTurnOtherNotSaved': 'This turn was not saved to history',
+      'realtimeTurnOtherResponding': 'Still speaking…',
+      'realtimeTurnOtherResponse': 'What the other voice said',
+      'realtimeTurnOtherVoice': 'The other voice',
+      'realtimeTurnResponding': 'Responding…',
+      'realtimeTurnTranscribingLocally': 'Transcribing locally…',
+      'realtimeTurnYou': 'You',
+      'realtimeVoice': 'Voice',
+      'realtimeVoiceDesc': 'The style of the speaking voice',
+      'realtimeVoiceLabel': 'Voice persona',
+      'realtimeWorkspaceHint':
+          'Use the workspace and API key from the same region.',
+      'realtimeWorkspaceId': 'Workspace ID',
+      'realtimeWorkspaceMissing':
+          'Enter the Workspace ID to complete the endpoint.',
+      'sidebarStartConversation': 'Start conversation',
+      'startConversationWithThisLine': 'Talk about this line',
     },
     'zh': {
       'discoveryEmptyChannel': '这个媒体源还没有视频。',
@@ -2756,6 +2922,137 @@ class AppLocalizations {
       'manualTimingSaveRejected': '后端不接受这组边界。',
 
       // ── Named failure states (#62) ─────────────────────────────────────
+      'conversationMacOsOnly': '对话功能目前仅支持 macOS',
+      'transcriptionModelDownloadTitle': '下载 Whisper 语音转文字模型？',
+      'transcriptionModelDownloadExplainer':
+          '实时对话需要语音转文字模型来转录你的语音。它与 AI 对话服务提供方分开；'
+          '该服务可能还需要单独设置。',
+      'transcriptionModelDownloadOffer': 'Whisper {name} · {size} MB',
+      'transcriptionModelDownloadAction': '下载',
+      'transcriptionModelDownloadVerify': '下载完成后会校验模型完整性，再用于转录。',
+      'transcriptionModelDownloading':
+          '正在下载 Whisper {name} · {downloaded} / {total} MB',
+      'realtimeActivityListening': '在听你说',
+      'realtimeActivityOtherSpeaking': '对方在说',
+      'realtimeActivityPreparing': '准备中',
+      'realtimeActivityThinking': '正在思考',
+      'realtimeActivityThinkingElapsed': '思考中 · {seconds} 秒',
+      'realtimeActivityYouSpeaking': '你在说',
+      'realtimeAddProvider': '添加实时语音',
+      'realtimeApiKey': 'API 密钥（只写）',
+      'realtimeApiKeyHint': '由后端保存到系统钥匙串，不再回显。',
+      // ── 本地语音（local_cascade_realtime）──
+      'realtimeApiKeyOptionalHint': '本地服务可留空；后端不会写入钥匙串。',
+      'realtimeCancelAndDiscard': '取消并丢弃',
+      'realtimeCaptionDesc': '对方说话时显示淡出字幕',
+      'realtimeCaptionLabel': '余音字幕',
+      'realtimeCloudBillingHint': '云端音色在服务方处理音频，按用量计费。',
+      'realtimeDebriefBack': '回到对话列表',
+      'realtimeDebriefTitle': '对话总结',
+      'realtimeDiscardAndClose': '丢弃并关闭',
+      // ── 对话轮次与失败态 ──
+      'realtimeDiscardBody': '正在进行的对话和尚未完成的本地转写都会被丢弃。',
+      'realtimeDiscardTitle': '丢弃这次对话？',
+      'realtimeDisplayName': '显示名称',
+      'realtimeEndpoint': 'WebSocket 地址',
+      'realtimeFailureAudioCapture': '这一轮的录音没能保存下来。',
+      'realtimeFailureBargeIn': '你插了话，这一轮到此为止。',
+      'realtimeFailureCancelled': '这一轮还没结束你就离开了。',
+      'realtimeFailureDetailsHide': '收起详情',
+      'realtimeFailureDetailsShow': '详情',
+      'realtimeFailureDrainTimeout': '服务方没有在规定时间内说完这一轮。',
+      'realtimeFailureHistoryNotSaved': '这一轮没能写进你的对话记录。',
+      'realtimeFailureLocalTranscription': '本地转写没有返回结果。',
+      'realtimeFailurePostProcessing': '你说完之后，这一轮没能处理完成。',
+      'realtimeFailureResponseIncomplete': '对方还没说完这一轮就停了。',
+      'realtimeFailureSurfaceDisposed': '这一轮还没完成，对话就关闭了。',
+      'realtimeFailureUnknown': '这一轮没有走完。',
+      // ── 对话级提示 ──
+      'realtimeFinishAndTranscribe': '结束并在本地转写',
+      'realtimeHistoryBack': '回到全部对话',
+      'realtimeHistoryEmpty': '结束过的对话会出现在这里。',
+      'realtimeHistoryEndedWithError': '中途出错',
+      'realtimeHistoryLeftPartway': '中途离开',
+      'realtimeHistoryMinutes': '{count} 分钟',
+      'realtimeHistoryNeverFinished': '没有正常结束',
+      // ── 对话舞台 ──
+      'realtimeHistoryNothingCaptured': '未录到内容',
+      'realtimeHistoryShowAll': '全部对话',
+      'realtimeHistoryTurns': '{count} 轮',
+      'realtimeHistoryUnderAMinute': '不到一分钟',
+      'realtimeHistoryWhen': '{month} 月 {day} 日 {time}',
+      'realtimeHonestLayering': '对话中的服务方字幕只是实时引导；只有本地 Whisper 转写才算作你的产出。',
+      'realtimeInterruptHint': '直接开口就能打断',
+      'realtimeKeepTalking': '继续说',
+      'realtimeKeyStored': '已存密钥',
+      'realtimeLeaveConversation': '离开对话',
+      'realtimeLobbyLiveSubtitle': '全屏沉浸式实时语音对话',
+      'realtimeLobbyLiveTitle': '对话 · Live 态',
+      'realtimeLobbyReady': '准备好了就说话',
+      'realtimeLobbyTopic': '话题：{topic}',
+      'realtimeLobbyVoiceLine': '用 {voice} 的声音',
+      'realtimeLocalEndpointHint': '本机运行的本地语音服务（仅回环地址）。开始对话前请先启动。',
+      'realtimeLocalModelHint': '引擎模型由服务端配置决定，这里只是一个标识。',
+      'realtimeLocalPrivacyHint': '本地音色全程在本机处理——免密钥、不联网、离线可用。',
+      'realtimeManageVoices': '到设置里管理声音',
+      'realtimeModel': '模型',
+      'realtimeNoProviders': '尚未配置实时语音。',
+      'realtimeNoVoiceInLobby': '尚未配置实时语音。请到「设置 › 实时语音」添加。',
+      // ── 对话门厅 ──
+      'realtimeNoticeConnectionFailed': '与语音服务的连接失败了。',
+      'realtimeNoticeConnectionFailedLocal': '本机的本地语音服务没有运行。请先启动它，再重试。',
+      'realtimeNoticeFinishFailed': '这次对话没能正常收尾。',
+      'realtimeNoticeHistoryNotLoaded': '没能加载你过往的对话。',
+      'realtimeNoticeIdleClosed': '对话因长时间没有声音而自动结束。录音与转写均已保存。',
+      'realtimeNoticeLocalSpeechNotInstalled':
+          '未安装本地语音服务环境。请先运行 tool/run_local_speech_to_speech.py --install。',
+      'realtimeNoticeNoTopicSelected': '开始之前先选一个话题。',
+      'realtimeNoticeNoVoiceSelected': '开始之前先选一个声音。',
+      'realtimeNoticeProviderDisconnected': '语音服务断开了连接。',
+      'realtimeNoticeProviderError': '语音服务报告这次对话出了问题。',
+      'realtimeNoticeProviderEventInvalid': '语音服务发来了本应用读不懂的内容。',
+      'realtimeNoticeProvidersNotLoaded': '没能加载实时语音。',
+      'realtimeNoticeStartFailed': '这次对话没能开始。',
+      'realtimeNoticeTurnsNotLoaded': '这次对话没能打开。',
+      'realtimeNoticeUnknown': '这次对话出了点问题。',
+      // ── 对话结束页 ──
+      'realtimeProtocol': '协议',
+      'realtimeProtocolLocalCascade': '本地语音（语音转语音）',
+      'realtimeProviderCloudTag': '云端',
+      'realtimeProviderLocalTag': '本地',
+      'realtimeProviderRemoveFailed': '移除该供应商失败',
+      'realtimeProviderSaveFailed': '保存该供应商失败',
+      'realtimeProviders': '实时语音',
+      'realtimeProvidersDescription':
+          '实时对话使用的语音服务。地址与密钥在这里配置一次；对话里只需要选「用哪个声音跟你说话」。',
+      'realtimeProvidersLoadFailed': '无法加载语音供应商',
+      'realtimeRecentConversations': '最近的对话',
+      'realtimeRegion': '区域',
+      'realtimeRemove': '删除',
+      'realtimeRemoveBody': '已保存的 API 密钥会一并删除，过往对话记录保留。',
+      'realtimeRemoveTitle': '删除这个实时语音？',
+      'realtimeRetryTranscription': '重试转写',
+      'realtimeSaveProvider': '安全保存',
+      'realtimeStartConversation': '开始对话',
+      'realtimeTurnGuidanceOnly': '服务方实时字幕 · 仅供引导',
+      'realtimeTurnLearnerOutput': '本地 Whisper 转写 · 你的产出',
+      'realtimeTurnListening': '在听…',
+      'realtimeTurnNotTranscribed': '这一轮没能转写成功',
+      'realtimeTurnOtherNotSaved': '这一轮没能写进对话记录',
+      'realtimeTurnOtherResponding': '还在说…',
+      'realtimeTurnOtherResponse': '对方说的话',
+      'realtimeTurnOtherVoice': '对方',
+      'realtimeTurnResponding': '正在回应…',
+      'realtimeTurnTranscribingLocally': '正在本地转写…',
+      'realtimeTurnYou': '你',
+      'realtimeVoice': '声音',
+      'realtimeVoiceDesc': '对方说话的声音风格',
+      'realtimeVoiceLabel': '对话角色音色',
+      'realtimeWorkspaceHint': '请使用同一区域的 workspace 与 API 密钥。',
+      'realtimeWorkspaceId': 'Workspace ID',
+      'realtimeWorkspaceMissing': '填写 Workspace ID 才能补全服务地址。',
+      'sidebarStartConversation': '开始对话',
+      'startConversationWithThisLine': '围绕这句开始对话',
     },
   };
 }

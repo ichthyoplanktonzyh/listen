@@ -13,6 +13,7 @@ pub enum EventName {
     LexicalObservationCleared,
     VocabularyAssetsImported,
     MediaAvailabilityChanged,
+    TranscriptionModelChanged,
     PronunciationAnalysisProgress,
     PronunciationAnalysisCompleted,
     WordTimingsProgress,
@@ -42,6 +43,7 @@ impl EventName {
         EventName::LexicalObservationCleared,
         EventName::VocabularyAssetsImported,
         EventName::MediaAvailabilityChanged,
+        EventName::TranscriptionModelChanged,
         EventName::PronunciationAnalysisProgress,
         EventName::PronunciationAnalysisCompleted,
         EventName::WordTimingsProgress,
@@ -78,6 +80,7 @@ fn _exhaustiveness_guard(name: EventName) {
         | EventName::LexicalObservationCleared
         | EventName::VocabularyAssetsImported
         | EventName::MediaAvailabilityChanged
+        | EventName::TranscriptionModelChanged
         | EventName::PronunciationAnalysisProgress
         | EventName::PronunciationAnalysisCompleted
         | EventName::WordTimingsProgress

@@ -52,6 +52,13 @@ use super::pronunciation::{
     analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
     pronunciation_providers, track_pronunciation,
 };
+use super::realtime_conversation::{
+    connect as connect_realtime_conversation, delete_profile as delete_realtime_profile,
+    list_profiles as list_realtime_profiles, list_sessions as list_realtime_sessions,
+    list_turns as list_realtime_turns, register_profile as register_realtime_profile,
+    save_session as save_realtime_session, save_turn as save_realtime_turn,
+};
+use super::realtime_recording::{create_recording_asset, delete_recording_asset};
 use super::semantic_embedding::{
     capability as semantic_embedding_capability, disable as disable_semantic_embedding,
     enable as enable_semantic_embedding, install as install_semantic_embedding,
@@ -85,7 +92,12 @@ use super::timelines::{
     track_sense_group_analysis_summaries, track_word_timeline_summaries, track_word_timelines,
     track_word_timing_diagnostics, track_word_timings, word_timeline,
 };
-use super::transcription::pronunciation_rules;
+use super::transcription::{
+    cancel_recording_transcription, cancel_transcription_model_install,
+    create_recording_transcription, delete_transcription_model, install_transcription_model,
+    pronunciation_rules, recording_transcription_job, register_custom_transcription_model,
+    transcription_models, transcription_providers,
+};
 use super::tts::{clear_speech_synthesis_cache, speech_synthesis_capability, synthesize_speech};
 use super::vocabulary::{
     assign_sense_folder_occurrence, create_sense_folder, delete_sense_folder, export_vocabulary,
@@ -103,8 +115,63 @@ pub(crate) fn protected_router(state: &ApiState) -> Router<ApiState> {
         .merge(material_routes())
         .merge(source_identity_routes())
         .merge(generative_routes())
+        .merge(realtime_routes())
         .merge(provider_and_event_routes())
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize))
+}
+
+fn realtime_routes() -> Router<ApiState> {
+    Router::new()
+        .route(
+            "/v1/realtime/providers",
+            get(list_realtime_profiles).post(register_realtime_profile),
+        )
+        .route(
+            "/v1/realtime/providers/{id}",
+            delete(delete_realtime_profile),
+        )
+        .route(
+            "/v1/realtime/conversations/ws",
+            get(connect_realtime_conversation),
+        )
+        .route(
+            "/v1/realtime/sessions",
+            get(list_realtime_sessions).post(save_realtime_session),
+        )
+        .route("/v1/realtime/sessions/{id}/turns", get(list_realtime_turns))
+        .route("/v1/realtime/turns", post(save_realtime_turn))
+        .route("/v1/recordings", post(create_recording_asset))
+        .route("/v1/recordings/{id}", delete(delete_recording_asset))
+        .route("/v1/transcription/providers", get(transcription_providers))
+        .route("/v1/transcription/models", get(transcription_models))
+        .route(
+            "/v1/transcription/models/register-custom",
+            post(register_custom_transcription_model),
+        )
+        .route(
+            "/v1/transcription/models/install",
+            post(install_transcription_model),
+        )
+        .route(
+            "/v1/transcription/models/{model_id}/cancel-install",
+            post(cancel_transcription_model_install),
+        )
+        .route(
+            "/v1/transcription/models/{model_id}",
+            delete(delete_transcription_model),
+        )
+        .route(
+            "/v1/recording-transcriptions",
+            post(create_recording_transcription),
+        )
+        .route(
+            "/v1/recording-transcriptions/{job_id}",
+            get(recording_transcription_job),
+        )
+        .route(
+            "/v1/recording-transcriptions/{job_id}/cancel",
+            post(cancel_recording_transcription),
+        )
 }
 
 /// Learning-material routes (contract `5.0.0`). The router only wires

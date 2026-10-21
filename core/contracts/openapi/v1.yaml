@@ -1,15 +1,19 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 5.0.0
+  version: 5.1.0
   description: >
     Versioned loopback-only application-service adapter. Playback control is
-    excluded. Contract `5.0.0` narrows the active product to audio/video
-    learning: Media Materials, media-derived structured reading and alignment,
-    listening activities, learner-owned listening facts, and review. Standalone
-    document materials, conversation, production tasks, and coaching are not
-    part of this API contract. Responses stay path-free, and package adoption
-    binds generated listening resources to an exact media revision.
+    excluded. Contract `5.1.0` keeps the active product focused on audio/video
+    listening, learner-owned listening facts, and review, with a separate
+    realtime voice-conversation capability. Document materials, independent
+    reading/writing/speaking activities, output-training projections, and
+    coaching remain outside this contract. Core-managed media and material
+    source responses omit local source paths. Resource installation state and
+    learner-selected recording/transcription-model assets may expose local
+    filesystem locations. Content Package carrier paths are write-only inputs.
+    Package adoption binds generated listening resources to an exact media
+    revision.
 servers:
   - url: http://127.0.0.1:{port}
     variables:
@@ -2869,6 +2873,238 @@ paths:
       operationId: updatePhoneticFindingFeedback
       responses:
         "200": { description: Persisted user feedback for one finding }
+  /v1/recordings:
+    post:
+      operationId: createRecordingAsset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecordingAsset" }
+      responses:
+        "200":
+          description: Persisted local audio recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+  /v1/recordings/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: deleteRecordingAsset
+      responses:
+        "204": { description: Unreferenced recording metadata deleted }
+  /v1/recording-transcriptions:
+    post:
+      operationId: createRecordingTranscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecordingTranscription" }
+      responses:
+        "200":
+          description: Queued short-recording transcription job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+  /v1/recording-transcriptions/{job_id}:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: recordingTranscriptionJob
+      responses:
+        "200":
+          description: Current short-recording transcription state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+  /v1/recording-transcriptions/{job_id}/cancel:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cancelRecordingTranscription
+      responses:
+        "200":
+          description: Cancelled short-recording transcription
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+  /v1/realtime/providers:
+    get:
+      operationId: listRealtimeProviders
+      responses:
+        "200":
+          description: Secret-free realtime provider profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
+    post:
+      operationId: registerRealtimeProvider
+      description: Credentials are write-only and stored in the OS keychain. Local cascade profiles are keyless.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRealtimeProvider" }
+      responses:
+        "200":
+          description: Secret-free saved profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
+  /v1/realtime/providers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: deleteRealtimeProvider
+      responses:
+        "204": { description: Provider profile deleted }
+  /v1/realtime/conversations/ws:
+    get:
+      operationId: connectRealtimeConversation
+      description: Authenticated loopback WebSocket upgrade carrying neutral PCM audio and provider events.
+      parameters:
+        - { name: profile_id, in: query, required: true, schema: { type: string } }
+        - { name: language, in: query, required: false, schema: { type: string, default: en } }
+        - { name: instructions, in: query, required: false, schema: { type: string } }
+        - { name: manual_turns, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        "101": { description: WebSocket switching protocols }
+  /v1/realtime/sessions:
+    get:
+      operationId: listRealtimeSessions
+      description: Lists local conversation sessions newest first.
+      responses:
+        "200":
+          description: Realtime conversation sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RealtimeConversationSession" }
+    post:
+      operationId: saveRealtimeSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RealtimeConversationSession" }
+      responses:
+        "200":
+          description: Saved local session fact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RealtimeConversationSession" }
+  /v1/realtime/sessions/{id}/turns:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listRealtimeSessionTurns
+      description: Lists learner and assistant turns in local sequence order.
+      responses:
+        "200":
+          description: Conversation turn history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RealtimeConversationTurn" }
+  /v1/realtime/turns:
+    post:
+      operationId: saveRealtimeTurn
+      description: Finalized learner turns require a completed local transcription.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RealtimeConversationTurn" }
+      responses:
+        "200":
+          description: Saved conversation turn fact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RealtimeConversationTurn" }
+  /v1/transcription/providers:
+    get:
+      operationId: transcriptionProviders
+      responses:
+        "200":
+          description: Local recording-transcription providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TranscriptionProviderInfo" }
+  /v1/transcription/models:
+    get:
+      operationId: transcriptionModels
+      responses:
+        "200":
+          description: Model catalog and installation states
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TranscriptionModelDescriptor" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/transcription/models/install:
+    post:
+      operationId: installTranscriptionModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TranscriptionModelIdRequest" }
+      responses:
+        "200":
+          description: Model installation request accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscriptionModelInstallStarted" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/transcription/models/register-custom:
+    post:
+      operationId: registerCustomTranscriptionModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterCustomTranscriptionModelRequest" }
+      responses:
+        "200":
+          description: Local model registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscriptionModelDescriptor" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/transcription/models/{model_id}/cancel-install:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cancelTranscriptionModelInstall
+      responses:
+        "200":
+          description: Model installation cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscriptionModelDescriptor" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/transcription/models/{model_id}:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: deleteTranscriptionModel
+      responses:
+        "204": { description: Model removed }
+        default:
+          $ref: "#/components/responses/Error"
 components:
   parameters:
     MediaId:
@@ -4314,7 +4550,9 @@ components:
         license: { type: string }
         checksum_sha256: { type: string }
         size_bytes: { type: integer, minimum: 0 }
-        local_path: { type: [string, "null"] }
+        local_path:
+          type: [string, "null"]
+          description: Local filesystem path for an installed application-managed resource.
         state: { enum: [available, installing, installed, failed] }
         installed_bytes: { type: integer, minimum: 0 }
         error: { type: [string, "null"] }
@@ -5615,3 +5853,258 @@ components:
       description: >
         The media binding behind a rendition. A local path is never part of a
         binding.
+    RealtimeAdapterKind:
+      type: string
+      enum: [open_ai_realtime, qwen_omni_realtime, local_cascade_realtime]
+    RealtimeConversationAssistance:
+      type: string
+      enum: [content_anchored, unknown]
+    RealtimeProviderProfileView:
+      type: object
+      required: [id, display_name, adapter_kind, base_url, model_id, voice, has_credential, timeout_ms]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        adapter_kind: { $ref: "#/components/schemas/RealtimeAdapterKind" }
+        base_url: { type: string }
+        model_id: { type: string }
+        voice: { type: string }
+        has_credential: { type: boolean }
+        timeout_ms: { type: integer, minimum: 1000 }
+    RegisterRealtimeProvider:
+      type: object
+      required: [display_name, adapter_kind, base_url, model_id, voice]
+      properties:
+        display_name: { type: string }
+        adapter_kind: { $ref: "#/components/schemas/RealtimeAdapterKind" }
+        base_url: { type: string }
+        model_id: { type: string }
+        voice: { type: string }
+        secret: { type: string, writeOnly: true }
+        timeout_ms: { type: integer, minimum: 1000, default: 30000 }
+    RealtimeContentAnchor:
+      type: object
+      required: [media_id, start_ms, end_ms, source_text]
+      properties:
+        media_id: { type: string }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        source_text: { type: string }
+    RealtimeSurfaceContext:
+      type: object
+      required: [surface_kind, content_anchor]
+      properties:
+        surface_kind: { type: string }
+        content_anchor: { anyOf: [{ $ref: "#/components/schemas/RealtimeContentAnchor" }, { type: "null" }] }
+    RealtimeSessionStatus:
+      type: string
+      enum: [connecting, active, completed, interrupted, failed]
+    RealtimeConversationSession:
+      type: object
+      required: [id, profile_id, language, context, status, started_at_ms, ended_at_ms, failure_kind]
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        language: { type: string }
+        context: { anyOf: [{ $ref: "#/components/schemas/RealtimeSurfaceContext" }, { type: "null" }] }
+        status: { $ref: "#/components/schemas/RealtimeSessionStatus" }
+        started_at_ms: { type: integer, minimum: 0 }
+        ended_at_ms: { type: [integer, "null"], minimum: 0 }
+        failure_kind: { type: [string, "null"] }
+    RealtimeTurnRole:
+      type: string
+      enum: [learner, assistant]
+    RealtimeTurnStatus:
+      type: string
+      enum: [streaming, awaiting_local_transcript, finalized, interrupted, failed]
+    ProviderTranscript:
+      type: object
+      required: [text, provider_item_id, received_at_ms]
+      properties:
+        text: { type: string }
+        provider_item_id: { type: [string, "null"] }
+        received_at_ms: { type: integer, minimum: 0 }
+    LocalLearnerTranscript:
+      type: object
+      required: [text, recording_asset_id, transcription_job_id, completed_at_ms]
+      properties:
+        text: { type: string }
+        recording_asset_id: { type: string }
+        transcription_job_id: { type: string }
+        completed_at_ms: { type: integer, minimum: 0 }
+    RealtimeConversationTurn:
+      type: object
+      required: [id, session_id, sequence, role, status, assistance, provider_transcript, local_transcript, recording_asset_id, started_at_ms, ended_at_ms, failure_kind]
+      properties:
+        id: { type: string }
+        session_id: { type: string }
+        sequence: { type: integer, minimum: 0 }
+        role: { $ref: "#/components/schemas/RealtimeTurnRole" }
+        status: { $ref: "#/components/schemas/RealtimeTurnStatus" }
+        assistance: { $ref: "#/components/schemas/RealtimeConversationAssistance" }
+        provider_transcript: { anyOf: [{ $ref: "#/components/schemas/ProviderTranscript" }, { type: "null" }] }
+        local_transcript: { anyOf: [{ $ref: "#/components/schemas/LocalLearnerTranscript" }, { type: "null" }] }
+        recording_asset_id: { type: [string, "null"] }
+        started_at_ms: { type: integer, minimum: 0 }
+        ended_at_ms: { type: [integer, "null"], minimum: 0 }
+        failure_kind: { type: [string, "null"] }
+    RecordingSourceAvailability:
+      type: string
+      enum: [available, missing_media]
+    RecordingSourceSegment:
+      type: object
+      required: [media_id, start_ms, end_ms, label, subtitle_snapshot, availability]
+      properties:
+        media_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        label: { type: string }
+        subtitle_snapshot: { type: string }
+        availability: { $ref: "#/components/schemas/RecordingSourceAvailability" }
+    RecordingAudioMetadata:
+      type: object
+      required: [container, codec, sample_rate_hz, channels, sample_format, byte_length, content_sha256]
+      properties:
+        container: { type: string }
+        codec: { type: string }
+        sample_rate_hz: { type: integer, minimum: 1 }
+        channels: { type: integer, minimum: 1 }
+        sample_format: { type: string }
+        byte_length: { type: integer, minimum: 1 }
+        content_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+    RecordingAsset:
+      type: object
+      required: [id, file_path, created_at_ms, duration_ms, target, source_segment, language, audio, recorder_version]
+      properties:
+        id: { type: string }
+        file_path:
+          type: string
+          description: Local path for the recording file selected by the learner.
+        created_at_ms: { type: integer, minimum: 0 }
+        duration_ms: { type: integer, minimum: 1 }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        source_segment: { $ref: "#/components/schemas/RecordingSourceSegment" }
+        language: { type: string }
+        audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
+        recorder_version: { type: string }
+    CreateRecordingAsset:
+      type: object
+      required: [file_path, duration_ms, target, source_segment, language, audio, recorder_version]
+      properties:
+        file_path:
+          type: string
+          description: Local destination path selected for the recording file.
+        duration_ms: { type: integer, minimum: 1 }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        source_segment: { $ref: "#/components/schemas/RecordingSourceSegment" }
+        language: { type: string }
+        audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
+        recorder_version: { type: string }
+    TranscriptionModelQuality:
+      type: string
+      enum: [fast, balanced, accurate]
+    TranscriptionModelState:
+      type: string
+      enum: [downloadable, installing, installed, custom, failed]
+    TranscriptionProviderInfo:
+      type: object
+      required: [id, display_name, runtime_id, runtime_version, available, supports_translation, supported_languages, diagnostic]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        runtime_id: { type: string }
+        runtime_version: { type: string }
+        available: { type: boolean }
+        supports_translation: { type: boolean }
+        supported_languages: { type: array, items: { type: string } }
+        diagnostic: { type: [string, "null"] }
+    TranscriptionModelDescriptor:
+      type: object
+      required: [id, provider_id, display_name, family, revision, checksum_sha256, download_url, local_path, size_bytes, quality, english_only, supports_translation, state, installed_bytes, error, license, updated_at_ms]
+      properties:
+        id: { type: string }
+        provider_id: { type: string }
+        display_name: { type: string }
+        family: { type: string }
+        revision: { type: string }
+        checksum_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+        download_url: { type: [string, "null"], format: uri }
+        local_path:
+          type: [string, "null"]
+          description: >
+            Machine-local model installation path. For a custom model this is
+            the path explicitly selected by the user during registration.
+        size_bytes: { type: integer, minimum: 0 }
+        quality: { $ref: "#/components/schemas/TranscriptionModelQuality" }
+        english_only: { type: boolean }
+        supports_translation: { type: boolean }
+        state: { $ref: "#/components/schemas/TranscriptionModelState" }
+        installed_bytes: { type: integer, minimum: 0 }
+        error: { type: [string, "null"] }
+        license: { type: string }
+        updated_at_ms: { type: integer, minimum: 0 }
+    TranscriptionModelIdRequest:
+      type: object
+      required: [model_id]
+      properties:
+        model_id: { type: string, minLength: 1 }
+    RegisterCustomTranscriptionModelRequest:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: Local model path explicitly selected by the user for registration.
+    TranscriptionModelInstallStarted:
+      type: object
+      required: [installation_started]
+      properties:
+        installation_started: { type: boolean }
+    CreateRecordingTranscription:
+      type: object
+      required: [recording_id, model_id, language]
+      properties:
+        recording_id: { type: string }
+        model_id: { type: string }
+        language: { type: [string, "null"] }
+    RecordingTranscriptSegment:
+      type: object
+      required: [start_ms, end_ms, text]
+      properties:
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        text: { type: string }
+    RecordingTranscriptProvenance:
+      type: object
+      required: [provider_id, provider_version, runtime_id, runtime_version, model_id, model_revision, model_checksum_sha256, recording_content_sha256, requested_language, detected_language]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        runtime_id: { type: string }
+        runtime_version: { type: string }
+        model_id: { type: string }
+        model_revision: { type: string }
+        model_checksum_sha256: { type: string }
+        recording_content_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+        requested_language: { type: [string, "null"] }
+        detected_language: { type: [string, "null"] }
+    RecordingTranscriptionStatus:
+      type: string
+      enum: [queued, transcribing, completed, cancelled, failed]
+    RecordingTranscriptionJob:
+      type: object
+      required: [id, recording_asset_id, status, raw_transcript, segments, provenance, error_code, error_message, created_at_ms, started_at_ms, completed_at_ms, latency_ms]
+      properties:
+        id: { type: string }
+        recording_asset_id: { type: string }
+        status: { $ref: "#/components/schemas/RecordingTranscriptionStatus" }
+        raw_transcript: { type: [string, "null"] }
+        segments: { type: array, items: { $ref: "#/components/schemas/RecordingTranscriptSegment" } }
+        provenance: { $ref: "#/components/schemas/RecordingTranscriptProvenance" }
+        error_code: { type: [string, "null"] }
+        error_message: { type: [string, "null"] }
+        created_at_ms: { type: integer, minimum: 0 }
+        started_at_ms: { type: [integer, "null"], minimum: 0 }
+        completed_at_ms: { type: [integer, "null"], minimum: 0 }
+        latency_ms: { type: [integer, "null"], minimum: 0 }

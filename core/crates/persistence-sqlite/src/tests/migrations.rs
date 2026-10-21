@@ -28,12 +28,15 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
         "review_settings",
         "hunting_targets",
         "corpus_occurrences",
+        "recording_assets",
+        "transcription_models",
+        "realtime_provider_profiles",
+        "realtime_conversation_sessions",
+        "realtime_conversation_turns",
     ] {
         assert!(table_exists(&connection, table), "{table} must exist");
     }
     for retired in [
-        "realtime_conversation_sessions",
-        "recording_assets",
         "semantic_task_attempts",
         "personal_expression_attempts",
         "reading_positions",
@@ -76,10 +79,10 @@ fn fresh_database_bootstraps_listening_schema_and_review_budget() {
 #[test]
 fn fresh_file_store_reopens_without_reapplying_defaults() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("listen-listening.sqlite");
+    let path = temp.path().join("listen-ai.sqlite");
     {
         let repo = SqliteRepository::open(&path).unwrap();
-        assert_eq!(repo.schema_version().unwrap(), 64);
+        assert_eq!(repo.schema_version().unwrap(), 65);
         repo.connection
             .lock()
             .execute(
@@ -90,7 +93,7 @@ fn fresh_file_store_reopens_without_reapplying_defaults() {
     }
     {
         let repo = SqliteRepository::open(&path).unwrap();
-        assert_eq!(repo.schema_version().unwrap(), 64);
+        assert_eq!(repo.schema_version().unwrap(), 65);
         let budget: (u32, u32) = repo
             .connection
             .lock()
@@ -127,7 +130,7 @@ fn rejects_old_store_read_only_without_backup_or_lock_sidecar() {
         error,
         PersistenceError::UnsupportedSchemaVersion {
             found: 63,
-            expected: 64
+            expected: 65
         }
     ));
     assert_eq!(fs::read(&path).unwrap(), original);

@@ -29,10 +29,10 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 5.0.0 narrows material processing to audio/video and removes the
-    // document, conversation, production, and coaching surfaces.
+    // 5.1.0 adds the parked AI conversation surface to the listening-focused
+    // contract while keeping documents, production training, and coaching out.
     assert!(
-        openapi.contains("version: 5.0.0"),
+        openapi.contains("version: 5.1.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -120,6 +120,17 @@ fn openapi_version_snapshot_and_path_count() {
         "LearningEditionDetails:",
         "LearningEditionResource:",
         "LearningEditionRendition:",
+        "RealtimeConversationSession:",
+        "RealtimeConversationTurn:",
+        "RecordingAsset:",
+        "RecordingTranscriptionJob:",
+        "TranscriptionProviderInfo:",
+        "TranscriptionModelDescriptor:",
+        "TranscriptionModelQuality:",
+        "TranscriptionModelState:",
+        "TranscriptionModelIdRequest:",
+        "RegisterCustomTranscriptionModelRequest:",
+        "TranscriptionModelInstallStarted:",
     ] {
         assert!(
             openapi.contains(&format!("    {schema}")),
@@ -129,7 +140,6 @@ fn openapi_version_snapshot_and_path_count() {
 
     for removed in [
         "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob:",
-        "/v1/realtime/providers:",
         "/v1/reading/positions/{track_id}:",
         "/v1/production-corpus/search:",
         "/v1/review/anki/import:",
@@ -141,6 +151,153 @@ fn openapi_version_snapshot_and_path_count() {
             "retired OpenAPI surface {removed} must stay absent"
         );
     }
+}
+
+#[test]
+fn transcription_model_management_has_typed_json_contracts() {
+    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
+    assert!(openapi.contains("Core-managed media and material"));
+    assert!(openapi.contains("learner-selected recording/transcription-model assets"));
+    assert!(openapi.contains("Content Package carrier paths are write-only inputs."));
+
+    let providers = operation_response_block(openapi, "transcriptionProviders");
+    assert!(
+        providers.contains("type: array")
+            && providers
+                .contains("items: { $ref: \"#/components/schemas/TranscriptionProviderInfo\" }"),
+        "transcriptionProviders must return a JSON array of typed provider objects"
+    );
+    let models = operation_response_block(openapi, "transcriptionModels");
+    assert!(
+        models.contains("type: array")
+            && models
+                .contains("items: { $ref: \"#/components/schemas/TranscriptionModelDescriptor\" }"),
+        "transcriptionModels must return a JSON array of typed model descriptors"
+    );
+
+    for (operation, request, response) in [
+        (
+            "installTranscriptionModel",
+            Some("TranscriptionModelIdRequest"),
+            "TranscriptionModelInstallStarted",
+        ),
+        (
+            "registerCustomTranscriptionModel",
+            Some("RegisterCustomTranscriptionModelRequest"),
+            "TranscriptionModelDescriptor",
+        ),
+        (
+            "cancelTranscriptionModelInstall",
+            None,
+            "TranscriptionModelDescriptor",
+        ),
+    ] {
+        let block = operation_response_block(openapi, operation);
+        if let Some(request) = request {
+            assert!(
+                block.contains(&format!("#/components/schemas/{request}")),
+                "{operation} must declare JSON request schema {request}"
+            );
+        }
+        assert!(
+            block.contains(&format!("#/components/schemas/{response}")),
+            "{operation} must declare JSON response schema {response}"
+        );
+        assert!(
+            block.contains("application/json:"),
+            "{operation} must use JSON"
+        );
+    }
+    let delete = operation_response_block(openapi, "deleteTranscriptionModel");
+    assert!(delete.contains("\"204\": { description: Model removed }"));
+
+    assert_schema_contract(
+        openapi,
+        "TranscriptionProviderInfo",
+        &[
+            "id",
+            "display_name",
+            "runtime_id",
+            "runtime_version",
+            "available",
+            "supports_translation",
+            "supported_languages",
+            "diagnostic",
+        ],
+    );
+    let provider = openapi_schema_block(openapi, "TranscriptionProviderInfo");
+    assert!(provider.contains("diagnostic: { type: [string, \"null\"] }"));
+    assert!(provider.contains("available: { type: boolean }"));
+    assert!(provider.contains("supported_languages: { type: array, items: { type: string } }"));
+
+    assert_schema_contract(
+        openapi,
+        "TranscriptionModelDescriptor",
+        &[
+            "id",
+            "provider_id",
+            "display_name",
+            "family",
+            "revision",
+            "checksum_sha256",
+            "download_url",
+            "local_path",
+            "size_bytes",
+            "quality",
+            "english_only",
+            "supports_translation",
+            "state",
+            "installed_bytes",
+            "error",
+            "license",
+            "updated_at_ms",
+        ],
+    );
+    let descriptor = openapi_schema_block(openapi, "TranscriptionModelDescriptor");
+    for nullable in ["local_path", "error"] {
+        assert!(
+            descriptor.contains(&format!("{nullable}: {{ type: [string, \"null\"] }}"))
+                || (nullable == "local_path"
+                    && descriptor.contains("local_path:\n          type: [string, \"null\"]")),
+            "TranscriptionModelDescriptor.{nullable} must preserve Rust Option nullability"
+        );
+    }
+    assert!(
+        descriptor.contains("checksum_sha256: { type: string, pattern: \"^[0-9a-fA-F]{64}$\" }")
+    );
+    assert!(descriptor.contains("download_url: { type: [string, \"null\"], format: uri }"));
+    assert!(descriptor.contains("#/components/schemas/TranscriptionModelQuality"));
+    assert!(descriptor.contains("#/components/schemas/TranscriptionModelState"));
+    assert!(descriptor.contains("user during registration"));
+
+    assert_schema_contract(openapi, "TranscriptionModelIdRequest", &["model_id"]);
+    assert!(
+        openapi_schema_block(openapi, "TranscriptionModelIdRequest")
+            .contains("model_id: { type: string, minLength: 1 }")
+    );
+    assert_schema_contract(
+        openapi,
+        "RegisterCustomTranscriptionModelRequest",
+        &["path"],
+    );
+    let custom_model = openapi_schema_block(openapi, "RegisterCustomTranscriptionModelRequest");
+    assert!(custom_model.contains("type: string"));
+    assert!(custom_model.contains("minLength: 1"));
+    assert!(custom_model.contains("explicitly selected by the user"));
+    assert_schema_contract(
+        openapi,
+        "TranscriptionModelInstallStarted",
+        &["installation_started"],
+    );
+    assert!(
+        openapi_schema_block(openapi, "TranscriptionModelInstallStarted")
+            .contains("installation_started: { type: boolean }")
+    );
+
+    let quality = openapi_schema_block(openapi, "TranscriptionModelQuality");
+    assert!(quality.contains("enum: [fast, balanced, accurate]"));
+    let state = openapi_schema_block(openapi, "TranscriptionModelState");
+    assert!(state.contains("enum: [downloadable, installing, installed, custom, failed]"));
 }
 
 #[test]
@@ -228,6 +385,57 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
         assert!(
             adoption.contains(status),
             "adoptLearningEdition must declare {status} responses"
+        );
+    }
+}
+
+fn openapi_schema_block(openapi: &str, schema_name: &str) -> String {
+    let heading = format!("    {schema_name}:\n");
+    let start = openapi
+        .find(&heading)
+        .unwrap_or_else(|| panic!("OpenAPI schema {schema_name} missing"));
+    let rest = &openapi[start..];
+    let end = rest
+        .lines()
+        .enumerate()
+        .skip(1)
+        .find(|(_, line)| {
+            line.starts_with("    ") && !line.starts_with("      ") && line.ends_with(':')
+        })
+        .map(|(index, _)| index)
+        .unwrap_or(rest.lines().count());
+    rest.lines().take(end).collect::<Vec<_>>().join("\n")
+}
+
+fn assert_schema_contract(openapi: &str, schema_name: &str, expected_fields: &[&str]) {
+    let block = openapi_schema_block(openapi, schema_name);
+    let required_start = block
+        .find("      required:")
+        .unwrap_or_else(|| panic!("{schema_name} must declare required JSON fields"));
+    let properties_start = block
+        .find("      properties:")
+        .unwrap_or_else(|| panic!("{schema_name} must declare JSON properties"));
+    assert!(required_start < properties_start);
+    let required = &block[required_start..properties_start];
+    let required_text = required.replace("      required:", "");
+    let required_fields = required_text
+        .split(['[', ']', ',', '\n'])
+        .map(|field| field.trim().trim_start_matches('-').trim())
+        .filter(|field| !field.is_empty())
+        .collect::<Vec<_>>();
+    let properties = &block[properties_start..];
+    for field in expected_fields {
+        assert!(
+            required_fields.iter().any(|required| required == field),
+            "{schema_name} must require field {field}; got {required_fields:?}"
+        );
+        assert!(
+            properties.lines().any(|line| {
+                line.starts_with("        ")
+                    && !line.starts_with("          ")
+                    && line.trim_start().starts_with(&format!("{field}:"))
+            }),
+            "{schema_name} must define JSON property {field}"
         );
     }
 }

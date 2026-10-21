@@ -38,6 +38,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   file_selector: ^1.0.3
   crypto: ^3.0.6
+  path: ^1.9.1
   desktop_drop: ^0.7.1
   csv: ^6.0.0
   video_player: ^2.11.1

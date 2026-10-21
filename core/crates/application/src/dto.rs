@@ -1,12 +1,12 @@
 use domain::{
     CorpusOccurrence, CorpusOccurrenceId, HuntingCheckAnswer, HuntingTargetId,
-    HuntingTargetSourceKind, LearningEventId, LearningStatus, LexicalEntryId, LexicalEntryKind,
-    LexicalObservationId, ListeningComprehensionReport, ListeningInboxResolution, MediaId,
-    MediaItem, MediaKind, MediaTriageIntent, ObservationResult, PracticeAnchor, PracticeItemId,
-    PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, ReviewAttempt, ReviewCardState,
-    ReviewItem, ReviewItemId, ReviewRating, ReviewSchedule, ReviewSource, SubtitleSentenceId,
-    SubtitleTrackId, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
-    WordTimelineId, WordTiming,
+    HuntingTargetSourceKind, LanguageCode, LearningEventId, LearningStatus, LexicalEntryId,
+    LexicalEntryKind, LexicalObservationId, ListeningComprehensionReport, ListeningInboxResolution,
+    MediaId, MediaItem, MediaKind, MediaTriageIntent, ObservationResult, PracticeAnchor,
+    PracticeItemId, PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget,
+    RecordingAudioMetadata, RecordingSourceSegment, ReviewAttempt, ReviewCardState, ReviewItem,
+    ReviewItemId, ReviewRating, ReviewSchedule, ReviewSource, SubtitleSentenceId, SubtitleTrackId,
+    TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, WordTimelineId, WordTiming,
 };
 use serde::{Deserialize, Serialize};
 
@@ -217,6 +217,24 @@ pub struct SubmitPracticeAttempt {
     pub item_id: PracticeItemId,
     pub text_answer: String,
     pub create_review_item_on_failure: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRecordingAsset {
+    pub file_path: String,
+    pub duration_ms: u64,
+    pub target: PracticeTarget,
+    pub source_segment: RecordingSourceSegment,
+    pub language: LanguageCode,
+    pub audio: RecordingAudioMetadata,
+    pub recorder_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRecordingTranscriptionRequest {
+    pub recording_id: String,
+    pub model_id: String,
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

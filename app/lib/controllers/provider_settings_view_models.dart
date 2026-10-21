@@ -6,6 +6,7 @@ import '../data/repositories/settings_repository.dart';
 import '../models/api_failure.dart';
 import '../models/llm_provider.dart';
 import '../models/named_failure.dart';
+import '../models/realtime_conversation.dart';
 import '../models/syntax_capability.dart';
 
 enum LlmProbeStatus { probing, supported, unsupported, failed }
@@ -154,6 +155,142 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
       _probeStatuses[id] = LlmProbeStatus.failed;
     }
     _notify();
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+}
+
+@immutable
+class RealtimeProviderFormInput {
+  const RealtimeProviderFormInput({
+    required this.displayName,
+    required this.adapterKind,
+    required this.baseUrl,
+    required this.modelId,
+    required this.voice,
+    required this.secret,
+  });
+
+  final String displayName;
+  final String adapterKind;
+  final String baseUrl;
+  final String modelId;
+  final String voice;
+  final String secret;
+}
+
+@immutable
+class RealtimeProviderSettingsState {
+  RealtimeProviderSettingsState({
+    required List<RealtimeProviderProfileView> profiles,
+    required this.loading,
+    required this.submitting,
+    required this.failure,
+    required Set<String> deletingIds,
+  }) : profiles = List.unmodifiable(profiles),
+       deletingIds = Set.unmodifiable(deletingIds);
+
+  final List<RealtimeProviderProfileView> profiles;
+  final bool loading;
+  final bool submitting;
+  final NamedFailure? failure;
+  final Set<String> deletingIds;
+}
+
+class RealtimeProviderSettingsViewModel extends ChangeNotifier {
+  RealtimeProviderSettingsViewModel(this._repository);
+
+  final RealtimeProviderRepository _repository;
+  List<RealtimeProviderProfileView> _profiles = const [];
+  bool _loading = true;
+  bool _submitting = false;
+  NamedFailure? _failure;
+  final Set<String> _deletingIds = {};
+  bool _disposed = false;
+  int _loadGeneration = 0;
+
+  RealtimeProviderSettingsState get state => RealtimeProviderSettingsState(
+    profiles: _profiles,
+    loading: _loading,
+    submitting: _submitting,
+    failure: _failure,
+    deletingIds: _deletingIds,
+  );
+
+  Future<void> load() async {
+    final generation = ++_loadGeneration;
+    _loading = true;
+    _failure = null;
+    _notify();
+    try {
+      final profiles = await _repository.list();
+      if (_disposed || generation != _loadGeneration) return;
+      _profiles = List.unmodifiable(profiles);
+    } on ApiFailure catch (failure) {
+      if (_disposed || generation != _loadGeneration) return;
+      _failure = NamedFailure('realtimeProvidersLoadFailed', detail: failure);
+    } finally {
+      if (!_disposed && generation == _loadGeneration) {
+        _loading = false;
+        _notify();
+      }
+    }
+  }
+
+  Future<bool> register(RealtimeProviderFormInput input) async {
+    if (_submitting) return false;
+    _submitting = true;
+    _failure = null;
+    _notify();
+    try {
+      await _repository.register(
+        RealtimeProviderDraft(
+          displayName: input.displayName,
+          adapterKind: input.adapterKind,
+          baseUrl: input.baseUrl,
+          modelId: input.modelId,
+          voice: input.voice,
+          secret: input.secret,
+        ),
+      );
+      if (_disposed) return false;
+      await load();
+      return true;
+    } on ApiFailure catch (failure) {
+      if (_disposed) return false;
+      _failure = NamedFailure('realtimeProviderSaveFailed', detail: failure);
+      return false;
+    } finally {
+      if (!_disposed) {
+        _submitting = false;
+        _notify();
+      }
+    }
+  }
+
+  Future<void> delete(String id) async {
+    if (!_deletingIds.add(id)) return;
+    _failure = null;
+    _notify();
+    try {
+      await _repository.delete(id);
+      if (_disposed) return;
+      await load();
+    } on ApiFailure catch (failure) {
+      if (_disposed) return;
+      _failure = NamedFailure('realtimeProviderRemoveFailed', detail: failure);
+    } finally {
+      _deletingIds.remove(id);
+      _notify();
+    }
   }
 
   void _notify() {

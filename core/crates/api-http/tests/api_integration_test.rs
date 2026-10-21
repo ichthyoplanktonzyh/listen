@@ -34,6 +34,8 @@ fn build_app() -> Router {
         repo.clone(),
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+    .with_realtime_conversation_repository(repo.clone())
+    .with_recording_repository(repo.clone())
     .with_material_repository(repo.clone())
     .with_package_lifecycle_repository(repo.clone())
     .with_capability_attempt_repository(repo.clone())
@@ -186,11 +188,126 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The Phase 1 canonical contract is locked exactly: 5.0.0 is the contract
-    // that rebuilds the learning-material surface on source assets and typed
-    // document/media renditions.
+    // The listening contract retains typed media materials and adds AI
+    // conversation routes in minor version 5.1.
     assert_eq!(body["contract_version"], CONTRACT_VERSION);
     assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
+}
+
+#[tokio::test]
+async fn realtime_conversation_turns_persist_through_the_dedicated_repository() {
+    let app = build_app();
+    let (status, profile) = send(
+        &app,
+        post_json(
+            "/v1/realtime/providers",
+            Some(TOKEN),
+            &json!({
+                "display_name": "Test voice",
+                "adapter_kind": "open_ai_realtime",
+                "base_url": "wss://example.invalid/realtime",
+                "model_id": "test-model",
+                "voice": "alloy",
+                "secret": "test-secret",
+                "timeout_ms": 1000,
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{profile}");
+
+    let session = json!({
+        "id": "session-1",
+        "profile_id": profile["id"],
+        "language": "en",
+        "context": null,
+        "status": "active",
+        "started_at_ms": 10,
+        "ended_at_ms": null,
+        "failure_kind": null,
+    });
+    let (status, saved_session) = send(
+        &app,
+        post_json("/v1/realtime/sessions", Some(TOKEN), &session),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved_session}");
+
+    let turn = json!({
+        "id": "turn-1",
+        "session_id": "session-1",
+        "sequence": 1,
+        "role": "learner",
+        "status": "streaming",
+        "assistance": "unknown",
+        "provider_transcript": null,
+        "local_transcript": null,
+        "recording_asset_id": null,
+        "started_at_ms": 11,
+        "ended_at_ms": null,
+        "failure_kind": null,
+    });
+    let (status, saved_turn) =
+        send(&app, post_json("/v1/realtime/turns", Some(TOKEN), &turn)).await;
+    assert_eq!(status, StatusCode::OK, "{saved_turn}");
+    assert_eq!(saved_turn["id"], "turn-1");
+
+    let (status, turns) = send(
+        &app,
+        get("/v1/realtime/sessions/session-1/turns", Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{turns}");
+    assert_eq!(turns.as_array().unwrap().len(), 1);
+    assert_eq!(turns[0]["id"], "turn-1");
+}
+
+#[tokio::test]
+async fn free_realtime_recordings_accept_the_unanchored_zero_range() {
+    let app = build_app();
+    let (status, recording) = send(
+        &app,
+        post_json(
+            "/v1/recordings",
+            Some(TOKEN),
+            &json!({
+                "file_path": "/tmp/realtime-turn.wav",
+                "duration_ms": 800,
+                "target": {
+                    "kind": "segment",
+                    "id": null,
+                    "sentence_id": null,
+                    "start_ms": 0,
+                    "end_ms": 0,
+                },
+                "source_segment": {
+                    "media_id": null,
+                    "start_ms": 0,
+                    "end_ms": 0,
+                    "label": "free realtime conversation",
+                    "subtitle_snapshot": "",
+                    "availability": "missing_media",
+                },
+                "language": "en",
+                "audio": {
+                    "container": "wav",
+                    "codec": "pcm_s16le",
+                    "sample_rate_hz": 16000,
+                    "channels": 1,
+                    "sample_format": "s16",
+                    "byte_length": 25600,
+                    "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                },
+                "recorder_version": "realtime-test",
+            }),
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{recording}");
+    assert_eq!(recording["source_segment"]["media_id"], Value::Null);
+    assert_eq!(recording["source_segment"]["start_ms"], 0);
+    assert_eq!(recording["source_segment"]["end_ms"], 0);
 }
 
 #[tokio::test]

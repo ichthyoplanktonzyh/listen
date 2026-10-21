@@ -12,10 +12,13 @@ use domain::{
     PhoneticAnalysisJobId, PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId,
     PhoneticFindingFeedback, PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem,
     PracticeItemId, PracticeSession, PracticeSessionId, ProsodyAnalysis, ProsodyAnalysisId,
-    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
-    SecretRef, SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, SubtitleSentence,
-    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
-    VocabularyAssetBundle, WordPronunciation, WordTimeline, WordTimelineId, WordTiming,
+    RealtimeConversationSession, RealtimeConversationSessionId, RealtimeConversationTurn,
+    RealtimeConversationTurnId, RealtimeProviderProfile, RealtimeProviderProfileId, RecordingAsset,
+    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
+    ReviewSchedule, SecretRef, SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation,
+    SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus,
+    TimeMs, TranscriptionModelDescriptor, TranscriptionModelId, VocabularyAssetBundle,
+    WordPronunciation, WordTimeline, WordTimelineId, WordTiming,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -775,6 +778,126 @@ pub trait SecretCleanupRepository: Send + Sync {
     fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError>;
     fn pending_secret_cleanups(&self) -> Result<Vec<SecretRef>, ApplicationError>;
     fn complete_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
+}
+
+/// Realtime provider profiles and local conversation history.
+pub trait RealtimeConversationRepository: SecretCleanupRepository {
+    fn upsert_realtime_profile(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        let _ = profile;
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<Option<RealtimeProviderProfile>, ApplicationError> {
+        let _ = id;
+        Ok(None)
+    }
+    fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn delete_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError> {
+        let _ = id;
+        Ok(())
+    }
+    fn upsert_realtime_profile_preserving_credential(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        self.upsert_realtime_profile(profile)
+    }
+    fn upsert_realtime_profile_and_schedule_cleanup(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        self.upsert_realtime_profile(profile)
+    }
+    fn delete_realtime_profile_and_schedule_cleanup(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError> {
+        self.delete_realtime_profile(id)
+    }
+    fn save_realtime_session(
+        &self,
+        session: &RealtimeConversationSession,
+    ) -> Result<RealtimeConversationSession, ApplicationError> {
+        let _ = session;
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_session(
+        &self,
+        id: &RealtimeConversationSessionId,
+    ) -> Result<Option<RealtimeConversationSession>, ApplicationError> {
+        let _ = id;
+        Ok(None)
+    }
+    fn list_realtime_sessions(&self) -> Result<Vec<RealtimeConversationSession>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn save_realtime_turn(
+        &self,
+        turn: &RealtimeConversationTurn,
+    ) -> Result<RealtimeConversationTurn, ApplicationError> {
+        let _ = turn;
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_turn(
+        &self,
+        id: &RealtimeConversationTurnId,
+    ) -> Result<Option<RealtimeConversationTurn>, ApplicationError> {
+        let _ = id;
+        Ok(None)
+    }
+    fn list_realtime_turns(
+        &self,
+        session_id: &RealtimeConversationSessionId,
+    ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError> {
+        let _ = session_id;
+        Ok(Vec::new())
+    }
+}
+
+/// Audio recordings used to transcribe local realtime conversation turns.
+pub trait RecordingRepository: Send + Sync {
+    fn save_recording_asset(
+        &self,
+        asset: &RecordingAsset,
+    ) -> Result<RecordingAsset, ApplicationError>;
+    fn get_recording_asset(
+        &self,
+        id: &RecordingAssetId,
+    ) -> Result<Option<RecordingAsset>, ApplicationError>;
+    fn delete_recording_asset(
+        &self,
+        id: &RecordingAssetId,
+    ) -> Result<Option<RecordingAsset>, ApplicationError>;
+}
+
+/// Persisted local transcription-model catalog.
+pub trait TranscriptionRepository: Send + Sync {
+    fn upsert_model(
+        &self,
+        model: &TranscriptionModelDescriptor,
+    ) -> Result<TranscriptionModelDescriptor, ApplicationError>;
+    fn list_models(&self) -> Result<Vec<TranscriptionModelDescriptor>, ApplicationError>;
+    fn get_model(
+        &self,
+        id: &TranscriptionModelId,
+    ) -> Result<Option<TranscriptionModelDescriptor>, ApplicationError>;
+    fn delete_model(&self, id: &TranscriptionModelId) -> Result<(), ApplicationError>;
 }
 
 pub trait LlmProviderProfileRepository: SecretCleanupRepository {

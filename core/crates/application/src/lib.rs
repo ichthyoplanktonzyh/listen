@@ -23,16 +23,17 @@ use domain::{
     PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeKind, PracticeMode,
     PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget, PracticeTargetKind,
     PronunciationProviderInfo, ProsodicChunkProjection, ProsodyAnalysis, ProsodyAnalysisId,
-    ProsodyAnalysisSummary, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId,
-    ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId,
-    SecretRef, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary,
-    SenseGroupId, SentenceDiagnosis, SentencePronunciation, SubtitleSentence, SubtitleSentenceId,
-    SubtitleToken, SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus,
-    SyntacticAnalysis, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
-    VocabularyAssetBundle, WordPronunciation, WordTimeline, WordTimelineId,
-    WordTimelineLifecycleStage, WordTimelineSummary, WordTiming, detached_media_path,
-    learning_observation_id, normalize_lemma, observation_spec_for_marking,
-    observation_spec_for_practice, observation_spec_for_review, validate_syntactic_analysis,
+    ProsodyAnalysisSummary, RecordingAsset, RecordingAssetId, ReviewAttempt, ReviewAttemptId,
+    ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource,
+    ReviewSourceKind, RhythmFrameId, SecretRef, SenseGroup, SenseGroupAnalysis,
+    SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis,
+    SentencePronunciation, SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind,
+    SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis, TimeMs,
+    TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, VocabularyAssetBundle,
+    WordPronunciation, WordTimeline, WordTimelineId, WordTimelineLifecycleStage,
+    WordTimelineSummary, WordTiming, detached_media_path, learning_observation_id, normalize_lemma,
+    observation_spec_for_marking, observation_spec_for_practice, observation_spec_for_review,
+    validate_syntactic_analysis,
 };
 
 mod background_jobs;
@@ -64,6 +65,8 @@ mod pronunciation;
 mod pronunciation_providers;
 mod prosody;
 mod providers;
+mod realtime_conversation;
+mod recording;
 mod repositories;
 mod secret_store;
 mod semantic_embedding;
@@ -100,6 +103,8 @@ pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use prosody::*;
 pub use providers::*;
+pub use realtime_conversation::*;
+pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use semantic_embedding::*;
@@ -113,6 +118,61 @@ pub(crate) use util::{
     phrase_candidates, require_text,
 };
 pub(crate) use vocabulary::ObservationContext;
+
+struct DisabledRealtimeConversationRepository;
+
+impl SecretCleanupRepository for DisabledRealtimeConversationRepository {
+    fn reserve_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+
+    fn schedule_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError> {
+        Ok(0)
+    }
+
+    fn pending_secret_cleanups(&self) -> Result<Vec<SecretRef>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn complete_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+}
+
+impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {}
+
+struct DisabledRecordingRepository;
+
+impl RecordingRepository for DisabledRecordingRepository {
+    fn save_recording_asset(
+        &self,
+        _asset: &RecordingAsset,
+    ) -> Result<RecordingAsset, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "recording repository is not configured".into(),
+        ))
+    }
+
+    fn get_recording_asset(
+        &self,
+        _id: &RecordingAssetId,
+    ) -> Result<Option<RecordingAsset>, ApplicationError> {
+        Ok(None)
+    }
+
+    fn delete_recording_asset(
+        &self,
+        _id: &RecordingAssetId,
+    ) -> Result<Option<RecordingAsset>, ApplicationError> {
+        Ok(None)
+    }
+}
 
 #[derive(Clone)]
 pub struct AppServices {
@@ -145,6 +205,8 @@ pub struct AppServices {
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
+    pub(crate) realtime_conversations: Arc<dyn RealtimeConversationRepository>,
+    pub(crate) recordings: Arc<dyn RecordingRepository>,
     pub(crate) semantic_embedding_index: Arc<dyn SemanticEmbeddingIndexRepository>,
     pub(crate) embedding_provider: Arc<dyn EmbeddingProvider>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
@@ -211,6 +273,14 @@ impl AppServices {
 
     pub fn llm_providers(&self) -> LlmProviderUseCases {
         LlmProviderUseCases::from_services(self)
+    }
+
+    pub fn realtime_conversations(&self) -> RealtimeConversationUseCases {
+        RealtimeConversationUseCases::new(self.realtime_conversations.clone())
+    }
+
+    pub fn recordings(&self) -> RecordingUseCases {
+        RecordingUseCases::new(self.recordings.clone())
     }
 
     pub fn semantic_embedding(&self) -> SemanticEmbeddingUseCases {
@@ -503,6 +573,8 @@ impl AppServices {
             corpus: Arc::new(DisabledCorpusIndexRepository),
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
+            realtime_conversations: Arc::new(DisabledRealtimeConversationRepository),
+            recordings: Arc::new(DisabledRecordingRepository),
             semantic_embedding_index: Arc::new(DisabledSemanticEmbeddingIndexRepository),
             embedding_provider: Arc::new(UnavailableEmbeddingProvider),
             lexical_normalizers: Arc::new(Vec::new()),
@@ -583,6 +655,19 @@ impl AppServices {
         llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     ) -> Self {
         self.llm_provider_profiles = llm_provider_profiles;
+        self
+    }
+
+    pub fn with_realtime_conversation_repository(
+        mut self,
+        realtime_conversations: Arc<dyn RealtimeConversationRepository>,
+    ) -> Self {
+        self.realtime_conversations = realtime_conversations;
+        self
+    }
+
+    pub fn with_recording_repository(mut self, recordings: Arc<dyn RecordingRepository>) -> Self {
+        self.recordings = recordings;
         self
     }
 

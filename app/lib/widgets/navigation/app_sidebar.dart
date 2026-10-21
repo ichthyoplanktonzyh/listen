@@ -44,12 +44,14 @@ class AppSidebar extends StatelessWidget {
     super.key,
     required this.currentRoute,
     required this.onRouteSelected,
+    this.onOpenConversation,
     this.onOpenSettings,
     this.toolsMenu,
   });
 
   final AppRoute currentRoute;
   final ValueChanged<AppRoute> onRouteSelected;
+  final VoidCallback? onOpenConversation;
 
   final VoidCallback? onOpenSettings;
 
@@ -73,13 +75,14 @@ class AppSidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: ListenSpacing.gap16,
-              vertical: ListenSpacing.gap16,
+          if (onOpenConversation != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ListenSpacing.gap16,
+                vertical: ListenSpacing.gap16,
+              ),
+              child: const ListenWordmark(size: 22),
             ),
-            child: const ListenWordmark(size: 22),
-          ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(
@@ -108,6 +111,19 @@ class AppSidebar extends StatelessWidget {
             ),
           ),
           Divider(height: 1, thickness: 1, color: colors.outlineVariant),
+          if (onOpenConversation != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ListenSpacing.gap8,
+                vertical: ListenSpacing.gap8,
+              ),
+              child: _SidebarItem(
+                icon: Icons.forum_outlined,
+                label: l.text('sidebarStartConversation'),
+                isSelected: false,
+                onTap: onOpenConversation!,
+              ),
+            ),
           if (toolsMenu != null)
             Padding(
               padding: const EdgeInsets.symmetric(

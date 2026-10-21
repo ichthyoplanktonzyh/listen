@@ -47,6 +47,8 @@ fn test_state_with_repository() -> (ApiState, Arc<SqliteRepository>) {
         .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
         .with_corpus_index_repository(repo.clone())
         .with_llm_provider_profile_repository(repo.clone())
+        .with_realtime_conversation_repository(repo.clone())
+        .with_recording_repository(repo.clone())
         .with_material_repository(repo.clone())
         .with_package_lifecycle_repository(repo.clone())
         .with_capability_attempt_repository(repo.clone())

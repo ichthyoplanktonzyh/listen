@@ -14,11 +14,14 @@ mod migrations;
 mod package_lifecycle;
 mod phonetic_analysis;
 mod progress;
+mod realtime_conversation;
+mod recording;
 mod secret_cleanup;
 mod semantic_embedding;
 mod source_identity;
 mod subtitles;
 mod support;
+mod transcription;
 
 pub use connection::SqliteRepository;
 pub use migrations::{MIGRATION_VERSION, migrate};

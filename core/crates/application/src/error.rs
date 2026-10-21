@@ -38,5 +38,7 @@ pub enum ApplicationError {
     #[error(transparent)]
     Provider(#[from] domain::LlmProviderError),
     #[error(transparent)]
+    RealtimeProvider(#[from] domain::RealtimeProviderError),
+    #[error(transparent)]
     SecretStore(#[from] crate::SecretStoreError),
 }

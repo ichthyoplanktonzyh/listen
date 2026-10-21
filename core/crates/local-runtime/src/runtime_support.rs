@@ -9,6 +9,22 @@ use std::path::{Path, PathBuf};
 use application::ApplicationError;
 use sha2::{Digest, Sha256};
 
+pub(crate) fn support_dir() -> PathBuf {
+    std::env::var_os("LLPLAYERNEXT_SUPPORT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var_os("HOME").expect("HOME is required"))
+                .join("Library/Application Support/listen")
+        })
+}
+
+pub(crate) fn file_id(value: &str) -> String {
+    value
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
+}
+
 pub(crate) fn ffmpeg_wav_args(
     media_path: String,
     audio_track: Option<u32>,

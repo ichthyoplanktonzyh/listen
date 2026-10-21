@@ -33,7 +33,7 @@ compatibility. A monorepo does not erase existing user databases or package
 versions: breaking durable-format changes require explicit migration.
 For the current scope-reduction stage, the owner's fresh-store waiver in
 [STATE.md](../STATE.md) overrides this migration requirement. Do not reset or
-move a real learner's old database; use the new listening store.
+move a real learner's old database; use the branch-specific fresh store in STATE.md.
 Published artifacts are immutable and never reuse a tag with different bytes.
 
 Root tooling builds formal product artifacts from one clean commit and records

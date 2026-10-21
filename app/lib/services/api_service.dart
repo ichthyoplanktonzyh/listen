@@ -14,6 +14,8 @@ import '../models/llm_provider.dart';
 import '../models/material_capability.dart';
 import '../models/practice.dart';
 import '../models/review_deck.dart';
+import '../models/realtime_conversation.dart';
+import '../models/realtime_recording.dart';
 import '../models/saved_vocabulary_count.dart';
 import '../models/runtime_resources.dart';
 import '../models/semantic_embedding.dart';
@@ -38,6 +40,8 @@ part 'api/capability_attempts.dart';
 part 'api/package_lifecycle.dart';
 part 'api/composition.dart';
 part 'api/source_identities.dart';
+part 'api/realtime.dart';
+part 'api/transcription.dart';
 
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
   final file = File(path);
@@ -339,9 +343,9 @@ const supportedApiVersion = 1;
 // The listening product consumes Core's media-only 5.0 material, capability,
 // package-lifecycle, and composition surfaces. API generation remains v1.
 const supportedContractMajor = 5;
-// A sidecar must present at least 5.0.0 within the supported major. Older
-// contracts are rejected here instead of failing on the first material call.
-const supportedContractMinor = 0;
+// The AI conversation surface is introduced in 5.1.0, so older sidecars are
+// rejected here instead of failing on the first conversation request.
+const supportedContractMinor = 1;
 
 void validateSidecarHandshake(Map<String, dynamic> handshake) {
   if (handshake['event'] != 'api.started' ||
