@@ -9,6 +9,12 @@ Install Flutter with macOS desktop support, Xcode, Rust matching
 `core/Cargo.toml`, and Python 3.11+. The desktop release target is Apple Silicon;
 the bundled native tools currently require macOS 26+.
 
+Desktop and mobile are joint construction targets under the approved
+[devices and production design](docs/architecture/devices-and-production.md).
+The current launcher and packaging commands below remain macOS workflows;
+Android/mobile assembly and two-device acceptance are roadmap work, not
+capabilities implied by installing an emulator.
+
 ```sh
 ./dev setup
 ./dev status

@@ -90,20 +90,51 @@ inputs into a Complete Learning Material. It owns provider execution and
 material-side derivation, not learner state or Learning Experience selection.
 _Avoid_: Learning Activity, import form, provider workflow
 
+**Material Production Task**: A durable request to turn authorized Raw Sources
+and reusable inputs into a qualified Learning Material, retaining its execution
+intent, outcome, and result association independently of a client connection.
+_Avoid_: Learning Activity, Meaningful Learning Episode, material download
+
+**Production Executor**: The personal-computer or remote execution authority
+that accepts a Material Production Task, organizes material compilation, and
+makes its result available for delivery.
+_Avoid_: Model Provider, Learner, sync relay
+
+**Model Provider**: A replaceable source of model computation for a declared
+production or inference operation, such as a locally executed model or a
+vendor API. It is not by itself the owner of a complete production task.
+_Avoid_: Production Executor, Learning Material Compiler
+
 **Complete Learning Material**: The formal first-class material consumed by the
-learning world, qualified for its actual modalities under [MODEL.md](MODEL.md):
-text learning needs no TTS, while present audio requires the full
-sound-processing scope. “Learning Material” is the accepted short form.
-_Avoid_: Raw Source, single file, Content Package, mandatory audio for all text
+learning world, qualified under the foundational contract in [MODEL.md](MODEL.md)
+for its actual modalities. Audio listening requires interactive text, exact
+sentence/word alignment and declared Sentence Translation; deeper analysis is
+on demand. “Learning Material” is the accepted short form.
+_Avoid_: Raw Source, single file, Content Package, every analysis completed
+
+**Native Media Resource**: Source-provided media or support, such as an audio
+track, subtitle, or chapter, usable for ordinary playback before learning
+preparation; its presence does not establish qualified learning readiness.
+_Avoid_: Foundational Learning Resource, generated analysis, learner fact
+
+**Foundational Learning Resource**: A qualified resource supplying the shared
+interaction coordinates or essential meaning support required by the basic
+learning contract for the material's modalities.
+_Avoid_: Every generated resource, package base role, Model Provider
+
+**On-demand Learning Resource**: A compatible deeper analysis or explanation
+requested for a bounded context or whole material, reusable afterward without
+being required for foundational learning readiness.
+_Avoid_: Sentence Translation in a declared Support Language, foundational alignment
 
 **Canonical Audio**: The exact audio representation used by the material's
 Structured Timed Text and Speech Learning Representation. It may come from a
 Source Media Rendition or faithful TTS.
 _Avoid_: Any available audio, detached clip, generated pronunciation example
 
-**Canonical Text**: The exact language-bearing text of one Complete Learning
-Material, whether or not audio exists. It may come from an authored document,
-qualified transcription, or another verified path and pairs with exact
+**Canonical Text**: The exact qualified language-bearing text of a Material
+Revision, whether or not every foundational resource is ready. It may come from
+an authored document, qualified transcription, or another verified path and pairs with exact
 Canonical Audio when present.
 _Avoid_: UI transcript, translation, OCR cache
 
@@ -192,7 +223,7 @@ _Avoid_: Signal Fact, Gen-authored universal answer, phonetic terminology
 **Optional Enrichment**: Grammar, semantic, pragmatic, discourse, cultural, or
 contextual assistance that improves a Complete Learning Material but is not a
 required part of its contract.
-_Avoid_: Sentence Translation, required sound processing, audio-independent Sense Group
+_Avoid_: Sentence Translation, foundational timing, learner facts
 
 **Resource Provenance**: The exact inputs, producer, provider/model, version,
 configuration, transformation, evidence class, and qualification history needed
@@ -201,15 +232,16 @@ _Avoid_: Quality guarantee, provider log
 
 ## Learning world
 
-**Learning Boundary**: The boundary after which the learning system consumes a
-Complete Learning Material and reasons about Learner-relative experience rather
-than provider production steps.
+**Learning Boundary**: The boundary after which the learning system consumes
+qualified material resources and reasons about Learner-relative experience
+rather than provider production steps; each operation needs its own qualified
+inputs.
 _Avoid_: File import, package installation, screen navigation
 
 **Workbench**: The unified learner-facing workspace that consumes material and
-learning semantics supplied by Core and hosts material interaction and Learning
-Activities. Its views and activity modes may vary with the material and intent
-without becoming separate material-consumption systems.
+learning semantics supplied by Core, hosting native playback before preparation,
+production progress, and resource-backed Learning Activities. Entry does not
+require completed preparation; dependent actions require qualified resources.
 _Avoid_: Learning Activity, media-only player, provider-output viewer, one fixed layout
 
 **Language Object**: A family of reusable language targets such as a Lexical
@@ -219,17 +251,18 @@ universal database identity.
 _Avoid_: Token, Language Slice, universal parent table
 
 **Learning Activity**: A meaningful cognitive operation through which a Learner
-interacts with a Complete Learning Material, such as listening for meaning,
-intensive listening, reading, dictation, shadowing, reconstruction, speaking,
+interacts with material using the qualified resources required by that operation,
+such as listening for meaning, intensive listening, reading, dictation,
+shadowing, reconstruction, speaking,
 or writing.
 _Avoid_: Screen, button, feature, mandatory course stage
 
 **Language Slice**: A stable, re-enterable pointer to a bounded experience in a
-Complete Learning Material: Material Revision, Canonical Text span, Canonical
+material: Material Revision, qualified Canonical Text span, Canonical
 Audio rendition/range when available, and compatible resource references. A
-text-only Slice is valid; it normally does not copy audio or become a new
-material.
-_Avoid_: Audio clip file, detached flashcard, Corpus Occurrence
+Slice save requires qualified text and stable anchors; audio re-entry also
+requires accurate alignment. A text-only Slice is valid.
+_Avoid_: Textless audio-range save, detached flashcard, Corpus Occurrence
 
 **Learning Focus**: The Language Slice or Language Object currently receiving
 intentional attention inside a Learning Activity.

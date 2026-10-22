@@ -8,7 +8,8 @@ The current implementation follows only the audio/video listening journey in
 dimensions describe possible future scope, not runtime requirements for this
 stage.
 
-> Status: owner-approved theoretical baseline, revision 3, 2026-09-08.
+> Status: owner-approved model, revision 4, 2026-10-22. Workbench entry and
+> foundational/on-demand resource policy are targets, not implementation claims.
 
 This document is the project-level authority for Listen's theoretical model.
 It defines the relationship among the language world, the learning world,
@@ -44,7 +45,7 @@ Listen is not a media player with subtitles and lookup attached, and it is not
 a mandatory curriculum or a collection of disconnected exercises. Its center
 is the continuing relationship between a Learner and authentic language.
 
-## Two worlds and one formal boundary
+## Two worlds and the learning boundary
 
 Listen separates the material-side language world from the learner-relative
 learning world:
@@ -53,17 +54,16 @@ learning world:
 LANGUAGE WORLD
 ────────────────────────────────────
 Raw Source
-    ↓
-Learning Material Compiler / listen-gen
-    ↓
-Complete Learning Material
-    ├── Canonical Text / Structured Reading
-    ├── Sentence Translation
-    ├── text-side Sense Groups, independent of audio
-    ├── when audio is present: full sound-processing scope
-    │   ├── Canonical Audio / Structured Timed Text
-    │   └── material-side Speech Learning Representation
-    └── optional enrichments
+    ├── Native Media Resources -> Workbench playback, before production
+    └── explicit material-production request
+            ↓
+        Learning Material Compiler / listen-gen
+            ↓
+        Complete Learning Material (foundational contract satisfied)
+            ├── Canonical Text / Structured Reading
+            ├── Sentence Translation
+            ├── when audio exists: exact sentence/word timed text
+            └── compatible on-demand resources, produced or reused as requested
 
 ══════════════ LEARNING BOUNDARY ══════════════
 
@@ -95,19 +95,30 @@ The learning world answers: **what has happened between this Learner and this
 language, and what should happen next?**
 
 A file, URL, feed item, article, EPUB, podcast, audio file, video, or pasted text
-enters Listen as a Raw Source. It may be acquired, inspected, previewed, or used
-as production input before compilation, but it is not yet the formal first-class
-object of the learning system. Formal learning begins from a Complete Learning
-Material that satisfies the contract below.
+enters Listen as a Raw Source. Selecting it opens the same MaterialWorkbench
+before material production. Accessible native media and source-provided
+resources support ordinary playback; an inaccessible source shows an honest
+acquisition or recovery state. Entering the workspace does not establish
+learning readiness, a learning attempt, or acquired capability.
+
+Resource-dependent learning actions become available when their exact
+dependencies are qualified. Complete Learning Material names satisfaction of
+the foundational contract below; it is not an entry requirement for the
+Workbench or a requirement to finish every possible analysis before any useful
+action. Detailed presentation and the full journey are in [JOURNEYS.md](JOURNEYS.md).
 
 ## Complete Learning Material contract
 
-"Complete" means qualified for the material's actual modalities under the
-contract below, not that every material must acquire audio. Text-only material
-can support formal reading and other text-based Learning Activities without
-TTS. When audio is present, its full sound-processing scope is required; Listen
-does not divide it into minimum processing and optional speech enhancements.
-Unrelated optional explanations do not become validity requirements.
+"Complete" means qualified under the foundational contract for the material's
+actual modalities, not that every possible analysis has run. The active
+audio/video listening contract requires qualified interactive text, exact
+sentence/word timing and media alignment, and Sentence Translation in the
+declared Support Languages. Detailed sound analysis is on demand.
+
+The broader model still permits text-only learning without TTS; standalone
+text materials and activities remain outside the current implementation scope.
+Native playback and partially ready resources never masquerade as satisfying
+the complete foundational contract.
 
 ### 1. Language Experience
 
@@ -139,9 +150,9 @@ spans, and stable Text Anchors independently of audio. It supports reading,
 lookup, translation, Language Slices, and meaningful learning history without
 inventing audio locators.
 
-Sense Group analysis belongs to this text side: semantic/syntactic grouping
-does not require audio or TTS. Text-only materials can support meaning-group
-reading, focusing, and Slice selection. The same groups can also accompany
+Sense Group analysis belongs to this text side: semantic/syntactic grouping is
+on demand and does not require audio or TTS. Text-only materials can support
+meaning-group reading, focusing, and Slice selection. The same groups can also accompany
 audio-backed learning, but are not evidence of audible prosodic boundaries.
 
 When audio exists, Structured Timed Text relates that text structure to the
@@ -168,6 +179,12 @@ compatibility evidence must make clear which Material Revision and canonical
 audio/text pair a resource describes. An inferred or approximate mapping must
 not be presented as exact.
 
+Qualified native subtitles may be reused after normalization and compatibility
+checks; ASR is one production route, not a mandatory rerun. Sentence timing
+alone does not satisfy exact word-level interaction. Failure to obtain word
+timing leaves that dependency unavailable rather than distributing sentence
+duration uniformly and calling it exact.
+
 ### 3. Meaning Scaffold
 
 A Complete Learning Material includes sentence-level translation for the
@@ -175,20 +192,82 @@ declared Support Language used by the Learner. Translation is part of the
 material contract rather than an accidental enrichment. This requirement is
 independent of whether audio exists.
 
+A listening preparation request must declare the Learner's Support Language;
+a missing declaration is a prerequisite to resolve, not permission to skip
+translation and claim foundational readiness.
+
 Grammar, semantics, pragmatics, discourse, cultural context, and other
 explanations are valuable optional enrichments. Their absence does not make the
 material incomplete when the required sentence translation exists.
 
-### 4. Speech Learning Representation
+### 4. Resource policy and readiness
+
+Resources have three distinct product roles:
+
+- **Native Media Resources** permit ordinary playback before preparation:
+  source media, audio tracks, supplied subtitles, and chapters where available.
+  Their presence alone does not establish qualified learning resources.
+- **Foundational Learning Resources** provide shared interaction coordinates
+  and essential meaning support. Preparing a material for basic listening
+  fills these requirements by qualifying reusable inputs or producing gaps.
+- **On-demand Learning Resources** add deeper analysis or explanations when
+  requested for a sentence, Slice, or whole material. They can be retained
+  and reused without becoming prerequisites for foundational readiness.
+
+The foundational requirements map to current resource types as follows:
+
+| Domain requirement | Current representation | Supported interaction |
+|---|---|---|
+| Qualified canonical text, sentence and token spans, stable anchors | `structured_reading` | Interactive text, word/phrase selection, text-backed Slice saving |
+| Exact text-to-media binding | `anchor_time_alignment` | Return from an anchor to this exact recording |
+| Exact sentence and word/token time ranges | subtitle/timed-text representations and `word_timeline` | Synchronized highlighting, seek, sentence/word replay and loops |
+| Sentence Translation in declared Support Languages | `translation` | Essential meaning support aligned to the same text |
+
+`subtitle_text_track` and `timed_text_track` are existing representation forms,
+not additional competing canonical texts to manufacture. Validity requires the
+capability and compatible resources, not duplicated storage. Original playable
+media is a rendition/input prerequisite, not a generated learning-resource kind.
+
+| On-demand result | Current resource or capability |
+|---|---|
+| Semantic/syntactic Sense Groups | `sense_group_analysis`; distinct from foundational sentence segmentation |
+| Word duration, energy, pitch and other acoustic analysis | `word_acoustics`; distinct from mandatory word timing |
+| Continuous acoustic tracks and speech/silence analysis | `acoustic_track`, `speech_activity` |
+| Prominence, rhythm, weak forms and prosodic structure | `prosody_analysis` |
+| Phone timing and audio-backed realization/comparison | `phone_timeline` and phonetic-analysis capabilities |
+| Word/phrase meaning, reference pronunciation, grammar, pragmatic or cultural explanation | Dictionary, pronunciation and explanation capabilities; not all have a package resource kind |
+
+Perceptual Guidance is learner-relative help selected or composed at experience
+time, not a universal material answer to precompute. A VAD or acoustic operation
+may run internally to produce alignment without obliging delivery of a separate
+analysis resource for every material. Cost and implementation maturity do not
+determine whether a domain dependency is required. An additional Support
+Language is an explicit request; declared languages must actually be supported.
+
+Readiness has separate assessments: playable, some qualified learning resources
+available, foundational learning ready, and requested on-demand results ready.
+These can coexist and are derived from exact dependencies on each device, not
+one linear completion flag or Gen process success. A missing optional analysis
+does not invalidate foundational learning; a failed required translation or
+timing does not silently become optional. Available actions may use qualified
+partial resources without claiming the full foundational contract is met.
+
+The package schema's `base`/`assistance` roles describe resource relationships,
+not this product policy: translation is assistance yet foundational. A release's
+`required` declaration is also distinct from the product-wide foundational
+requirements. Schema acceptance alone does not prove foundational readiness.
+These tables define target semantics, not changes to existing package schemas.
+
+### 5. Speech Learning Representation
 
 Speech Learning Representation is Listen's distinctive bridge from a sound
 recording to learnable listening experience. Its purpose is not merely to label
 phonetic phenomena; it must support the question: **why does the real speech
 sound this way, and where should the Learner direct attention?**
 
-For any material with source audio, the full material-side sound-processing
-scope is required without a separate enhancement request. Learner-requested
-TTS enters the same scope once audio is generated. That scope covers:
+Exact interactive text and sentence/word alignment belong to the foundational
+contract for audio. Deeper material-side sound processing is available on demand
+for source audio or any explicitly generated audio. Its analysis scope includes:
 
 - qualified text, sentence/word timing, and exact audio/text alignment;
 - reusable text-side Sense Groups together with distinct audio-side prosodic
@@ -202,17 +281,16 @@ TTS enters the same scope once audio is generated. That scope covers:
 - material-side listening hotspots that can support contextual Perceptual
   Guidance and focused replay.
 
-Full processing is an obligation to cover and qualify this scope, not a demand
-that every recording exhibit every phenomenon or that every measurement be
-possible. Absence of a phenomenon, inapplicability, insufficient evidence,
-unsupported analysis, and processing failure remain distinct, explicit
-outcomes. A skipped or failed analysis is not relabeled as successful full
-processing; predictions never fill an observed-evidence gap as if measured.
-Provider limitations are production limitations, not an optional speech tier.
+A requested analysis must qualify its actual scope, not claim every recording
+exhibits every phenomenon. Absence of a phenomenon, inapplicability, insufficient
+evidence, unsupported analysis, processing failure, and not requested are
+distinct outcomes. Skipped or failed analysis is not successful analysis;
+predictions never fill an observed-evidence gap as if measured.
 
-The Learner decides which results to view or use, not whether existing audio
-receives this processing. Minimum Sufficient Scaffold still governs how much
-help an Activity reveals; it does not reduce material-production scope.
+The Learner can request the analyses needed now or prepare a larger scope in
+advance. Minimum Sufficient Scaffold governs presentation of available help.
+On-demand production and selective presentation are separate decisions; neither
+weakens exactness or provenance for a result that is actually supplied.
 
 Speech Learning Representation has three layers:
 
@@ -301,12 +379,28 @@ Once a Complete Learning Material crosses the learning boundary, the learning
 system consumes its declared contract and does not depend on how a particular
 provider or recipe produced it.
 
+This model is device-independent. Desktop and mobile share material identity,
+Language Slices, Personal Corpus facts, and capability semantics while retaining
+their own local learning capability. A Material Production Task can be assigned
+to a personal-computer or remote Production Executor; the executor's choice of
+Model Provider does not change the formal learning boundary. Prepared learning
+does not require the original executor or provider to remain available. The
+[desktop/mobile and production design](docs/architecture/devices-and-production.md)
+defines the approved deployment target without declaring it implemented.
+
 ### Unified Workbench consumption
 
-All processed materials pass through Core's validation, organization, and
-semantic interpretation before the same App Workbench consumes them. The
-Workbench is the common material-interaction and Learning Activity workspace,
-not a consumer of provider-specific Gen output or production recipes.
+The same MaterialWorkbench hosts native playback before production, background
+preparation progress, qualified resource-backed interaction, and learning or
+review selected from the Personal Corpus. Core supplies source/media identity,
+availability, resource validity, and learning semantics; the App does not
+interpret provider-specific Gen output as material authority.
+
+Entering the Workbench does not require a qualified Learning Edition. Playback
+uses accessible media and its native resources; dependent learning actions open
+only when their qualified resources are available. Resource production can
+continue while watching or after leaving the page. Returning preserves media
+context and playback position; resource failure does not break native playback.
 
 Text-only, audio, video, and subsequently enriched materials share this
 consumption boundary. Views, components, and activity modes adapt to the
@@ -330,7 +424,7 @@ boundary, not a claim that current App implementations are already unified.
 The central relation in the learning world is:
 
 ```text
-Learner × Complete Learning Material
+Learner × material with qualified resources for the chosen operation
 ```
 
 A Learning Activity names the meaningful cognitive operation the Learner is
@@ -345,7 +439,8 @@ sequence or a large taxonomy before real product evidence demands it.
 ## Language Slice
 
 A Language Slice is the atomic re-enterable experience pointer of the Personal
-Corpus:
+Corpus. Saving one requires qualified Canonical Text and stable Text Anchors;
+playback alone never enables a textless audio-range Corpus save:
 
 ```text
 Language Slice
@@ -356,12 +451,18 @@ Language Slice
 ```
 
 A Slice may cover a word, expression, phrase, Sense Group, Prosodic Chunk,
-sentence, utterance, or another bounded audio/text span. It does not normally
+sentence, utterance, or another bounded text-backed span. It does not normally
 copy a new audio file or become a new Material. It points back to the original
 material so the Learner can reopen the Slice, recover surrounding context, and
 return to the whole experience. A text-only Slice is fully valid and can enter
 the Personal Corpus without audio. Re-entry then means reopening the text and
 its context, not mandatory playback.
+
+Qualified text can enable Slice saving before translation or every other
+foundational resource is ready. Saving a Slice with original-audio seek/replay
+also requires its accurate media mapping. Before qualified text exists, the
+Learner can retain the whole Source in the Personal Library and keep playback
+progress, but cannot save a textless audio segment into the Personal Corpus.
 
 Later TTS can add compatible listening resources and new listening episodes;
 it cannot turn earlier reading episodes into listening experience, rewrite
@@ -569,17 +670,22 @@ acquisition model with real users.
 
 ## Durable invariants
 
-- Formal learning begins from Complete Learning Material, not Raw Source.
+- Selecting a Source opens the Workbench before production; native playback
+  does not imply qualified learning resources or acquired capability.
+- Resource-dependent learning actions require their own qualified inputs;
+  Complete Learning Material means the full foundational contract is met.
 - Text-only material supports formal learning without TTS; audio generation is
   on demand, not a condition of text-learning validity.
-- Existing audio and newly generated TTS receive the same full sound-processing
-  scope, never a minimum-plus-optional-enhancement tier.
+- Audio listening requires qualified interactive text, exact sentence/word
+  timing and media binding, and declared Sentence Translation; deeper sound
+  analysis and explanations are on demand.
 - Canonical Text, Structured Reading, and declared Sentence Translation support
   text learning; Structured Timed Text binds exact audio when it exists.
-- Full processing and honest evidence do not require every phenomenon to exist.
-- Full material preparation does not require displaying every scaffold.
-- Sense Groups support text-only learning independently of audio; they are not
-  an optional sound enhancement or a substitute for Prosodic Chunks.
+- Requested analysis preserves honest absence, insufficient evidence,
+  unsupported analysis and failure; it need not find every phenomenon.
+- Resource production and selective display of available scaffolds are distinct.
+- Sense Groups are on-demand text-side help, independent of audio; they do
+  not replace foundational sentence segmentation or Prosodic Chunks.
 - Material-side facts and learner-relative guidance remain separate.
 - Signal evidence states what is observed, predicted, or inferred honestly.
 - Sense Group and Prosodic Chunk remain distinct.
@@ -587,6 +693,9 @@ acquisition model with real users.
 - Processed materials pass through Core and share one App Workbench consumption
   boundary; different views and Activity modes do not create separate systems.
 - A Language Slice remains linked to its original material and context.
+- Corpus Slice saving requires qualified text and stable anchors; audio
+  re-entry additionally requires accurate alignment. Textless audio-range
+  saving is outside the selected product model.
 - A text-only Slice is valid; later audio never rewrites earlier experience.
 - Personal Corpus retains meaningful episodes, not raw clickstream.
 - Early Corpus re-entry is learner-selected browsing, learning, and review;
