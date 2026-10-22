@@ -22,7 +22,7 @@ Production execution and device exchange below describe target responsibilities;
 Owns the learner-facing learning world:
 
 - selecting and resuming a Learning Activity;
-- presenting a Complete Learning Material;
+- presenting native media before preparation and qualified learning resources;
 - owning the unified Workbench that consumes Core-provided materials and
   learning semantics across modalities and Activity modes;
 - presenting transcript text and Sense Groups as support within audio/video
@@ -38,6 +38,12 @@ Owns the learner-facing learning world:
 - source discovery, acquisition, preview, executor selection, production-task
   and delivery progress, and recovery UX on desktop and mobile.
 
+Selecting a Source enters the same Workbench before Gen runs. App presents
+Core-owned per-action readiness without treating native subtitle display,
+process success, or package installation as foundational learning readiness.
+Playback remains available when resource production fails. Whole-material
+retention is distinct from text-backed Corpus saving.
+
 App does not define canonical material validity, Speech Structure truth,
 Personal Corpus facts, capability projection semantics, provider execution, or
 community registry truth.
@@ -47,6 +53,8 @@ community registry truth.
 Owns the executable semantics and persistence boundaries for:
 
 - Complete Learning Material identity and contract validation;
+- foundational/on-demand resource qualification, per-action dependencies,
+  device-local readiness, and text/anchor prerequisites for Corpus saving;
 - Material Revisions, canonical representations, Structured Reading, Structured
   Timed Text, exact anchors/locators, and resource compatibility;
 - Language Objects, Language Slices, Learner Relations, Meaningful Learning
@@ -79,9 +87,12 @@ reusable Complete Learning Materials:
   qualification, deterministic packaging, and honest failure.
 
 Gen may emit multiple compatible resources rather than one monolithic speech
-artifact. Present audio requires the full sound-processing scope in
-[MODEL.md](MODEL.md); neither provider defaults nor missing analysis turn it
-into an optional enhancement. Gen does not own Perceptual Guidance, Learner
+artifact. [MODEL.md](MODEL.md#4-resource-policy-and-readiness) owns the product
+resource policy: basic listening requires qualified interactive text, exact
+sentence/word alignment, and declared translations; deeper sound analysis and
+explanations are on demand. Gen reuses qualified inputs and produces missing
+requested resources without lowering evidence quality or fabricating timing.
+Gen does not own Perceptual Guidance, Learner
 State, Meaningful Learning Episodes, Personal Corpus, review scheduling, or
 activity selection.
 
@@ -217,28 +228,32 @@ will experience the result.
 
 ### Gen to Core: qualified material-side artifact
 
-The seam is a versioned, data-only Content Package carrying one qualified
-Learning Edition: canonical text and Structured Reading, translation, text-side
-groups, and, when audio is present, the audio, Structured Timed Text, and full
-material-side speech resources. Optional enrichments, exact dependencies,
-provenance, evidence class, and compatibility remain explicit.
+The seam is a versioned, data-only Content Package carrying exact renditions
+and qualified resources with explicit dependencies, provenance, evidence class,
+and compatibility. Gen can fill missing foundations or produce requested
+on-demand analyses; valid delivery of a partial result does not itself establish
+the complete foundational contract.
 
-Core validates identity and the modality-aware contract before exposing the
-composition as Complete Learning Material. Installed candidates do not silently
-become learner facts or overwrite adopted material.
+Core validates identity, dependencies, and the modality-aware foundational
+requirements before presenting a composition as Complete Learning Material.
+Installed candidates do not silently become learner facts or overwrite adopted
+material. Schema validity and a release's `required` flags do not substitute
+for product readiness semantics.
 
 ### Core to Workbench: unified material consumption
 
-Core validates and organizes processed material resources and supplies their
-canonical semantics and learning projections to the App Workbench. The
+Core supplies Source/media identity and availability before production, then
+validates resources and their dependencies as they become available to the same
+App Workbench. The
 [unified consumption boundary](MODEL.md#unified-workbench-consumption) applies
 to text-only, audio, video, and later-enriched materials alike.
 
 App owns adaptive views, components, and Activity modes within that Workbench;
 it does not bypass Core to interpret provider-specific Gen results as material
 authority. TTS enrichment and Corpus-selected learning/review use the same
-boundary rather than separate material consumers. Source preview and Corpus
-browsing remain distinct journeys, not additional formal-learning workbenches.
+boundary rather than separate material consumers. Native playback and source
+preview occur in that Workbench before preparation. Corpus browsing remains a
+separate journey; choosing source re-entry or review returns to the Workbench.
 
 ### App to Core: learner intent and factual outcomes
 
@@ -267,7 +282,8 @@ privacy, lifecycle, and deletion semantics. Public artifacts are
 content-addressed and replaceable; Personal Corpus entries and meaningful
 learner facts are authenticated, mergeable, and learner-owned.
 Production completion does not establish delivery or local readiness; each
-recipient validates required resources through Core before learning.
+recipient validates an operation's resources through Core. Native playback
+does not wait for production, and partial results do not claim full foundations.
 
 ## Architectural invariants
 
@@ -276,13 +292,14 @@ recipient validates required resources through Core before learning.
 - Production Executor placement and Model Provider choice are independent.
 - Production tasks, material delivery, and private learning-data replication
   have separate lifecycles and authority.
-- Formal Learning Activities consume only a validated Complete Learning
-  Material contract.
+- Native playback can precede production in the same Workbench; learning
+  actions use qualified resources for their actual dependencies.
 - Processed materials reach one unified App Workbench through Core; Workbench
   views and Activity modes vary without bypassing the semantic boundary.
 - Current formal learning starts from audio/video; standalone text material
   and text-source TTS are deferred.
-- Present audio receives the full sound-processing scope.
+- Audio listening foundations require interactive text, exact sentence/word
+  timing, and declared translation; deeper sound analysis is on demand.
 - Canonical audio, when present, and canonical text represent one Material Revision.
 - Structured Reading supplies audio-independent coordinates; Structured Timed
   Text binds them to exact audio.
@@ -300,6 +317,9 @@ recipient validates required resources through Core before learning.
 - Language Slices point back to the original Material Revision and context.
 - Saved listening Slices retain exact audio/text coordinates; new resources
   never rewrite earlier episode facts.
+- Corpus Slice saving requires qualified text and stable anchors; audio
+  source re-entry additionally needs accurate mapping. Whole-Source retention
+  remains available before that qualification.
 - Personal Corpus facts outlive packages, models, projections, and indexes.
 - Exposure and clickstream do not automatically become learner state.
 - Reading, listening, speaking, and writing remain independent dimensions.

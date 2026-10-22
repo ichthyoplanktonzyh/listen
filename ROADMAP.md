@@ -22,12 +22,23 @@ embedded mobile runtime and required platform adapters before committing to a
 specific bridge. Keep desktop process assembly where it remains useful.
 
 Prove that the same qualified material can be validated, explicitly adopted,
-and consumed in both Workbenches. Exercise playback, timed text, existing help,
+and consumed in both Workbenches. Also open native media in that same workspace
+before preparation, using available source resources without Gen. Exercise
+playback, timed text, existing help,
 intentional collection, exact source re-entry, and local listening review.
 Close the relevant Personal Corpus depth gaps as part of that journey.
 Both ends persist learner intent and facts locally, including while offline.
 Shared semantics do not require identical layouts or desktop interactions on
 a touch screen. Other OS rollout order remains to be selected.
+
+Implement the owner-approved resource policy in
+[MODEL.md](MODEL.md#4-resource-policy-and-readiness): foundational interactive
+text, exact sentence/word alignment, and declared translations; deeper analysis
+on demand. Validate per-action partial readiness separately from complete
+foundations and device-local availability. Reuse qualified native resources,
+preserve playback on generation failure, and gate Corpus saving on qualified
+text/anchors with accurate mapping for original-audio re-entry. Existing
+schema acceptance or read/listen/watch availability is not this acceptance gate.
 
 ## 2. Complete phone submission and computer production
 
@@ -35,7 +46,8 @@ Pair the devices and run the first automatic journey over local transfer:
 
 ```text
 phone shares an audio/video link or local file
-    -> durable task reaches the selected computer
+    -> phone enters the Workbench and plays accessible native media
+    -> explicit preparation request reaches the selected computer as a durable task
     -> computer obtains exact input and runs Gen
     -> result is delivered, validated, and explicitly adopted on the phone
     -> phone disconnects and learns, collects, and reviews locally

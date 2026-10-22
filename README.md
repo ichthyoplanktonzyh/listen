@@ -36,11 +36,11 @@ for the target and [current state](STATE.md) for implementation gaps.
 
 | Document | Responsibility |
 |---|---|
-| [MODEL.md](MODEL.md) | Product and domain model |
+| [MODEL.md](MODEL.md) | Product/domain model and foundational versus on-demand resource policy |
 | [PRODUCT.md](PRODUCT.md) | Purpose, principles, and non-goals |
 | [DOMAIN.md](DOMAIN.md), [DOMAIN.zh-CN.md](DOMAIN.zh-CN.md) | One bilingual glossary |
 | [CONTEXT-MAP.md](CONTEXT-MAP.md) | Semantic responsibilities across modules |
-| [JOURNEYS.md](JOURNEYS.md) | Intended learner journeys |
+| [JOURNEYS.md](JOURNEYS.md) | Full media-first journey: native playback, resource preparation, learning, retention, re-entry and review |
 
 These documents describe the product direction. They do not assert that every
 capability is implemented or require every capability in the current stage.

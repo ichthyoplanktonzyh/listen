@@ -12,6 +12,14 @@ production. Mobile Core embedding, paired-device task dispatch/delivery,
 private-state replication, and remote Gen execution are not implemented by the
 process diagram below. A configured model API does not relocate that workflow.
 
+The approved [resource policy](../../MODEL.md#4-resource-policy-and-readiness)
+and [full learner journey](../../JOURNEYS.md) also target Workbench playback
+before production, foundational interactive text/exact timing/translation,
+on-demand analysis, and text-backed Corpus saving. Existing package validation
+and media-capability projections do not by themselves establish this new
+product readiness contract. This document describes existing execution, not
+completed implementation of those target gates.
+
 ## Modules and contracts
 
 | Module | Implementation authority |

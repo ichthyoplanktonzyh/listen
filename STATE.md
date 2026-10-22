@@ -5,9 +5,11 @@
 ## Current focus
 
 Listen limits its active implementation to one audio/video listening
-journey: acquire a Source, process and adopt a Learning Material, learn in the
-MaterialWorkbench with contextual help, explicitly retain useful language,
-and return through the Personal Corpus and listening review.
+journey. The approved target opens a Source in MaterialWorkbench for native
+playback before preparation, then adds qualified foundational learning
+resources and on-demand help in the same workspace. The Learner can retain
+whole Sources, save meaningful text-backed language, and return through the
+Personal Corpus and listening review.
 
 Desktop and mobile are now joint construction targets. The owner-approved
 [devices and production design](docs/architecture/devices-and-production.md)
@@ -71,6 +73,21 @@ predates this reduction and remains immutable. Its source and artifact behavior
 are separate from the current branch.
 
 ## Approved target and implementation gaps
+
+The owner-approved resource policy now requires interactive qualified text,
+exact sentence/word timing and media binding, and declared Sentence Translation
+for foundational listening readiness. Deeper sound analysis, Sense Groups,
+lookup/pronunciation, and explanations are on demand. [MODEL.md](MODEL.md#4-resource-policy-and-readiness)
+owns the mapping to current resource types. [JOURNEYS.md](JOURNEYS.md) now owns
+the full path from native viewing to preparation, partial readiness, learning,
+whole-Source retention, text-backed saving, Corpus re-entry, and review.
+
+These are approved semantics, not completed runtime changes. Existing package
+acceptance and media/read/listen/watch projections do not prove the full new
+foundational contract. Readiness enforcement, missing production/consumption
+paths, the unified pre-production entry, and text-backed save gating still
+need implementation verification against this journey. This documentation
+change modifies no executable schema, provider, database, or UI behavior.
 
 The accepted target journey is phone submission, computer production, automatic
 material delivery, phone offline learning/collection/review, and private learning
