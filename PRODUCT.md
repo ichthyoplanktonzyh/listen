@@ -93,9 +93,10 @@ segmentation, form, and meaning. Reading, listening, speaking, and writing
 remain independent learner capabilities. Success in one never silently proves
 another.
 
-The product currently deepens listening. Reading, speaking, and writing remain
-conceptually independent; their deferred implementations do not add controls,
-background work, or requirements to the current listening experience.
+The product currently deepens listening and defers independent reading,
+speaking, and writing activities. Vocabulary capability state remains
+four-dimensional; displaying or manually marking those dimensions does not
+require the deferred activities, output assessment, or coach automation.
 
 ### Speech analysis must become perceptual guidance
 
@@ -245,10 +246,23 @@ production; the product must not silently substitute an English-shaped model.
 
 ### Account-enhanced and offline-capable
 
+Desktop and mobile are joint product targets. Both retain local learning,
+Personal Corpus, and review capability once required material resources are
+available. A personal computer can produce materials and deliver them to a
+phone, but prepared learning does not depend on that computer staying online.
+
+Local-first does not require all computation to be local. The Production
+Executor and Model Provider are independent choices: a personal computer or
+remote service can organize production using local models, vendor APIs, or a
+mixture. All routes deliver the same qualified material contract. Calling a
+vendor API from a computer still depends on that computer executing the task.
+
 An account may support synchronization, subscriptions, publishing, and
-cross-device recovery. Compiled or locally produced Learning Materials and
-private learning history should remain usable offline within their rights and
-storage constraints.
+cross-device recovery. Compiled materials and private learning history remain
+usable offline within their rights and storage constraints. Production tasks,
+material delivery, and private learning-data replication are distinct concerns.
+See the approved [desktop/mobile and production design](docs/architecture/devices-and-production.md)
+for deployment and delivery decisions; it does not assert implemented support.
 
 ## Durable learner journey
 

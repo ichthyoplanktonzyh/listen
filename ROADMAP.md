@@ -1,48 +1,101 @@
 # Listen Roadmap
 
-> Current stage: audio/video listening scope reduction, 2026-10-21.
+> Current stage: desktop/mobile local learning and replaceable material
+> production, approved 2026-10-22.
 
-[STATE.md](STATE.md) defines the selected implementation scope.
-[MODEL.md](MODEL.md) retains the broader conceptual model; that breadth is not
-an implementation checklist. Previous plans and task queues are not inherited.
+[STATE.md](STATE.md) defines the implementation baseline and remaining gaps.
+The [devices and production design](docs/architecture/devices-and-production.md)
+defines the accepted deployment target, and [JOURNEYS.md](JOURNEYS.md) defines
+the learner experience. The broader [MODEL.md](MODEL.md) remains a domain model,
+not an instruction to restore deferred activities or source modalities.
 
-## 1. Remove deferred implementations
+The listening scope reduction is merged. Its frozen recovery branches remain
+recovery points; new work starts from the reduced `main` baseline. Preserve
+existing learner data and published releases under the root development rules.
 
-Preserve the complete source baseline, then remove coaching, AI conversation,
-independent reading/writing/speaking, and document-material processing from the
-active product. Remove their exclusive dependencies and configuration across
-App, Core, Gen, contracts, and development tooling. Preserve the text and speech
-foundations required for audio/video listening.
+## 1. Establish shared desktop/mobile local learning
 
-Keep dedicated frozen recovery branches for the deferred implementations.
-Restore a feature only after reconsidering its value and adapting it to the
-then-current interfaces; do not continuously merge all experimental breadth
-back into the listening baseline.
+Design and validate changes on desktop and mobile together, starting with
+macOS and Android. Separate the Core learning module and persistence rules
+from heavy production tools and platform process assumptions. Validate a light
+embedded mobile runtime and required platform adapters before committing to a
+specific bridge. Keep desktop process assembly where it remains useful.
 
-Data compatibility with the earlier development implementation is waived by
-the owner. Use fresh isolated stores for validation, without resetting actual
-learner data. Published releases remain unchanged.
+Prove that the same qualified material can be validated, explicitly adopted,
+and consumed in both Workbenches. Exercise playback, timed text, existing help,
+intentional collection, exact source re-entry, and local listening review.
+Close the relevant Personal Corpus depth gaps as part of that journey.
+Both ends persist learner intent and facts locally, including while offline.
+Shared semantics do not require identical layouts or desktop interactions on
+a touch screen. Other OS rollout order remains to be selected.
 
-## 2. Verify the smaller product
+## 2. Complete phone submission and computer production
 
-Validate audio/video production, installation/adoption, Workbench playback,
-subtitles and help, explicit collection, source re-entry, and listening review.
-Exercise unavailable resources, failure/retry, cancellation, reopening, and
-child-process cleanup with deterministic providers. Verify the extracted
-application as well as source tests.
+Pair the devices and run the first automatic journey over local transfer:
 
-Update current documentation to match the final interfaces and supported
-journey. Removed features must not remain reachable through menus, settings,
-background requests, or development defaults.
+```text
+phone shares an audio/video link or local file
+    -> durable task reaches the selected computer
+    -> computer obtains exact input and runs Gen
+    -> result is delivered, validated, and explicitly adopted on the phone
+    -> phone disconnects and learns, collects, and reviews locally
+    -> private learning records return to the computer
+    -> computer re-enters the retained Slice and its history
+```
 
-Keep the existing narrow FSRS listening queue and learner ratings. Remove
-coach and upgrade policies without removing the scheduling of saved listening
-items.
+Manual export/import can be a development aid, but is not acceptance of this
+automatic delivery journey. Persist tasks across page closure and restart;
+separate production outcome from each recipient's readiness. Support honest
+waiting when the computer is unavailable, cancellation, retry, reconnect,
+resumable resource transfer, and duplicate-safe effects. Establish explicit
+conflict/correction semantics for private facts and derived review schedules;
+do not replicate by overwriting whole database files.
 
-## 3. Deepen the listening journey
+Use deterministic production fixtures for this gate. Exercise the actual
+desktop/mobile combination, not just desktop tests or mobile layout previews.
+Prepared learning must work with the production computer off and phone offline.
 
-After the smaller baseline is accepted, close the actual gaps in material
-readiness, contextual perceptual help, intentional collection, Personal Corpus
-re-entry, and audio-first review. Choose each change from a concrete learner
-failure in [JOURNEYS.md](JOURNEYS.md). Add no new learning channel or source
-modality merely because the model can describe it.
+## 3. Validate replaceable model providers
+
+Keep the same computer executor and task/delivery flow while allowing local
+models, vendor APIs, or mixed computation. Every route must satisfy the same
+material contract and provenance/qualification requirements. Use deterministic
+provider adapters to verify those semantics; live/paid calls still require
+explicit authorization.
+
+Expose default executor/provider choices and per-task overrides without turning
+ordinary learning into pipeline configuration. Explain remote data disclosure,
+cost controls, unknown provider outcomes, and failures. Do not silently switch
+to paid computation when an executor or provider is unavailable.
+
+## 4. Add remote production and asynchronous remote delivery
+
+Introduce a remote Production Executor under the same task/result semantics.
+Add optional relay transport for devices on different networks or online at
+different times; keep relay transport independent of production hosting.
+Pairing, authenticated access, private data handling, and interrupted-transfer
+recovery are required before remote acceptance. Concrete services and wire
+protocols remain implementation decisions.
+
+The acceptance journey prepares new material with the personal computer off:
+phone submission reaches the remote executor, Gen produces a qualified result,
+the phone receives and verifies it, and local offline learning continues.
+Notifications are hints; reopening must reconcile task and delivery state even
+if no background notification arrived. Do not promise immediate background
+downloads across all mobile platforms.
+
+Community publishing, subscriptions, recommendations, and a complete account
+system are not prerequisites for this private cross-device journey.
+
+## Queued listening-product follow-up
+
+Restore vocabulary four-dimensional display, filtering, and manual marking.
+The domain and storage retain independent reading/listening/speaking/writing
+state; currently the vocabulary UI exposes listening only. This is a later
+fix, not part of writing the approved plan, and does not restore independent
+reading/writing/speaking activities, output assessment, or coach automation.
+
+Continue to select listening-depth work from concrete failures in material
+readiness, useful perceptual help, intentional collection, Personal Corpus
+re-entry, and audio-first review. Do not add breadth solely because the model
+can describe it.

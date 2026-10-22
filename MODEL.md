@@ -301,6 +301,15 @@ Once a Complete Learning Material crosses the learning boundary, the learning
 system consumes its declared contract and does not depend on how a particular
 provider or recipe produced it.
 
+This model is device-independent. Desktop and mobile share material identity,
+Language Slices, Personal Corpus facts, and capability semantics while retaining
+their own local learning capability. A Material Production Task can be assigned
+to a personal-computer or remote Production Executor; the executor's choice of
+Model Provider does not change the formal learning boundary. Prepared learning
+does not require the original executor or provider to remain available. The
+[desktop/mobile and production design](docs/architecture/devices-and-production.md)
+defines the approved deployment target without declaring it implemented.
+
 ### Unified Workbench consumption
 
 All processed materials pass through Core's validation, organization, and

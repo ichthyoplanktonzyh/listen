@@ -10,6 +10,11 @@ and [JOURNEYS.md](JOURNEYS.md). Responsibilities below do not require deferred
 document, conversation, output-training, or coach implementations to remain in
 the runtime.
 
+Desktop and mobile are joint targets under the approved
+[devices and production design](docs/architecture/devices-and-production.md).
+Production execution and device exchange below describe target responsibilities;
+[runtime architecture](docs/architecture/runtime.md) describes current processes.
+
 ## Contexts
 
 ### Learning Experience — `app/`
@@ -30,7 +35,8 @@ Owns the learner-facing learning world:
 - browsing Corpus history and explicitly adding selected entries to learning
   or review without requiring automatic recommendations;
 - presenting listening review, perceptual repair, and further listening contexts;
-- source discovery, acquisition, preview, compilation progress, and recovery UX.
+- source discovery, acquisition, preview, executor selection, production-task
+  and delivery progress, and recovery UX on desktop and mobile.
 
 App does not define canonical material validity, Speech Structure truth,
 Personal Corpus facts, capability projection semantics, provider execution, or
@@ -79,17 +85,45 @@ into an optional enhancement. Gen does not own Perceptual Guidance, Learner
 State, Meaningful Learning Episodes, Personal Corpus, review scheduling, or
 activity selection.
 
+### Production Execution — target adapters, placement undecided
+
+Owns durable Material Production Task acceptance, dispatch, input acquisition,
+execution attempts, cancellation/recovery, and result publication. A personal
+computer or remote service can fill this role while using the same Gen
+compiler and material contract. Gen retains provider execution and material
+qualification; Model Providers do not become task or material authorities.
+
+The executor reports production outcome separately from each recipient's
+delivery/readiness state. It does not adopt materials on a learner's behalf,
+own private learning history, or turn operational progress into learning facts.
+Concrete hosting, task protocols, and source placement remain undecided.
+
+### Device Exchange — target adapters, placement undecided
+
+Owns device pairing/authentication, production-task transport, resumable
+material delivery, and private-state replication using Core's merge semantics.
+Local direct transfer is preferred; optional relay transport can store and
+forward when devices are remote or not online together. A relay is independent
+of the Production Executor and does not acquire canonical learning authority.
+
+Task transport, immutable material delivery, and private learning-data
+replication remain separate concerns even if they share infrastructure.
+Public distribution has different access and lifecycle semantics from private
+device exchange. A complete account or community system is not a prerequisite
+for the first paired-device journey.
+
 ### Project Governance — root documentation
 
 Owns the project model, product semantics, ubiquitous language,
 cross-module responsibilities, learner journeys, roadmap, and current project state. Root prose does not override executable contracts or runtime
 facts owned by the modules.
 
-### Community and Sync — required future context
+### Community — deferred context
 
-Will own accounts/devices, private-state replication, immutable package
-distribution, mutable listings, public Community Corpus indexing, publishers,
-subscriptions, ratings, reports, moderation, and update discovery.
+Will own public package distribution, mutable listings, public Community Corpus
+indexing, publishers, subscriptions, ratings, reports, moderation, and update
+discovery. Hosted accounts and cross-device recovery may complement device
+exchange later; they are not required for local prepared learning.
 
 Public material distribution and private Personal Corpus synchronization remain
 separate data planes even if one hosted product implements both. Repository,
@@ -114,8 +148,11 @@ protocol, service, and deployment boundaries remain undecided.
 Material Sources
       │ Raw Source
       ▼
-App acquisition / preview
-      │ production request and exact authorized inputs
+App acquisition / preview (desktop or mobile)
+      │ durable task and authorized inputs
+      ▼
+Production Executor (personal computer or remote)
+      │ compiler execution using selected Model Providers
       ▼
 Gen  -- qualified Complete Learning Material package --> Core
                                                                │
@@ -128,8 +165,9 @@ Gen  -- qualified Complete Learning Material package --> Core
                                                                ▼
                                                        Learning Experience
 
-App  <---- discovery / publishing / sync ----> Community and Sync
-Core <---- private merge semantics ----------> Community and Sync
+App  <---- tasks / delivery / private sync ----> Device Exchange
+Core <---- private merge semantics ------------> Device Exchange
+App  <---- discovery / publishing -------------> Community
 
 listen -----> project meaning and governance links
 ```
@@ -143,6 +181,8 @@ listen -----> project meaning and governance links
 | Detailed learner-facing Activity and scaffold UX | `app/` |
 | Unified Workbench and its material/Activity views | `app/` using Core semantics |
 | Source discovery, acquisition, preview, and production progress UX | `app/` |
+| Durable task execution, recovery, and result publication | Production Execution |
+| Device pairing, task transport, and private material delivery | Device Exchange |
 | Complete Learning Material executable contract | `core/` |
 | Structured Timed Text, anchors, locators, and compatibility | `core/` |
 | Language Slice, episode, Personal Corpus, and learner facts | `core/` |
@@ -153,18 +193,24 @@ listen -----> project meaning and governance links
 | Signal Facts and Speech Structure production | `gen/` |
 | Perceptual Guidance selection and presentation | Core semantics + App experience |
 | Package validation, installation, and adoption | `core/` |
-| Public package discovery and distribution | Community and Sync |
-| Private-state replication | Community and Sync using Core merge semantics |
+| Public package discovery and distribution | Community |
+| Private-state replication | Device Exchange using Core merge semantics |
 | External context results | External provider with attribution and limits |
 
 ## Stable seams
 
-### App to Gen: material production intent
+### App through Production Executor to Gen: material production intent
 
 App supplies the exact learner-authorized Raw Source, target material identity,
 declared Target/Support Languages, reusable compatible inputs, and requested
 Complete Learning Material contract. Gen owns provider execution, derivation,
 qualification, progress, cancellation, retry, provenance, and immutable output.
+
+The target executor persists dispatch and attempt state independently of the
+App connection, and carries compiler progress and outcomes back to the App.
+Executor placement and Model Provider choice are independent. Moving execution
+does not change the required material contract or promote raw provider output
+to canonical learning input.
 
 App does not prescribe provider steps, and Gen does not decide how a Learner
 will experience the result.
@@ -214,16 +260,22 @@ The seam must preserve why a cue is available, what evidence supports it, and
 what assistance the Learner actually received. A generated explanation cannot
 rewrite the underlying Signal Facts or learner history.
 
-### Client to Community and Sync
+### Client to Device Exchange and Community
 
 Public compiled material and private learning history use separate authority,
 privacy, lifecycle, and deletion semantics. Public artifacts are
 content-addressed and replaceable; Personal Corpus entries and meaningful
 learner facts are authenticated, mergeable, and learner-owned.
+Production completion does not establish delivery or local readiness; each
+recipient validates required resources through Core before learning.
 
 ## Architectural invariants
 
 - Raw Source and Complete Learning Material are different lifecycle stages.
+- Desktop and mobile share learning semantics and retain local prepared learning.
+- Production Executor placement and Model Provider choice are independent.
+- Production tasks, material delivery, and private learning-data replication
+  have separate lifecycles and authority.
 - Formal Learning Activities consume only a validated Complete Learning
   Material contract.
 - Processed materials reach one unified App Workbench through Core; Workbench

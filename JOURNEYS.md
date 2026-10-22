@@ -9,6 +9,10 @@ The Learner experiences one path through content acquisition, material
 production, the MaterialWorkbench, and the Personal Corpus. Internal provider
 execution and package construction do not become extra learner tasks.
 
+Desktop and mobile are joint targets. The cross-device journey below is
+approved direction, not a claim of implemented mobile or remote support; see
+the [devices and production design](docs/architecture/devices-and-production.md).
+
 ## Bring or discover audio/video
 
 1. Choose a local audio/video file or acquire an audio/video Source through an
@@ -21,8 +25,10 @@ execution and package construction do not become extra learner tasks.
 
 ## Prepare a Learning Material
 
-1. App submits the exact Source, Material Revision, language declaration, and
-   reusable resources for production.
+1. App submits the authorized Source, language declaration, target material
+   contract, and reusable resources as a durable Material Production Task to
+   the chosen executor. Source acquisition establishes exact input identity
+   and revision binding before derivation.
 2. Gen transcribes and aligns media and prepares compatible text, translation,
    and sound resources. Structured Reading and stable Text Anchors remain
    necessary for timed text, lookup, help, and precise saved references.
@@ -33,6 +39,38 @@ execution and package construction do not become extra learner tasks.
    and installs it; explicit adoption selects the coherent material composition.
 5. The MaterialWorkbench consumes the adopted composition through Core. It does
    not interpret provider output as canonical material.
+
+## Ask another device to prepare a material
+
+1. On a phone or computer, share a supported audio/video link or choose a local
+   file, then request preparation using the configured Production Executor and
+   Model Provider choices. A vendor API alone is not a remote executor.
+2. Submit links as source references; transfer device-local files when the
+   executor cannot otherwise obtain the authorized bytes. Show input-access
+   failures honestly. If a personal computer is offline, retain the request
+   and show that it is waiting for that computer.
+3. Leave the submission page without losing the task. The selected computer
+   or remote executor processes it, reports progress, and supports retry or
+   cancellation. Reconnecting or submitting again does not duplicate effects.
+4. Deliver the produced material automatically through the configured device
+   exchange path. Distinguish production success from transfer, validation,
+   and local readiness. Core validation and explicit adoption still apply;
+   new results never silently replace an adopted composition.
+5. When all required resources are locally verified, offer learning in the
+   same Workbench. A completion notification is a convenience: reopening the
+   App also discovers and receives completed results. Background delivery is
+   subject to platform scheduling, not a promise of immediate availability.
+6. Disconnect the phone and turn off the production computer. Learn, collect,
+   browse the Personal Corpus, and review using prepared local resources.
+   Additional inference requests may wait without blocking that experience.
+7. Reconnect and exchange private learning records. The computer can reopen
+   the retained Slice and relevant history in the same Material Revision.
+   Duplicate exchange does not duplicate facts; removal of an offline media
+   copy does not remove learner history.
+
+The first acceptance path uses macOS production and Android learning, followed
+by vendor-API production on the computer and then remote production with the
+personal computer off. [ROADMAP.md](ROADMAP.md) owns that execution sequence.
 
 ## Listen and resolve a difficulty
 
@@ -99,6 +137,9 @@ execution and package construction do not become extra learner tasks.
 
 ## Experience invariants
 
+- Prepared learning and learner-owned records remain locally usable on both
+  desktop and mobile without the original production executor being online.
+- Material delivery, task state, and private learner-data exchange are distinct.
 - One Core-backed MaterialWorkbench serves material and Personal Corpus entry.
 - Canonical Text, timed text, translation, and sound resources refer to one
   compatible Material Revision.

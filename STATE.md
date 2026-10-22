@@ -9,7 +9,12 @@ journey: acquire a Source, process and adopt a Learning Material, learn in the
 MaterialWorkbench with contextual help, explicitly retain useful language,
 and return through the Personal Corpus and listening review.
 
-The owner has selected four implementations to move to separate branches:
+Desktop and mobile are now joint construction targets. The owner-approved
+[devices and production design](docs/architecture/devices-and-production.md)
+retains local prepared learning on both ends while allowing personal-computer
+or remote production, with independently replaceable model providers.
+
+Four implementations have moved to separate frozen recovery branches:
 
 - AI conversation, including standalone and material-anchored voice sessions;
 - independent reading, writing, and speaking activities, output assessment,
@@ -33,8 +38,10 @@ cross-channel recommendations, or automatic capability-upgrade suggestions.
 ## Working baseline
 
 The full implementation is preserved at `f01ba17e` on
-`codex/preserve-before-listening-focus`. The scope reduction is developed on
-`codex/listening-focus`. Dedicated recovery branches use the reduced baseline:
+`codex/preserve-before-listening-focus`. The listening scope reduction was
+merged into `main` in [PR #8](https://github.com/ichthyoplanktonzyh/listen/pull/8),
+merge commit `43bffca8`; `codex/listening-focus` retains its implementation
+branch. Dedicated recovery branches use the reduced baseline:
 
 | Deferred implementation | Branch |
 |---|---|
@@ -57,18 +64,42 @@ filename and does not probe or move the earlier `listen.sqlite`. An explicit
 database override is still supported, but incompatible stores are rejected
 instead of reset.
 
-App, Core, and Gen remain one repository and one macOS application. The
-published [v0.7.0-dev.1 preview](https://github.com/ichthyoplanktonzyh/listen/releases/tag/v0.7.0-dev.1)
+App, Core, and Gen remain one repository, currently assembled as one macOS
+application. The published
+[v0.7.0-dev.1 preview](https://github.com/ichthyoplanktonzyh/listen/releases/tag/v0.7.0-dev.1)
 predates this reduction and remains immutable. Its source and artifact behavior
 are separate from the current branch.
 
-## Acceptance
+## Approved target and implementation gaps
 
-Removing an entry point alone is insufficient: its exclusive runtime,
-configuration, contracts, dependencies, and tests leave the active product too.
-Shared listening foundations remain exercised by deterministic fixtures.
+The accepted target journey is phone submission, computer production, automatic
+material delivery, phone offline learning/collection/review, and private learning
+records returning to the computer. Mixed production using vendor APIs follows;
+remote production later allows preparing new materials with the personal
+computer off. [ROADMAP.md](ROADMAP.md) owns execution order.
 
-The smaller baseline must pass module checks and the Gen → Core → App integration
-gate, and run from an extracted application outside the checkout. This scope
-reduction does not claim that the Personal Corpus journey is already complete;
-remaining depth gaps must be described against the listening journey.
+The supported runtime is still the macOS App/Core/Gen assembly in
+[runtime architecture](docs/architecture/runtime.md). Mobile product assembly
+and local Core embedding, paired-device persistent tasks, automatic delivery,
+private-state replication, and remote production are not implemented. Existing
+provider API calls do not imply those capabilities. The new documentation
+records approved direction, not successful two-device acceptance.
+
+The Personal Corpus journey still has depth gaps. Close them against the same
+listening journey while building the shared desktop/mobile learning path.
+
+Vocabulary capability state and interfaces still retain reading, listening,
+speaking, and writing, but the scope reduction narrowed the vocabulary UI to
+listening only. Restoring four-dimensional display, filtering, and manual
+marking is a separately queued fix; it does not restore independent activities
+or coach policies and is not implemented by this documentation change.
+
+## Acceptance rules
+
+Exercise the whole selected journey with deterministic production providers,
+including unavailable input/executor, cancellation, retry, reconnect, local
+readiness, offline learning, and duplicate-safe private-data exchange. Desktop
+checks do not substitute for mobile execution or two-device acceptance.
+Interface changes retain the Gen → Core → App integration gate; packaging
+changes verify the extracted application outside the checkout. No live/paid
+model calls or model downloads are implied by documenting these targets.

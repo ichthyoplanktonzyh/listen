@@ -7,6 +7,12 @@ One repository contains Flutter `app/`, Rust `core/`, Python `gen/`, and the
 shared development tooling in `tools/`. The desktop product packages these
 modules together as `listen.app`.
 
+The approved direction targets desktop and mobile local learning, with material
+production on a personal computer or remote executor and replaceable model
+providers. The current supported build remains macOS; see the
+[desktop/mobile and production design](docs/architecture/devices-and-production.md)
+for the target and [current state](STATE.md) for implementation gaps.
+
 ## Start here
 
 - [Current state](STATE.md) and [roadmap](ROADMAP.md): audio/video listening,
@@ -14,6 +20,8 @@ modules together as `listen.app`.
 - [Development](DEVELOPMENT.md): setup, run, checks, and packaging.
 - [Runtime architecture](docs/architecture/runtime.md): module, process,
   contract, and persistence boundaries in the implementation.
+- [Desktop/mobile and production design](docs/architecture/devices-and-production.md):
+  approved local-first target, production executors, providers, and delivery.
 - [Development preview](docs/development/dev-preview-distribution.md): download,
   installation, signing, and external runtime requirements.
 

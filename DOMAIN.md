@@ -90,6 +90,21 @@ inputs into a Complete Learning Material. It owns provider execution and
 material-side derivation, not learner state or Learning Experience selection.
 _Avoid_: Learning Activity, import form, provider workflow
 
+**Material Production Task**: A durable request to turn authorized Raw Sources
+and reusable inputs into a qualified Learning Material, retaining its execution
+intent, outcome, and result association independently of a client connection.
+_Avoid_: Learning Activity, Meaningful Learning Episode, material download
+
+**Production Executor**: The personal-computer or remote execution authority
+that accepts a Material Production Task, organizes material compilation, and
+makes its result available for delivery.
+_Avoid_: Model Provider, Learner, sync relay
+
+**Model Provider**: A replaceable source of model computation for a declared
+production or inference operation, such as a locally executed model or a
+vendor API. It is not by itself the owner of a complete production task.
+_Avoid_: Production Executor, Learning Material Compiler
+
 **Complete Learning Material**: The formal first-class material consumed by the
 learning world, qualified for its actual modalities under [MODEL.md](MODEL.md):
 text learning needs no TTS, while present audio requires the full
